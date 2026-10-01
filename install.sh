@@ -1,5 +1,5 @@
 #!/bin/sh
-# Universe for one user, no root: PREFIX/lib/universe holds the CLI, the modules and the UI's Python venv; PREFIX/bin gets universe, universe-ui and, where GTK is new enough, universe-desktop.
+# Universe for one user: PREFIX/lib/universe holds the CLI, the modules and the UI's Python venv; PREFIX/bin gets universe, universe-ui and, where GTK is new enough, universe-desktop. Root is only asked for (sudo) to put the udev rule and the uhid load under /etc, since /usr is read-only on SteamOS and Bazzite.
 set -eu
 
 usage() {
@@ -13,6 +13,10 @@ usage: install.sh [--prefix DIR] [--version vX.Y.Z] [--uninstall]
 
 Run from a release tarball it installs that tarball; from a git checkout it
 builds the checkout (cargo needed); piped from curl it downloads the release.
+
+The virtual pads and the key macros need /dev/uhid and /dev/uinput opened to
+your session: a udev rule and a module load under /etc, which it installs as
+root through sudo (asking for your password) or prints the commands for.
 USAGE
 }
 
@@ -31,6 +35,8 @@ while [ $# -gt 0 ]; do
 done
 lib="$prefix/lib/universe"
 manifest="$lib/installed-files"
+rules=/etc/udev/rules.d/70-universe.rules
+load=/etc/modules-load.d/universe.conf
 
 say() { printf '%s\n' "$*"; }
 die() { printf 'install.sh: %s\n' "$*" >&2; exit 1; }
@@ -40,10 +46,44 @@ remove_installed() {
     while IFS= read -r f; do rm -f "$prefix/$f"; done < "$manifest"
 }
 
+# sudo prompts on /dev/tty, so a `curl | sh` still asks; with no terminal only a passwordless sudo goes on
+as_root() {
+    if [ "$(id -u)" = 0 ]; then
+        "$@"
+    elif command -v sudo >/dev/null && { sudo -n true 2>/dev/null || (: </dev/tty) 2>/dev/null; }; then
+        sudo "$@"
+    else
+        return 1
+    fi
+}
+
+install_system_files() {
+    if [ ! -f "$lib/system/${rules##*/}" ] || [ -f "/usr/lib/udev/rules.d/${rules##*/}" ] \
+        || { cmp -s "$lib/system/${rules##*/}" "$rules" && cmp -s "$lib/system/${load##*/}" "$load"; }; then
+        return 0
+    fi
+    say "root (sudo) puts the pad rules in place: $rules and $load open /dev/uhid and /dev/uinput to your session for the virtual pads and the key macros"
+    # shellcheck disable=SC2016
+    if as_root sh -c 'install -Dm644 "$1" "$3" && install -Dm644 "$2" "$4" || exit 1
+        udevadm control --reload 2>/dev/null
+        modprobe uhid 2>/dev/null
+        udevadm trigger --action=change --subsystem-match=misc --subsystem-match=hidraw 2>/dev/null
+        exit 0' sh "$lib/system/${rules##*/}" "$lib/system/${load##*/}" "$rules" "$load"; then
+        return 0
+    fi
+    say "note: without them the virtual pads and the key macros do nothing; as root, run"
+    say "  install -Dm644 $lib/system/${rules##*/} $rules"
+    say "  install -Dm644 $lib/system/${load##*/} $load"
+    say "  then reboot"
+}
+
 if [ "$uninstall" = 1 ]; then
     [ -d "$lib" ] || die "nothing installed under $prefix"
     remove_installed
     rm -rf "$lib"
+    if [ -f "$rules" ] || [ -f "$load" ]; then
+        as_root rm -f "$rules" "$load" || say "note: $rules and $load stay; remove them as root"
+    fi
     say "removed Universe from $prefix; your config, library and recordings stay under ~/.config/universe and ~/.local/share/universe"
     exit 0
 fi
@@ -107,7 +147,7 @@ if ! "$venv/bin/python" -c 'import sdl2' 2>/dev/null; then
 fi
 
 remove_installed
-rm -rf "${lib:?}/bin" "$lib/modules" "$lib/sources"
+rm -rf "${lib:?}/bin" "$lib/modules" "$lib/sources" "$lib/system"
 install -Dm755 "$dist/bin/universe" "$lib/bin/universe"
 desktop=0
 if [ -x "$dist/bin/universe-desktop" ]; then
@@ -121,6 +161,10 @@ if [ -x "$dist/bin/universe-desktop" ]; then
 fi
 cp -r "$dist/share/universe/modules" "$lib/modules"
 cp -r "$dist/share/universe/sources" "$lib/sources"
+# releases up to 0.0.9 ship neither
+if [ -d "$dist/lib/udev" ]; then
+    install -Dm644 "$dist/lib/udev/rules.d/${rules##*/}" "$dist/lib/modules-load.d/${load##*/}" -t "$lib/system"
+fi
 
 mkdir -p "$prefix/bin"
 cat > "$prefix/bin/universe" <<EOF
@@ -161,6 +205,7 @@ if [ "$desktop" = 1 ]; then
 fi
 
 say "installed Universe under $prefix"
+install_system_files
 if [ "$desktop" = 1 ]; then
     say "note: GNOME Shell reads search providers from XDG_DATA_DIRS only, which $prefix/share is not on by default: its search does not list Universe Desktop's games"
 fi

@@ -8,8 +8,11 @@ usage: tools/ci-deps [desktops]
 As root in a fresh Arch, Ubuntu or Fedora container: the packages that
 tools/distro-check needs (a Rust toolchain, Python, scdoc, the libraries
 the pip-installed Qt loads, GTK 4 and libadwaita to build Universe Desktop
-on Arch and Fedora), and a user `ci` to run it as, since root
-writes through the read-only files the tests make. `desktops` adds what
+on Arch and Fedora, rpm-build for tools/rpm-check on Fedora), and a user
+`ci` to run it as, since root writes through the read-only files the tests
+make; ci has a passwordless sudo, which install.sh takes to put the udev rule
+and the uhid load under /etc, and tools/rpm-check to install the RPMs and their
+build dependencies. `desktops` adds what
 tools/desktop-smoke starts (Arch only: Ubuntu has no niri).
 USAGE
 }
@@ -24,7 +27,7 @@ esac
 case "$ID" in
     arch)
         pacman -Sy --noconfirm archlinux-keyring > /dev/null
-        pacman -Su --noconfirm --needed base-devel rust python git scdoc tzdata \
+        pacman -Su --noconfirm --needed base-devel sudo rust python git scdoc tzdata \
             libxkbcommon libxkbcommon-x11 sdl2 fontconfig libglvnd nss libpulse xcb-util-cursor ttf-dejavu dbus \
             glib2-devel gtk4 libadwaita blueprint-compiler > /dev/null
         [ "${1:-}" != desktops ] || pacman -S --noconfirm --needed mesa sway foot grim mako xorg-server-xvfb openbox xterm dunst \
@@ -37,12 +40,12 @@ case "$ID" in
     ubuntu | debian)
         export DEBIAN_FRONTEND=noninteractive
         apt-get update -qq
-        apt-get install -y -qq build-essential pkg-config rustup python3 python3-venv python3-dev git scdoc tzdata ca-certificates \
+        apt-get install -y -qq build-essential sudo pkg-config rustup python3 python3-venv python3-dev git scdoc tzdata ca-certificates \
             libxkbcommon-dev libgl1 libegl1 libxkbcommon-x11-0 libfontconfig1 libdbus-1-3 libpulse0 libglib2.0-0 libgssapi-krb5-2 \
             libxcb-cursor0 fonts-dejavu-core dbus > /dev/null
         ;;
     fedora)
-        dnf install -y -q gcc rust cargo python3 python3.14 python3-devel git scdoc tzdata libxkbcommon-devel libxkbcommon-x11 \
+        dnf install -y -q sudo rpm-build rpmdevtools gcc rust cargo python3 python3.14 python3-devel git scdoc tzdata libxkbcommon-devel libxkbcommon-x11 \
             mesa-libGL mesa-libEGL fontconfig dbus-libs pulseaudio-libs glib2 krb5-libs xcb-util-cursor dejavu-sans-fonts dbus-daemon \
             gtk4-devel libadwaita-devel blueprint-compiler util-linux > /dev/null
         ;;
@@ -51,6 +54,7 @@ esac
 [ "${1:-}" != desktops ] || [ "$ID" = arch ] || { echo "ci-deps: the desktops are Arch's" >&2; exit 2; }
 
 id ci > /dev/null 2>&1 || useradd -m ci
+echo 'ci ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/ci
 if command -v rustup > /dev/null; then
     runuser -u ci -- rustup default stable > /dev/null
 fi

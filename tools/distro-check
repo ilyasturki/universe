@@ -6,7 +6,8 @@ usage() {
 usage: tools/distro-check
 
 What a user of a distro other than NixOS goes through, on this one: the core's
-tests, tools/dist, install.sh into a fresh HOME, the CLI finding the shipped
+tests, tools/dist, install.sh into a fresh HOME (and through sudo, its udev
+rule and uhid load under /etc), the CLI finding the shipped
 modules and sources, doctor, Universe Desktop where the distro's GTK is new
 enough for it, the UI offscreen on the fake library and on the
 real core (shots in DISTRO_OUT, default target/distro-check), then
@@ -49,6 +50,8 @@ export HOME="$work/home" XDG_CONFIG_HOME="$work/home/.config" XDG_DATA_HOME="$wo
 mkdir -p "$HOME"
 "$work/dist/install.sh"
 export PATH="$HOME/.local/bin:$PATH"
+cmp "$repo/packaging/system/70-universe.rules" /etc/udev/rules.d/70-universe.rules
+cmp "$repo/packaging/system/universe.conf" /etc/modules-load.d/universe.conf
 
 echo "── cli"
 universe --version
@@ -92,5 +95,6 @@ echo "── uninstall"
 "$work/dist/install.sh" --uninstall
 left="$(find "$HOME/.local/bin" "$HOME/.local/lib" "$HOME/.local/share/applications" "$HOME/.local/share/dbus-1/services" \
     "$HOME/.local/share/gnome-shell/search-providers" "$HOME/.local/share/metainfo" -mindepth 1 2> /dev/null || true)"
+left="$left$(find /etc/udev/rules.d/70-universe.rules /etc/modules-load.d/universe.conf 2> /dev/null || true)"
 [ -z "$left" ] || { echo "distro-check: left behind:"$'\n'"$left" >&2; exit 1; }
 echo "distro-check: ok"
