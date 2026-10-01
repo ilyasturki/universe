@@ -740,6 +740,9 @@ FocusScope {
                 editor.edit(row, function (value) {
                     controller.setValue(index, value);
                 });
+            } else if (row.type === "bool") {
+                Sound.favourite(!row.value);
+                controller.toggle(index);
             } else if (row.type === "action") {
                 Sound.panel();
                 menu.show(page.slotActions(row), cards, cards.focusRect, row.label, function (action) {

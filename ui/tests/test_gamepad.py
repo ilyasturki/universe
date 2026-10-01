@@ -113,6 +113,30 @@ def test_covering_releases_what_was_held():
     assert m.axis(AXIS_LEFTX, 32767) == [(Qt.Key.Key_Right, True, False)], "the axis is forgotten: the next push presses again"
 
 
+def test_covering_centers_a_stick_held_off_centre():
+    m = Mapper(Clock())
+    m.stick(gamepad.AXIS_RIGHTX, 32767)
+    assert m.center_sticks() == [("rightX", 0.0)], "a scrub held as the pad is taken away stops"
+    assert m.center_sticks() == []
+    assert m.stick(gamepad.AXIS_RIGHTX, 32767) == ("rightX", 1.0)
+
+
+# Another app took the focus: a press is dropped with its release, the release of a key pressed before still goes out.
+def test_a_covered_pad_drops_a_press_with_its_release(app, monkeypatch):
+    posted = []
+    monkeypatch.setattr(gamepad, "post_key", lambda key, pressed, autorepeat=False, window=None: posted.append((key, pressed)))
+    thread = gamepad.GamepadThread()
+    thread._post(int(Qt.Key.Key_Return), True, False)
+    thread.setCovered(True)
+    thread._post(int(Qt.Key.Key_Escape), True, False)
+    thread._post(int(Qt.Key.Key_Return), False, False)
+    thread._post(int(Qt.Key.Key_Down), True, True)
+    thread.setCovered(False)
+    thread._post(int(Qt.Key.Key_Escape), False, False)
+    thread._post(int(Qt.Key.Key_Down), False, False)
+    assert posted == [(Qt.Key.Key_Return, True), (Qt.Key.Key_Return, False), (Qt.Key.Key_Down, False)], "a dropped repeat does not take its key's release"
+
+
 def test_post_key_needs_a_focus_window(app):
     assert gamepad.post_key(Qt.Key.Key_Return, True) is False
 

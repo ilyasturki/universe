@@ -7,6 +7,7 @@ from typing import cast
 from PySide6.QtCore import QEvent, QObject, Qt, QTimer, Signal, Slot
 
 from . import keyboard
+from .focus import Focus
 from .home import Home
 from .models import Collection, CollectionGames, Game, GameListModel, ObjectListModel, collection_key
 from .qt import Property
@@ -152,10 +153,15 @@ class Keys(QObject):
         self._hold = QTimer(self)
         self._hold.setSingleShot(True)
         self._hold.setInterval(CANCEL_HOLD_MS)
-        self._hold.timeout.connect(self.cancelHeld)
+        self._hold.timeout.connect(self._held)
         self._mode = "pad"
         self._windows = []
         self._layout = {"name": "", "rows": {}}
+
+    def _held(self):
+        if os.environ.get("UNIVERSE_UI_INPUT_LOG"):
+            logging.getLogger("universe.keys").info("cancel held")
+        self.cancelHeld.emit()
 
     def watch(self, window):
         self._windows.append(window)
@@ -475,9 +481,17 @@ class Api(QObject):
         controller = self._screens.controller
         controller.testingChanged.connect(lambda: self._pad.setMuted(controller.testing or controller.walking))
         controller.walkChanged.connect(lambda: self._pad.setMuted(controller.testing or controller.walking))
-        self._home = Home(client, controller, self.screenMode, self, frames=lambda: self._theme.frame)
+        self._focus = Focus(client, parent=self)
+        self._focus.changed.connect(self._on_focus)
+        self._home = Home(client, controller, self.screenMode, self, frames=lambda: self._theme.frame, focus=self._focus)
         self._window = None
         self._fullscreen = fullscreen
+
+    # B held as another app takes the focus never sees its release here: the power menu would open behind it.
+    def _on_focus(self):
+        if not self._focus.active:
+            self._keys.dropHold()
+            self._screens.controller.focusLost()
 
     def attachWindow(self, window):
         self._window = window
@@ -485,6 +499,7 @@ class Api(QObject):
         window.screenChanged.connect(lambda screen: self._modes.clear())
 
     def shutdown(self):
+        self._focus.shutdown()
         self._home.shutdown()
         self._screens.shutdown()
         self._client.shutdown()
@@ -508,6 +523,7 @@ class Api(QObject):
 
     keys = Property(QObject, lambda self: self._keys, constant=True)
     pad = Property(QObject, lambda self: self._pad, constant=True)
+    focus = Property(QObject, lambda self: self._focus, constant=True)
     power = Property(QObject, lambda self: self._power, constant=True)
     network = Property(QObject, lambda self: self._network, constant=True)
     system = Property(QObject, lambda self: self._system, constant=True)

@@ -50,6 +50,7 @@ TIMING_ROWS = [
     ("controller.volume_step", "Volume step (%)", ("1", "2", "5", "10"), "How much a volume macro moves the default sink per press, 1 to 100."),
 ]
 TIMING_DEFAULTS = {"controller.hold_ms": 600, "controller.volume_step": 2}
+HOME_SUMMONS = ("controller.home_summons", "HOME opens Universe", "HOME pressed in another app brings Universe to the front; off, it does nothing there.")
 
 
 class Watcher(QObject):
@@ -97,6 +98,13 @@ class Watcher(QObject):
             return False
         self._process.write((json.dumps(command) + "\n").encode())
         return True
+
+    # `--keys`' Press, Unpress and Axis: a line as if the child had read it.
+    def press(self, slot, down=True):
+        self.received.emit({"event": "button", "id": "script", "slot": slot, "code": "", "pressed": bool(down)})
+
+    def axis(self, name, value):
+        self.received.emit({"event": "axis", "id": "script", "axis": name, "value": float(value)})
 
     def stop(self):
         if self._process is None:
@@ -689,6 +697,8 @@ class ControllerScreen(AdvancedRows, QObject):
             value = _dig(config, key)
             row = _row("Timing", key, label, "int", str(TIMING_DEFAULTS[key] if value in (None, "") else value), choices, detail=detail, advanced=True)
             _add(rows, groups, "Timing", row, caps=True)
+        key, label, detail = HOME_SUMMONS
+        _add(rows, groups, "HOME", _row("HOME", key, label, "bool", _dig(config, key) is not False, detail=detail, advanced=True), caps=True)
         self._set_rows(rows, groups)
 
     @Slot(int, result="QVariant")
@@ -703,9 +713,10 @@ class ControllerScreen(AdvancedRows, QObject):
     def setValue(self, index, value):
         row = self.row(index)
         if str(row.get("key") or "").startswith("controller."):
-            if not self._client.setConfig(row["key"], str(value)):
+            text = ("true" if value else "false") if row.get("type") == "bool" else str(value)
+            if not self._client.setConfig(row["key"], text):
                 return False
-            self._rebuild()
+            self.load()
             return True
         if row.get("key") != "device":
             return False
@@ -714,6 +725,12 @@ class ControllerScreen(AdvancedRows, QObject):
             return False
         self.setCurrent(device["id"])
         return True
+
+    @Slot(int)
+    def toggle(self, index):
+        row = self.row(index)
+        if row.get("type") == "bool":
+            self.setValue(index, not row.get("value"))
 
     @Slot(str, str, str, str, str, result=bool)
     def bind(self, slot, trigger, action, keys, command):
@@ -883,6 +900,12 @@ class ControllerScreen(AdvancedRows, QObject):
         self._stop_testing()
         if self._watcher is not None:
             self._watcher.send({"cmd": "resume"})
+
+    # Another app has the focus: what the pad does there is not for this page.
+    def focusLost(self):
+        self.cancelLearn()
+        self._stop_walk()
+        self._stop_testing()
 
     @Slot(str, result=bool)
     def run(self, action, keys=""):

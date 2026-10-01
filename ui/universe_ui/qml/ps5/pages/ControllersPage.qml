@@ -119,7 +119,7 @@ FocusScope {
             });
             out = out.concat(buttons);
         }
-        // The Timing card behind the Advanced row.
+        // The Timing and HOME cards behind the Advanced row.
         var gate = source.findIndex(function (r) {
             return r.key === "advanced";
         });
@@ -134,23 +134,28 @@ FocusScope {
                 form: gate
             });
             if (controller.showAdvanced) {
-                out.push({
-                    heading: true,
-                    label: "Timing",
-                    display: ""
-                });
+                var section = "";
                 source.forEach(function (r, i) {
-                    if (r.advanced)
+                    if (!r.advanced)
+                        return;
+                    if (r.section !== section) {
+                        section = r.section;
                         out.push({
-                            key: r.key,
-                            label: r.label,
-                            type: r.type,
-                            display: r.display,
-                            detail: r.detail,
-                            choices: r.choices,
-                            value: r.value,
-                            form: i
+                            heading: true,
+                            label: section,
+                            display: ""
                         });
+                    }
+                    out.push({
+                        key: r.key,
+                        label: r.label,
+                        type: r.type,
+                        display: r.display,
+                        detail: r.detail,
+                        choices: r.choices,
+                        value: r.value,
+                        form: i
+                    });
                 });
             }
         }
@@ -226,6 +231,9 @@ FocusScope {
                 Qt.callLater(function () {
                     rows.index = Math.min(entries.length - 1, index + 2);
                 });
+        } else if (row.type === "bool") {
+            Sound.play("select");
+            controller.toggle(row.form);
         } else if (String(row.key).indexOf("controller.") === 0) {
             rows.edit(row, function (value) {
                 controller.setValue(row.form, value);

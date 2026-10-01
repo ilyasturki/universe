@@ -1,5 +1,6 @@
 import functools
 import logging
+import os
 import threading
 import time
 
@@ -139,11 +140,16 @@ class Mapper:
         del self.held[key]
         return [(key, False, False)]
 
-    # Every held key released, the axes and the sticks forgotten: what the game presses from here is not ours.
+    # Every held key released and the axes forgotten: what the game presses from here is not ours.
     def release_all(self):
         out = [(key, False, False) for key in self.held]
         self.held.clear()
         self._axis.clear()
+        return out
+
+    # Each stick off centre set back to it, so a scrub held as the pad is taken away does not run on.
+    def center_sticks(self):
+        out = [(name, 0.0) for name, value in self._stick.items() if value]
         self._stick.clear()
         return out
 
@@ -229,18 +235,21 @@ class GamepadThread(QThread):
         else:
             log.info("mapping: %s", line)
 
-    # Muted, a press is dropped with its release: a release on its own steps a section or answers a dialog.
+    # Muted or covered, a press is dropped with its release: a release on its own steps a section or answers a dialog.
     @Slot(int, bool, bool)
     def _post(self, key, pressed, autorepeat):
-        if pressed and self._pad is not None and self._pad.muted:
-            self._swallowed.add(key)
+        if pressed and (self._covered or (self._pad is not None and self._pad.muted)):
+            if not autorepeat:
+                self._swallowed.add(key)
+            if self._covered and os.environ.get("UNIVERSE_UI_INPUT_LOG"):
+                log.info("pad key %d dropped: covered", key)
             return
         if not pressed and key in self._swallowed:
             self._swallowed.discard(key)
             return
         post_key(Qt.Key(key), pressed, autorepeat)
 
-    # The game is on screen: its presses are not read, and the loop sleeps between hot-plug checks.
+    # The game is on screen, or another app has the focus: the presses are not read, and the loop sleeps between hot-plug checks.
     def setCovered(self, covered):
         self._covered = bool(covered)
 
@@ -266,7 +275,12 @@ class GamepadThread(QThread):
                     self._handle(sdl2, event, controllers)
                 if self._pending:
                     self._apply_mappings(sdl2, controllers)
-                ticks = self.mapper.release_all() if self._covered else self.mapper.tick()
+                if self._covered:
+                    for name, value in self.mapper.center_sticks():
+                        self.stick.emit(name, value)
+                    ticks = self.mapper.release_all()
+                else:
+                    ticks = self.mapper.tick()
                 for key, pressed, repeat in ticks:
                     self.key.emit(key, pressed, repeat)
                 sdl2.SDL_WaitEventTimeout(None, 20 if self.mapper.held and not self._covered else 500)
@@ -392,16 +406,18 @@ def post_wheel(window, x, y, steps, sideways=False, pixels=False):
     )
 
 
-# `--keys`, one name per gap: `Wait`, `Wait:N`, `Hold:A`/`Release:A`, `Stick:rightX=0.6`, `Shot:path.png`, `Guide`; with a fake watcher `Press:slot`/`Unpress:slot`, `Axis:lx=0.6`;
+# `--keys`, one name per gap: `Wait`, `Wait:N`, `Hold:A`/`Release:A`, `Stick:rightX=0.6`, `Shot:path.png`, `Guide`; `Pad:A`/`PadHold:A`/`PadRelease:A` through the
+# pad thread, dropped as its presses are while covered; as if the watcher read them, `Press:slot`/`Unpress:slot`, `Axis:lx=0.6`;
 # the mouse, at 1080p design units (dp, so 1728 wide at 16:10): `Mouse:x,y` moves it, `Click:x,y` / `RightClick:x,y` press and release there, `MouseDown:x,y` / `MouseUp:x,y` one or the other,
 # `Wheel:x,y,N` rolls N notches (up positive), `HWheel:x,y,N` sideways (right positive), `Scroll:x,y,N` N pixels as a touchpad; `Type:text` types it from the keyboard (`_` a space);
 # a finger: `Tap:x,y`, `LongTap:x,y,ms` held that long, `Swipe:x1,y1,x2,y2` dragged across in eight moves.
 class KeyScript(QObject):
-    def __init__(self, script, gap_ms, window, pad=None, watcher=None, home=None, parent=None):
+    def __init__(self, script, gap_ms, window, pad=None, watcher=None, home=None, gamepad=None, parent=None):
         super().__init__(parent)
         self._queue = [k for k in script.split() if k]
         self._window = window
         self._pad = pad
+        self._gamepad = gamepad
         self._watcher = watcher
         self._home = home
         self._timer = QTimer(self)
@@ -429,6 +445,14 @@ class KeyScript(QObject):
             axis, _, value = bare.partition("=")
             if self._pad is not None:
                 self._pad.set(axis, float(value or 0))
+            return
+        if phase in ("Pad", "PadHold", "PadRelease"):
+            key = KEY_NAMES.get(bare)
+            if self._gamepad is not None and key is not None:
+                if phase in ("Pad", "PadHold"):
+                    self._gamepad.key.emit(int(key), True, False)
+                if phase in ("Pad", "PadRelease"):
+                    self._gamepad.key.emit(int(key), False, False)
             return
         if phase in ("Press", "Unpress"):
             if self._watcher is not None:

@@ -36,10 +36,13 @@ class Home(QObject):
     bannersWaitingChanged = Signal()
     stopping = Signal(str)
 
-    def __init__(self, client, controller, screen_mode: Callable[[], dict] = dict, parent=None, frames=lambda: True):
+    def __init__(self, client, controller, screen_mode: Callable[[], dict] = dict, parent=None, frames=lambda: True, focus=None):
         super().__init__(parent)
         self._client = client
         self._controller = controller
+        self._focus = focus
+        # A HOME press made in another app, its release dropped with it.
+        self._away = False
         self._screen_mode = screen_mode
         self._frames = frames
         self._overlay = None
@@ -219,9 +222,21 @@ class Home(QObject):
         self._generation += 1
         self._shown = shown
 
+    # HOME from another app brings the launcher up (`controller.home_summons`) and does nothing more; from the launcher or its game it is HOME.
     def _on_button(self, ident, slot, pressed):
-        if slot == "guide":
-            self.guide(pressed)
+        if slot != "guide":
+            return
+        focus = self._focus
+        if pressed and focus is not None and focus.elsewhere:
+            self._away = True
+            if (self._controller.state or {}).get("home_summons", True):
+                focus.summon()
+            return
+        if self._away and not pressed:
+            self._away = False
+            return
+        self._away = False
+        self.guide(pressed)
 
     @Slot(bool)
     def guide(self, pressed):

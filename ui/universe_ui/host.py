@@ -19,6 +19,8 @@ QML_DIR = Path(__file__).parent / "qml"
 READY_ENV = "UNIVERSE_HOST_READY"
 # The core's nest::OWN_ENV: the gamescope started here is the launcher's, not Steam's.
 OWN_ENV = "UNIVERSE_OWN_GAMESCOPE"
+# The core's nest::HOST_DISPLAY_ENV: inside its gamescope DISPLAY is gamescope's, and an X11 desktop is asked who has the focus.
+HOST_DISPLAY_ENV = "UNIVERSE_HOST_DISPLAY"
 # A gamescope that fails to start mostly exits at once; one that hangs (NVIDIA) shows nothing at all.
 READY_S = 30
 # Qt's dispatcher polling a closed fd: its notifier can no longer be unregistered, so the loop spins for good.
@@ -202,7 +204,10 @@ def run_in_gamescope(command, argv, ready_s=READY_S):
     ready = Path(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()) / f"universe-ui-ready-{os.getpid()}"
     ready.unlink(missing_ok=True)
     own = "nested" if os.environ.get("WAYLAND_DISPLAY") or os.environ.get("DISPLAY") else "drm"
-    proc = subprocess.Popen(gamescope_argv(command, argv), env={**os.environ, READY_ENV: str(ready), OWN_ENV: own})
+    env = {**os.environ, READY_ENV: str(ready), OWN_ENV: own}
+    if os.environ.get("DISPLAY"):
+        env[HOST_DISPLAY_ENV] = os.environ["DISPLAY"]
+    proc = subprocess.Popen(gamescope_argv(command, argv), env=env)
     stopping = []
 
     def forward(signum, frame):
@@ -343,7 +348,13 @@ def run(argv=None):
         gamepad = GamepadThread(app, pad=api.pad)
         gamepad.stick.connect(api.pad.set, Qt.ConnectionType.QueuedConnection)
         api.screens.controller.mapping.connect(gamepad.setMapping)
-        api.home.changed.connect(lambda: gamepad.setCovered(api.home.padCovered))
+
+        def cover():
+            gamepad.setCovered(api.home.padCovered or not api.focus.active)
+
+        api.home.changed.connect(cover)
+        api.focus.changed.connect(cover)
+        cover()
         gamepad.start()
         if args.fake:
             unbound = [s for s in os.environ.get("UNIVERSE_FAKE_UNBOUND", "").split(",") if s]
@@ -357,7 +368,7 @@ def run(argv=None):
 
         # Keys only reach an active window; a bare X server hands focus to nobody by itself.
         window.requestActivate()
-        KeyScript(args.keys, args.key_gap, window, pad=api.pad, watcher=watcher if args.fake else None, home=api.home, parent=app).start(args.key_delay)
+        KeyScript(args.keys, args.key_gap, window, pad=api.pad, watcher=watcher, home=api.home, gamepad=gamepad, parent=app).start(args.key_delay)
 
     if args.quit_after > 0:
         QTimer.singleShot(args.quit_after, app.quit)

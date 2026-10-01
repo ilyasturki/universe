@@ -29,9 +29,13 @@ def test_rows_follow_the_watcher_and_the_macros(api, fake):
     assert screen.rows[-1]["key"] == "advanced" and screen.groups[-1]["rows"] == [len(screen.rows) - 1]
     assert not screen.showAdvanced and [g["title"] for g in screen.groups] == ["Controller", ""]
     screen.showAdvanced = True
-    assert [g["title"] for g in screen.groups] == ["Controller", "", "Timing"] and screen.groups[-1]["advanced"] is True
+    assert [g["title"] for g in screen.groups] == ["Controller", "", "Timing", "HOME"] and screen.groups[-1]["advanced"] is True
     assert screen.setValue(screen.reveal("controller.hold_ms", ""), "800") is True
     assert fake.config()["controller"]["hold_ms"] == 800 and {r["key"]: r for r in screen.rows}["controller.hold_ms"]["value"] == "800"
+    home = screen.reveal("controller.home_summons", "")
+    assert (screen.rows[home]["type"], screen.rows[home]["value"]) == ("bool", True), "HOME opens Universe out of the box"
+    screen.toggle(home)
+    assert fake.config()["controller"]["home_summons"] is False and screen.state["home_summons"] is False, "the state Home reads follows at once"
     screen.showAdvanced = False
 
     watcher = FakeWatcher("dualsense-edge")

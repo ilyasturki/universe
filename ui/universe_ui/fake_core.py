@@ -311,6 +311,8 @@ class FakeCore:
         self.last_splash = ""
         self.game_shown = False
         self.window_misses = 0
+        self.focus = ""
+        self.summons = 0
         self.frozen = False
         self.hud_shown = False
         self.fps_limit_writes = 0
@@ -951,6 +953,17 @@ class FakeCore:
     def focus_pid(self, pid):
         if pid == os.getpid():
             self.game_shown = False
+
+    # `UNIVERSE_FAKE_FOCUS` plays the desktop's focus: `launcher` (the default), `session` (the game's window), `other` or `unknown`.
+    def host_focus(self):
+        focus = self.focus or os.environ.get("UNIVERSE_FAKE_FOCUS") or "launcher"
+        if focus == "unknown":
+            raise UniverseError("Unavailable", "no window list")
+        return {"launcher": focus == "launcher", "session": focus == "session"}
+
+    def summon(self):
+        self.summons += 1
+        self.focus = "launcher"
 
     def freeze(self, on):
         if not self.current():
@@ -1861,7 +1874,9 @@ class FakeCore:
         raise UniverseError("NotFound", f"no controller family '{ident}'")
 
     def controller_state(self):
-        return copy.deepcopy(self._controller())
+        state = copy.deepcopy(self._controller())
+        state["home_summons"] = (self._config.get("controller") or {}).get("home_summons", True)
+        return state
 
     def controller_pads(self):
         pads = []
