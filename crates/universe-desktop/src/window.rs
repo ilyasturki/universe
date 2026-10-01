@@ -285,9 +285,13 @@ impl Window {
         navigation.push(page);
     }
 
+    /// Over the preferences when they are open: the window's own toasts sit under a dialog.
     pub fn toast(&self, toast: adw::Toast) {
         toast.set_use_markup(false);
-        self.imp().toasts.add_toast(toast);
+        match self.visible_dialog().and_downcast::<adw::PreferencesDialog>() {
+            Some(dialog) => dialog.add_toast(toast),
+            None => self.imp().toasts.add_toast(toast),
+        }
     }
 
     /// A toast whose button undoes what it tells, which Ctrl+Z presses too while it shows.
@@ -528,6 +532,7 @@ impl Window {
         if let Some(job) = &job {
             body.push(match job.kind() {
                 Kind::Install | Kind::Update => gettext("{} pauses, and resumes from the Store.").replace("{}", &job.title()),
+                Kind::Component => gettext("Installing {} stops.").replace("{}", &job.title()),
                 _ => gettext("Fetching artwork stops; the art fetched so far is kept."),
             });
         }

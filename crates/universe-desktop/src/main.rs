@@ -1,6 +1,7 @@
 mod actions;
 mod app;
 mod backend;
+mod components;
 mod config;
 mod covers;
 mod dialogs;

@@ -119,9 +119,13 @@ pub fn present(win: &Window, page: &str) {
     dialog.add(&doctor.page);
     load_doctor(&dialog, &doctor);
     let (weak_page, weak_win) = (Rc::downgrade(&artwork), win.downgrade());
+    let (weak_dialog, weak_runners, runners_connector) = (dialog.downgrade(), Rc::downgrade(&runners), connector.clone());
     let job = win.app().connect_local("job-changed", false, move |_| {
         if let (Some(page), Some(win)) = (weak_page.upgrade(), weak_win.upgrade()) {
             load_artwork(&page, &win);
+            if let (Some(dialog), Some(runners)) = (weak_dialog.upgrade(), weak_runners.upgrade()) {
+                load_runners(&dialog, &runners, &win, &runners_connector);
+            }
         }
         None
     });
@@ -226,20 +230,51 @@ fn load_runners(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, win: &Wind
     let (dialog, page, win, connector) = (dialog.downgrade(), page.clone(), win.downgrade(), connector.to_string());
     glib::spawn_future_local(async move {
         let runners = backend::run(async { backend::core().runners().await }).await;
+        let listed = crate::components::listing(false).await;
         let (Some(dialog), Some(win)) = (dialog.upgrade(), win.upgrade()) else { return };
         page.clear();
+        let listed = listed.unwrap_or_else(|e| {
+            dialog.add_toast(crate::dialogs::toast(&e.to_string()));
+            Vec::new()
+        });
+        let again: Rc<dyn Fn()> = {
+            let (dialog, page, win, connector) = (dialog.downgrade(), Rc::downgrade(&page), win.downgrade(), connector.clone());
+            Rc::new(move || {
+                if let (Some(dialog), Some(page), Some(win)) = (dialog.upgrade(), page.upgrade(), win.upgrade()) {
+                    load_runners(&dialog, &page, &win, &connector);
+                }
+            })
+        };
         let found = |r: &Value| text(r, "kind") == "linux" || !text(r, "path").is_empty();
         let mut sorted = runners;
         sorted.sort_by(|a, b| {
             let (ua, ub) = (usage.get(&text(a, "id")).copied().unwrap_or_default(), usage.get(&text(b, "id")).copied().unwrap_or_default());
-            found(b).cmp(&found(a)).then(ub.0.cmp(&ua.0)).then(ub.1.total_cmp(&ua.1)).then(text(a, "name").to_lowercase().cmp(&text(b, "name").to_lowercase()))
+            ub.0.cmp(&ua.0).then(ub.1.total_cmp(&ua.1)).then(text(a, "name").to_lowercase().cmp(&text(b, "name").to_lowercase()))
         });
-        let (installed, missing) = (page.group("", &gettext("The programs your games start through")), page.group(&gettext("Not Found"), ""));
+        let installed = page.group("", &gettext("The programs your games start through, and what Universe installs for them"));
+        let offered = page.group(&gettext("Not Installed"), &gettext("Universe downloads and updates these"));
+        let missing = if listed.is_empty() {
+            page.group(&gettext("Not Found"), "")
+        } else {
+            page.group(&gettext("No Download"), &gettext("Install these from your distribution: upstream ships no build Universe can fetch"))
+        };
+        let tools = page.group(&gettext("Tools"), &gettext("What runs beside the games"));
+        let (mut waiting, mut none) = (Vec::new(), 0);
         for runner in sorted {
             let id = text(&runner, "id");
+            let own = crate::components::of_runner(&id, &text(&runner, "kind"), &listed);
+            let (in_use, tag, wants) = crate::components::summary(&own);
             let count = usage.get(&id).map(|u| u.0).unwrap_or(0);
             let platforms = list(&runner, "platforms").iter().map(|p| crate::library::platform_name(p)).collect::<Vec<_>>().join(", ");
-            let row = crate::rows::plain(adw::ActionRow::builder().activatable(true).build(), text(&runner, "name"), platforms);
+            let row = crate::rows::plain(
+                adw::ActionRow::builder().activatable(true).build(),
+                text(&runner, "name"),
+                if in_use.is_empty() { platforms } else { in_use },
+            );
+            if !tag.is_empty() {
+                let class = if wants { "accent" } else { "dimmed" };
+                row.add_suffix(&gtk::Label::builder().label(&tag).css_classes([class, "caption-heading"]).valign(gtk::Align::Center).build());
+            }
             if count > 0 {
                 row.add_suffix(
                     &gtk::Label::builder()
@@ -249,34 +284,49 @@ fn load_runners(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, win: &Wind
                 );
             }
             row.add_suffix(&chevron());
-            let is_found = found(&runner);
-            let (dialog, runner, list, win, connector) =
+            let (dialog, runner_ref, list, win, connector) =
                 (dialog.downgrade(), runner.clone(), games.remove(&id).unwrap_or_default(), win.downgrade(), connector.clone());
             row.connect_activated(move |_| {
                 let (Some(dialog), Some(win)) = (dialog.upgrade(), win.upgrade()) else { return };
-                open_runner(&dialog, &runner, &list, &win, &connector);
+                open_runner(&dialog, &runner_ref, &list, &win, &connector);
             });
-            if is_found {
+            if found(&runner) {
                 installed.add(&row);
+            } else if own.iter().any(|c| !c["latest"].is_null()) {
+                waiting.push((!own.iter().any(|c| c["proposal"] == "install"), row));
             } else {
                 missing.add(&row);
+                none += 1;
             }
         }
-        missing.set_visible(missing.first_child().is_some());
+        waiting.sort_by_key(|(later, _)| *later);
+        for (_, row) in &waiting {
+            offered.add(row);
+        }
+        let tooling = crate::components::tools(&listed);
+        for c in &tooling {
+            tools.add(&crate::components::row(c, again.clone()));
+        }
+        offered.set_visible(!waiting.is_empty());
+        missing.set_visible(none > 0);
+        tools.set_visible(!tooling.is_empty());
     });
 }
 
 fn open_runner(dialog: &adw::PreferencesDialog, runner: &Value, games: &[(String, String, f64)], win: &Window, connector: &str) {
-    let id = text(runner, "id");
-    let view = FormView::new(Form::Runner(id), dialog, connector.to_string());
+    let (id, kind) = (text(runner, "id"), text(runner, "kind"));
+    let view = FormView::new(Form::Runner(id.clone()), dialog, connector.to_string());
     let path = text(runner, "path");
-    let description = match (text(runner, "kind").as_str(), path.is_empty(), text(runner, "source").as_str()) {
+    let description = match (kind.as_str(), path.is_empty(), text(runner, "source").as_str()) {
         ("linux", _, _) => gettext("Starts native Linux games as they are."),
-        (_, true, _) => gettext("Not found: set its program below."),
+        (_, true, _) => gettext("Not found: set its program below, or install it under Builds."),
         (_, false, "config") => gettext("Set to {}").replace("{}", &path),
         (_, false, _) => gettext("Found at {}").replace("{}", &path),
     };
     view.page.set_description(&description);
+    if kind != "linux" {
+        view.add_head(&crate::components::group(&gettext("Builds"), move |listed| crate::components::of_runner(&id, &kind, listed)));
+    }
     if !games.is_empty() {
         let group = adw::PreferencesGroup::builder().title(gettext("Games")).build();
         let mut games = games.to_vec();
@@ -543,6 +593,26 @@ fn confirm_fetch_all(win: &Window) {
     dialog.present(Some(win));
 }
 
+/// Installs what fixes a check, asking first, then checks again once the install ends.
+fn install_button(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, component: &str) -> gtk::Button {
+    let button = gtk::Button::builder().label(gettext("_Install…")).use_underline(true).valign(gtk::Align::Center).css_classes(["suggested-action"]).build();
+    let (weak_dialog, weak_page, id) = (dialog.downgrade(), Rc::downgrade(page), component.to_string());
+    button.connect_clicked(move |button| {
+        let (weak_dialog, weak_page, weak_button, id) = (weak_dialog.clone(), weak_page.clone(), button.downgrade(), id.clone());
+        glib::spawn_future_local(async move {
+            let listed = crate::components::listing(false).await.unwrap_or_default();
+            let (Some(button), Some(c)) = (weak_button.upgrade(), listed.iter().find(|c| text(c, "id") == id)) else { return };
+            let checked: Rc<dyn Fn()> = Rc::new(move || {
+                if let (Some(dialog), Some(page)) = (weak_dialog.upgrade(), weak_page.upgrade()) {
+                    load_doctor(&dialog, &page);
+                }
+            });
+            crate::components::act(&button, c, "install", checked);
+        });
+    });
+    button
+}
+
 /// What Universe needs from this machine, the checks that fail first with what to do about them.
 fn load_doctor(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>) {
     page.loading();
@@ -642,6 +712,9 @@ fn load_doctor(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>) {
                 if !check.fix.is_empty() {
                     let fix = crate::rows::plain(adw::ActionRow::builder().subtitle_selectable(true).build(), gettext("What to do"), &check.fix);
                     row.add_row(&fix);
+                }
+                if !check.component.is_empty() {
+                    row.add_suffix(&install_button(&dialog, &page, &check.component));
                 }
                 group.add(&row);
             }

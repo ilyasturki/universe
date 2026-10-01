@@ -543,7 +543,7 @@ impl StorePage {
         imp.job_group.set_title(&match job.as_ref().map(|j| j.kind()) {
             Some(Kind::Install) => gettext("Installing"),
             Some(Kind::Update) => gettext("Updating"),
-            Some(Kind::Scan | Kind::Artwork) => gettext("In Progress"),
+            Some(Kind::Scan | Kind::Artwork | Kind::Component) => gettext("In Progress"),
             None => gettext("Paused"),
         });
 
@@ -729,11 +729,15 @@ impl StorePage {
                 }
                 Kind::Update => gettext("Updating"),
                 Kind::Artwork if !job.title().is_empty() => gettext("Fetching art"),
-                Kind::Scan | Kind::Artwork => String::new(),
+                Kind::Scan | Kind::Artwork | Kind::Component => String::new(),
             });
             line.push(job.message());
             if job.total() > 0 {
-                let (done, total) = if job.pauses() { (size(job.done()), size(job.total())) } else { (job.done().to_string(), job.total().to_string()) };
+                let (done, total) = if job.pauses() || job.kind() == Kind::Component {
+                    (size(job.done()), size(job.total()))
+                } else {
+                    (job.done().to_string(), job.total().to_string())
+                };
                 line.push(gettext("{} of {}").replacen("{}", &done, 1).replacen("{}", &total, 1));
             }
         }

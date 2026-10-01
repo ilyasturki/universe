@@ -404,8 +404,12 @@ impl Core {
             global,
         ));
         let kind = spec.kind.as_str();
+        // The runner page's Builds group picks the Proton build.
         out.extend(
-            launch_keys::rows(Scope::Global, machine.mode).iter().filter(|r| r.runners.contains(&kind)).map(|r| global_launch_field(r, config, set, machine)),
+            launch_keys::rows(Scope::Global, machine.mode)
+                .iter()
+                .filter(|r| r.runners.contains(&kind) && r.key != "proton")
+                .map(|r| global_launch_field(r, config, set, machine)),
         );
         for o in spec.options {
             let f = Field::new(o.key, o.label, o.kind, "Options");
@@ -664,7 +668,8 @@ mod tests {
         core.set_field(&form, "exe", "").await.unwrap();
         assert_eq!(field(&core.form(&form, None).await.unwrap(), "exe").own, "");
         let proton = core.form(&Form::Runner("proton".into()), None).await.unwrap();
-        assert!(proton.iter().any(|f| f.key == "launch.proton") && proton.iter().any(|f| f.key == "launch.esync"));
+        assert!(proton.iter().all(|f| f.key != "launch.proton"), "the Builds group picks the Proton build");
+        assert!(proton.iter().any(|f| f.key == "launch.wayland") && proton.iter().any(|f| f.key == "launch.esync"));
     }
 
     #[test]

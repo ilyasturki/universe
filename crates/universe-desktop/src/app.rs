@@ -354,6 +354,14 @@ impl Application {
 
     /// Starts a job over `targets` (see `jobs::start`) unless one runs; false, and a word to the player, when it does.
     pub fn start_job(&self, kind: Kind, source: &str, targets: Vec<(String, String)>, force: bool) -> bool {
+        self.begin(|| jobs::start(kind, source, targets, force))
+    }
+
+    pub fn start_component(&self, component: jobs::ComponentJob) -> bool {
+        self.begin(|| jobs::start_component(component))
+    }
+
+    fn begin<F: std::future::Future<Output = Outcome> + 'static>(&self, start: impl FnOnce() -> (Job, F)) -> bool {
         let window = self.active_window().and_downcast::<Window>();
         if let Some(job) = self.job() {
             if let Some(win) = &window {
@@ -361,7 +369,7 @@ impl Application {
             }
             return false;
         }
-        let (job, outcome) = jobs::start(kind, source, targets, force);
+        let (job, outcome) = start();
         self.imp().job.replace(Some(job.clone()));
         self.emit_by_name::<()>("job-changed", &[]);
         let app = self.downgrade();

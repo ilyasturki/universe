@@ -1134,9 +1134,24 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
   a job that can stop asks first; then the game is stopped and its `session-end` waited for, an
   install or update pauses (the Store resumes it) and the window goes. SIGINT and SIGTERM take the
   same way out.
-- **One job at a time** (`jobs.rs`): an install, an update, a scan or an art refresh. A store's
-  "update all" steps through its games, so each can be cancelled. The Store page shows the job; its
-  end is a toast, and a notification for an install or update when the window is not focused.
+- **One job at a time** (`jobs.rs`): an install, an update, a scan, an art refresh or a component's
+  install or update (`Application::start_component`, a `ComponentJob`; Stop cancels it through
+  `component_cancel`). A store's "update all" steps through its games, so each can be cancelled.
+  The Store page shows the job; its end is a toast — on the preferences when they are open — and a
+  notification for an install or update when the window is not focused.
+- **Runners** (Preferences › Runners, as Settings › Runners in `universe-ui`): the runners found,
+  by the games on them, each with the build in use as its subtitle and what waits on it (an update,
+  a newer build than the system's, Needed) beside its game count; then "Not Installed" (Universe
+  can download it, a runner a game waits on first), "No Download" and "Tools" (gogdl, legendary,
+  comet, butler, gamescope, MangoHud, gpu-screen-recorder). A runner's page puts a Builds group
+  under its Runner card (`FormView::add_head`): one row per component it installs — Proton's
+  families and umu-run, or the runner's own — and the core's runner form leaves the Proton build
+  key to it. A component's row (`components.rs`, the plumbing the first run can use too) shows the
+  build that runs and its tag, and its menu holds `actions()`: install, update, use a build, follow
+  the newest, another version, roll back, remove, uninstall; what costs something asks first in an
+  `AdwAlertDialog`, an install showing its notice and size. While its job runs the row shows the
+  progress and Stop, and both pages read the listing again when a job starts or ends. A Doctor check
+  that an install fixes gets an Install button that runs the same flow.
 - **Undo, not confirmation**, for what can come back: hiding, favourites, removing a game, a
   screenshot, a recording, a journal entry. A removal is held (`Application::defer`) while its toast
   shows and done when the toast goes, or on quit; Undo, or Ctrl+Z for the newest toast, drops it.

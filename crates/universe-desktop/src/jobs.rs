@@ -15,6 +15,18 @@ pub enum Kind {
     Update,
     Scan,
     Artwork,
+    Component,
+}
+
+/// `version` empty: the catalogue's newest; `update` takes the newest and prunes the old builds; `follow` then runs Universe's
+/// newest over the system's.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ComponentJob {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    pub update: bool,
+    pub follow: bool,
 }
 
 /// What a long job ends with: its line for the player, whether it went through, the game an install brought in.
@@ -91,6 +103,7 @@ impl Job {
             Kind::Scan => gettext("Looking for installed games"),
             Kind::Artwork if n == 1 => gettext("Fetching art for {}").replace("{}", &first),
             Kind::Artwork => gettext("Fetching artwork"),
+            Kind::Component => gettext("Installing {}").replace("{}", &first),
         };
         imp.kind.set(kind);
         imp.source.replace(source.into());
@@ -176,10 +189,14 @@ impl Job {
         glib::spawn_future_local(async move {
             backend::run(async move {
                 let core = backend::core();
-                if kind == Kind::Artwork {
-                    core.media_cancel();
-                } else {
-                    core.source_cancel(&source, &target);
+                match kind {
+                    Kind::Artwork => core.media_cancel(),
+                    Kind::Component => {
+                        let _ = core.component_cancel(&target);
+                    }
+                    _ => {
+                        let _ = core.source_cancel(&source, &target);
+                    }
                 }
             })
             .await;
@@ -191,6 +208,84 @@ impl Job {
 /// art to fetch (none: all of them), none for a scan. Progress arrives on the main loop as it comes, the outcome once it ends.
 pub fn start(kind: Kind, source: &str, targets: Vec<(String, String)>, force: bool) -> (Job, impl std::future::Future<Output = Outcome>) {
     let job = Job::new(kind, source, &targets);
+    let (source, current) = (source.to_string(), job.imp().current.clone());
+    let outcome = run(job.clone(), move |core, tx| async move {
+        let mut progress = |done: u64, total: u64, message: &str| {
+            let _ = tx.send(Note::Progress(done, total, message.to_string()));
+        };
+        let (first, title) = targets.first().cloned().unwrap_or_default();
+        if let Ok(mut c) = current.lock() {
+            c.clone_from(&first);
+        }
+        let (count, game) = match kind {
+            Kind::Install => core.source_install(&source, &first, Some(&mut progress)).await.map(|id| (1, id)),
+            Kind::Update => {
+                for (step, (id, title)) in targets.iter().enumerate() {
+                    if let Ok(mut c) = current.lock() {
+                        c.clone_from(id);
+                    }
+                    let _ = tx.send(Note::Target(title.clone(), step as u32 + 1));
+                    core.source_update(&source, id, Some(&mut progress)).await?;
+                }
+                Ok((targets.len(), String::new()))
+            }
+            Kind::Scan => core.source_scan(&source, Some(&mut progress)).await.map(|n| (n, String::new())),
+            Kind::Artwork => core.media_refresh(&first, force, Some(&mut progress)).await.map(|(changed, _)| (changed, String::new())),
+            Kind::Component => Err(universe::Error::Invalid(format!("{first}: a component's job starts through start_component"))),
+        }?;
+        let text = match (kind, count as u32, count.to_string()) {
+            (Kind::Install | Kind::Component, ..) => gettext("{} is installed").replace("{}", &title),
+            (Kind::Update, 1, _) => gettext("{} is updated").replace("{}", &title),
+            (Kind::Update, n, text) => ngettext("{} game updated", "{} games updated", n).replace("{}", &text),
+            (Kind::Scan, 0, _) => gettext("No new installed games"),
+            (Kind::Scan, n, text) => ngettext("{} installed game found", "{} installed games found", n).replace("{}", &text),
+            (Kind::Artwork, 0, _) => gettext("No new art"),
+            (Kind::Artwork, n, text) => ngettext("New art for {} game", "New art for {} games", n).replace("{}", &text),
+        };
+        Ok(Outcome { ok: true, text, game })
+    });
+    (job, outcome)
+}
+
+pub fn start_component(component: ComponentJob) -> (Job, impl std::future::Future<Output = Outcome>) {
+    let label = if component.update {
+        gettext("Updating {}").replace("{}", &component.name)
+    } else {
+        gettext("Installing {}").replace("{}", format!("{} {}", component.name, component.version).trim_end())
+    };
+    let job = Job::new(Kind::Component, "", &[(component.id.clone(), component.name.clone())]);
+    job.imp().label.replace(label);
+    if let Ok(mut c) = job.imp().current.lock() {
+        c.clone_from(&component.id);
+    }
+    let outcome = run(job.clone(), move |core, tx| async move {
+        let mut progress = |done: u64, total: u64, message: &str| {
+            let _ = tx.send(Note::Progress(done, total, message.to_string()));
+        };
+        let ComponentJob { id, name, version, update, follow } = component;
+        let text = if update {
+            let updated = core.component_update(&id, Some(&mut progress)).await?;
+            match updated.first().and_then(|u| u["version"].as_str()) {
+                Some(v) => gettext("{} is updated").replace("{}", &format!("{name} {v}")),
+                None => gettext("{} is up to date").replace("{}", &name),
+            }
+        } else {
+            let installed = core.component_install(&id, &version, true, Some(&mut progress)).await?;
+            if follow {
+                core.component_use(&id, "latest").await?;
+            }
+            gettext("{} is installed").replace("{}", format!("{name} {installed}").trim_end())
+        };
+        Ok(Outcome { ok: true, text, game: String::new() })
+    });
+    (job, outcome)
+}
+
+fn run<F, Fut>(job: Job, work: F) -> impl std::future::Future<Output = Outcome>
+where
+    F: FnOnce(Arc<universe::core::Core>, tokio::sync::mpsc::UnboundedSender<Note>) -> Fut + Send + 'static,
+    Fut: std::future::Future<Output = universe::Result<Outcome>> + 'static,
+{
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<Note>();
     let pump = job.clone();
     glib::spawn_future_local(async move {
@@ -198,55 +293,16 @@ pub fn start(kind: Kind, source: &str, targets: Vec<(String, String)>, force: bo
             pump.note(note);
         }
     });
-    let (source, current, job_ref) = (source.to_string(), job.imp().current.clone(), job.clone());
-    let outcome = async move {
-        let result = backend::pinned(move |core| async move {
-            let mut progress = |done: u64, total: u64, message: &str| {
-                let _ = tx.send(Note::Progress(done, total, message.to_string()));
-            };
-            let first = targets.first().map(|(id, _)| id.clone()).unwrap_or_default();
-            if let Ok(mut c) = current.lock() {
-                c.clone_from(&first);
-            }
-            match kind {
-                Kind::Install => core.source_install(&source, &first, Some(&mut progress)).await.map(|id| (1, id)),
-                Kind::Update => {
-                    for (step, (id, title)) in targets.iter().enumerate() {
-                        if let Ok(mut c) = current.lock() {
-                            c.clone_from(id);
-                        }
-                        let _ = tx.send(Note::Target(title.clone(), step as u32 + 1));
-                        core.source_update(&source, id, Some(&mut progress)).await?;
-                    }
-                    Ok((targets.len(), String::new()))
-                }
-                Kind::Scan => core.source_scan(&source, Some(&mut progress)).await.map(|n| (n, String::new())),
-                Kind::Artwork => core.media_refresh(&first, force, Some(&mut progress)).await.map(|(changed, _)| (changed, String::new())),
-            }
-        })
-        .await;
-        let cancelled = job_ref.cancelled();
-        job_ref.end();
-        let title = job_ref.title();
+    async move {
+        let result = backend::pinned(move |core| work(core, tx)).await;
+        let cancelled = job.cancelled();
+        job.end();
         let failed = |text: String| Outcome { ok: false, text, game: String::new() };
         match result {
-            Ok((count, game)) => Outcome {
-                ok: true,
-                game,
-                text: match (kind, count as u32, count.to_string()) {
-                    (Kind::Install, ..) => gettext("{} is installed").replace("{}", &title),
-                    (Kind::Update, 1, _) => gettext("{} is updated").replace("{}", &title),
-                    (Kind::Update, n, text) => ngettext("{} game updated", "{} games updated", n).replace("{}", &text),
-                    (Kind::Scan, 0, _) => gettext("No new installed games"),
-                    (Kind::Scan, n, text) => ngettext("{} installed game found", "{} installed games found", n).replace("{}", &text),
-                    (Kind::Artwork, 0, _) => gettext("No new art"),
-                    (Kind::Artwork, n, text) => ngettext("New art for {} game", "New art for {} games", n).replace("{}", &text),
-                },
-            },
-            Err(_) if cancelled && job_ref.pauses() => failed(gettext("{} is paused: it resumes from the Store").replace("{}", &title)),
+            Ok(outcome) => outcome,
+            Err(_) if cancelled && job.pauses() => failed(gettext("{} is paused: it resumes from the Store").replace("{}", &job.title())),
             Err(_) if cancelled => failed(gettext("Stopped")),
             Err(e) => failed(e.to_string()),
         }
-    };
-    (job, outcome)
+    }
 }

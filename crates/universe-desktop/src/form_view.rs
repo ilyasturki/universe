@@ -128,7 +128,8 @@ pub struct FormView {
     /// Each group with whether it sits on the advanced page.
     groups: RefCell<Vec<(adw::PreferencesGroup, bool)>>,
     advanced_page: RefCell<Option<adw::NavigationPage>>,
-    /// Groups of the page's owner, kept after the form's own on every rebuild.
+    /// Groups of the page's owner, kept after the form's first card (`head`) or after its own (`tail`) on every rebuild.
+    head: RefCell<Vec<adw::PreferencesGroup>>,
     tail: RefCell<Vec<adw::PreferencesGroup>>,
     syncing: Cell<bool>,
     screen: String,
@@ -147,6 +148,7 @@ impl FormView {
             fields: RefCell::default(),
             groups: RefCell::default(),
             advanced_page: RefCell::default(),
+            head: RefCell::default(),
             tail: RefCell::default(),
             syncing: Cell::new(false),
             screen,
@@ -157,9 +159,21 @@ impl FormView {
         view
     }
 
+    pub fn add_head(&self, group: &adw::PreferencesGroup) {
+        self.page.add(group);
+        self.head.borrow_mut().push(group.clone());
+    }
+
     pub fn add_tail(&self, group: &adw::PreferencesGroup) {
         self.page.add(group);
         self.tail.borrow_mut().push(group.clone());
+    }
+
+    fn place_head(&self) {
+        for group in self.head.borrow().iter() {
+            self.page.remove(group);
+            self.page.add(group);
+        }
     }
 
     /// A game's Proton card is titled with its runner.
@@ -258,13 +272,21 @@ impl FormView {
         self.syncing.set(false);
         let mut all = Vec::new();
         let has_advanced = groups.iter().any(|(_, a, _)| *a);
+        let mut headed = false;
         for (_, advanced, group) in &groups {
             if *advanced {
                 self.advanced.add(group);
             } else {
                 self.page.add(group);
+                if !headed {
+                    self.place_head();
+                    headed = true;
+                }
             }
             all.push((group.clone(), *advanced));
+        }
+        if !headed {
+            self.place_head();
         }
         if has_advanced {
             let group = adw::PreferencesGroup::new();
