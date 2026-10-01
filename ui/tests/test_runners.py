@@ -120,9 +120,14 @@ def test_the_builds_card_installs_and_switches_builds(api, fake):
     form = api.screens.runner
     components = api.screens.components
     form.load("proton")
-    assert cards(form)[:2] == [("Runner", ["exe", "component", "args", "gamescope"]), ("Builds", ["component", "component"])]
+    assert cards(form)[:2] == [("Runner", ["exe", "component", "args", "gamescope"]), ("Builds", ["launch.proton", "component", "component"])]
     assert card_of(form, "component") == ["umu-run", "ge-proton", "proton-cachyos"], "umu-run starts Proton's builds: beside its program"
-    assert "launch.proton" not in rows_by_key(form), "the Builds card picks the Proton build"
+    default = rows_by_key(form)["launch.proton"]
+    assert default["value"] == "proton-ge"
+    assert default["choices"] == ["Proton 9.0", "proton-cachyos", "proton-em", "proton-ge", "proton-tkg"], (
+        "every Proton found is a default: Steam's own and config.toml's beside the families"
+    )
+    assert form.setValue(index_of(form, "launch.proton"), "Proton 9.0") is True and fake.config()["launch"]["proton"] == "Proton 9.0"
     finished = record(fake.jobFinished)
     assert components.act("proton-cachyos", "install") is True
     until(lambda: form.rows[next(i for i, r in enumerate(form.rows) if r.get("component") == "proton-cachyos")]["action"] == "Cancel")
@@ -143,12 +148,13 @@ def test_runner_form_carries_its_launch_keys(api, fake):
     form.load("proton")
     assert cards(form) == [
         ("Runner", ["exe", "args", "gamescope"]),
+        ("Builds", ["launch.proton"]),
         ("Proton", ["launch.wayland", "launch.hdr"]),
         ("Games", ["game"] * 7 + ["add_file"]),
-    ], "config.toml's [launch] keys tied to Proton, the global values, its games; no Advanced row"
+    ], "config.toml's [launch] keys tied to Proton, the global values, its games; no Advanced row; the default build before the catalogue"
     assert not form.showAdvanced and form.hasAdvanced and "advanced" not in [r["key"] for r in form.rows]
     form.showAdvanced = True
-    assert cards(form)[1] == (
+    assert cards(form)[2] == (
         "Proton",
         [
             "launch.wayland",
@@ -163,8 +169,8 @@ def test_runner_form_carries_its_launch_keys(api, fake):
             "launch.debug_log",
         ],
     ), "the switches fold into the Proton card"
-    assert form.groups[1]["dividers"] == [{"at": 2, "label": "Advanced · Sync"}, {"at": 5, "label": "Upscaling"}, {"at": 9, "label": "Logs"}]
-    assert [g["title"] for g in form.groups] == ["Runner", "Proton", "Games"], "the sidebar does not move with Advanced"
+    assert form.groups[2]["dividers"] == [{"at": 2, "label": "Advanced · Sync"}, {"at": 5, "label": "Upscaling"}, {"at": 9, "label": "Logs"}]
+    assert [g["title"] for g in form.groups] == ["Runner", "Builds", "Proton", "Games"], "the sidebar does not move with Advanced"
     assert all(form.rows[i]["advanced"] for g in form.advancedGroups for i in g["rows"]) and all(g["advanced"] for g in form.advancedGroups)
     assert {g["title"]: g["meta"] for g in form.advancedGroups}["Upscaling"] == "AMD Radeon RX 7900 GRE · RDNA 3"
     rows = rows_by_key(form)

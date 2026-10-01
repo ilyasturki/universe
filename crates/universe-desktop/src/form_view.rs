@@ -28,6 +28,7 @@ pub fn section_title(section: &str) -> String {
         "Desktop and library" => gettext("Desktop and Library"),
         "Artwork" => gettext("Artwork"),
         "Runner" => gettext("Runner"),
+        "Builds" => gettext("Builds"),
         "Options" => gettext("Options"),
         "Settings" => gettext("Settings"),
         other => other.to_string(),
@@ -128,8 +129,8 @@ pub struct FormView {
     /// Each group with whether it sits on the advanced page.
     groups: RefCell<Vec<(adw::PreferencesGroup, bool)>>,
     advanced_page: RefCell<Option<adw::NavigationPage>>,
-    /// Groups of the page's owner, kept after the form's first card (`head`) or after its own (`tail`) on every rebuild.
-    head: RefCell<Vec<adw::PreferencesGroup>>,
+    /// Groups of the page's owner, kept after one of the form's cards (`head`) or after them all (`tail`) on every rebuild.
+    head: RefCell<Vec<(adw::PreferencesGroup, String)>>,
     tail: RefCell<Vec<adw::PreferencesGroup>>,
     syncing: Cell<bool>,
     screen: String,
@@ -159,9 +160,10 @@ impl FormView {
         view
     }
 
-    pub fn add_head(&self, group: &adw::PreferencesGroup) {
+    /// `group` right after the form's card of `section`, else after its first.
+    pub fn add_head(&self, group: &adw::PreferencesGroup, section: &str) {
         self.page.add(group);
-        self.head.borrow_mut().push(group.clone());
+        self.head.borrow_mut().push((group.clone(), section.to_string()));
     }
 
     pub fn add_tail(&self, group: &adw::PreferencesGroup) {
@@ -169,8 +171,8 @@ impl FormView {
         self.tail.borrow_mut().push(group.clone());
     }
 
-    fn place_head(&self) {
-        for group in self.head.borrow().iter() {
+    fn place_head(&self, follows: impl Fn(&str) -> bool) {
+        for (group, _) in self.head.borrow().iter().filter(|(_, s)| follows(s)) {
             self.page.remove(group);
             self.page.add(group);
         }
@@ -272,21 +274,20 @@ impl FormView {
         self.syncing.set(false);
         let mut all = Vec::new();
         let has_advanced = groups.iter().any(|(_, a, _)| *a);
-        let mut headed = false;
-        for (_, advanced, group) in &groups {
+        let cards: Vec<String> = groups.iter().filter(|(_, a, _)| !a).map(|(s, _, _)| s.clone()).collect();
+        let anchored = |section: &str| cards.iter().any(|c| c == section);
+        for (section, advanced, group) in &groups {
             if *advanced {
                 self.advanced.add(group);
             } else {
                 self.page.add(group);
-                if !headed {
-                    self.place_head();
-                    headed = true;
-                }
+                let first = cards.first() == Some(section);
+                self.place_head(|after| after == section || (first && !anchored(after)));
             }
             all.push((group.clone(), *advanced));
         }
-        if !headed {
-            self.place_head();
+        if cards.is_empty() {
+            self.place_head(|_| true);
         }
         if has_advanced {
             let group = adw::PreferencesGroup::new();

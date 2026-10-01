@@ -21,7 +21,7 @@ def test_game_settings_form(api, fake):
     assert form.title == "The Technomancer"
     core = rows_by_key(form, "")
     assert core["launch.proton"]["type"] == "enum"
-    assert core["launch.proton"]["choices"] == ["proton-cachyos", "proton-em", "proton-ge"]
+    assert core["launch.proton"]["choices"] == ["Proton 9.0", "proton-cachyos", "proton-em", "proton-ge", "proton-tkg"]
     assert core["favorite"]["value"] is True
     assert core["launch.proton"]["inherited"] is False
     assert core["launch.esync"]["inherited"] is True, "an empty launch key takes the global value"

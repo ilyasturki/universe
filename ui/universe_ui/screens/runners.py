@@ -7,7 +7,7 @@ from PySide6.QtCore import Signal, Slot
 from ..models import file_url
 from ..qt import QVARIANT, Property
 from .components import NO_BUILD, NO_BUILD_META, build_text, catalogue_warning
-from .settings import HOMES, RowsForm, _group, _plural, _row, _to_bus, global_launch_rows, runner_logo
+from .settings import HOMES, RowsForm, _group, _plural, _row, _to_bus, global_launch_rows, launch_row, proton_choices, runner_logo
 
 FOUND = {"path": "Found on PATH"}
 PROTON_TOOL = "umu-run"
@@ -16,7 +16,7 @@ NOT_INSTALLED_META = "Universe downloads and updates these"
 NOT_FOUND = "Not found"
 TOOLS = "Tools"
 BUILDS = "Builds"
-# Launch keys the Builds card sets instead.
+# Launch keys picked on the Builds card: Proton's lists every build found, a family's or not.
 BUILD_KEYS = ("proton",)
 
 
@@ -158,9 +158,9 @@ class RunnersForm(RowsForm):
 
 
 def build_runner(client, ident, screen_mode, listing=None, row_of: Callable[[dict], dict] = dict):
-    """A runner's page: its program and gamescope, the builds Universe installs of it, the global launch keys of its kind (the
-    advanced ones folded into the Proton card, else the runner's), its options, its games. Without `listing` (the search) no
-    Builds card."""
+    """A runner's page: its program and gamescope, its builds (Proton's default, what Universe installs of it), the global launch
+    keys of its kind (the advanced ones folded into the Proton card, else the runner's), its options, its games. Without
+    `listing` (the search) the Builds card holds no component."""
     runner = next((r for r in client.runners() if r["id"] == ident), None)
     if runner is None:
         return {}, [], []
@@ -202,14 +202,19 @@ def build_runner(client, ident, screen_mode, listing=None, row_of: Callable[[dic
         )
     )
     groups.append(_group("Runner", list(range(len(rows))), caps=True))
-    builds = [c for c in _in_use_first(own) if c["id"] != PROTON_TOOL]
-    if builds:
-        first = len(rows)
-        rows.extend({**row_of(c), "section": name} for c in builds)
+    mode = screen_mode()
+    first = len(rows)
+    rows.extend(
+        launch_row(spec["section"], spec, launch.get(spec["key"]) or spec["default"], protons=proton_choices(config))
+        for spec in client.launchKeys("global", mode)
+        if kind in spec["runners"] and spec["key"] in BUILD_KEYS
+    )
+    rows.extend({**row_of(c), "section": name} for c in _in_use_first(own) if c["id"] != PROTON_TOOL)
+    if len(rows) > first:
         groups.append(_group(BUILDS, list(range(first, len(rows))), caps=True, warning=catalogue_warning(listing or {})))
     home = "Proton" if kind == "proton" else "Runner"
     homes = {**HOMES, "Sync": home, "Upscaling": home, "Logs": home}
-    global_launch_rows(rows, groups, client, config, screen_mode(), lambda spec: kind in spec["runners"] and spec["key"] not in BUILD_KEYS, client.gpu(), homes)
+    global_launch_rows(rows, groups, client, config, mode, lambda spec: kind in spec["runners"] and spec["key"] not in BUILD_KEYS, client.gpu(), homes)
     options = runner.get("options") or []
     if options:
         first = len(rows)

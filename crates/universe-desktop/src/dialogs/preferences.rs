@@ -325,7 +325,9 @@ fn open_runner(dialog: &adw::PreferencesDialog, runner: &Value, games: &[(String
     };
     view.page.set_description(&description);
     if kind != "linux" {
-        view.add_head(&crate::components::group(&gettext("Builds"), move |listed| crate::components::of_runner(&id, &kind, listed)));
+        // Proton's form has a Builds card of its own, the default build: its builds go right under it.
+        let title = if kind == "proton" { String::new() } else { gettext("Builds") };
+        view.add_head(&crate::components::group(&title, move |listed| crate::components::of_runner(&id, &kind, listed)), "Builds");
     }
     if !games.is_empty() {
         let group = adw::PreferencesGroup::builder().title(gettext("Games")).build();

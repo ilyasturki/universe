@@ -653,8 +653,8 @@
     "config_writable": true,
     "paths": {"games_root": "/mnt/games/PC", "prefixes_root": "/mnt/games/prefixes"},
     "desktop": {"hide_cursor": true},
-    "proton": {},
-    "protons": ["proton-cachyos", "proton-em", "proton-ge"],
+    "proton": {"proton-tkg": "/opt/proton-tkg"},
+    "protons": ["Proton 9.0", "proton-cachyos", "proton-em", "proton-ge", "proton-tkg"],
     "modules": {
       "enabled": ["capture", "journal"],
       "capture": {"codec": "av1_10bit"},

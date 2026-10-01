@@ -843,9 +843,11 @@ name, platforms and where its program was found, a warning) and a Runner card fo
 (`exe`, a path; the detected one shown as the value, inherited, where it was found as the detail;
 `origin: "runner"` once set here, X clearing it back) — on Proton's page umu-run's component row
 right under it — arguments and the gamescope switch (`origin` `global` or `runner`, X likewise);
-then a Builds card, one component row per build family: the runner's own, or Proton's (GE-Proton,
-Proton-CachyOS, Proton-EM, umu-proton; the one in use first). The Builds card is where the build is
-picked: there is no Build row, and Proton's card leaves out the `proton` launch key. Then — for
+then a Builds card, where the build is picked: on Proton's page first the `launch.proton` row, the
+default build, whose choices are every Proton found (`config.protons`: the families' builds, Steam's
+own, `[proton]`'s, the local ones), then one component row per build family: the runner's own, or
+Proton's (GE-Proton, Proton-CachyOS, Proton-EM, umu-proton; the one in use first). There is no Build
+row, and Proton's launch card leaves the `proton` key to the Builds card. Then — for
 Proton and Wine — the launch keys tied to its kind (`launchKeys("global")` filtered by `runners`:
 the Proton card, with Sync, Upscaling and Logs folded in behind Y, or into the Runner card on plain
 Wine; the global `[launch]` values written through `set_setting`), each option by its type in an
@@ -1145,8 +1147,9 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
   can download it, a runner a game waits on first), "No Download" and "Tools" (gogdl, legendary,
   comet, butler, gamescope, MangoHud, gpu-screen-recorder). A runner's page puts a Builds group
   under its Runner card (`FormView::add_head`): one row per component it installs — Proton's
-  families and umu-run, or the runner's own — and the core's runner form leaves the Proton build
-  key to it. A component's row (`components.rs`, the plumbing the first run can use too) shows the
+  families and umu-run, or the runner's own. On Proton's page the core's runner form gives the
+  Proton build key a Builds card of its own, every Proton found among its choices, and the component
+  rows sit right under it. A component's row (`components.rs`, the plumbing the first run can use too) shows the
   build that runs and its tag, and its menu holds `actions()`: install, update, use a build, follow
   the newest, another version, roll back, remove, uninstall; what costs something asks first in an
   `AdwAlertDialog`, an install showing its notice and size. While its job runs the row shows the

@@ -404,13 +404,14 @@ impl Core {
             global,
         ));
         let kind = spec.kind.as_str();
-        // The runner page's Builds group picks the Proton build.
-        out.extend(
-            launch_keys::rows(Scope::Global, machine.mode)
-                .iter()
-                .filter(|r| r.runners.contains(&kind) && r.key != "proton")
-                .map(|r| global_launch_field(r, config, set, machine)),
-        );
+        out.extend(launch_keys::rows(Scope::Global, machine.mode).iter().filter(|r| r.runners.contains(&kind)).map(|r| {
+            let f = global_launch_field(r, config, set, machine);
+            if r.key == "proton" {
+                Field { section: "Builds".into(), ..f }
+            } else {
+                f
+            }
+        }));
         for o in spec.options {
             let f = Field::new(o.key, o.label, o.kind, "Options");
             out.push(f.inherits(table_value(own, o.key), Origin::Runner, o.default.into(), Origin::Default));
@@ -657,6 +658,7 @@ mod tests {
     #[tokio::test]
     async fn a_runner_program_set_on_its_form_is_the_runners_and_its_reset_finds_it_again() {
         let _sb = sandbox();
+        edit_config("", "[proton]\nproton-em = \"~/proton-em\"\n");
         let (core, _) = open().await;
         let form = Form::Runner("dolphin".into());
         core.set_field(&form, "exe", "/opt/dolphin/dolphin-emu").await.unwrap();
@@ -668,7 +670,9 @@ mod tests {
         core.set_field(&form, "exe", "").await.unwrap();
         assert_eq!(field(&core.form(&form, None).await.unwrap(), "exe").own, "");
         let proton = core.form(&Form::Runner("proton".into()), None).await.unwrap();
-        assert!(proton.iter().all(|f| f.key != "launch.proton"), "the Builds group picks the Proton build");
+        let default = field(&proton, "launch.proton");
+        assert_eq!(default.section, "Builds", "the default build sits with the builds");
+        assert!(default.choices.iter().any(|c| c.value == "proton-em"), "every Proton found, config.toml's included");
         assert!(proton.iter().any(|f| f.key == "launch.wayland") && proton.iter().any(|f| f.key == "launch.esync"));
     }
 
