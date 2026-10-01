@@ -35,9 +35,7 @@ FocusScope {
         }
     }
 
-    onLogChanged: Qt.callLater(function () {
-        flick.contentY = maxScroll();
-    })
+    onLogChanged: toEnd.restart()
 
     function maxScroll() {
         return Math.max(0, flick.contentHeight - flick.height);
@@ -157,5 +155,12 @@ FocusScope {
         anchors.top: flick.top
         anchors.bottom: flick.bottom
         flickable: flick
+    }
+
+    // Not Qt.callLater: a call still queued when the page is popped would run on the dead page.
+    Timer {
+        id: toEnd
+        interval: 0
+        onTriggered: flick.contentY = maxScroll()
     }
 }
