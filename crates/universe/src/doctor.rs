@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::config::Config;
 use crate::desktop::Profile;
 use crate::distro::Family;
-use crate::modules::Module;
+use crate::modules::{Hooker, Module};
 use crate::sources::Source;
 
 /// ExitType=cgroup, which ends a game's unit with its last process rather than the one it started.
@@ -22,7 +22,7 @@ pub struct Check {
     pub component: String,
 }
 
-/// A line of a module's `check` hook.
+/// A line of a module's or a source's `check` hook.
 #[derive(Deserialize)]
 struct Reported {
     check: String,
@@ -33,39 +33,48 @@ struct Reported {
     detail: String,
     #[serde(default)]
     fix: String,
+    #[serde(default)]
+    component: String,
 }
 
-/// What an active module's `check` hook finds, under the module's global settings; a hook that prints none and fails is one failed check.
-async fn module_checks(m: &Module, config: &Config) -> Vec<Check> {
-    let Some(exe) = m.hook("check") else { return Vec::new() };
+/// What a module's or a source's `check` hook finds, under its global settings; a hook that prints none and fails is one failed check.
+async fn hook_checks(hooker: Hooker, config: &Config) -> Vec<Check> {
+    let Some(exe) = hooker.hook("check") else { return Vec::new() };
     let mut env = crate::modules::HookEnv::default();
     for (k, v) in crate::core::passthrough_env() {
         env.set(&k, v);
     }
-    env.set("MODULE_SETTINGS_JSON", serde_json::Value::Object(m.merged_settings(config, None)).to_string());
-    let check = |check: String, label: String, ok: bool, detail: String, fix: String| Check {
-        label: if label.is_empty() { check.clone() } else { label },
-        check,
-        ok,
-        detail,
-        fix: if ok { String::new() } else { fix },
-        module: m.id().into(),
-        component: String::new(),
+    env.set("UNIVERSE_DISTRO", crate::distro::detect().as_str());
+    let (settings, name) = match &hooker {
+        Hooker::Module(m) => (("MODULE_SETTINGS_JSON", m.merged_settings(config, None)), if m.manifest.name.is_empty() { m.id() } else { &m.manifest.name }),
+        Hooker::Source(s) => (("SOURCE_SETTINGS_JSON", s.merged_settings(config, None)), s.name()),
     };
-    let name = if m.manifest.name.is_empty() { m.id() } else { m.manifest.name.as_str() };
-    let failed = |detail: String| vec![check("check".into(), format!("{name} check"), false, detail, format!("run {} by hand to see why", exe.display()))];
-    let out = match crate::modules::run_blocking(&crate::modules::Hooker::Module(m.clone()), "check", &env).await {
+    env.set(settings.0, serde_json::Value::Object(settings.1).to_string());
+    let check = |r: Reported| Check {
+        label: if r.label.is_empty() { r.check.clone() } else { r.label },
+        check: r.check,
+        ok: r.ok,
+        detail: r.detail,
+        fix: if r.ok { String::new() } else { r.fix },
+        module: hooker.id().into(),
+        component: r.component,
+    };
+    let failed = |detail: String| {
+        let fix = format!("run {} by hand to see why", exe.display());
+        vec![check(Reported { check: "check".into(), label: format!("{name} check"), ok: false, detail, fix, component: String::new() })]
+    };
+    let out = match crate::modules::run_blocking(&hooker, "check", &env).await {
         Ok(out) => out,
         Err(e) => return failed(e.to_string()),
     };
-    let found: Vec<Check> =
-        out.stdout.lines().filter_map(|line| serde_json::from_str::<Reported>(line).ok()).map(|r| check(r.check, r.label, r.ok, r.detail, r.fix)).collect();
+    let found: Vec<Check> = out.stdout.lines().filter_map(|line| serde_json::from_str::<Reported>(line).ok()).map(check).collect();
     if found.is_empty() && out.status != 0 {
         return failed(format!("exited {}: {}", out.status, out.stderr.trim().lines().last().unwrap_or("")));
     }
     found
 }
 
+/// A check's component: the one its hook names, a fetched tool or a system tool by its program, the default Proton's family, a runner.
 fn attach_components(out: &mut [Check], config: &Config, packagekit: bool) {
     let catalogue = crate::components::cached(config);
     let installable = |id: &str| catalogue.components.get(id).and_then(|e| e.latest()).is_some();
@@ -74,20 +83,27 @@ fn attach_components(out: &mut [Check], config: &Config, packagekit: bool) {
         .iter()
         .find(|(_, e)| e.kind == crate::components::Kind::Proton && crate::config::of_family(&config.launch.proton, &e.family))
         .map(|(id, _)| id.clone());
+    let family = crate::distro::detect();
+    // A system tool, by id or program, that PackageKit can install here.
+    let system = |name: &str| {
+        crate::components::SYSTEM
+            .iter()
+            .find(|t| t.id == name || t.bin == name)
+            .filter(|t| packagekit && !t.packages(family).is_empty())
+            .map(|t| t.id.to_string())
+            .unwrap_or_default()
+    };
     for c in out.iter_mut() {
+        let named = std::mem::take(&mut c.component);
+        let missing = !c.ok || c.detail.starts_with("not installed");
         let id = match c.check.as_str() {
-            "proton" if c.detail.starts_with("not installed") || !c.ok => proton.clone().unwrap_or_default(),
-            "gog-comet" if !c.ok => "comet".into(),
-            "umu-run" | "gogdl" | "legendary" | "butler" if c.detail.starts_with("not installed") || !c.ok => c.check.clone(),
-            "gamescope" | "mangohud" | "mangohud-32bit" | "gpu-screen-recorder" | "gsr-kms-server" if !c.ok && packagekit => {
-                let tool = match c.check.as_str() {
-                    "mangohud-32bit" => "mangohud",
-                    "gsr-kms-server" => "gpu-screen-recorder",
-                    other => other,
-                };
-                let family = crate::distro::detect();
-                crate::components::system_tool(tool).filter(|t| !t.packages(family).is_empty()).map(|t| t.id.to_string()).unwrap_or_default()
-            }
+            _ if !named.is_empty() && c.ok => String::new(),
+            _ if !named.is_empty() && crate::components::system_tool(&named).is_some() => system(&named),
+            _ if !named.is_empty() => named,
+            "proton" if missing => proton.clone().unwrap_or_default(),
+            "mangohud-32bit" if !c.ok => system("mangohud"),
+            check if missing && catalogue.tool(check).is_some() => catalogue.tool(check).map(|(id, _)| id.clone()).unwrap_or_default(),
+            check if !c.ok && crate::components::SYSTEM.iter().any(|t| t.bin == check) => system(check),
             check => check.strip_prefix("runner-").filter(|_| !c.ok).unwrap_or_default().to_string(),
         };
         if !id.is_empty() && (installable(&id) || crate::components::system_tool(&id).is_some()) {
@@ -112,15 +128,6 @@ fn mangohud_install(family: Family) -> &'static str {
         Family::Fedora => "install mangohud and mangohud.i686",
         Family::Debian => "install mangohud and mangohud:i386",
         Family::Other => "install MangoHud and its 32-bit build",
-    }
-}
-
-/// Native gpu-screen-recorder 6.1+: its Flatpak cannot be driven from outside, and gsr-kms-server needs `cap_sys_admin` (Arch's package sets it).
-fn gsr_fix(family: Family) -> &'static str {
-    match family {
-        Family::NixOs => "set programs.gpu-screen-recorder.enable",
-        Family::Arch => "install gpu-screen-recorder",
-        _ => "install gpu-screen-recorder 6.1 or later natively (not its Flatpak), then sudo setcap cap_sys_admin+ep on its gsr-kms-server",
     }
 }
 
@@ -499,17 +506,12 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
         if !m.enabled {
             continue;
         }
-        if m.active() && !m.needs_setup() {
-            reported.extend(module_checks(m, config).await);
+        if !m.needs_setup() {
+            reported.extend(hook_checks(Hooker::Module(m.clone()), config).await);
         }
         for b in m.manifest.requires.bins.iter().chain(m.missing.iter()).collect::<std::collections::BTreeSet<_>>() {
             let (ok, detail) = bin(b);
-            let fix = if b == "gsr-cli" || b == "gpu-screen-recorder" {
-                gsr_fix(family).to_string()
-            } else {
-                format!("install {b}, or turn the {} module off", m.manifest.name)
-            };
-            push(b, b, ok, detail, fix, m.id());
+            push(b, b, ok, detail, format!("install {b}, or turn the {} module off", m.manifest.name), m.id());
         }
         for key in &m.unset {
             let label = m.manifest.settings.iter().find(|s| &s.key == key).map(|s| s.label.clone()).unwrap_or_else(|| key.clone());
@@ -521,10 +523,6 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
                 format!("choose it in Settings › Modules, or run universe module set {} {key}=…", m.id()),
                 m.id(),
             );
-        }
-        if m.id() == "capture" {
-            let (ok, detail) = bin("gsr-kms-server");
-            push("gsr-kms-server", "gsr-kms-server", ok, detail, gsr_fix(family).into(), "capture");
         }
     }
     for m in sources.iter().filter(|m| m.enabled) {
@@ -538,22 +536,7 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
             };
             push(b, b, ok, detail, format!("install {b}, or turn the {} source off", m.manifest.name), m.id());
         }
-        if m.id() == "gog" {
-            let auth = crate::paths::expand(m.merged_settings(config, None).get("auth_path").and_then(|v| v.as_str()).unwrap_or("~/.config/gogdl/auth.json"));
-            let logged = std::fs::read_to_string(&auth).map(|s| s.contains("refresh_token")).unwrap_or(false);
-            push(
-                "gog-auth",
-                "GOG login",
-                logged,
-                if logged { auth.to_string_lossy().into() } else { "not logged in".into() },
-                "run universe login gog".into(),
-                "gog",
-            );
-            if m.merged_settings(config, None).get("achievements").and_then(|v| v.as_bool()).unwrap_or(false) {
-                let (ok, detail) = bin("comet");
-                push("gog-comet", "GOG achievements (comet)", ok, detail, "install comet-gog, or universe source set gog achievements=false".into(), "gog");
-            }
-        }
+        reported.extend(hook_checks(Hooker::Source(m.clone()), config).await);
     }
     if config.controller.enabled {
         let uinput = std::fs::OpenOptions::new().write(true).open("/dev/uinput").is_ok();
@@ -623,6 +606,8 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
         "remove them from [sources] enabled in config.toml, or install them".into(),
         "core",
     );
+    // A hook's line replaces the core's of the same id for its module, a required binary's: the module words its own fix.
+    out.retain(|c| !reported.iter().any(|r| r.module == c.module && r.check == c.check));
     out.extend(reported);
     attach_components(&mut out, config, crate::packagekit::available().await);
     out
@@ -671,7 +656,7 @@ echo '{"check":"quota","ok":true,"detail":"28 % used","fix":"never shown"}'
 exit 1
 "#,
         );
-        let checks = module_checks(&m, &config).await;
+        let checks = hook_checks(Hooker::Module(m), &config).await;
         let seen: Vec<_> = checks.iter().map(|c| (c.check.as_str(), c.label.as_str(), c.ok, c.detail.as_str(), c.fix.as_str(), c.module.as_str())).collect();
         assert_eq!(
             seen,
@@ -680,9 +665,54 @@ exit 1
         );
 
         let m = module_with_check(env.path(), "#!/bin/sh\necho 'codex went away' >&2\nexit 2\n");
-        let checks = module_checks(&m, &config).await;
+        let checks = hook_checks(Hooker::Module(m), &config).await;
         assert_eq!(checks.len(), 1);
         assert_eq!((checks[0].check.as_str(), checks[0].label.as_str(), checks[0].ok), ("check", "Play journal check", false));
         assert!(checks[0].detail.contains("codex went away") && checks[0].fix.contains("bin/check"), "{:?}", checks[0]);
+    }
+
+    #[tokio::test]
+    async fn a_sources_check_hook_reports_under_its_settings_and_names_a_component() {
+        let env = crate::paths::test_env();
+        std::fs::create_dir_all(env.path().join("bin")).unwrap();
+        let exe = env.path().join("bin/check");
+        std::fs::write(
+            &exe,
+            r#"#!/bin/sh
+printf '%s' "$SOURCE_SETTINGS_JSON" | grep -q '"achievements":true' || exit 3
+[ -n "$UNIVERSE_DISTRO" ] || exit 4
+echo '{"check":"gog-comet","label":"GOG achievements (comet)","ok":false,"detail":"comet is not on PATH","fix":"install comet-gog","component":"comet"}'
+"#,
+        )
+        .unwrap();
+        std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let manifest = toml::from_str(
+            "id = \"gog\"\nname = \"GOG\"\nexe = \"bin/source\"\n[hooks]\ncheck = \"bin/check\"\n[[settings]]\nkey = \"achievements\"\ntype = \"bool\"\ndefault = true\n",
+        )
+        .unwrap();
+        let source = Source { available: true, missing: vec![], enabled: true, dir: env.path().to_path_buf(), manifest };
+        let checks = hook_checks(Hooker::Source(source), &toml::from_str("").unwrap()).await;
+        let seen: Vec<_> = checks.iter().map(|c| (c.check.as_str(), c.ok, c.module.as_str(), c.component.as_str())).collect();
+        assert_eq!(seen, [("gog-comet", false, "gog", "comet")]);
+    }
+
+    #[test]
+    fn a_checks_component_is_the_one_its_hook_names_else_its_program() {
+        let _env = crate::paths::test_env();
+        let config: Config = toml::from_str("").unwrap();
+        let check = |check: &str, ok: bool, component: &str| Check {
+            check: check.into(),
+            label: check.into(),
+            ok,
+            detail: if ok { "found".into() } else { "missing".into() },
+            fix: "install it".into(),
+            module: "m".into(),
+            component: component.into(),
+        };
+        let mut out = vec![check("umu-run", false, ""), check("helper", false, "umu-run"), check("helper-ok", true, "umu-run"), check("comet", false, "nope")];
+        attach_components(&mut out, &config, false);
+        let components: Vec<_> = out.iter().map(|c| c.component.as_str()).collect();
+        assert_eq!(components, ["umu-run", "umu-run", "", ""], "a fetched tool by its program, a hook's own, none once fine or unknown");
+        assert!(out[1].fix.starts_with("universe component install umu-run"), "{}", out[1].fix);
     }
 }

@@ -17,6 +17,7 @@ pre-launch   = "bin/pre-launch"
 post-launch  = "bin/post-launch"
 session-end  = "bin/session-end"
 post-process = "bin/post-process"
+check        = "bin/check"
 timeout_s    = 40
 
 [[settings]]

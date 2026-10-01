@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
+import shutil
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -12,7 +13,8 @@ PROBE_TIMEOUT_S = 10
 
 
 def main():
-    if setting_str(load_settings(), "provider") != "codex":
+    # Without codex the module is unavailable, and doctor already says so.
+    if setting_str(load_settings(), "provider") != "codex" or shutil.which("codex") is None:
         return 0
     signed_in, detail = providers.codex_signed_in(PROBE_TIMEOUT_S)
     line = {

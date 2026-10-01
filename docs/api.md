@@ -1154,7 +1154,7 @@ written whole, missing or not.
 | `module_settings(module, game_id)` | `module_settings(…)` | `universe module settings <id> [game]` | global settings merged with the game's; `game_id=""` is global only |
 | `set_module_setting(module, game_id, key, value)` | `set_module_setting(…)` | `universe module set <id> k=v [--game g]` | validated against `[[settings]]`. `game_id=""` writes `config.toml [modules.<id>]`, otherwise `game.toml [modules.<id>]` |
 | `module_setting_choices(module, key)` | `module_setting_choices(…)` | — | the global setting's choices; a setting with `choices_exec` gets them from the module, live (see below) |
-| `doctor()` | `doctor()` | `universe doctor` | `[{check, label, ok, detail, fix, module, component}]` (`component` the component whose install fixes it — a runner not found, a fetched tool, the default Proton's family when the catalogue has a build for it, a system tool PackageKit can install — else empty; `components-fhs` on NixOS once Universe holds a downloaded runner; `check` a stable id, `label` its plain name, `detail` the problem when not `ok`, `fix` what to do about it, empty when `ok`, worded for the distribution: NixOS options on NixOS, the Arch, Fedora or Debian package names elsewhere): the config file (absent: defaults; read-only), the systemd user manager (250 or later, for `ExitType=cgroup`) and cgroup v2, umu-run (or python3 for the one Universe would fetch), MangoHud and its 32-bit layer, gamescope and mangoapp, required binaries of the enabled modules and sources (`module` names the one, or `core`, `runners`, `media`, `controller`; a tool Universe fetches is fine missing), one line per `required` setting an enabled module is still waiting on, the lines of each active module's `check` hook (the journal's `codex-signin`), `gsr-kms-server`, Proton, the desktop (`desktop`, then per profile the programs it drives, `desktop-<program>`, a notification daemon where the OSD is a notification, `cursor` where the profile cannot hide it), the cursor and Universe extensions on GNOME, tokens, one `runner-<id>` check per runner a library game uses (its program resolved), `runner-eden-stop` when Eden is one (its `[UI] confirmStop` at `2`, else a stop shows its "close?" question); `modules` and `sources` say what `config.toml` enables that is not found |
+| `doctor()` | `doctor()` | `universe doctor` | `[{check, label, ok, detail, fix, module, component}]` (`component` the component whose install fixes it — a runner not found, a fetched tool, the default Proton's family when the catalogue has a build for it, a system tool PackageKit can install — else empty; `components-fhs` on NixOS once Universe holds a downloaded runner; `check` a stable id, `label` its plain name, `detail` the problem when not `ok`, `fix` what to do about it, empty when `ok`, worded for the distribution: NixOS options on NixOS, the Arch, Fedora or Debian package names elsewhere): the config file (absent: defaults; read-only), the systemd user manager (250 or later, for `ExitType=cgroup`) and cgroup v2, umu-run (or python3 for the one Universe would fetch), MangoHud and its 32-bit layer, gamescope and mangoapp, required binaries of the enabled modules and sources (`module` names the one, or `core`, `runners`, `media`, `controller`; a tool Universe fetches is fine missing), one line per `required` setting an enabled module is still waiting on, the lines of each enabled module's and source's `check` hook (the journal's `codex-signin`, the capture's `gpu-screen-recorder`, `gsr-cli` and `gsr-kms-server`, GOG's `gog-auth` and `gog-comet`), Proton, the desktop (`desktop`, then per profile the programs it drives, `desktop-<program>`, a notification daemon where the OSD is a notification, `cursor` where the profile cannot hide it), the cursor and Universe extensions on GNOME, tokens, one `runner-<id>` check per runner a library game uses (its program resolved), `runner-eden-stop` when Eden is one (its `[UI] confirmStop` at `2`, else a stop shows its "close?" question); `modules` and `sources` say what `config.toml` enables that is not found |
 | — | — | `universe setup` | after an install: on GNOME, writes the `universe@ilyasturki.github.io` extension the binary carries into `~/.local/share/gnome-shell/extensions/` (rewritten when stale; left to a system copy when there is none there) and adds it to `org.gnome.shell enabled-extensions` (out of `disabled-extensions`, which overrides it), read by the shell at the next login; then prints `doctor` |
 
 A module entry is `{id, name, version, description, dir, enabled, available, missing: [bin],
@@ -1470,7 +1470,7 @@ thaw         = "bin/thaw"
 session-end  = "bin/stop"         # short and blocking, inside the game unit's ExecStopPost; this is where a recording is filed
 post-process = "bin/process"      # async (transient unit), after the session-end hooks
 screenshot   = "bin/shot"         # on demand
-check        = "bin/check"        # blocking, from doctor, while the module is on and set up: one check per stdout line
+check        = "bin/check"        # blocking, from doctor, while the module is on (available or not) and set up: one check per stdout line
 timeout_s    = 20                 # for blocking hooks; the sum bounds the game unit's TimeoutStopSec
 
 [limits]                          # applied to the transient units of async hooks
@@ -1546,10 +1546,13 @@ Exit codes: 0 is success; anything else is logged and the session continues — 
 hook, where a non-zero exit cancels the launch.
 
 A `check` hook runs outside any game and session, with `MODULE_SETTINGS_JSON` (the global settings),
-`MODULE_DIR`, `MODULE_DATA_DIR`, `UNIVERSE_BIN` and `PATH`. Each stdout line that is a JSON object
-`{"check", "label", "ok", "detail", "fix"}` is a doctor check of the module's (`label` defaults to
-`check`, `fix` shows only when not `ok`); a hook that prints none and exits non-zero, or times out,
-is one failed `check` check naming its error.
+`MODULE_DIR`, `MODULE_DATA_DIR`, `UNIVERSE_BIN`, `PATH` and `UNIVERSE_DISTRO` (`nixos`, `arch`, `fedora`,
+`debian` or `other`, to word a fix for the distribution). It runs while the module is on, even when a
+required binary is missing, so it can say how to get it. Each stdout line that is a JSON object
+`{"check", "label", "ok", "detail", "fix", "component"}` is a doctor check of the module's (`label` defaults to
+`check`, `fix` shows only when not `ok`, `component` optionally names the component or system tool whose
+install fixes it); a line whose `check` is a required binary's replaces doctor's own line for it. A hook
+that prints none and exits non-zero, or times out, is one failed `check` check naming its error.
 
 ## Source protocol
 
@@ -1579,6 +1582,7 @@ purpose = "install games"         # what signing in is for, after "Sign in to" (
 [hooks]                           # optional, as a module's (every session hook but `screenshot`); they run for the games whose source is this one
 pre-launch  = "bin/pre-launch"
 session-end = "bin/session-end"
+check       = "bin/check"         # from doctor while the source is on, as a module's, with SOURCE_SETTINGS_JSON
 timeout_s   = 20
 
 [[settings]]                      # as a module's; `scope` is global (config.toml [sources.<id>]) or game (game.toml [sources.<id>] over it)

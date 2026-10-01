@@ -191,6 +191,26 @@ def seed_cache(src, env, products=None):
     (env["data"] / "library.json").write_text(json.dumps(LIBRARY_PAGE["products"] if products is None else products))
 
 
+@pytest.mark.parametrize("comet", [True, False], ids=["comet", "no-comet"])
+def test_check_reports_the_login_and_comet(src, env, capsys, monkeypatch, comet):
+    monkeypatch.setenv("PATH", str(env["tmp"] / "bin"))
+    if comet:
+        shim = env["tmp"] / "bin" / "comet"
+        shim.write_text("#!/bin/sh\n")
+        shim.chmod(0o755)
+    settings = json.loads(os.environ["SOURCE_SETTINGS_JSON"])
+    monkeypatch.setenv("SOURCE_SETTINGS_JSON", json.dumps({**settings, "achievements": True}))
+    code, lines, _ = run(src, capsys, "check")
+    assert code == 0 and [(c["check"], c["ok"]) for c in lines] == [("gog-auth", False), ("gog-comet", comet)]
+    assert lines[1]["component"] == "comet", "doctor offers the comet component"
+    auth = Path(settings["auth_path"])
+    auth.parent.mkdir(parents=True)
+    auth.write_text(json.dumps({src.GALAXY_CLIENT_ID: {"refresh_token": "r"}}))
+    monkeypatch.setenv("SOURCE_SETTINGS_JSON", json.dumps({**settings, "achievements": False}))
+    _, lines, _ = run(src, capsys, "check")
+    assert [(c["check"], c["ok"]) for c in lines] == [("gog-auth", True)], "signed in, and no comet asked for without achievements"
+
+
 def test_login_url(src, env, capsys):
     code, events, _ = run(src, capsys, "login")
     assert code == 0

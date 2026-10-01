@@ -875,6 +875,25 @@ def wants_comet(settings):
     return comet
 
 
+def hook_check(settings):
+    """doctor's lines: the login, and comet while achievements are on."""
+    auth = settings["auth_path"]
+    logged = bool(((load_json(auth) or {}).get(GALAXY_CLIENT_ID) or {}).get("refresh_token"))
+    check = {"check": "gog-auth", "label": "GOG login", "ok": logged, "detail": auth if logged else "not logged in", "fix": "run universe login gog"}
+    print(json.dumps(check), flush=True)
+    if settings["achievements"]:
+        comet = shutil.which("comet")
+        check = {
+            "check": "gog-comet",
+            "label": "GOG achievements (comet)",
+            "ok": comet is not None,
+            "detail": comet or "comet is not on PATH",
+            "fix": "install comet-gog, or universe source set gog achievements=false",
+            "component": "comet",
+        }
+        print(json.dumps(check), flush=True)
+
+
 def hook_pre_launch(settings):
     comet = wants_comet(settings)
     if comet is None:
@@ -1003,6 +1022,7 @@ HOOKS = {
     "post-launch": hook_post_launch,
     "session-end": hook_session_end,
     "post-process": hook_post_process,
+    "check": hook_check,
 }
 
 

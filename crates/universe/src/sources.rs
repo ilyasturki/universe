@@ -8,8 +8,8 @@ use crate::game::Game;
 use crate::modules::{self, Limits, Requires, Setting};
 use crate::paths;
 
-/// The session hooks a source may declare; they run for the games it installed or found.
-pub const HOOKS: [&str; 6] = ["pre-launch", "post-launch", "freeze", "thaw", "session-end", "post-process"];
+/// The hooks a source may declare: the session ones run for the games it installed or found, `check` from doctor.
+pub const HOOKS: [&str; 7] = ["pre-launch", "post-launch", "freeze", "thaw", "session-end", "post-process", "check"];
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]

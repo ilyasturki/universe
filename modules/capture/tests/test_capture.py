@@ -192,6 +192,17 @@ def test_start_fps_auto_falls_back_to_60_when_the_mode_is_unreadable(tmp_path, f
     assert flag_values((fakebin["logs"] / "systemd-run.args").read_text().splitlines(), "-f") == ["60"]
 
 
+@pytest.mark.parametrize(("distro", "fix"), [("arch", "install gpu-screen-recorder"), ("debian", "setcap")], ids=["arch", "elsewhere"])
+def test_check_words_the_gsr_fix_for_the_distribution(tmp_path, distro, fix):
+    _write_shim(tmp_path / "gpu-screen-recorder", "exit 0")
+    env = {"PATH": str(tmp_path), "UNIVERSE_DISTRO": distro}
+    result = subprocess.run([sys.executable, str(BIN_DIR / "check")], env=env, capture_output=True, text=True, timeout=30, check=False)
+    assert result.returncode == 0, result.stderr
+    lines = [json.loads(line) for line in result.stdout.splitlines()]
+    assert [(c["check"], c["ok"]) for c in lines] == [("gpu-screen-recorder", True), ("gsr-cli", False), ("gsr-kms-server", False)]
+    assert all(fix in c["fix"] and c["component"] == "gpu-screen-recorder" for c in lines)
+
+
 def test_fps_choices_stop_at_the_screens_refresh_rate(tmp_path, fakebin):
     def choices(**extra):
         env = env_for(tmp_path, fakebin, {}, extra=extra)
