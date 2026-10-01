@@ -1,3 +1,5 @@
+import os
+
 from PySide6.QtCore import Signal, Slot
 
 from ..qt import Property
@@ -14,10 +16,17 @@ NOT_YET = "not importable yet"
 IMPORTERS = ("lutris", "roms")
 RUNNING = ("queued", "importing")
 
-TITLES = {"found": "What's on this machine", "stores": "Your stores", "preferences": "Controller and screen", "done": "You're set"}
+TITLES = {
+    "found": "What's on this machine",
+    "stores": "Your stores",
+    "install": "Where games install",
+    "preferences": "Controller and screen",
+    "done": "You're set",
+}
 SUBTITLES = {
     "found": "Games other launchers installed here. Adding them moves nothing.",
     "stores": "Sign in to see and install the games you own.",
+    "install": "New installs go here. Games already installed stay where they are.",
     "preferences": "Both can be changed later in Settings.",
     "done": "Everything here can be changed later in Settings.",
 }
@@ -129,6 +138,8 @@ class Onboarding(RowsForm):
         self._launchers = []
         self._queue = []
         self._gog_dirs = []
+        self._install_dirs = []
+        self._first_root = ""
         self._sources = []
         self._signed_in = []
         self._prefs = {"config": {}, "gpu": {}, "keys": []}
@@ -174,6 +185,8 @@ class Onboarding(RowsForm):
             self._writable = bool(self._prefs["config"].get("config_writable", True))
             self._home_manager = self._prefs["config"].get("config_owner") == "home-manager"
             self._gog_dirs = [str(d) for d in report.get("gog_dirs") or []]
+            self._install_dirs = [d for d in report.get("install_dirs") or [] if d.get("dir")]
+            self._first_root = self._games_root()
             self._launchers = [{**launcher, "state": "", "count": 0, "error": "", "blocked": ""} for launcher in report.get("launchers") or []]
             found_via = {launcher.get("via") for launcher in self._launchers if launcher.get("found")}
             # A source that is off is offered only where the config takes the write that turns it on.
@@ -193,7 +206,7 @@ class Onboarding(RowsForm):
             if any(not s.get("logged_in") for s in self._sources):
                 steps.append("stores")
             if self._writable:
-                steps.append("preferences")
+                steps += ["install", "preferences"]
             steps.append("done")
             self._steps = [_step(s) for s in steps]
             self._set_loading(False)
@@ -279,6 +292,22 @@ class Onboarding(RowsForm):
                     continue
                 entries.append((name, {**_static("logged_in", "Account", _source_status(source)[0]), "module": source["id"]}, True))
                 entries.extend((name, {**row, "quiet": signed_in}, True) for row in login_rows(source, name))
+        elif step == "install":
+            root, choices = self._games_root(), {}
+            for path, why in [
+                (self._first_root, "Where games install now"),
+                *((d["dir"], f"Where {d['by']} installs") for d in self._install_dirs),
+                (root, ""),
+            ]:
+                choices.setdefault(path, why)
+            for path, why in choices.items():
+                label = path.replace(os.path.expanduser("~"), "~", 1)
+                if path == root:
+                    entries.append(("", {**_static("install_dir", label, "In use", why), "dir": path}, False))
+                else:
+                    row = _row("", "install_dir", label, "action", "", detail=why)
+                    entries.append(("", {**row, "via": "folder", "dir": path, "display": "Use", "action": "Use", "verb": True}, False))
+            entries.append(("", {**_row("", "paths.games_root", "Another folder…", "path", root), "display": ""}, False))
         elif step == "preferences":
             self._set_rows(*preference_rows(self._controller, **self._prefs))
             return
@@ -315,9 +344,16 @@ class Onboarding(RowsForm):
             self._refresh()
         self.headChanged.emit()
 
+    def _games_root(self):
+        return str((self._prefs["config"].get("paths") or {}).get("games_root") or "")
+
     @Slot(int, result=bool)
     def runImport(self, index):
         row = self.row(index)
+        if row.get("via") == "folder":
+            ok = self._write({"key": "paths.games_root"}, row["dir"])
+            self._refresh()
+            return bool(ok)
         if row.get("via") == "component":
             ident = row["component"]
             return not self._components.busyOn(ident) and (self._components.propose(ident) or self._components.installById(ident))

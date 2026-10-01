@@ -20,12 +20,19 @@ pub struct Launcher {
 }
 
 /// `gog_dirs`: folders holding GOG installs made by another launcher, for the gog source's `scan_dirs`; `install_dirs`:
-/// the folders other launchers install into (Heroic's, Lutris's), offered for `paths.games_root`.
+/// the folders other launchers install into, offered for `paths.games_root`.
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Report {
     pub launchers: Vec<Launcher>,
     pub gog_dirs: Vec<String>,
-    pub install_dirs: Vec<String>,
+    pub install_dirs: Vec<InstallDir>,
+}
+
+/// A folder another launcher installs into: `by` names it (`Heroic`, `Lutris`).
+#[derive(Debug, Clone, Default, Serialize, PartialEq)]
+pub struct InstallDir {
+    pub dir: String,
+    pub by: String,
 }
 
 const TITLES: usize = 6;
@@ -47,9 +54,15 @@ pub fn run(config: &Config) -> Report {
     Report { launchers, gog_dirs: gog_dirs.iter().map(|d| d.to_string_lossy().into()).collect(), install_dirs }
 }
 
-fn install_dirs(gog_dirs: &[PathBuf], lutris: Option<PathBuf>, games_root: &Path) -> Vec<String> {
+fn install_dirs(heroic: &[PathBuf], lutris: Option<PathBuf>, games_root: &Path) -> Vec<InstallDir> {
     let mut seen = std::collections::BTreeSet::new();
-    gog_dirs.iter().cloned().chain(lutris).filter(|d| d.is_dir() && d != games_root && seen.insert(d.clone())).map(|d| d.to_string_lossy().into()).collect()
+    heroic
+        .iter()
+        .map(|d| (d.clone(), "Heroic"))
+        .chain(lutris.map(|d| (d, "Lutris")))
+        .filter(|(d, _)| d.is_dir() && d != games_root && seen.insert(d.clone()))
+        .map(|(d, by)| InstallDir { dir: d.to_string_lossy().into(), by: by.into() })
+        .collect()
 }
 
 /// Every library game's file, for the folder scan to leave out.
@@ -406,8 +419,8 @@ mod tests {
             std::fs::create_dir_all(d).unwrap();
         }
         let gog = [heroic.clone(), dir.path().join("gone"), root.clone(), heroic.clone()];
-        let found = install_dirs(&gog, Some(lutris.clone()), &root);
-        assert_eq!(found, vec![heroic.to_string_lossy().to_string(), lutris.to_string_lossy().to_string()]);
+        let found: Vec<(String, String)> = install_dirs(&gog, Some(lutris.clone()), &root).into_iter().map(|d| (d.dir, d.by)).collect();
+        assert_eq!(found, vec![(heroic.to_string_lossy().into(), "Heroic".into()), (lutris.to_string_lossy().into(), "Lutris".into())]);
     }
 
     #[test]

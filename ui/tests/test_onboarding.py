@@ -61,7 +61,7 @@ def test_the_ui_memory_flag_of_an_earlier_version_carries_over(empty_api, empty)
 def test_steps_and_found_rows(empty_api, empty):
     signed_out(empty)
     form = loaded(empty_api.screens.onboarding)
-    assert [s["id"] for s in form.steps] == ["found", "stores", "preferences", "done"]
+    assert [s["id"] for s in form.steps] == ["found", "stores", "install", "preferences", "done"]
     assert form.stepId == "found"
     rows = rows_by_key(form)
     assert {key: (row["type"], row["via"]) for key, row in rows.items()} == {
@@ -84,12 +84,12 @@ def test_steps_and_found_rows(empty_api, empty):
 def test_signed_in_stores_skip_their_step(empty_api, empty):
     empty.core._data["sources"] = [s for s in empty.core._data["sources"] if s["id"] == "gog"]
     form = loaded(empty_api.screens.onboarding)
-    assert [s["id"] for s in form.steps] == ["found", "preferences", "done"], "every store signed in: nothing to do there"
+    assert [s["id"] for s in form.steps] == ["found", "install", "preferences", "done"], "every store signed in: nothing to do there"
 
 
 def test_an_offered_store_turns_on_and_adopts_its_launchers_games_once_signed_in(empty_api, empty):
     form = loaded(empty_api.screens.onboarding)
-    assert [s["id"] for s in form.steps] == ["found", "stores", "preferences", "done"], "Epic is off, its launcher is here"
+    assert [s["id"] for s in form.steps] == ["found", "stores", "install", "preferences", "done"], "Epic is off, its launcher is here"
     finished = record(empty.jobFinished)
     assert form.runImport(index_of(form, "heroic-epic")) is True
     until(lambda: finished)
@@ -187,6 +187,24 @@ def test_an_import_still_running_leaves_the_rest_of_the_setup_usable(empty_api, 
     until(lambda: any(job["kind"] == "media" for job in empty.jobs()), "the emulator games' art comes after, as a job")
 
 
+def test_the_install_folder_is_the_games_root_or_another_launchers(empty_api, empty):
+    form = loaded(empty_api.screens.onboarding)
+    while form.stepId != "install":
+        form.next()
+    assert [(r["key"], r["type"], r.get("dir")) for r in form.rows] == [
+        ("install_dir", "static", "/mnt/games/PC"),
+        ("install_dir", "action", "/mnt/games/Heroic"),
+        ("install_dir", "action", "/home/player/Games"),
+        ("paths.games_root", "path", None),
+    ], "the folder in use, then Heroic's and Lutris's, then any other"
+    assert form.runImport(1) is True
+    assert empty.core.settings()["paths"]["games_root"] == "/mnt/games/Heroic"
+    assert [r["type"] for r in form.rows[:2]] == ["action", "static"], "the one picked is the one in use"
+    assert form.setValue(index_of(form, "paths.games_root"), "/srv/games") is True
+    assert empty.core.settings()["paths"]["games_root"] == "/srv/games"
+    assert [r["dir"] for r in form.rows if r["type"] == "static"] == ["/srv/games"], "a folder of one's own joins the list, in use"
+
+
 def test_preferences_write_the_family_and_hdr(empty_api, empty):
     form = loaded(empty_api.screens.onboarding)
     while form.stepId != "preferences":
@@ -207,7 +225,7 @@ def test_read_only_config_skips_preferences(empty_api, empty, config_owner, owne
     empty.core._config["config_owner"] = config_owner
     signed_out(empty)
     form = loaded(empty_api.screens.onboarding)
-    assert [s["id"] for s in form.steps] == ["found", "stores", "done"]
+    assert [s["id"] for s in form.steps] == ["found", "stores", "done"], "no install folder nor preferences: nothing to write them to"
     rows = rows_by_key(form)
     assert rows["heroic-gog"]["type"] == "static" and "/mnt/games/PC" in rows["heroic-gog"]["detail"] and owner in rows["heroic-gog"]["detail"]
     assert rows["heroic-epic"]["type"] == "static" and "sources.enabled" in rows["heroic-epic"]["detail"], "Epic is off, and cannot be turned on"
