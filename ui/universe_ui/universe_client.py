@@ -4,7 +4,9 @@ import logging
 import os
 import tempfile
 import threading
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from PySide6.QtCore import QFileSystemWatcher, QObject, QTimer, Signal, Slot
 from PySide6.QtGui import QImage
@@ -796,7 +798,7 @@ class CoreClient(QObject):
             elif was and not self._current:
                 self._ended(was)
 
-    def _job(self, kind, target, work, source="", text=str):
+    def _job(self, kind, target, work, source="", text: Callable[[Any], str] = str):
         self._job_seq += 1
         job = f"job-{self._job_seq}"
         self._jobs[job] = {
