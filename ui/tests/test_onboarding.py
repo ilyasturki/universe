@@ -64,7 +64,9 @@ def test_steps_and_found_rows(empty_api, empty):
     assert [s["id"] for s in form.steps] == ["found", "stores", "install", "preferences", "done"]
     assert form.stepId == "found"
     rows = rows_by_key(form)
+    assert form.rows[0]["key"] == "everything", "Add everything leads"
     assert {key: (row["type"], row["via"]) for key, row in rows.items()} == {
+        "everything": ("action", "everything"),
         "lutris": ("action", "lutris"),
         "steam": ("action", "steam"),
         "heroic-gog": ("action", "gog"),
@@ -124,6 +126,19 @@ def test_a_store_that_signs_in_with_an_api_key_is_worded_from_its_login_table(em
     login = empty_api.screens.login
     login.begin("steam")
     assert login.status == empty.core._source("steam")["login"]["hint"], "the store's own hint under its link"
+
+
+def test_add_everything_runs_every_launcher_once(empty_api, empty):
+    form = loaded(empty_api.screens.onboarding)
+    assert form.runImport(index_of(form, "everything")) is True
+    assert "everything" not in rows_by_key(form), "nothing is left to add"
+
+    def states():
+        return {row["key"]: row["state"] for row in form.rows if "state" in row}
+
+    until(lambda: len(states()) == 5 and set(states().values()) <= {"imported", "waiting"}, "each runs to its end")
+    assert states()["heroic-epic"] == "waiting", "Epic, off and signed out, waits for its sign-in"
+    until(lambda: empty_api.allGames.count == 3, "Lutris's two and the emulator folders' one, the importers one after the other")
 
 
 def test_found_rows_run_the_importers(empty_api, empty):
@@ -310,12 +325,12 @@ def test_the_setup_in_each_look(empty_api, empty, theme):
     signed_out(empty)
     look = Look(empty_api, theme)
     form = empty_api.screens.onboarding
-    until(lambda: look.opened() and not form.loading and form.stepId == "found" and form.count == 5)
+    until(lambda: look.opened() and not form.loading and form.stepId == "found" and form.count == 6)
     look.press(Qt.Key.Key_I)
     until(lambda: form.stepId == "stores", "X moves on")
     look.press(Qt.Key.Key_Escape)
     until(lambda: form.stepId == "found" and look.opened(), "B goes back a step, the setup stays")
-    look.press(Qt.Key.Key_Down, 6)
+    look.press(Qt.Key.Key_Down, 7)
     until(look.nav_focused, "Down past the last row reaches the buttons")
     look.press(Qt.Key.Key_Return)
     until(lambda: form.stepId == "stores", "A on Continue moves on")
@@ -332,6 +347,7 @@ def test_the_setup_in_each_look(empty_api, empty, theme):
     look.reopen()
     until(lambda: look.opened() and form.stepId == "found", "it runs again")
     until(look.rows_focused)
+    look.press(Qt.Key.Key_Down)
     look.press(Qt.Key.Key_Return)
     until(lambda: empty_api.allGames.count == 2, "A on the Lutris row imports behind the setup")
     assert form.added is True

@@ -259,6 +259,11 @@ class Onboarding(RowsForm):
         step = self._step_id()
         entries = []
         if step == "found":
+            pending = self._pending()
+            if len(pending) > 1:
+                row = _row("", "everything", "Add everything", "action", "", detail="Every launcher below, one after the other.")
+                games = _plural(sum(launcher["games"] for launcher in pending), "game")
+                entries.append(("", {**row, "via": "everything", "display": "Add " + games, "action": "Add", "verb": True}, False))
             for launcher in filter(lambda launcher: launcher["found"], self._launchers):
                 if _importable(launcher) and not launcher["state"]:
                     row = _row("", launcher["id"], launcher["name"], "action", "", detail=launcher["where"])
@@ -357,9 +362,22 @@ class Onboarding(RowsForm):
         if row.get("via") == "component":
             ident = row["component"]
             return not self._components.busyOn(ident) and (self._components.propose(ident) or self._components.installById(ident))
+        if row.get("via") == "everything":
+            pending = self._pending()
+            for launcher in pending:
+                self._start(launcher)
+            return bool(pending)
         launcher = self._launcher(row.get("key", ""))
         if launcher is None or launcher["state"] or not _importable(launcher):
             return False
+        self._start(launcher)
+        return True
+
+    def _pending(self):
+        """The launchers found here whose games can still be added."""
+        return [launcher for launcher in self._launchers if launcher["found"] and _importable(launcher) and not launcher["state"]]
+
+    def _start(self, launcher):
         if launcher["via"] in IMPORTERS:
             self._queue.append(launcher)
             self._set_state(launcher, "queued")
@@ -368,7 +386,6 @@ class Onboarding(RowsForm):
             self._adopt_gog(launcher)
         else:
             self._adopt(launcher)
-        return True
 
     def _next_import(self):
         """One importer at a time, both writing the library; the rest of the setup stays usable meanwhile."""
