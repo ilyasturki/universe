@@ -30,6 +30,20 @@ def test_selector_defaults_and_persists(app, tmp_path):
     assert memory.has("switch2Font") is False
 
 
+def test_the_startup_animation_is_on_until_turned_off_for_every_look(app, fake, tmp_path):
+    from universe_ui.api import Api
+
+    path = str(tmp_path / "memory.json")
+    selector = ThemeSelector(Memory(path), "switch2")
+    assert selector.bootIntro is True
+    selector.bootIntro = False
+    selector.set("ps5")
+    assert selector.bootIntro is False and ThemeSelector(Memory(path)).bootIntro is False
+    api = Api(fake, memory_path=path, boot=True)
+    assert api.boot.running is False, "the switch wins over a start that would play it"
+    api.shutdown()
+
+
 def test_each_look_keeps_its_own_font(app, tmp_path):
     memory = Memory(str(tmp_path / "memory.json"))
     selector = ThemeSelector(memory, "switch2")

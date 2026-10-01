@@ -210,3 +210,26 @@ def test_a_loop_that_keeps_wedging_quits_instead_of_restarting(monkeypatch):
     monkeypatch.setattr(host, "stop_children", lambda: pytest.fail("a run that quits kills nothing on the way"))
     host.relaunch([])
     assert exits == [1] and execs == []
+
+
+@pytest.mark.parametrize(
+    ("argv", "session", "steam", "restarts", "wanted"),
+    [
+        ([], None, False, 0, True),
+        (["--windowed"], None, False, 0, False),
+        (["--size", "1280x800"], None, False, 0, False),
+        (["--fake"], None, False, 0, False),
+        (["--keys", "Right"], None, False, 0, False),
+        ([], {"id": "control"}, False, 0, False),
+        ([], None, True, 0, False),
+        ([], None, False, 1, False),
+        (["--windowed", "--fake", "--boot"], None, False, 0, True),
+        (["--no-boot"], None, False, 0, False),
+    ],
+    ids=["fullscreen", "windowed", "size", "fake", "keys", "session", "steam", "relaunch", "forced", "off"],
+)
+def test_only_a_plain_fullscreen_start_opens_on_the_intro(argv, session, steam, restarts, wanted):
+    from types import SimpleNamespace
+
+    client = SimpleNamespace(currentSession=session, underSteam=steam)
+    assert host.boot_wanted(host.parse_args(argv), client, restarts) is wanted

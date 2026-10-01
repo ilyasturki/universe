@@ -131,6 +131,49 @@ def test_the_ps5_look_renders_and_lands_on_its_themes(api):
     window.close()
 
 
+@pytest.mark.parametrize("skip", [True, False], ids=["skipped", "played"])
+@pytest.mark.parametrize("look", ["reprise", "ps5", "switch2"])
+def test_the_intro_plays_then_leaves_home_the_focus_and_no_press(fake, tmp_path, look, skip):
+    from PySide6.QtCore import QObject
+    from PySide6.QtTest import QTest
+
+    from universe_ui.api import Api
+    from universe_ui.screens.network import FAKE as FAKE_NET
+    from universe_ui.screens.power import FAKE
+
+    def has_focus(item):
+        at = window.activeFocusItem()
+        while at is not None and at != item:
+            at = at.parentItem()
+        return at is not None
+
+    api = Api(fake, memory_path=str(tmp_path / "memory.json"), theme=look, power_root=FAKE, net_root=FAKE_NET, boot=True)
+    try:
+        _engine, window = render(api, activate=True)
+        root = window.property("contentItem").childItems()[0].property("item")
+        boot = window.findChild(QObject, "boot")
+        home = page_as(root, "HomePage") if look == "reprise" else until(lambda: root.findChild(QObject, "homePage"))
+        start = until(lambda: game_id(home))
+        assert api.boot.running and boot.property("visible")
+        until(lambda: boot.property("ring") > 0, "the mark comes in")
+        if skip:
+            QTest.keyClick(window, Qt.Key.Key_Right)
+            until(lambda: not api.boot.running, "a press skips it", 1000)
+        else:
+            until(lambda: not api.boot.running, "it ends by itself", 3000)
+        assert game_id(home) == start, "the press that skipped stays the intro's"
+        until(lambda: has_focus(home), "home holds the focus")
+        QTest.keyClick(window, Qt.Key.Key_Right)
+        until(lambda: game_id(home) != start, "the next press moves home")
+        assert not boot.property("visible")
+        api.theme.set("ps5" if look != "ps5" else "reprise")
+        settle(window)
+        assert not api.boot.running and not boot.property("visible"), "a switch does not replay it"
+        window.close()
+    finally:
+        api.shutdown()
+
+
 def test_the_media_tab_and_the_screenshots_page(api, fake):
     _engine, window = render(api, activate=True)
     root = window.property("contentItem").childItems()[0].property("item")
