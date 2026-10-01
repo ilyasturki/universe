@@ -14,8 +14,18 @@ NOT_YET = "not importable yet"
 IMPORTERS = ("lutris", "roms")
 RUNNING = ("queued", "importing")
 
-TITLES = {"found": "What's on this machine", "stores": "Your stores", "preferences": "A few choices", "done": "You're set"}
-SUBTITLES = {"done": "Everything here can be changed later under Settings."}
+TITLES = {"found": "What's on this machine", "stores": "Your stores", "preferences": "Controller and screen", "done": "You're set"}
+SUBTITLES = {
+    "found": "Games other launchers installed here. Adding them moves nothing.",
+    "stores": "Sign in to see and install the games you own.",
+    "preferences": "Both can be changed later in Settings.",
+    "done": "Everything here can be changed later in Settings.",
+}
+DONE_RUNNING = ("Still adding games", "They keep arriving on Home after you finish.")
+DONE_EMPTY = ("Nothing added yet", "Add games any time from Home.")
+DONE_HOME_MANAGER = "Settings come from home-manager on this machine."
+DONE_READ_ONLY = "config.toml is read-only here, so settings stay as they are."
+HDR_DETAIL = "Games that support HDR send it to an HDR screen."
 
 
 def _step(ident):
@@ -39,7 +49,7 @@ def preference_rows(controller, config, gpu, keys):
         if value in (None, "", {}):
             value = spec["default"]
         row = launch_row("Graphics", spec, value, gpu=gpu)
-        row["advanced"] = False
+        row.update(advanced=False, detail=HDR_DETAIL if spec["key"] == "hdr" else row["detail"])
         _add(rows, groups, "Graphics", row, caps=True)
     return rows, groups
 
@@ -49,18 +59,33 @@ def _static(key, label, display, detail=""):
 
 
 def _found_display(launcher):
+    """The row's short word; the reason, when there is one, is its detail line."""
     state, n = launcher["state"], launcher["count"]
     if state == "queued":
         return "Waiting…"
     if state == "importing":
-        return "Importing…"
+        return "Adding…"
     if state == "imported":
         return f"{_plural(n, 'game')} added" if n else "Nothing new"
-    if state in ("failed", "waiting"):
-        return launcher["error"] or "Failed"
+    if state == "failed":
+        return "Not added"
+    if state == "waiting":
+        return "Waiting for a sign-in"
     if not launcher["games"]:
         return "No games"
+    if launcher["blocked"]:
+        return _plural(launcher["games"], "game")
     return _plural(launcher["games"], "game") + " · " + launcher["detail"]
+
+
+def _where(launcher, sources):
+    """Where a launcher's games go once added."""
+    if launcher["via"] == "lutris":
+        return "They join the library with their play time."
+    if launcher["via"] == "roms":
+        return "The games your emulators list join the library."
+    name = (sources.get(launcher["via"]) or {}).get("name") or launcher["via"]
+    return f"They play and update through Universe's {name} source."
 
 
 def _importable(launcher):
@@ -139,17 +164,20 @@ class Onboarding(RowsForm):
 
         # The first sources() of a process asks every store whether its sign-in still holds: off the UI thread, with the rest.
         def look():
-            return client.core.discover(), client.sources(), client.config(), client.gpu(), client.launchKeys("global", None)
+            return client.core.discover(), client.sources(), client.config(), client.gpu(), client.launchKeys("global", None), client.getSourceSettings("gog")
 
         def done(found, error):
             if error:
                 self.message.emit(f"Could not look at this machine: {error}")
-            report, everything, config, gpu, keys = found or ({}, [], {}, {}, [])
+            report, everything, config, gpu, keys, gog = found or ({}, [], {}, {}, [], {})
             self._prefs = {"config": config or {}, "gpu": gpu or {}, "keys": keys or []}
+            self._writable = bool(self._prefs["config"].get("config_writable", True))
+            self._home_manager = self._prefs["config"].get("config_owner") == "home-manager"
             self._gog_dirs = [str(d) for d in report.get("gog_dirs") or []]
-            self._launchers = [{**launcher, "state": "", "count": 0, "error": ""} for launcher in report.get("launchers") or []]
+            self._launchers = [{**launcher, "state": "", "count": 0, "error": "", "blocked": ""} for launcher in report.get("launchers") or []]
             found_via = {launcher.get("via") for launcher in self._launchers if launcher.get("found")}
-            self._sources = [s for s in everything if s.get("available", True) and (s.get("enabled", True) or s["id"] in found_via)]
+            # A source that is off is offered only where the config takes the write that turns it on.
+            self._sources = [s for s in everything if s.get("available", True) and (s.get("enabled", True) or (self._writable and s["id"] in found_via))]
             known = {s["id"]: s for s in everything}
             for launcher in self._launchers:
                 via = launcher.get("via") or ""
@@ -157,8 +185,10 @@ class Onboarding(RowsForm):
                 if why:
                     launcher["importable"] = False
                 launcher["detail"] = why or ("" if launcher["importable"] else NOT_YET)
-            self._writable = bool(self._prefs["config"].get("config_writable", True))
-            self._home_manager = self._prefs["config"].get("config_owner") == "home-manager"
+                launcher["where"] = _where(launcher, known)
+                launcher["blocked"] = "" if self._writable or why else self._blocked(launcher, known.get(via), gog or {})
+                if launcher["blocked"]:
+                    launcher["importable"] = False
             steps = ["found"]
             if any(not s.get("logged_in") for s in self._sources):
                 steps.append("stores")
@@ -171,6 +201,20 @@ class Onboarding(RowsForm):
 
         self._run(look, done)
         self._components.load()
+
+    def _owner(self):
+        return "home-manager" if self._home_manager else "config.toml"
+
+    def _blocked(self, launcher, source, gog):
+        """Under a read-only config, what the user has to write for a launcher's games to be adopted; empty when nothing."""
+        via = launcher["via"]
+        if via in IMPORTERS or source is None:
+            return ""
+        if not source.get("enabled", True):
+            return f"{source.get('name', via)} is off: add {via} to sources.enabled in {self._owner()}."
+        current = [d.strip() for d in str(gog.get("scan_dirs") or "").split(",") if d.strip()]
+        missing = [d for d in self._gog_dirs if d not in current] if via == "gog" else []
+        return f"Add {', '.join(missing)} to sources.gog.scan_dirs in {self._owner()}." if missing else ""
 
     def _step_id(self):
         return self._steps[self._step]["id"] if 0 <= self._step < len(self._steps) else ""
@@ -190,9 +234,9 @@ class Onboarding(RowsForm):
         for launcher in self._launchers:
             state, n = launcher["state"], launcher["count"]
             if state in RUNNING:
-                lines.append((launcher["id"], launcher["name"], "Importing…", state))
+                lines.append((launcher["id"], launcher["name"], "Adding…", state))
             elif state == "imported" and n:
-                lines.append((launcher["id"], launcher["name"], f"{_plural(n, 'game')} {'added' if launcher['via'] in IMPORTERS else 'adopted'}", state))
+                lines.append((launcher["id"], launcher["name"], f"{_plural(n, 'game')} added", state))
         for ident in self._signed_in:
             source = self._source(ident) or {"name": ident}
             lines.append((ident, source.get("name", ident), "Signed in", "signed_in"))
@@ -204,11 +248,13 @@ class Onboarding(RowsForm):
         if step == "found":
             for launcher in filter(lambda launcher: launcher["found"], self._launchers):
                 if _importable(launcher) and not launcher["state"]:
-                    row = _row("", launcher["id"], launcher["name"], "action", "")
-                    row.update(via=launcher["via"], display=_plural(launcher["games"], "game"), action="Import" if launcher["via"] in IMPORTERS else "Adopt")
+                    row = _row("", launcher["id"], launcher["name"], "action", "", detail=launcher["where"])
+                    # `verb`: the row says what A does, the looks draw no arrow to a page it does not open.
+                    row.update(via=launcher["via"], display="Add " + _plural(launcher["games"], "game"), action="Add", verb=True)
                 else:
-                    row = _static(launcher["id"], launcher["name"], _found_display(launcher))
-                    row["quiet"] = not _importable(launcher) and not launcher["state"]
+                    row = _static(launcher["id"], launcher["name"], _found_display(launcher), detail=launcher["error"] or launcher["blocked"])
+                    # A reason is read whole: the folder to add is at its end.
+                    row.update(quiet=not _importable(launcher) and not launcher["state"] and not launcher["blocked"], wraps=bool(row["detail"]))
                 entries.append(("", {**row, "state": launcher["state"], "count": launcher["count"]}, False))
             if not entries:
                 entries.append(("", _static("none", "Other launchers", "None found"), False))
@@ -219,9 +265,10 @@ class Onboarding(RowsForm):
                 row.update(
                     via="component",
                     component=component["id"],
-                    display="Installing…" if busy else _plural(used, "game"),
+                    display="Installing…" if busy else "Install for " + _plural(used, "game"),
                     action="" if busy else "Install",
                     detail=component.get("notice") or "",
+                    verb=True,
                 )
                 entries.append((NEEDED, row, True))
         elif step == "stores":
@@ -236,14 +283,11 @@ class Onboarding(RowsForm):
             self._set_rows(*preference_rows(self._controller, **self._prefs))
             return
         elif step == "done":
-            summary = self._summary() or [("library", "Library", "Nothing added yet: games can join any time from the Library", "")]
-            for key, label, display, state in summary:
+            for key, label, display, state in self._summary():
                 entries.append(("", {**_static(key, label, display), "state": state}, False))
             if not self._writable:
-                if self._home_manager:
-                    entries.append(("", _static("read_only", "Settings", "Managed by home-manager", READ_ONLY_HOME_MANAGER), False))
-                else:
-                    entries.append(("", _static("read_only", "Settings", "Read-only", READ_ONLY), False))
+                why = ("Managed by home-manager", READ_ONLY_HOME_MANAGER) if self._home_manager else ("Read-only", READ_ONLY)
+                entries.append(("", {**_static("read_only", "Settings", *why), "wraps": True}, False))
         self._set_rows(*_shown(entries))
 
     @Slot()
@@ -322,8 +366,7 @@ class Onboarding(RowsForm):
         current = [d.strip() for d in str(self._client.core.source_settings("gog").get("scan_dirs") or "").split(",") if d.strip()]
         missing = [d for d in self._gog_dirs if d not in current]
         if missing and not self._writable:
-            where = "home-manager" if self._home_manager else "config.toml"
-            self._set_state(launcher, "failed", error=f"Settings are read-only: add {', '.join(missing)} to sources.gog.scan_dirs in {where}")
+            self._set_state(launcher, "failed", error=f"Settings are read-only: add {', '.join(missing)} to sources.gog.scan_dirs in {self._owner()}.")
             return
         if missing and not self._client.setSourceSetting("gog", "scan_dirs", ",".join(current + missing)):
             self._set_state(launcher, "failed", error="Could not add the folders to the GOG source")
@@ -344,7 +387,7 @@ class Onboarding(RowsForm):
             return
         if not source.get("enabled", True):
             if not self._writable:
-                self._set_state(launcher, "failed", error=f"Settings are read-only: add {launcher['via']} to sources.enabled")
+                self._set_state(launcher, "failed", error=f"Settings are read-only: add {launcher['via']} to sources.enabled in {self._owner()}.")
                 return
             self._client.enableSource(launcher["via"], True)
             self._reread()
@@ -370,7 +413,7 @@ class Onboarding(RowsForm):
             return
         count = int(self._client.jobResult(job) or 0)
         if not count and not source.get("logged_in", True):
-            self._set_state(launcher, "waiting", error=f"Sign in to {name} to adopt them")
+            self._set_state(launcher, "waiting", error=f"Sign in to {name} on the stores step to add them.")
             if all(s["id"] != "stores" for s in self._steps):
                 self._steps.insert(1, _step("stores"))
                 self.stepChanged.emit()
@@ -413,7 +456,11 @@ class Onboarding(RowsForm):
         if step != "done":
             return TITLES.get(step, ""), SUBTITLES.get(step, "")
         if self._running():
-            return "Still importing", "Games keep arriving on Home after you finish."
+            return DONE_RUNNING
+        if not self._summary():
+            return DONE_EMPTY
+        if not self._writable:
+            return TITLES["done"], DONE_HOME_MANAGER if self._home_manager else DONE_READ_ONLY
         return TITLES["done"], SUBTITLES["done"]
 
     def _set_rows(self, rows, groups):

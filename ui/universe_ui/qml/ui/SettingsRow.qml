@@ -332,7 +332,8 @@ Item {
                 width: Theme.dp(14)
                 height: Theme.dp(22)
                 anchors.verticalCenter: parent.verticalCenter
-                visible: row.entry.type !== "static"
+                // A row that says what A does (`verb`) opens no page.
+                visible: row.entry.type !== "static" && row.entry.verb !== true
                 readonly property color tint: row.focused ? Theme.onLight : Theme.textMuted
                 onTintChanged: requestPaint()
                 onPaint: {

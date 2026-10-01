@@ -71,6 +71,7 @@ def test_steps_and_found_rows(empty_api, empty):
         "heroic-epic": ("action", "epic"),
         "roms": ("action", "roms"),
     }, "Heroic's Amazon games, with nothing to bring over, stay out"
+    assert all((row["action"], row["verb"]) == ("Add", True) and row["detail"] for row in rows.values()), "one verb, and where the games go"
     assert form.idle is False
     form.next()
     assert form.stepId == "stores" and [r["key"] for r in form.rows] == ["logged_in", "link", "code", "enabled", "enabled"]
@@ -207,11 +208,13 @@ def test_read_only_config_skips_preferences(empty_api, empty, config_owner, owne
     signed_out(empty)
     form = loaded(empty_api.screens.onboarding)
     assert [s["id"] for s in form.steps] == ["found", "stores", "done"]
-    assert form.runImport(index_of(form, "heroic-gog")) is True
-    row = rows_by_key(form)["heroic-gog"]
-    assert row["state"] == "failed" and "/mnt/games/PC" in row["display"] and owner in row["display"], "no scan_dirs write, so no scan"
+    rows = rows_by_key(form)
+    assert rows["heroic-gog"]["type"] == "static" and "/mnt/games/PC" in rows["heroic-gog"]["detail"] and owner in rows["heroic-gog"]["detail"]
+    assert rows["heroic-epic"]["type"] == "static" and "sources.enabled" in rows["heroic-epic"]["detail"], "Epic is off, and cannot be turned on"
+    assert form.runImport(index_of(form, "heroic-gog")) is False, "no scan_dirs write, so no scan"
     assert "scan_dirs" not in empty.core._config.get("sources", {}).get("gog", {})
     form.next()
+    assert form.stepId == "stores" and "enabled" not in [r["key"] for r in form.rows], "no switch the config cannot keep"
     form.next()
     assert form.stepId == "done" and form.rows[-1]["key"] == "read_only" and owner in form.rows[-1]["detail"]
 
