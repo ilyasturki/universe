@@ -1069,8 +1069,9 @@ unless `guide` is on. While the game is frozen the pads report nothing held, so 
 under the launcher is not queued for the game.
 
 Only an emulator runner is served; a Proton, Wine or native game keeps the physical pads (Wine's
-winebus reads hidraw and evdev past SDL's hints). Without `/dev/uhid` open to the user (on NixOS
-`programs.universe.controller.enable`, which also opens the virtual pads' hidraw nodes) or without
+winebus reads hidraw and evdev past SDL's hints). Without `/dev/uhid` open to the user (the AUR and
+COPR packages and install.sh ship `70-universe.rules`, which also opens the virtual pads' hidraw
+nodes, and load uhid at boot; on NixOS `programs.universe.controller.enable`) or without
 SDL3, the hook logs why and the game gets the physical pads.
 `$XDG_RUNTIME_DIR/universe/pads-<session>.json` holds `{ready, pid, players: [{player, name, vendor,
 product, pad}]}` while the forwarder runs; it stops with the session, or by itself once the game's

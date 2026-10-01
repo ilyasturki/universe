@@ -57,7 +57,22 @@ x86_64 Linux with a systemd user session and Python 3.11 to 3.14 (on Fedora 45, 
 paru -S universe
 ```
 
-**From a checkout** (needs cargo), installed for your user under `~/.local`, no root:
+**Fedora 44 and newer** (COPR): `universe` and `universe-desktop`, built from each release against Fedora's PySide6, GTK and libadwaita.
+
+```sh
+sudo dnf copr enable ilyasturki/universe
+sudo dnf install universe universe-desktop
+```
+
+**SteamOS, Bazzite and other distros**: the latest release, installed for your user under `~/.local`. It asks for your password once, to put the pad rules under `/etc`; on a Steam Deck, set one with `passwd` first. Without sudo it prints the commands to run as root instead.
+
+```sh
+curl -fsSL https://github.com/ilyasturki/universe/releases/latest/download/install.sh | sh
+```
+
+`sh -s -- --uninstall` in place of `sh` removes it.
+
+**From a checkout** (needs cargo), installed the same way:
 
 ```sh
 git clone https://github.com/ilyasturki/universe
