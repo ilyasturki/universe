@@ -222,7 +222,6 @@ class Home(QObject):
         self._generation += 1
         self._shown = shown
 
-    # HOME from another app brings the launcher up (`controller.home_summons`) and does nothing more; from the launcher or its game it is HOME.
     def _on_button(self, ident, slot, pressed):
         if slot != "guide":
             return

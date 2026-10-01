@@ -901,7 +901,6 @@ class ControllerScreen(AdvancedRows, QObject):
         if self._watcher is not None:
             self._watcher.send({"cmd": "resume"})
 
-    # Another app has the focus: what the pad does there is not for this page.
     def focusLost(self):
         self.cancelLearn()
         self._stop_walk()

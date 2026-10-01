@@ -486,7 +486,6 @@ impl Controller {
         }
     }
 
-    /// Another window has the focus: a press made there is not for the test, a learn or the walk.
     fn focus_lost(&self) {
         if self.walk.borrow().is_some() || !self.learning.borrow().is_empty() {
             self.send(json!({"cmd": "cancel"}));
