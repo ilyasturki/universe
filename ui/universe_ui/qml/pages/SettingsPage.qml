@@ -569,32 +569,32 @@ FocusScope {
             refresh();
     }
 
-    function componentMenu(index, items, title) {
+    function componentMenu(ident, items, title) {
         if (items.length === 0) {
             Sound.edge();
             return;
         }
         menu.show(items, cards, cards.focusRect, title, function (action) {
-            page.componentAction(index, action);
+            page.componentAction(ident, action);
         });
     }
 
-    function componentAction(index, action) {
+    function componentAction(ident, action) {
         if (action === "versions") {
             Sound.panel();
-            componentMenu(index, components.versionActions(index), "Another version");
+            componentMenu(ident, components.versionActions(ident), "Another version");
             return;
         }
-        var ask = components.confirm(index, action);
+        var ask = components.confirm(ident, action);
         if (ask) {
             dialog.ask(ask, function (yes) {
                 if (yes)
-                    components.act(index, action) ? Sound.enter() : Sound.edge();
+                    components.act(ident, action) ? Sound.enter() : Sound.edge();
                 cards.forceActiveFocus();
             });
             return;
         }
-        components.act(index, action) ? Sound.enter() : Sound.edge();
+        components.act(ident, action) ? Sound.enter() : Sound.edge();
         cards.forceActiveFocus();
     }
 
@@ -654,7 +654,7 @@ FocusScope {
             page.runnerRequested(row.runner);
         } else if (sectionId === "components") {
             Sound.panel();
-            componentMenu(index, components.actions(index), row.label);
+            componentMenu(row.component, components.actions(row.component), row.label);
         } else if (sectionId === "doctor" && row.component) {
             Sound.panel();
             dialog.ask(components.question(row.component) || {

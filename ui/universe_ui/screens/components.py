@@ -275,28 +275,25 @@ class ComponentsForm(RowsForm):
     def refresh(self):
         self._fetch(True)
 
-    def _component(self, index):
-        return self._by_id(self.row(index).get("component", ""))
-
     def _by_id(self, ident):
         return next((c for c in self._listing.get("components") or [] if c["id"] == ident), None)
 
     def busyOn(self, ident):
         return bool(self._job) and self._job["ok"] is None and self._job["component"] == ident
 
-    @Slot(int, result="QVariant")
-    def actions(self, index):
-        c = self._component(index)
-        return actions(c, self.busyOn(c["id"])) if c else []
+    @Slot(str, result="QVariant")
+    def actions(self, ident):
+        c = self._by_id(ident)
+        return actions(c, self.busyOn(ident)) if c else []
 
-    @Slot(int, result="QVariant")
-    def versionActions(self, index):
-        c = self._component(index)
+    @Slot(str, result="QVariant")
+    def versionActions(self, ident):
+        c = self._by_id(ident)
         return version_actions(c) if c else []
 
-    @Slot(int, str, result="QVariant")
-    def confirm(self, index, action):
-        c = self._component(index)
+    @Slot(str, str, result="QVariant")
+    def confirm(self, ident, action):
+        c = self._by_id(ident)
         if not c:
             return None
         if action == "install" and c["kind"] == "system":
@@ -322,9 +319,9 @@ class ComponentsForm(RowsForm):
         detail = "\n\n".join(p for p in (notice, " · ".join(p for p in parts if p)) if p)
         return {**_ask(f"Install {component['name']} {version}?", detail, "Install"), "notice": notice}
 
-    @Slot(int, str, result=bool)
-    def act(self, index, action):
-        c = self._component(index)
+    @Slot(str, str, result=bool)
+    def act(self, ident, action):
+        c = self._by_id(ident)
         return bool(c) and self._act(c, action)
 
     def _act(self, c, action):

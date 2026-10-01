@@ -139,7 +139,7 @@ FocusScope {
             glyph: "B",
             label: "Back"
         });
-        var label = zone !== "rows" ? "OK" : !row || row.heading || row.type === "info" || row.type === "static" || row.disabled ? "OK" : row.type === "bool" ? "Toggle" : row.type === "radio" ? "Select" : row.type === "action" ? (row.component ? "Install" : sectionId === "components" ? "Options" : listForm !== null ? "Open" : "Select") : "Change";
+        var label = zone !== "rows" ? "OK" : !row || row.heading || row.type === "info" || row.type === "static" || row.disabled ? "OK" : row.type === "bool" ? "Toggle" : row.type === "radio" ? "Select" : row.type === "action" ? (sectionId === "doctor" && row.component ? "Install" : sectionId === "components" ? "Options" : listForm !== null ? "Open" : "Select") : "Change";
         out.push({
             glyph: "A",
             label: label
@@ -283,6 +283,7 @@ FocusScope {
                     type: "action",
                     action: "component",
                     form: i,
+                    component: c.component,
                     icon: c.icon,
                     iconSlot: true,
                     display: c.tag && c.tag !== "Updated" ? c.tag : c.display,
@@ -578,7 +579,7 @@ FocusScope {
             });
         } else if (sectionId === "components") {
             Sound.play("ok");
-            componentMenu(row.form, components.actions(row.form), row.label);
+            componentMenu(row.component, components.actions(row.component), row.label);
         } else if (sectionId === "doctor" && row.component) {
             Sound.play("ok");
             var ask = components.question(row.component);
@@ -679,7 +680,7 @@ FocusScope {
         }
     }
 
-    function componentMenu(index, items, title) {
+    function componentMenu(ident, items, title) {
         if (items.length === 0) {
             Sound.play("edge");
             return;
@@ -692,18 +693,18 @@ FocusScope {
                 act: i.action
             };
         }), function (action) {
-            page.componentAction(index, action);
+            page.componentAction(ident, action);
         });
     }
 
-    function componentAction(index, action) {
+    function componentAction(ident, action) {
         if (action === "versions") {
-            componentMenu(index, components.versionActions(index), "Another version");
+            componentMenu(ident, components.versionActions(ident), "Another version");
             return;
         }
-        var ask = components.confirm(index, action);
+        var ask = components.confirm(ident, action);
         if (!ask) {
-            Sound.play(components.act(index, action) ? "ok" : "edge");
+            Sound.play(components.act(ident, action) ? "ok" : "edge");
             return;
         }
         shell.dialogAsk({
@@ -713,7 +714,7 @@ FocusScope {
             danger: action === "rollback" || action === "uninstall" || action.indexOf("remove:") === 0 ? 1 : -1
         }, function (i) {
             if (i === 1)
-                Sound.play(components.act(index, action) ? "ok" : "edge");
+                Sound.play(components.act(ident, action) ? "ok" : "edge");
         });
     }
 

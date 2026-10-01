@@ -191,7 +191,7 @@ def test_settings_components_part_by_kind_and_a_opens_the_options(ps5, api):
     click(window, Qt.Key.Key_Return)
     popup = root.findChild(QObject, "popup")
     until(lambda: popup.property("open") is True)
-    assert [i["label"] for i in value(popup, "items")] == [a["label"] for a in form.actions(row["form"])]
+    assert [i["label"] for i in value(popup, "items")] == [a["label"] for a in form.actions(row["component"])]
     assert warnings == []
 
 
@@ -207,25 +207,22 @@ def test_the_component_bar_hides_by_x_or_its_cross_and_uninstall_asks_in_red(ps5
     until(lambda: page.property("sectionId") == "components" and page.property("level") == "section")
     finished = record(fake.jobFinished)
 
-    def row_of(ident):
-        return next(i for i, r in enumerate(form.rows) if r.get("component") == ident and r["key"] == "component")
-
     def hidden():
         return form.job is None and page.property("componentsBar") is False
 
-    assert form.act(row_of("wine"), "install")
+    assert form.act("wine", "install")
     until(lambda: {"glyph": "X", "label": "Hide progress"} in value(page, "hints"))
     click(window, Qt.Key.Key_I)  # X
     until(hidden, "X hides it")
     until(lambda: len(finished) == 1)
-    assert form.act(row_of("rpcs3"), "install")
+    assert form.act("rpcs3", "install")
     closer = page.findChild(QQuickItem, "hideJob")
     until(closer.isVisible)
     p = closer.mapToScene(QPointF(closer.width() / 2, closer.height() / 2))
     gamepad.touch(window, [(p.x(), p.y())], 0)
     until(hidden, "so does a tap on its ×")
     until(lambda: len(finished) == 2)
-    QMetaObject.invokeMethod(page, "componentAction", Q_ARG("QVariant", row_of("xemu")), Q_ARG("QVariant", "uninstall"))
+    QMetaObject.invokeMethod(page, "componentAction", Q_ARG("QVariant", "xemu"), Q_ARG("QVariant", "uninstall"))
     dialog = root.findChild(QObject, "dialog")
     until(lambda: dialog.property("open") is True)
     assert dialog.property("message") == "Uninstall xemu?" and dialog.property("dangerIndex") == 1, "Uninstall is the red button"

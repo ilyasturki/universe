@@ -494,7 +494,7 @@ def test_the_component_bar_hides_in_both_looks_and_the_job_goes_on(api, fake):
 
     def install(ident):
         until(lambda: form.rows)
-        assert form.act(next(i for i, r in enumerate(form.rows) if r.get("component") == ident and r["key"] == "component"), "install")
+        assert form.act(ident, "install")
         until(lambda: page.property("componentsBar") is True)
         settle(window)
 
@@ -534,8 +534,7 @@ def test_the_component_bar_hides_in_both_looks_and_the_job_goes_on(api, fake):
     gamepad.touch(window, [centre(until(lambda: page.findChild(QQuickItem, "hideJob")))], 0)
     until(lambda: hidden(page), "so does a tap on its ×")
     until(lambda: len(finished) == 4)
-    xemu = next(i for i, r in enumerate(form.rows) if r.get("component") == "xemu" and r["key"] == "component")
-    QMetaObject.invokeMethod(page, "componentAction", Q_ARG("QVariant", xemu), Q_ARG("QVariant", "uninstall"))
+    QMetaObject.invokeMethod(page, "componentAction", Q_ARG("QVariant", "xemu"), Q_ARG("QVariant", "uninstall"))
     dialog = root.findChild(QObject, "dialog")
     until(lambda: dialog.property("message") == "Uninstall xemu?", "the uninstall asks first")
     assert dialog.property("dangerIndex") == 1, "Uninstall is the red button"
