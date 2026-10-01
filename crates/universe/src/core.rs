@@ -2048,35 +2048,22 @@ impl Core {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::await_holding_lock, reason = "ENV_LOCK serialises the tests that set the profile env; each test body runs on its own thread")]
     #[test]
     fn trash_puts_a_file_in_the_xdg_trash() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
-        let dir = tempfile::tempdir().unwrap();
-        std::env::set_var("XDG_DATA_HOME", dir.path().join("share"));
-        let doomed = dir.path().join("game.toml");
+        let env = crate::paths::test_env();
+        let doomed = env.path().join("game.toml");
         std::fs::write(&doomed, "x").unwrap();
         super::trash(&doomed).unwrap();
         assert!(!doomed.exists());
-        assert!(dir.path().join("share/Trash/files/game.toml").is_file(), "{:?}", std::fs::read_dir(dir.path().join("share")).map(|r| r.count()));
+        assert!(env.path().join("home/.local/share/Trash/files/game.toml").is_file());
         assert!(matches!(super::trash(&doomed), Err(crate::Error::Io(_))), "a missing file is a typed error");
     }
 
     use super::*;
 
     /// A `fake` source whose script is a shell case over the verb; every Universe home under one tempdir.
-    fn fake_source(script: &str) -> tempfile::TempDir {
-        let dir = tempfile::tempdir().unwrap();
-        for (var, sub) in [
-            ("UNIVERSE_DATA_HOME", "data"),
-            ("UNIVERSE_STATE_HOME", "state"),
-            ("UNIVERSE_CONFIG_HOME", "config"),
-            ("UNIVERSE_MODULES_PATH", "modules"),
-            ("UNIVERSE_SOURCES_PATH", "sources"),
-        ] {
-            std::fs::create_dir_all(dir.path().join(sub)).unwrap();
-            std::env::set_var(var, dir.path().join(sub));
-        }
+    fn fake_source(script: &str) -> crate::paths::TestEnv {
+        let dir = crate::paths::test_env();
         std::fs::write(dir.path().join("config/config.toml"), "[modules]\nenabled = []\n[sources]\nenabled = [\"fake\"]\n").unwrap();
         let src = dir.path().join("sources/fake");
         std::fs::create_dir_all(&src).unwrap();
@@ -2095,18 +2082,8 @@ mod tests {
     }
 
     /// A library of one game with two played sessions, and a `journal` module whose post-process hook is a stub.
-    fn journal_sandbox(provider: &str) -> tempfile::TempDir {
-        let dir = tempfile::tempdir().unwrap();
-        for (var, sub) in [
-            ("UNIVERSE_DATA_HOME", "data"),
-            ("UNIVERSE_STATE_HOME", "state"),
-            ("UNIVERSE_CONFIG_HOME", "config"),
-            ("UNIVERSE_MODULES_PATH", "modules"),
-            ("UNIVERSE_SOURCES_PATH", "sources"),
-        ] {
-            std::fs::create_dir_all(dir.path().join(sub)).unwrap();
-            std::env::set_var(var, dir.path().join(sub));
-        }
+    fn journal_sandbox(provider: &str) -> crate::paths::TestEnv {
+        let dir = crate::paths::test_env();
         std::fs::write(
             dir.path().join("config/config.toml"),
             format!("[modules]\nenabled = [\"journal\"]\n[modules.journal]\nprovider = \"{provider}\"\n[sources]\nenabled = []\n"),
@@ -2154,7 +2131,7 @@ mod tests {
         }
     }
 
-    fn screenshot_sandbox(body: &str) -> tempfile::TempDir {
+    fn screenshot_sandbox(body: &str) -> crate::paths::TestEnv {
         use std::os::unix::fs::PermissionsExt;
         let dir = journal_sandbox("stub");
         std::fs::write(dir.path().join("config/config.toml"), "[modules]\nenabled = [\"screenshot\"]\n[sources]\nenabled = []\n").unwrap();
@@ -2168,7 +2145,6 @@ mod tests {
 
     #[tokio::test]
     async fn a_screenshot_off_a_session_is_the_launchers_and_no_games() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let dir = screenshot_sandbox("echo \"$SCREENSHOTS_DIR/${GAME_ID:-none}.png\"");
         let shot = open().await.screenshot().await.unwrap();
         assert_eq!(shot, dir.path().join("state/screenshots/none.png").to_string_lossy(), "no game stands in for the launcher");
@@ -2176,7 +2152,6 @@ mod tests {
 
     #[tokio::test]
     async fn a_failed_screenshot_says_why_and_a_missing_module_says_so() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let dir = screenshot_sandbox("echo 'shell refused' >&2\nexit 1");
         let err = open().await.screenshot().await.unwrap_err().to_string();
         assert!(err.contains("screenshot: shell refused"), "{err}");
@@ -2188,7 +2163,6 @@ mod tests {
 
     #[tokio::test]
     async fn an_entry_is_written_on_demand_whatever_the_games_own_switch_says() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let _dir = journal_sandbox("stub");
         let core = open().await;
         let unit = core.journal_write("sample", "20260910-100000", false).await.unwrap();
@@ -2216,7 +2190,6 @@ mod tests {
 
     #[tokio::test]
     async fn the_sweep_starts_one_owed_entry_at_a_time() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let _dir = journal_sandbox("stub");
         let core = open().await;
         let journal_dir = core.get("sample").await.unwrap().game.journal_dir();
@@ -2256,7 +2229,6 @@ mod tests {
 
     #[tokio::test]
     async fn a_module_waiting_on_a_setting_writes_nothing_and_doctor_says_so() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let _dir = journal_sandbox("");
         let core = open().await;
         let module = core.modules().await.into_iter().find(|m| m["id"] == "journal").unwrap();
@@ -2272,7 +2244,6 @@ mod tests {
 
     #[tokio::test]
     async fn settings_carry_the_keys_the_file_sets() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let _dir = fake_source("library) ;;");
         let core = open().await;
         let s = core.settings().await;
@@ -2284,7 +2255,6 @@ mod tests {
 
     #[tokio::test]
     async fn sizes_learnt_by_info_survive_a_refresh_and_leave_library_at_alone() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let _dir = fake_source(
             r#"library) echo '{"event":"game","id":"1","title":"One","owned":true,"installed":false}' ;;
 info) echo '{"event":"info","data":{"folder_name":"One"},"download_size":700,"disk_size":1000}' ;;
@@ -2323,7 +2293,6 @@ scan) echo '{"event":"game","id":"1","title":"One","owned":true,"installed":fals
 
     #[tokio::test]
     async fn listing_takes_the_install_state_from_the_disk_not_the_cache() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let _dir = fake_source(
             r#"library) echo '{"event":"game","id":"1","title":"Gone","owned":true,"installed":true,"dir":"/g/Gone","exe":"gone.exe","build":"7"}'; echo '{"event":"game","id":"2","title":"New","owned":true,"installed":false}' ;;
 scan) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":true,"dir":"/g/New","exe":"new.exe","build":"9","disk_size":500}' ;;"#,
@@ -2340,7 +2309,6 @@ scan) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":true
 
     #[tokio::test]
     async fn cancel_sigterms_the_running_install_and_nothing_else() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         // The downloader child is detached from the pipes and killed on TERM, as the gog source does with gogdl.
         let _dir = fake_source(
             r#"install) sleep 30 >/dev/null 2>&1 & dl=$!; trap 'kill $dl; exit 143' TERM; echo '{"event":"progress","done":1,"total":10,"message":"10%"}'; wait $dl; exit 1 ;;"#,
@@ -2368,7 +2336,6 @@ scan) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":true
 
     #[tokio::test]
     async fn an_install_stamps_the_arrival_a_scan_does_not_and_a_removed_game_comes_back() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let _dir = fake_source(
             r#"scan) echo '{"event":"game","id":"1","title":"Old","owned":true,"installed":true,"dir":"/g/Old","exe":"old.exe"}' ;;
 install) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":true,"dir":"/g/New","exe":"new.exe"}' ;;"#,
@@ -2395,7 +2362,6 @@ install) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":t
 
     #[tokio::test]
     async fn a_title_two_stores_sell_is_two_games_and_one_added_by_hand_is_taken_over() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let _dir = fake_source(
             r#"scan) echo '{"event":"game","id":"1","title":"Control","owned":true,"installed":true,"dir":"/g/Control","exe":"c.sh","umu_id":"umu-870780","store":"egs","runner":"linux"}'; echo '{"event":"game","id":"2","title":"Manual","owned":true,"installed":true,"dir":"/g/Manual","exe":"m.exe"}'; echo '{"event":"game","id":"3","title":"Loose","owned":null,"installed":true,"dir":"/g/Loose","exe":"l.exe"}' ;;"#,
         );
@@ -2431,7 +2397,6 @@ install) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":t
 
     #[tokio::test]
     async fn a_new_game_takes_the_stores_prefix_and_a_purge_trashes_only_universes_own() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let dir = fake_source("");
         let store = dir.path().join("steamapps/compatdata/1");
         std::fs::create_dir_all(&store).unwrap();
@@ -2446,7 +2411,6 @@ install) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":t
             format!("[paths]\nprefixes_root = \"{}\"\n[modules]\nenabled = []\n[sources]\nenabled = [\"fake\"]\n", prefixes.display()),
         )
         .unwrap();
-        std::env::set_var("XDG_DATA_HOME", dir.path().join("share"));
         let core = open().await;
         assert_eq!(core.source_scan("fake", None).await.unwrap(), 2);
         let shared = core.get("shared").await.unwrap().game;
@@ -2493,7 +2457,6 @@ install) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":t
 
     #[tokio::test]
     async fn an_uninstall_goes_through_a_store_that_does_them_and_trashes_the_folder_otherwise() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let dir = fake_source("");
         let (one, two, asked) = (dir.path().join("g/One"), dir.path().join("g/Two"), dir.path().join("asked"));
         for d in [&one, &two] {
@@ -2509,7 +2472,6 @@ uninstall) echo '{{"event":"window","class":"steam","title":""}}'; echo "$2" >> 
         std::fs::write(dir.path().join("sources/fake/run"), format!("#!/bin/sh\ncase \"$1\" in\n{script}\nesac\necho '{{\"event\":\"done\"}}'\n")).unwrap();
         let manifest = dir.path().join("sources/fake/source.toml");
         std::fs::write(&manifest, "api = 2\nid = \"fake\"\nname = \"Fake\"\nexe = \"run\"\ncapabilities = [\"uninstall\"]\n").unwrap();
-        std::env::set_var("XDG_DATA_HOME", dir.path().join("share"));
         let core = open().await;
         assert_eq!(core.source_scan("fake", None).await.unwrap(), 2);
         assert_eq!(core.uninstall_via("one").await.unwrap().as_deref(), Some("Fake"));
@@ -2528,7 +2490,6 @@ uninstall) echo '{{"event":"window","class":"steam","title":""}}'; echo "$2" >> 
 
     #[tokio::test]
     async fn a_failing_source_leaves_the_others_scanned_and_listed() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let dir = fake_source(
             r#"scan) echo '{"event":"game","id":"1","title":"Old","owned":true,"installed":true,"dir":"/g/Old","exe":"old.exe"}' ;;
 update) echo '{"event":"update","id":"1","title":"Old","local_build":"1","remote_build":"2","version":"2","date":""}' ;;"#,
@@ -2549,7 +2510,6 @@ update) echo '{"event":"update","id":"1","title":"Old","local_build":"1","remote
 
     #[tokio::test]
     async fn achievements_come_from_the_source_once_and_a_session_unlock_outlives_a_refresh() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let _dir = fake_source(
             r#"scan) echo '{"event":"game","id":"1","title":"Old","owned":true,"installed":true,"dir":"/g/Old","exe":"old.exe"}' ;;
 achievements) [ "$2" = 1 ] || exit 3; echo "$2" >> "$SOURCE_DATA_DIR/asked"; echo '{"event":"achievement","key":"a","name":"A","unlocked_at":"2024-05-01T20:11:04+0000","rarity":3.5}'; echo '{"event":"achievement","key":"b","name":"B","hidden":true}'; echo '{"event":"achievement","name":"no key"}' ;;"#,
@@ -2583,7 +2543,6 @@ achievements) [ "$2" = 1 ] || exit 3; echo "$2" >> "$SOURCE_DATA_DIR/asked"; ech
 
     #[tokio::test]
     async fn a_game_whose_source_lists_no_achievements_says_so() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let _dir = fake_source(r#"scan) echo '{"event":"game","id":"1","title":"Old","owned":true,"installed":true,"dir":"/g/Old","exe":"old.exe"}' ;;"#);
         let core = open().await;
         core.source_scan("fake", None).await.unwrap();
@@ -2596,7 +2555,6 @@ achievements) [ "$2" = 1 ] || exit 3; echo "$2" >> "$SOURCE_DATA_DIR/asked"; ech
 
     #[tokio::test]
     async fn a_game_scope_source_setting_lands_in_game_toml() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let _dir = fake_source(r#"scan) echo '{"event":"game","id":"1","title":"Old","owned":true,"installed":true,"dir":"/g/Old","exe":"old.exe"}' ;;"#);
         let toml = PathBuf::from(std::env::var_os("UNIVERSE_SOURCES_PATH").unwrap()).join("fake/source.toml");
         let text = std::fs::read_to_string(&toml).unwrap();

@@ -53,9 +53,7 @@ mod tests {
     #[test]
     #[ignore = "live: downloads every pinned tool from GitHub"]
     fn live_the_pinned_tools_download_and_match() {
-        let _lock = crate::paths::ENV_LOCK.lock().unwrap();
-        let home = tempfile::tempdir().unwrap();
-        std::env::set_var("UNIVERSE_DATA_HOME", home.path());
+        let _env = crate::paths::test_env();
         let rt = tokio::runtime::Runtime::new().unwrap();
         let never = std::sync::atomic::AtomicBool::new(false);
         for (id, entry) in crate::components::builtin().components.iter().filter(|(_, e)| !e.bin.is_empty()) {
@@ -64,12 +62,11 @@ mod tests {
             assert!(std::fs::metadata(installed.program_path()).is_ok_and(|m| m.len() > 0), "{id}");
             assert!(dir().join(&entry.bin).is_file(), "{id}: linked into {}", dir().display());
         }
-        std::env::remove_var("UNIVERSE_DATA_HOME");
     }
 
     #[test]
     fn fetched_tools_are_searched_after_path() {
-        let _lock = crate::paths::ENV_LOCK.lock().unwrap();
+        let _env = crate::paths::test_env();
         assert!(["umu-run", "gogdl", "legendary", "butler"].into_iter().all(|bin| find(bin).is_some()) && find("wine").is_none());
         let path = search_path();
         let dirs: Vec<PathBuf> = std::env::split_paths(&path).collect();

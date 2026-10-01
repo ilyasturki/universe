@@ -270,18 +270,13 @@ choices = ["windows", "linux"]
 
     #[test]
     fn discover_reads_source_toml_and_needs_an_exe() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
-        let dir = tempfile::tempdir().unwrap();
+        let env = crate::paths::test_env();
         for (id, body) in [("gog", "api = 2\nid = \"gog\"\nexe = \"bin/source\"\n"), ("noexe", "api = 2\nid = \"noexe\"\n")] {
-            std::fs::create_dir_all(dir.path().join(id)).unwrap();
-            std::fs::write(dir.path().join(id).join("source.toml"), body).unwrap();
+            std::fs::create_dir_all(env.path().join("sources").join(id)).unwrap();
+            std::fs::write(env.path().join("sources").join(id).join("source.toml"), body).unwrap();
         }
-        std::env::set_var("UNIVERSE_SOURCES_PATH", dir.path());
-        std::env::set_var("UNIVERSE_CONFIG_HOME", dir.path().join("config"));
         let cfg: Config = toml::from_str("[sources]\nenabled = [\"gog\"]").unwrap();
         let found = discover(&cfg);
-        std::env::remove_var("UNIVERSE_SOURCES_PATH");
-        std::env::remove_var("UNIVERSE_CONFIG_HOME");
         assert_eq!(found.iter().map(|s| s.id()).collect::<Vec<_>>(), vec!["gog"]);
         assert!(found[0].enabled);
     }

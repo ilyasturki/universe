@@ -517,17 +517,14 @@ mod tests {
 
     #[test]
     fn proton_names_list_the_builds_found_and_the_configs() {
-        let _env = paths::ENV_LOCK.lock().unwrap();
-        let dir = tempfile::tempdir().unwrap();
-        std::env::set_var("UNIVERSE_DATA_HOME", dir.path());
+        let _env = paths::test_env();
         for d in ["GE-Proton10-4", "wine-ge-8-26"] {
-            std::fs::create_dir_all(dir.path().join("proton").join(d)).unwrap();
+            std::fs::create_dir_all(paths::data_home().join("proton").join(d)).unwrap();
         }
-        std::fs::write(dir.path().join("proton/GE-Proton10-4/proton"), b"#!/usr/bin/env python3\n").unwrap();
+        std::fs::write(paths::data_home().join("proton/GE-Proton10-4/proton"), b"#!/usr/bin/env python3\n").unwrap();
         let mut c = Config::default();
         c.proton.insert("mine".into(), "/opt/mine".into());
         let names = c.proton_names();
-        std::env::remove_var("UNIVERSE_DATA_HOME");
         assert!(names.contains(&"GE-Proton10-4".to_string()) && names.contains(&"mine".to_string()), "{names:?}");
         assert!(!names.contains(&"wine-ge-8-26".to_string()), "a Wine build is no Proton");
     }

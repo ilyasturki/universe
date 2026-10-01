@@ -259,25 +259,15 @@ mod tests {
 
     #[test]
     fn the_extension_is_written_once_and_a_system_copy_left_alone() {
-        let _guard = crate::paths::ENV_LOCK.lock().unwrap();
-        let (home, system) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
-        let was = (std::env::var_os("XDG_DATA_HOME"), std::env::var_os("XDG_DATA_DIRS"));
-        std::env::set_var("XDG_DATA_HOME", home.path());
-        std::env::set_var("XDG_DATA_DIRS", system.path());
+        let env = crate::paths::test_env();
         let first = super::install_extension().unwrap();
         let second = super::install_extension().unwrap();
-        let user = home.path().join("gnome-shell/extensions").join(super::UNIVERSE_EXTENSION);
+        let user = env.path().join("home/.local/share/gnome-shell/extensions").join(super::UNIVERSE_EXTENSION);
         std::fs::write(user.join("extension.js"), "stale").unwrap();
         let refreshed = super::install_extension().unwrap();
         std::fs::remove_dir_all(&user).unwrap();
-        std::fs::create_dir_all(system.path().join("gnome-shell/extensions").join(super::UNIVERSE_EXTENSION)).unwrap();
+        std::fs::create_dir_all(env.path().join("share/gnome-shell/extensions").join(super::UNIVERSE_EXTENSION)).unwrap();
         let shipped = super::install_extension().unwrap();
-        for (var, v) in [("XDG_DATA_HOME", was.0), ("XDG_DATA_DIRS", was.1)] {
-            match v {
-                Some(v) => std::env::set_var(var, v),
-                None => std::env::remove_var(var),
-            }
-        }
         assert_eq!(first, super::ExtensionCopy::Written(user.clone()));
         assert_eq!(second, super::ExtensionCopy::Current);
         assert_eq!(refreshed, super::ExtensionCopy::Written(user.clone()), "a stale copy is rewritten");

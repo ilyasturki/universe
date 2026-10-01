@@ -152,16 +152,14 @@ mod tests {
 
     #[test]
     fn import_and_file() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
-        let data = tempfile::tempdir().unwrap();
-        std::env::set_var("UNIVERSE_DATA_HOME", data.path());
+        let env = crate::paths::test_env();
         let rec = tempfile::tempdir().unwrap();
         let g = Game::new("Dead Cells");
         std::fs::create_dir_all(rec.path().join("dead-cells")).unwrap();
         std::fs::write(rec.path().join("dead-cells/001-20241211-012656-30m.mkv"), b"x").unwrap();
         assert_eq!(import_existing(&g, rec.path()).unwrap(), 1);
         assert_eq!(import_existing(&g, rec.path()).unwrap(), 0);
-        let pending = data.path().join("p.mkv");
+        let pending = env.path().join("data/p.mkv");
         std::fs::write(&pending, b"y").unwrap();
         let timeline =
             Timeline { started_at: "2026-09-11T12:00:05+02:00".into(), pauses: vec![("2026-09-11T12:10:00+02:00".into(), "2026-09-11T12:12:00+02:00".into())] };

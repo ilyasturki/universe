@@ -657,14 +657,11 @@ choices = ["codex"]
     }
 
     #[tokio::test]
-    #[allow(clippy::await_holding_lock)]
     async fn a_modules_check_hook_reports_its_lines_or_its_failure() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
-        let dir = tempfile::tempdir().unwrap();
-        std::env::set_var("UNIVERSE_DATA_HOME", dir.path().join("data"));
+        let env = crate::paths::test_env();
         let config: Config = toml::from_str("").unwrap();
         let m = module_with_check(
-            dir.path(),
+            env.path(),
             r#"#!/bin/sh
 echo probing >&2
 printf '%s' "$MODULE_SETTINGS_JSON" | grep -q '"provider":"codex"' || exit 3
@@ -682,7 +679,7 @@ exit 1
             "each JSON line is a check of the module's, under its global settings; its exit status goes with lines printed"
         );
 
-        let m = module_with_check(dir.path(), "#!/bin/sh\necho 'codex went away' >&2\nexit 2\n");
+        let m = module_with_check(env.path(), "#!/bin/sh\necho 'codex went away' >&2\nexit 2\n");
         let checks = module_checks(&m, &config).await;
         assert_eq!(checks.len(), 1);
         assert_eq!((checks[0].check.as_str(), checks[0].label.as_str(), checks[0].ok), ("check", "Play journal check", false));

@@ -544,11 +544,8 @@ pub fn status(game: &Game) -> MediaStatus {
 mod tests {
     use super::*;
 
-    fn setup(id: &str) -> (std::sync::MutexGuard<'static, ()>, tempfile::TempDir, Game) {
-        let env = crate::paths::ENV_LOCK.lock().unwrap();
-        let dir = tempfile::tempdir().unwrap();
-        std::env::set_var("UNIVERSE_DATA_HOME", dir.path().join("data"));
-        (env, dir, Game::new(id))
+    fn setup(id: &str) -> (crate::paths::TestEnv, Game) {
+        (crate::paths::test_env(), Game::new(id))
     }
 
     fn touch(p: &Path) {
@@ -565,7 +562,7 @@ mod tests {
 
     #[test]
     fn picks_sit_over_defaults_and_come_off() {
-        let (_env, dir, game) = setup("g");
+        let (env, game) = setup("g");
         touch(&game.media_dir().join("boxFront.png"));
         note_source(&game.media_dir(), "box_front", "sgdb").unwrap();
         touch(&game.media_dir().join("logo.png"));
@@ -578,7 +575,7 @@ mod tests {
         assert_eq!(slot("logo").origin, "");
         assert_eq!(slot("banner").kind, "missing");
 
-        let src = dir.path().join("pick.jpg");
+        let src = env.path().join("pick.jpg");
         touch(&src);
         let placed = set_slot(&game, "box_front", &src).unwrap();
         assert_eq!(placed, game.media_dir().join("picked/box_front.jpg"));
@@ -591,7 +588,7 @@ mod tests {
         assert_eq!(shown.iter().find(|(s, _)| s == "box_front").unwrap().1, placed.to_string_lossy());
 
         touch(&game.picked_dir().join("cover.png"));
-        let src2 = dir.path().join("pick2.png");
+        let src2 = env.path().join("pick2.png");
         touch(&src2);
         set_slot(&game, "box_front", &src2).unwrap();
         assert!(!placed.exists());
@@ -609,9 +606,9 @@ mod tests {
 
     #[test]
     fn screenshots_join_the_pick_dir() {
-        let (_env, dir, game) = setup("s");
+        let (env, game) = setup("s");
         touch(&game.media_dir().join("screenshots/steam-01.png"));
-        let src = dir.path().join("mine.png");
+        let src = env.path().join("mine.png");
         touch(&src);
         set_slot(&game, "screenshot", &src).unwrap();
         assert!(game.picked_dir().join("screenshots/mine.png").exists());

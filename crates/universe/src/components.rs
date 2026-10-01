@@ -1455,27 +1455,6 @@ mod tests {
         Build { version: version.into(), date: date.into(), channel: Channel::Stable, assets }
     }
 
-    struct Home {
-        _dir: tempfile::TempDir,
-        _lock: std::sync::MutexGuard<'static, ()>,
-    }
-
-    impl Drop for Home {
-        fn drop(&mut self) {
-            for var in ["UNIVERSE_DATA_HOME", "UNIVERSE_CACHE_HOME", "UNIVERSE_CATALOGUE"] {
-                std::env::remove_var(var);
-            }
-        }
-    }
-
-    fn home() -> Home {
-        let lock = crate::paths::ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let dir = tempfile::tempdir().unwrap();
-        std::env::set_var("UNIVERSE_DATA_HOME", dir.path().join("data"));
-        std::env::set_var("UNIVERSE_CACHE_HOME", dir.path().join("cache"));
-        Home { _dir: dir, _lock: lock }
-    }
-
     fn serve(bodies: Vec<(&'static str, Vec<u8>)>) -> String {
         use std::io::{BufRead, BufReader, Write};
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -1513,7 +1492,7 @@ mod tests {
 
     #[test]
     fn each_format_unpacks_to_a_build_with_its_program() {
-        let _home = home();
+        let _env = paths::test_env();
         let emu_tar = tar_of(&[("emu-1.0/emu", b"#!/bin/sh\n"), ("emu-1.0/lib/x.so", b"so")], true);
         let wine_tar = xz(&tar_of(&[("wine-11/bin/wine", b"#!/bin/sh\n")], false));
         let proton_tar = tar_of(&[("GE-Proton11-7-x86_64/proton", b"#!/usr/bin/env python3\n"), ("GE-Proton11-7-x86_64/version", b"1 GE-Proton11-7\n")], true);
@@ -1587,7 +1566,7 @@ mod tests {
 
     #[test]
     fn a_download_that_is_not_the_pinned_one_writes_nothing() {
-        let _home = home();
+        let _env = paths::test_env();
         let base = serve(vec![("/emu.AppImage", b"tampered".to_vec())]);
         let a = asset(Format::AppImage, &format!("{base}/emu.AppImage"), FAKE_APPIMAGE);
         let err = rt().block_on(install("xemu", &entry("xemu", Kind::Emulator, vec![]), &build("1", "", vec![a]), false, None, &AtomicBool::new(false)));
@@ -1597,7 +1576,7 @@ mod tests {
 
     #[test]
     fn a_cancelled_download_stops_and_leaves_nothing() {
-        let _home = home();
+        let _env = paths::test_env();
         let base = serve(vec![("/big", vec![0u8; 1 << 20])]);
         let a = asset(Format::Binary, &format!("{base}/big"), &[0u8; 1 << 20]);
         let err = rt().block_on(install("gogdl", &entry("gogdl", Kind::Tool, vec![]), &build("1", "", vec![a]), false, None, &AtomicBool::new(true)));
@@ -1632,7 +1611,7 @@ mod tests {
 
     #[test]
     fn an_update_takes_the_newest_stable_build_and_a_prune_keeps_two_and_the_pinned() {
-        let _home = home();
+        let _env = paths::test_env();
         let any = |v: &str| asset(Format::AppImage, &format!("https://x/{v}"), v.as_bytes());
         let mut rolling = build("0.3.1-rc1", "2026-09-20", vec![any("rc")]);
         rolling.channel = Channel::Rolling;
@@ -1655,22 +1634,9 @@ mod tests {
     }
 
     #[tokio::test]
-    #[allow(clippy::await_holding_lock)]
     async fn an_uninstall_takes_every_build_and_the_folder_unless_a_game_names_one() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let dir = tempfile::tempdir().unwrap();
-        for (var, sub) in [
-            ("UNIVERSE_DATA_HOME", "data"),
-            ("UNIVERSE_CACHE_HOME", "cache"),
-            ("UNIVERSE_STATE_HOME", "state"),
-            ("UNIVERSE_CONFIG_HOME", "config"),
-            ("UNIVERSE_MODULES_PATH", "modules"),
-            ("UNIVERSE_SOURCES_PATH", "sources"),
-        ] {
-            std::fs::create_dir_all(dir.path().join(sub)).unwrap();
-            std::env::set_var(var, dir.path().join(sub));
-        }
-        std::fs::write(dir.path().join("config/config.toml"), "[runners.xemu]\nbuild = \"0.8.1\"\n[modules]\nenabled = []\n").unwrap();
+        let env = paths::test_env();
+        std::fs::write(env.path().join("config/config.toml"), "[runners.xemu]\nbuild = \"0.8.1\"\n[modules]\nenabled = []\n").unwrap();
         fake_build("xemu", Kind::Emulator, "0.8.1", "2026-05-01");
         fake_build("xemu", Kind::Emulator, "0.8.136", "2026-06-08");
         set_skipped("xemu", "0.9.0", true).unwrap();
@@ -1749,7 +1715,7 @@ mod tests {
 
     #[test]
     fn a_runner_runs_the_system_program_first_then_follows_its_build_setting() {
-        let _home = home();
+        let _env = paths::test_env();
         let spec = runners::spec("xemu").unwrap();
         let mut config = Config::default();
         fake_build("xemu", Kind::Emulator, "0.8.1", "2026-05-01");
@@ -1771,7 +1737,7 @@ mod tests {
 
     #[test]
     fn a_proton_family_follows_universes_newest_build_but_an_exact_name_wins() {
-        let _home = home();
+        let _env = paths::test_env();
         let config = Config::default();
         for v in ["GE-Proton11-6", "GE-Proton11-7"] {
             fake_build("ge-proton", Kind::Proton, v, "");
@@ -1844,7 +1810,7 @@ mod tests {
 
     #[test]
     fn the_catalogue_falls_back_to_the_cache_then_the_pinned_tools() {
-        let _home = home();
+        let _env = paths::test_env();
         let file = paths::data_home().join("catalogue.json");
         std::fs::create_dir_all(paths::data_home()).unwrap();
         let config = Config::default();

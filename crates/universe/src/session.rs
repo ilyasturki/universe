@@ -472,7 +472,6 @@ impl Core {
 }
 
 #[cfg(test)]
-#[allow(clippy::await_holding_lock)]
 pub(crate) mod tests {
     use super::*;
     use crate::game::Game;
@@ -481,29 +480,20 @@ pub(crate) mod tests {
 
     /// A library of one Dolphin game on a fake emulator, every Universe home under one tempdir.
     pub(crate) struct Sandbox {
-        _dir: tempfile::TempDir,
         post_ran: std::path::PathBuf,
+        _env: crate::paths::TestEnv,
     }
 
     pub(crate) fn sandbox() -> Sandbox {
-        let dir = tempfile::tempdir().unwrap();
-        for (var, sub) in [
-            ("UNIVERSE_DATA_HOME", "data"),
-            ("UNIVERSE_STATE_HOME", "state"),
-            ("UNIVERSE_CONFIG_HOME", "config"),
-            ("UNIVERSE_MODULES_PATH", "modules"),
-            ("UNIVERSE_SOURCES_PATH", "sources"),
-        ] {
-            std::fs::create_dir_all(dir.path().join(sub)).unwrap();
-            std::env::set_var(var, dir.path().join(sub));
-        }
-        std::fs::write(dir.path().join("config/config.toml"), "[launch]\ngamescope = false\nmangohud = false\nfps_limit = \"none\"\n[modules]\nenabled = []\n")
+        let env = crate::paths::test_env();
+        let dir = env.path();
+        std::fs::write(dir.join("config/config.toml"), "[launch]\ngamescope = false\nmangohud = false\nfps_limit = \"none\"\n[modules]\nenabled = []\n")
             .unwrap();
-        let emu = dir.path().join("dolphin-emu");
+        let emu = dir.join("dolphin-emu");
         std::fs::write(&emu, b"#!/bin/sh\n").unwrap();
-        let rom = dir.path().join("F-Zero GX.iso");
+        let rom = dir.join("F-Zero GX.iso");
         std::fs::write(&rom, b"").unwrap();
-        let post_ran = dir.path().join("post-ran");
+        let post_ran = dir.join("post-ran");
         let mut g = Game::new("Sample");
         g.launch.runner = "dolphin".into();
         g.launch.runner_exe = emu.to_string_lossy().into();
@@ -512,7 +502,7 @@ pub(crate) mod tests {
         g.launch.post_command = format!("touch {}", post_ran.display());
         g.desktop.hide_cursor = Some(true);
         g.save().unwrap();
-        Sandbox { _dir: dir, post_ran }
+        Sandbox { post_ran, _env: env }
     }
 
     pub(crate) async fn open() -> (Core, Arc<Memory>) {
@@ -533,7 +523,6 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn a_session_is_launched_ended_and_undone_in_reverse() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let sb = sandbox();
         let (core, memory) = open().await;
         let sid = core.launch("sample", "", "").await.unwrap();
@@ -572,7 +561,6 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn the_desktop_is_kept_awake_for_as_long_as_the_game_runs() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let _sb = sandbox();
         let (core, memory) = open().await;
         let sid = core.launch("sample", "", "").await.unwrap();
@@ -583,7 +571,6 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn keep_awake_off_leaves_the_desktop_to_its_own_idle() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let _sb = sandbox();
         let file = crate::paths::config_file();
         let text = std::fs::read_to_string(&file).unwrap();
@@ -595,7 +582,6 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn the_hud_toggle_is_the_games_key_and_the_layers_conf() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let _sb = sandbox();
         let (core, _memory) = open().await;
         assert!(matches!(core.set_mangohud(None).await, Err(Error::NotFound(_))), "no game, nothing to show");
@@ -626,7 +612,6 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn reconcile_closes_a_session_whose_unit_vanished() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let sb = sandbox();
         let (core, memory) = open().await;
         let sid = core.launch("sample", "", "").await.unwrap();
@@ -645,7 +630,6 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn a_refused_start_leaves_nothing_behind() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let sb = sandbox();
         let (core, memory) = open().await;
         memory.refuse_starts(true);
@@ -663,7 +647,6 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn adopt_scope_on_the_memory_host_is_idempotent() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let _sb = sandbox();
         let (core, memory) = open().await;
         let name = core.adopt_scope().await.unwrap();
@@ -676,7 +659,6 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn a_stop_files_a_stopped_end_and_the_log_opens_on_the_command_line() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let _sb = sandbox();
         let (core, memory) = open().await;
         let sid = core.launch("sample", "", "").await.unwrap();
@@ -704,7 +686,6 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn an_unasked_signal_is_a_kill_and_a_code_a_crash() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let _sb = sandbox();
         let (core, memory) = open().await;
         let sid = core.launch("sample", "", "").await.unwrap();
@@ -715,7 +696,6 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn a_signal_nobody_asked_for_is_a_kill() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let _sb = sandbox();
         let (core, memory) = open().await;
         let sid = core.launch("sample", "", "").await.unwrap();
@@ -727,7 +707,6 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn debug_log_makes_the_session_dir_and_a_launch_file() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let _sb = sandbox();
         let mut g = Game::load(&Game::new("Sample").toml_path()).unwrap();
         g.launch.debug_log = Some(true);
@@ -747,7 +726,6 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn current_is_none_once_the_unit_finished() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let _sb = sandbox();
         let (core, memory) = open().await;
         let sid = core.launch("sample", "", "").await.unwrap();
@@ -760,7 +738,6 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn freeze_runs_the_hooks_behind_the_unit() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let _sb = sandbox();
         let probe = std::path::PathBuf::from(std::env::var_os("UNIVERSE_MODULES_PATH").unwrap()).join("probe");
         std::fs::create_dir_all(probe.join("bin")).unwrap();
@@ -792,7 +769,6 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn the_games_own_source_runs_its_hooks_around_the_session() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let _sb = sandbox();
         let store = std::path::PathBuf::from(std::env::var_os("UNIVERSE_SOURCES_PATH").unwrap()).join("store");
         std::fs::create_dir_all(store.join("bin")).unwrap();
@@ -840,7 +816,6 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn reconcile_drops_a_marker_it_cannot_read() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let _sb = sandbox();
         std::fs::write(paths::current_session_file(), "{\"session_id\": 1").unwrap();
         let (core, _memory) = open().await;

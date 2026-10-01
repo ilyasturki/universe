@@ -523,9 +523,8 @@ mod tests {
 
     #[test]
     fn scan_offers_a_file_once_and_keeps_the_library_out() {
-        let _guard = crate::paths::ENV_LOCK.lock().unwrap();
-        let dir = tempfile::tempdir().unwrap();
-        let d = dir.path();
+        let env = crate::paths::test_env();
+        let d = env.path();
         std::env::set_var("UNIVERSE_DATA_HOME", d.join("universe"));
         let emu = d.join("bin/emu");
         touch(&emu);
@@ -559,7 +558,6 @@ mod tests {
             report.skipped.iter().map(|s| s.reason.as_str()).collect::<Vec<_>>(),
             vec!["mario is already in the library under another file", &format!("same title as {}", d.join("switch/Zelda.xci").display())]
         );
-        std::env::remove_var("UNIVERSE_DATA_HOME");
     }
 
     #[test]

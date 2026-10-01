@@ -555,13 +555,10 @@ scope = "config"
     }
 
     #[tokio::test]
-    #[allow(clippy::await_holding_lock)]
     async fn setting_choices_run_the_module_or_stay_static() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
-        let dir = tempfile::tempdir().unwrap();
-        std::env::set_var("UNIVERSE_DATA_HOME", dir.path().join("data"));
-        std::fs::create_dir_all(dir.path().join("bin")).unwrap();
-        let exe = dir.path().join("bin/choices");
+        let env = crate::paths::test_env();
+        std::fs::create_dir_all(env.path().join("bin")).unwrap();
+        let exe = env.path().join("bin/choices");
         std::fs::write(
             &exe,
             r##"#!/bin/sh
@@ -589,7 +586,7 @@ choices_exec = "bin/choices"
 "#,
         )
         .unwrap();
-        let module = Module { available: true, missing: vec![], unset: vec![], enabled: true, dir: dir.path().to_path_buf(), manifest: m };
+        let module = Module { available: true, missing: vec![], unset: vec![], enabled: true, dir: env.path().to_path_buf(), manifest: m };
         let cfg: Config = toml::from_str("").unwrap();
         let settings = module.merged_settings(&cfg, None);
         assert_eq!(setting_choices(&module, &settings, "provider").await.unwrap(), vec!["codex", "claude"]);

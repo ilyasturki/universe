@@ -548,7 +548,6 @@ impl Core {
 }
 
 #[cfg(test)]
-#[allow(clippy::await_holding_lock)]
 mod tests {
     use super::*;
     use crate::game::Game;
@@ -568,7 +567,6 @@ mod tests {
 
     #[tokio::test]
     async fn a_game_field_says_where_its_value_comes_from_and_a_reset_hands_it_back() {
-        let _env = paths::ENV_LOCK.lock().unwrap();
         let _sb = sandbox();
         edit_config("", "[launch.env]\nFROM_GLOBAL = \"1\"\n");
         let mut g = Game::load(&Game::new("Sample").toml_path()).unwrap();
@@ -606,7 +604,6 @@ mod tests {
 
     #[tokio::test]
     async fn a_game_value_promoted_becomes_the_global_one_and_leaves_the_game() {
-        let _env = paths::ENV_LOCK.lock().unwrap();
         let _sb = sandbox();
         let mut g = Game::load(&Game::new("Sample").toml_path()).unwrap();
         g.launch.pause_on_home = Some(false);
@@ -637,7 +634,6 @@ mod tests {
 
     #[tokio::test]
     async fn the_launch_form_holds_the_global_keys_and_the_config_ones() {
-        let _env = paths::ENV_LOCK.lock().unwrap();
         let _sb = sandbox();
         edit_config("", "[proton]\nproton-em = \"~/proton-em\"\n");
         let (core, _) = open().await;
@@ -656,7 +652,6 @@ mod tests {
 
     #[tokio::test]
     async fn a_runner_program_set_on_its_form_is_the_runners_and_its_reset_finds_it_again() {
-        let _env = paths::ENV_LOCK.lock().unwrap();
         let _sb = sandbox();
         let (core, _) = open().await;
         let form = Form::Runner("dolphin".into());

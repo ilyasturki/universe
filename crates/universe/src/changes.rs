@@ -486,7 +486,6 @@ impl Watcher {
 }
 
 #[cfg(test)]
-#[allow(clippy::await_holding_lock)]
 mod tests {
     use super::*;
     use crate::game::Game;
@@ -512,7 +511,6 @@ mod tests {
 
     #[tokio::test]
     async fn a_game_that_arrives_is_reloaded_and_named() {
-        let _env = paths::ENV_LOCK.lock().unwrap();
         let _sb = sandbox();
         let core = Arc::new(open().await.0);
         let (_watch, mut rx) = watch(core.clone(), QUICK).await.unwrap();
@@ -531,7 +529,6 @@ mod tests {
 
     #[tokio::test]
     async fn a_journal_made_after_the_start_is_watched_and_its_entries_reported() {
-        let _env = paths::ENV_LOCK.lock().unwrap();
         let _sb = sandbox();
         let core = Arc::new(open().await.0);
         let (_watch, mut rx) = watch(core.clone(), QUICK).await.unwrap();
@@ -552,7 +549,6 @@ mod tests {
 
     #[tokio::test]
     async fn a_pick_made_after_the_start_is_the_games_art() {
-        let _env = paths::ENV_LOCK.lock().unwrap();
         let _sb = sandbox();
         let core = Arc::new(open().await.0);
         let picked = core.get("sample").await.unwrap().game.picked_dir();
@@ -568,7 +564,6 @@ mod tests {
 
     #[tokio::test]
     async fn the_marker_starts_the_session_and_its_removal_ends_it_with_the_filed_line() {
-        let _env = paths::ENV_LOCK.lock().unwrap();
         let _sb = sandbox();
         let (core, memory) = open().await;
         let core = Arc::new(core);
@@ -593,7 +588,6 @@ mod tests {
 
     #[tokio::test]
     async fn a_session_already_running_is_reported_first() {
-        let _env = paths::ENV_LOCK.lock().unwrap();
         let _sb = sandbox();
         let core = Arc::new(open().await.0);
         let sid = core.launch("sample", "", "").await.unwrap();

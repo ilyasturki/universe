@@ -623,11 +623,9 @@ mod tests {
 
     #[test]
     fn a_downloaded_build_runs_inside_universe_fhs_on_nixos() {
-        let _lock = crate::paths::ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let dir = tempfile::tempdir().unwrap();
+        let env = crate::paths::test_env();
         let path_was = std::env::var_os("PATH").unwrap_or_default();
-        std::env::set_var("UNIVERSE_DATA_HOME", dir.path().join("data"));
-        let bin = dir.path().join("bin");
+        let bin = env.path().join("bin");
         std::fs::create_dir_all(&bin).unwrap();
         std::fs::write(bin.join("universe-fhs"), b"#!/bin/sh\nexec \"$@\"\n").unwrap();
         let joined = std::env::join_paths(std::iter::once(bin.clone()).chain(std::env::split_paths(&path_was))).unwrap();
@@ -635,13 +633,11 @@ mod tests {
         let program = crate::components::root().join("xemu/0.8.136/AppRun");
         std::fs::create_dir_all(program.parent().unwrap()).unwrap();
         std::fs::write(&program, b"#!/bin/sh\n").unwrap();
-        let mut g = game(dir.path(), "Halo.iso", "xemu");
+        let mut g = game(env.path(), "Halo.iso", "xemu");
         g.launch.runner_exe = program.to_string_lossy().into();
         g.launch.gamescope = Some(false);
         let r = crate::library::resolve(g, &Config::default(), &[]);
         let p = plan(&r, &Config::default(), &BTreeMap::new(), None, None, false, true).unwrap();
-        std::env::set_var("PATH", path_was);
-        std::env::remove_var("UNIVERSE_DATA_HOME");
         if crate::distro::detect() == crate::distro::Family::NixOs {
             assert_eq!(p.program, bin.join("universe-fhs").to_string_lossy(), "the libraries it was built against");
             assert_eq!(p.args[0], program.to_string_lossy());
@@ -803,11 +799,11 @@ mod tests {
 
     #[test]
     fn host_gamescope_takes_the_global_fields() {
-        let dir = tempfile::tempdir().unwrap();
-        let bin = dir.path().join("gamescope");
+        let env = crate::paths::test_env();
+        let bin = env.path().join("gamescope");
         std::fs::write(&bin, b"#!/bin/sh\n").unwrap();
         let mut cfg = Config::default();
-        cfg.launch.gamescope_bin = dir.path().join("nope").to_string_lossy().into();
+        cfg.launch.gamescope_bin = env.path().join("nope").to_string_lossy().into();
         assert!(host_gamescope(&cfg, None, true).is_none());
         cfg.launch.gamescope_bin = bin.to_string_lossy().into();
         cfg.launch.gamescope_args = "--adaptive-sync".into();
@@ -959,15 +955,10 @@ mod tests {
 
     #[test]
     fn mangohud_confs_keep_the_users_layout_and_own_the_rest() {
-        let _lock = crate::paths::ENV_LOCK.lock().unwrap();
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(dir.path().join("MangoHud")).unwrap();
-        std::fs::write(
-            dir.path().join("MangoHud/MangoHud.conf"),
-            "fps_limit=30\nfps_limit_method=early\nno_display\ntoggle_hud=F12\nreload_cfg=F9\ncontrol=mine\n",
-        )
-        .unwrap();
-        std::env::set_var("XDG_CONFIG_HOME", dir.path());
+        let _env = crate::paths::test_env();
+        let conf = crate::paths::xdg("XDG_CONFIG_HOME", ".config").join("MangoHud");
+        std::fs::create_dir_all(&conf).unwrap();
+        std::fs::write(conf.join("MangoHud.conf"), "fps_limit=30\nfps_limit_method=early\nno_display\ntoggle_hud=F12\nreload_cfg=F9\ncontrol=mine\n").unwrap();
         assert_eq!(
             layer_conf_text(Some("g"), Some(60), false),
             "fps_limit_method=early\ntoggle_hud=F12\nreload_cfg=F9\ncontrol=universe-mangohud-g\nfps_limit=60\n",

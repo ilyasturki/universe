@@ -5,7 +5,70 @@ pub fn xdg(var: &str, fallback: &str) -> PathBuf {
 }
 
 #[cfg(test)]
-pub(crate) static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[cfg(test)]
+pub(crate) struct TestEnv {
+    saved: Vec<(std::ffi::OsString, std::ffi::OsString)>,
+    dir: tempfile::TempDir,
+    _lock: std::sync::MutexGuard<'static, ()>,
+}
+
+/// Every `UNIVERSE_*` and `XDG_*` variable cleared, then the homes, HOME and the XDG dirs set under one tempdir; the whole environment put back on drop.
+#[cfg(test)]
+pub(crate) fn test_env() -> TestEnv {
+    let lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let saved: Vec<_> = std::env::vars_os().collect();
+    for (var, _) in &saved {
+        if var.to_str().is_some_and(|v| v.starts_with("UNIVERSE_") || v.starts_with("XDG_")) {
+            std::env::remove_var(var);
+        }
+    }
+    let dir = tempfile::tempdir().unwrap();
+    for (var, sub) in [
+        ("UNIVERSE_DATA_HOME", "data"),
+        ("UNIVERSE_CONFIG_HOME", "config"),
+        ("UNIVERSE_STATE_HOME", "state"),
+        ("UNIVERSE_CACHE_HOME", "cache"),
+        ("UNIVERSE_MODULES_PATH", "modules"),
+        ("UNIVERSE_SOURCES_PATH", "sources"),
+        ("HOME", "home"),
+        ("XDG_DATA_HOME", "home/.local/share"),
+        ("XDG_CONFIG_HOME", "home/.config"),
+        ("XDG_STATE_HOME", "home/.local/state"),
+        ("XDG_CACHE_HOME", "home/.cache"),
+        ("XDG_DATA_DIRS", "share"),
+        ("XDG_CONFIG_DIRS", "etc/xdg"),
+        ("XDG_RUNTIME_DIR", "run"),
+    ] {
+        std::fs::create_dir_all(dir.path().join(sub)).unwrap();
+        std::env::set_var(var, dir.path().join(sub));
+    }
+    TestEnv { saved, dir, _lock: lock }
+}
+
+#[cfg(test)]
+impl TestEnv {
+    pub(crate) fn path(&self) -> &Path {
+        self.dir.path()
+    }
+}
+
+#[cfg(test)]
+impl Drop for TestEnv {
+    fn drop(&mut self) {
+        for (var, _) in std::env::vars_os() {
+            if !self.saved.iter().any(|(v, _)| *v == var) {
+                std::env::remove_var(var);
+            }
+        }
+        for (var, value) in &self.saved {
+            if std::env::var_os(var).as_ref() != Some(value) {
+                std::env::set_var(var, value);
+            }
+        }
+    }
+}
 
 pub fn home() -> PathBuf {
     std::env::home_dir().unwrap_or_else(|| PathBuf::from("/"))
@@ -152,17 +215,37 @@ mod tests {
 
     #[test]
     fn a_data_dir_listed_twice_is_read_once() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        let was = (std::env::var_os("XDG_DATA_DIRS"), std::env::var_os("UNIVERSE_MODULES_PATH"));
+        let _env = test_env();
         std::env::set_var("XDG_DATA_DIRS", "/a/share:/b/share:/a/share:");
         std::env::remove_var("UNIVERSE_MODULES_PATH");
-        let dirs = system_module_dirs();
-        for (var, v) in [("XDG_DATA_DIRS", was.0), ("UNIVERSE_MODULES_PATH", was.1)] {
-            match v {
-                Some(v) => std::env::set_var(var, v),
-                None => std::env::remove_var(var),
+        assert_eq!(system_module_dirs(), [PathBuf::from("/a/share/universe/modules"), PathBuf::from("/b/share/universe/modules")]);
+    }
+
+    #[test]
+    fn a_test_env_seals_the_machine_off_and_puts_the_environment_back() {
+        let seen = |env: &TestEnv| {
+            let dir = env.path().to_string_lossy().into_owned();
+            let mut vars: Vec<_> = std::env::vars_os().map(|(k, v)| (k, v.to_string_lossy().replace(&dir, "<tmp>"))).collect();
+            vars.sort();
+            vars
+        };
+        let before = seen(&test_env());
+        let dir = {
+            let env = test_env();
+            std::env::set_var("SET_BY_A_TEST", "1");
+            std::env::remove_var("PATH");
+            for p in [data_home(), config_home(), state_home(), cache_home(), home(), user_dir("GAMES", "Games"), runtime_dir()] {
+                assert!(p.starts_with(env.path()), "{}", p.display());
             }
-        }
-        assert_eq!(dirs, [PathBuf::from("/a/share/universe/modules"), PathBuf::from("/b/share/universe/modules")]);
+            assert!(system_module_dirs().iter().chain(&system_source_dirs()).all(|d| d.starts_with(env.path())), "nothing installed on the machine");
+            env.path().to_path_buf()
+        };
+        assert!(!dir.exists(), "the tempdir goes with the guard");
+        let poisoner = std::thread::spawn(|| {
+            let _env = test_env();
+            panic!("a failing test");
+        });
+        assert!(poisoner.join().is_err());
+        assert_eq!(seen(&test_env()), before, "what a test set or removed is back, and a panicked holder doesn't fail the next");
     }
 }

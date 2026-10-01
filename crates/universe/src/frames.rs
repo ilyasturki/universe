@@ -239,30 +239,25 @@ async fn extract(ffmpeg: PathBuf, job: Job, seconds: f64, vaapi: Option<String>)
 }
 
 #[cfg(test)]
-#[allow(clippy::await_holding_lock)]
 mod tests {
     use super::*;
     use std::time::Duration;
 
     #[test]
     fn a_recording_keeps_the_qt_hosts_cache_layout() {
-        let _env = paths::ENV_LOCK.lock().unwrap();
-        let cache = tempfile::tempdir().unwrap();
-        std::env::set_var("UNIVERSE_CACHE_HOME", cache.path());
+        let env = paths::test_env();
         let recording = Path::new("/home/u/Videos/universe/Hades 20250101-120000.mkv");
-        assert_eq!(file(recording, 3), cache.path().join("frames/df9aaa96b8c3e3661cf39527fac094cdd1a3d663/03.jpg"));
+        assert_eq!(file(recording, 3), env.path().join("cache/frames/df9aaa96b8c3e3661cf39527fac094cdd1a3d663/03.jpg"));
         assert_eq!((at(0, 160.0), at(15, 160.0)), (5.0, 155.0));
     }
 
     #[tokio::test]
     async fn a_selected_recording_lands_every_frame_once() {
-        let _env = paths::ENV_LOCK.lock().unwrap();
+        let env = paths::test_env();
         if crate::runners::on_path("ffmpeg").is_none() {
             return;
         }
-        let dir = tempfile::tempdir().unwrap();
-        std::env::set_var("UNIVERSE_CACHE_HOME", dir.path().join("cache"));
-        let recording = dir.path().join("clip.mkv");
+        let recording = env.path().join("clip.mkv");
         // Past its last frame a seek writes nothing: at 10 fps the last sample of four seconds, 3.875 s, still has one.
         let made = std::process::Command::new("ffmpeg")
             .args(["-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=320x180:rate=10:duration=4", "-c:v", "mjpeg"])
