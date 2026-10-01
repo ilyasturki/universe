@@ -938,47 +938,80 @@ CLI's `universe add` and `universe migrate` are the same calls.
 
 ## First run
 
-`api.screens.onboarding` is the setup shown once: `needed` is true while `api.memory` has no
-`onboarded` and the library is empty (a library with games sets the flag on the first read, so an
-emptied library never brings it up later), and every look opens it from its root's
-`Component.onCompleted` as a dialog over what is on screen — Reprise as `pages/OnboardingPage.qml`
-(`openSetup()`, `openSub` with `{ setup: true }`, which keeps the tabs visible under it), the
-Switch 2 look as `switch2/pages/OnboardingPage.qml` on its stack (a page whose `overlay` is true
-leaves the layer under it in view), the PS5 look as `ps5/pages/OnboardingPage.qml` on its stack, and
-on an empty library its home row leads with Set Up and Add a Game; Settings › About › "First-run setup" opens it again, and so
-does the empty Home's "Set up" — a second pill beside "Add a game" in Reprise's hero band, a second
-disc beside the plus in the Switch 2 HOME row — shown while the library is empty, whatever the
-flag says. `load()`
-runs `discover()` off the UI thread and builds `steps` (`{id, title, subtitle}`): `found`, `stores`
-(when an enabled, available source is signed out, or one that is off has its launcher on this
-machine), `preferences` (when `settings()` says
-`config_writable`) and `done`; `step`, `stepId`, `next()`, `back()`, `finish()` (sets `onboarded`,
-emits `finished`; `next()` on the last step finishes). Every step is one `rows`/`groups` list in
-the settings forms' shape, so each look draws it with its settings rows and its value editor:
-`found` is a row per launcher found on the machine — an action row (`via`) where Universe can take
-the games over (`display` the count; `runImport(index)` runs `import_lutris(true)`,
-`import_roms(true)` for the emulators' folders, or has the source the `via` names adopt them: for
-`heroic-gog` it adds `gog_dirs` to the gog source's `scan_dirs` when the config takes writes, any
-other source it turns on; then it starts a `scan(via)` job. The row's `display` follows:
-"Importing…", "N games added", "Nothing new", the error, or — a scan that brought nothing while the
-source is signed out — "Sign in to X to adopt them", the scan running again once that sign-in
-succeeds), a `static` row otherwise ("No games", "N games · not importable yet", "· needs
-<program>", "· no <via> source"), `quiet` when there is nothing to bring over and nothing was done — Reprise leaves quiet
-rows out unless every row is one — then, under "Runners your games need", one row per missing
-runner the library needs that Universe can install (`via: "component"`; `runImport` installs it
-through `api.screens.components`, the row reading "Installing…" meanwhile; an import or an
-adoption that brought games asks the components again) — `stores` the source's Account row, "Get a sign-in link" (`link`) and "Enter the code"
-(`code`, both `quiet` once the source is signed in there), or for a source still off a `Use <name>`
-switch (`enabled`, a `bool` row) whose sign-in rows replace it once on, through the shared `api.screens.login` — `ui/LoginCard.qml` and `switch2/ui/LoginCard.qml`
-are the QR, URL and status card `FormPage` shows too — `preferences` the controller family
-(`controller.family`, an `enum` over `api.screens.controller.families`, written with `setFamily`)
-and `launch.hdr` when it fits this GPU (the upscaler upgrades are left to Settings), `done` a summary row and, under a read-only config, why the
-preferences were skipped. The header is the step's title; under the rows sit two buttons, Back
-("Skip setup" on the first step) and Continue ("Finish" on the last), reached with Down past the
-last row, Left/Right between them, A to press one — B and X do the same from anywhere in the
-dialog, the hint bar showing A and B. The
-Reprise Home rail lands on its first game when it fills while the page is up (the setup importing
-behind the dialog, the add page), as a cold start does.
+`api.screens.onboarding` is the setup shown once per machine: `needed` is true while the core's
+`onboarded()` is false and the library is empty — the flag is `$XDG_STATE_HOME/universe/onboarded`,
+the GTK app's too, so a machine set up in either is not asked again; a library with games sets it on
+the first read, so an emptied library never brings it up later, and `api.memory`'s `onboarded` of
+earlier versions is carried over to it. Every look opens it from its root's `Component.onCompleted`
+as a dialog over what is on screen — Reprise as `pages/OnboardingPage.qml` (`openSetup()`, `openSub`
+with `{ setup: true }`, which keeps the tabs visible under it), the Switch 2 look as
+`switch2/pages/OnboardingPage.qml` on its stack (a page whose `overlay` is true leaves the layer
+under it in view), the PS5 look as `ps5/pages/OnboardingPage.qml` on its stack, and on an empty
+library its home row leads with Set Up and Add a Game; Settings › About › "First-run setup" opens it
+again, and so does the empty Home's "Set up" — a second pill beside "Add a game" in Reprise's hero
+band, a second disc beside the plus in the Switch 2 HOME row — shown while the library is empty,
+whatever the flag says. `load()` asks the core everything in one call off the UI thread —
+`discover()`, `sources()` (whose first call in a process asks every store over the network whether
+its sign-in holds), `settings()`, `gpu()`, the global launch keys and the gog source's settings —
+`loading` true meanwhile, and builds `steps` (`{id, title, subtitle}`): `found`, `stores` (when an
+enabled, available source is signed out, or — where `config_writable` — one that is off has its
+launcher on this machine), `install` and `preferences` (both only where `config_writable`), and
+`done`; `step`, `stepId`, `title`, `subtitle` (the step's, the `done` step's following what came
+in: "Still adding games" while an import runs, "Nothing added yet", or the read-only config's owner,
+`config_owner`), `next()`, `back()`, `finish()` (sets the flag, emits `finished`; `next()` on the
+last step finishes). Every step is one `rows`/`groups` list in the settings forms' shape, so each
+look draws it with its settings rows and its value editor; the form leaves `quiet` rows out unless
+every row is one. `found` is a row per launcher found on the machine — an action row (`via`) where
+Universe can take the games over: one verb, `action` "Add" with `verb` set (`display` "Add N games",
+`detail` where they go; Reprise draws no arrow for a `verb` row), `runImport(index)` running
+`import_lutris(true)`, `import_roms(true)` for the emulators' folders, or having the source the
+`via` names adopt them (for `heroic-gog` it adds `gog_dirs` to the gog source's `scan_dirs`, any
+other source it turns on; then it starts a `scan(via)` job, whose count is `jobResult(job)`). The two
+importers write the library one after the other — a second one waits as `queued` — while adoptions
+run as jobs beside them, and nothing else waits: every other row and step stays usable. The row's
+`state` (`queued`, `importing`, `imported`, `failed`, `waiting` — a scan that brought nothing while
+the source is signed out, run again once that sign-in succeeds) and `count` follow it, `display`
+the short word ("Waiting…", "Adding…", "N games added", "Nothing new", "Not added", "Waiting for a
+sign-in") and `detail` the reason, `wraps` so it reads whole. The emulator games' art is fetched
+after they are in, as a `media` job over their ids (`mediaRefreshMany`). Under a read-only config, a
+launcher whose adoption needs a write (its source off, Heroic's folders missing from `scan_dirs`) is
+a `static` row whose `detail` says what to add where (home-manager when `config.toml` is a link into
+the Nix store, else `config.toml`). Other launchers are `static` rows ("No games", `quiet`; "N games ·
+not importable yet", "· needs <program>", "· no <via> source"). When two or more can still be added,
+"Add everything" (`everything`) leads and runs them all. Then, under "Runners your games need", one
+row per missing runner the library needs that Universe can install (`via: "component"`; `runImport`
+installs it through `api.screens.components`, the row reading "Installing…" meanwhile; an import or
+an adoption that brought games asks the components again). `stores` lists each source's Account row
+and its sign-in rows (`login_rows`, worded from the source's `[login]`: "Get a sign-in link" and
+"Enter the code" for a code, "Get an API key" and "Enter the key" for a key, `login` the kind,
+`prompt` the editor's title; both `quiet` once the source is signed in), or for a source still off
+a `Use <name>` switch (`enabled`, a `bool` row) whose sign-in rows replace it once on, through the
+shared `api.screens.login` — `ui/LoginCard.qml`, `switch2/ui/LoginCard.qml` and
+`ps5/ui/SettingsLoginCard.qml` are the QR, URL and status card `FormPage` shows too; while one is up
+the setup keeps that store's rows alone in the list, and shrinks the code (`qrSize`) before they
+are cut. `install` lists the folder in use (`install_dir`, `static`, "In use"), the other launchers'
+(`install_dirs`, an action row with `via: "folder"` whose `runImport` writes `paths.games_root`),
+then "Another folder…" (`paths.games_root`, a `path` row): it moves nothing already installed.
+`preferences` holds the controller family (`controller.family`, an `enum` over
+`api.screens.controller.families`, written with `setFamily`) and `launch.hdr` when it fits this GPU
+(the upscaler upgrades are left to Settings). `done` holds a row per launcher still on its way or
+that brought games, and per store signed in (`state` again), and, under a read-only config, why the
+install folder and the preferences were skipped. `idle` is true when no row on the step does
+anything: the looks then put the focus on Continue (Finish on `done`). `added` is true once games
+came in or are on their way. Under the rows sit two buttons, Back ("Skip setup" on the first step,
+"Close" once `added`) and Continue ("Finish" on the last), reached with Down past the last row,
+Left/Right between them, A to press one — B and X do the same from anywhere in the dialog, every
+look's hint bar showing both; B on the first step asks "Skip setup?" first (Keep going, Skip),
+unless `added`. Reprise and Switch 2 count the steps ("2 / 5") over the title, PS5 draws them as
+dots. The Reprise Home rail lands on its first game when it fills while the page is up (the setup
+importing behind the dialog, the add page), as a cold start does.
+
+The GTK app's first run (`dialogs/onboarding.rs`) has the same steps and the same flag: the found
+page's Continue, in a bar of its own under the content, waits for the look to end; each launcher has
+an Add button and Add Everything presses them all, the two importers taking turns; the stores page
+offers a source that is off but has its launcher here behind a "Use" switch; under a read-only
+config a launcher says what to write instead of failing; the done page follows the imports still
+running.
 
 ## The artwork pages and section
 
@@ -1187,7 +1220,8 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
   teaches the page nothing; its Big Screen group holds "HOME Opens Universe" (`controller.home_summons`,
   see "Focus").
 - **State**: `$XDG_STATE_HOME/universe/desktop.json` holds the window size, the sidebar's pick, the
-  sort, whether hidden games show and whether the first run was seen. A recording's frames come
+  sort and whether hidden games show; the first run's flag is the core's `onboarded()`, the one
+  `onboarded` of earlier versions carried over to it. A recording's frames come
   from `universe::frames`, the Qt host's cache.
 
 What cost time:
