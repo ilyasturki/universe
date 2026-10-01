@@ -9,6 +9,14 @@ capabilities = ["uninstall"]
 [requires]
 bins = ["butler"]
 
+[[tools]]
+id = "butler"
+name = "butler"
+kind = "tool"
+bin = "butler"
+homepage = "https://itch.io/docs/butler/"
+builds = [{ version = "15.31.0", assets = [{ format = "zip", url = "https://broth.itch.zone/butler/linux-amd64/15.31.0/archive/default", sha256 = "4f2a3f22b12f870923504d4b6935535cad377b45859f5fe9419e3adc0611a48c" }] }]
+
 [login]
 kind = "key"
 hint = "Open the link, generate an API key, then enter it."

@@ -27,6 +27,15 @@ pub struct Manifest {
     pub limits: Limits,
     pub settings: Vec<Setting>,
     pub login: Login,
+    /// Programs Universe fetches for the source when they are not on PATH, as catalogue entries; the catalogue's own win.
+    pub tools: Vec<Tool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Tool {
+    pub id: String,
+    #[serde(flatten)]
+    pub entry: crate::components::Entry,
 }
 
 /// How a frontend words the store's sign-in: `kind` is `code` (the page shows a code once signed in) or `key` (the

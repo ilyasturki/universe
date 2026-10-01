@@ -479,8 +479,9 @@ launch that uses `launch.umu_run`, and before any command of a source that requi
 `gogdl` (heroic-gogdl's x86_64 build), `legendary` (legendary-gl's Linux build, a python3 zipapp)
 and `butler` (itch.io's archive from broth.itch.zone, a zip kept whole: the program loads the 7-Zip
 libraries beside it). They are components (see Components): the catalogue's newest build, else the
-one Universe pins (umu-launcher 1.4.4, heroic-gogdl 1.3.0, legendary-gl 0.21.1, butler 15.31.0) when
-the catalogue cannot be reached. `<data>/bin` holds a link to each tool's newest build; every lookup
+pinned one when the catalogue cannot be reached or lacks the tool: umu-launcher 1.4.4 the core's, the
+others in the `[[tools]]` of the source that requires them (heroic-gogdl 1.3.0 in GOG's, legendary-gl
+0.21.1 in Epic's, butler 15.31.0 in itch.io's). `<data>/bin` holds a link to each tool's newest build; every lookup
 of a program searches it after PATH (an installed one wins), and it is appended to the `PATH` of the
 modules, the sources and the units Universe starts. A required binary Universe fetches never makes a
 source unavailable, and `doctor` reports it as fetched on first use.
@@ -1575,6 +1576,13 @@ capabilities = ["achievements", "uninstall"]   # optional verbs it answers, past
 
 [requires]
 bins = ["gogdl"]                  # a missing binary makes the source "unavailable" and it is never run, unless Universe fetches it (see Fetched tools)
+
+[[tools]]                         # optional: a program Universe fetches when it is not on PATH, a catalogue entry (see Components) with its id;
+id = "gogdl"                      # the catalogue's entry of the same id wins, this one stands in when the catalogue lacks it or cannot be reached
+name = "heroic-gogdl"
+kind = "tool"
+bin = "gogdl"
+builds = [{ version = "1.3.0", assets = [{ format = "binary", url = "https://…/gogdl_linux_x86_64", sha256 = "cba0…" }] }]
 
 [login]                           # optional: how frontends word the sign-in
 kind = "code"                     # code: the page shows a code once signed in (the default); key: the page makes an API key

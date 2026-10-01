@@ -34,7 +34,7 @@ pub async fn ensure(bin: &str) -> crate::Result<()> {
     let loaded = crate::components::load(&config, false).await;
     let never = std::sync::atomic::AtomicBool::new(false);
     let mut failures = Vec::new();
-    for catalogue in [loaded.catalogue, crate::components::builtin()] {
+    for catalogue in [loaded.catalogue, crate::components::pinned()] {
         let Some((id, entry)) = catalogue.tool(bin) else { continue };
         let Some(build) = entry.latest() else { continue };
         tracing::info!("{bin} not installed: fetching {} {}", entry.name, build.version);
@@ -56,7 +56,8 @@ mod tests {
         let _env = crate::paths::test_env();
         let rt = tokio::runtime::Runtime::new().unwrap();
         let never = std::sync::atomic::AtomicBool::new(false);
-        for (id, entry) in crate::components::builtin().components.iter().filter(|(_, e)| !e.bin.is_empty()) {
+        std::env::set_var("UNIVERSE_SOURCES_PATH", concat!(env!("CARGO_MANIFEST_DIR"), "/../../sources"));
+        for (id, entry) in crate::components::pinned().components.iter().filter(|(_, e)| !e.bin.is_empty()) {
             let Some(build) = entry.latest() else { continue };
             let installed = rt.block_on(crate::components::install(id, entry, build, false, None, &never)).unwrap_or_else(|e| panic!("{id}: {e}"));
             assert!(std::fs::metadata(installed.program_path()).is_ok_and(|m| m.len() > 0), "{id}");
@@ -66,8 +67,24 @@ mod tests {
 
     #[test]
     fn fetched_tools_are_searched_after_path() {
-        let _env = crate::paths::test_env();
-        assert!(["umu-run", "gogdl", "legendary", "butler"].into_iter().all(|bin| find(bin).is_some()) && find("wine").is_none());
+        let env = crate::paths::test_env();
+        let store = env.path().join("sources/store");
+        std::fs::create_dir_all(&store).unwrap();
+        std::fs::write(
+            store.join("source.toml"),
+            r#"id = "store"
+exe = "bin/source"
+[[tools]]
+id = "storecli"
+name = "store-cli"
+kind = "tool"
+bin = "storecli"
+builds = [{ version = "1.0.0", assets = [{ format = "binary", url = "https://example.org/storecli", sha256 = "00" }] }]
+"#,
+        )
+        .unwrap();
+        assert_eq!(find("storecli"), Some(("store-cli".into(), "1.0.0".into())), "a source pins its own tool");
+        assert!(find("umu-run").is_some() && find("wine").is_none());
         let path = search_path();
         let dirs: Vec<PathBuf> = std::env::split_paths(&path).collect();
         assert_eq!(dirs.last(), Some(&dir()), "an installed tool wins over a fetched one");

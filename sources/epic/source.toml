@@ -9,6 +9,14 @@ capabilities = ["achievements", "uninstall"]
 [requires]
 bins = ["legendary"]
 
+[[tools]]
+id = "legendary"
+name = "legendary-gl"
+kind = "tool"
+bin = "legendary"
+homepage = "https://github.com/legendary-gl/legendary"
+builds = [{ version = "0.21.1", assets = [{ format = "binary", url = "https://github.com/legendary-gl/legendary/releases/download/0.21.1/legendary_linux_x64", sha256 = "dbed33bbe96031e65858233e4badf0a1d401bb6cb0cc995d1237cf3a0c826a45" }] }]
+
 [login]
 hint = "Sign in at the link, then enter the authorizationCode the page shows, or the whole page."
 

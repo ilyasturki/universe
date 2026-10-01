@@ -117,7 +117,7 @@ pub struct Catalogue {
     pub components: BTreeMap<String, Entry>,
 }
 
-pub fn builtin() -> Catalogue {
+fn builtin() -> Catalogue {
     let proton = |name: &str, family: &str, homepage: &str| serde_json::json!({"name": name, "kind": "proton", "family": family, "homepage": homepage});
     let tool = |name: &str, bin: &str, version: &str, asset: serde_json::Value| serde_json::json!({"name": name, "kind": "tool", "bin": bin, "builds": [{"version": version, "assets": [asset]}]});
     serde_json::from_value(serde_json::json!({"schema": SCHEMA, "components": {
@@ -128,22 +128,25 @@ pub fn builtin() -> Catalogue {
         "umu-run": tool("umu-launcher", "umu-run", "1.4.4", serde_json::json!({"arch": "any", "format": "tar", "member": "umu/umu-run",
             "url": "https://github.com/Open-Wine-Components/umu-launcher/releases/download/1.4.4/umu-launcher-1.4.4-zipapp.tar",
             "sha256": "eb590691841f7fad3fc3ad8fd5db4ccb87849fe7948e62b28ece7a4ee48cc851"})),
-        "gogdl": tool("heroic-gogdl", "gogdl", "1.3.0", serde_json::json!({"format": "binary",
-            "url": "https://github.com/Heroic-Games-Launcher/heroic-gogdl/releases/download/v1.3.0/gogdl_linux_x86_64",
-            "sha256": "cba013d42767c808237c437335ab1d56f58405d07e8f37b3324d264ea5c49655"})),
-        "legendary": tool("legendary-gl", "legendary", "0.21.1", serde_json::json!({"format": "binary",
-            "url": "https://github.com/legendary-gl/legendary/releases/download/0.21.1/legendary_linux_x64",
-            "sha256": "dbed33bbe96031e65858233e4badf0a1d401bb6cb0cc995d1237cf3a0c826a45"})),
-        "butler": tool("butler", "butler", "15.31.0", serde_json::json!({"format": "zip",
-            "url": "https://broth.itch.zone/butler/linux-amd64/15.31.0/archive/default",
-            "sha256": "4f2a3f22b12f870923504d4b6935535cad377b45859f5fe9419e3adc0611a48c"})),
     }}))
     .expect("the built-in catalogue")
 }
 
+/// What stands in for the catalogue where it lacks an entry: the core's own, then each source's `[[tools]]`.
+pub fn pinned() -> Catalogue {
+    let mut out = builtin();
+    let roots = paths::system_source_dirs().into_iter().rev().chain([paths::user_sources_dir()]);
+    for (_, manifest) in crate::modules::read_manifests::<crate::sources::Manifest>(roots, "source.toml", |m| &m.id).into_values() {
+        for tool in manifest.tools {
+            out.components.entry(tool.id).or_insert(tool.entry);
+        }
+    }
+    out
+}
+
 impl Catalogue {
-    fn over_builtin(mut self) -> Catalogue {
-        for (id, entry) in builtin().components {
+    fn over_pinned(mut self) -> Catalogue {
+        for (id, entry) in pinned().components {
             self.components.entry(id).or_insert(entry);
         }
         self
@@ -233,13 +236,13 @@ pub struct Loaded {
 }
 
 pub fn cached(config: &Config) -> Catalogue {
-    read_cache(&catalogue_url(config)).map(|(c, _)| c.catalogue).unwrap_or_default().over_builtin()
+    read_cache(&catalogue_url(config)).map(|(c, _)| c.catalogue).unwrap_or_default().over_pinned()
 }
 
 pub async fn load(config: &Config, refresh: bool) -> Loaded {
     let url = catalogue_url(config);
     let cache = match read_cache(&url) {
-        Some((c, true)) if !refresh => return Loaded { catalogue: c.catalogue.over_builtin(), url, fetched_at: c.fetched_at, error: String::new() },
+        Some((c, true)) if !refresh => return Loaded { catalogue: c.catalogue.over_pinned(), url, fetched_at: c.fetched_at, error: String::new() },
         other => other,
     };
     match fetch_catalogue(&url).await {
@@ -248,11 +251,11 @@ pub async fn load(config: &Config, refresh: bool) -> Loaded {
             if let Err(e) = serde_json::to_vec(&cached).map_err(Error::from).and_then(|b| write_atomic(&cache_file(), &b)) {
                 tracing::warn!("catalogue cache: {e}");
             }
-            Loaded { catalogue: cached.catalogue.over_builtin(), url, fetched_at: cached.fetched_at, error: String::new() }
+            Loaded { catalogue: cached.catalogue.over_pinned(), url, fetched_at: cached.fetched_at, error: String::new() }
         }
         Err(e) => {
             let (catalogue, fetched_at) = cache.map(|(c, _)| (c.catalogue, c.fetched_at)).unwrap_or_default();
-            Loaded { catalogue: catalogue.over_builtin(), url, fetched_at, error: e.to_string() }
+            Loaded { catalogue: catalogue.over_pinned(), url, fetched_at, error: e.to_string() }
         }
     }
 }
@@ -1740,6 +1743,18 @@ mod tests {
         std::fs::write(own.join("proton"), b"").unwrap();
         assert_eq!(config.proton_path("proton-ge").unwrap(), canonical(&own), "<data>/proton/<name> is the user's own: it wins");
         assert!(config.proton_names().contains(&"GE-Proton11-7".to_string()));
+    }
+
+    #[test]
+    fn the_shipped_sources_pin_their_tools_and_the_core_only_umu_run() {
+        let _env = crate::paths::test_env();
+        assert_eq!(pinned().components.values().filter(|e| e.kind == Kind::Tool).map(|e| e.bin.as_str()).collect::<Vec<_>>(), ["umu-run"]);
+        std::env::set_var("UNIVERSE_SOURCES_PATH", concat!(env!("CARGO_MANIFEST_DIR"), "/../../sources"));
+        let catalogue = pinned();
+        for (bin, source) in [("gogdl", "gog"), ("legendary", "epic"), ("butler", "itch")] {
+            let (_, entry) = catalogue.tool(bin).unwrap_or_else(|| panic!("sources/{source} pins no {bin}"));
+            assert!(entry.latest().is_some_and(|b| b.asset().is_some_and(|a| a.sha256.len() == 64)), "{bin}: a build with a checked asset");
+        }
     }
 
     #[test]
