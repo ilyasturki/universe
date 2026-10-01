@@ -1479,10 +1479,10 @@ def test_each_looks_themes_page_says_it_is_not_affiliated(api, look):
         api.theme.set(step)
         settle(window)
     root = window.property("contentItem").childItems()[0].property("item")
-    page = root.property("activePage") if look == "reprise" else root.property("topPage")
-    assert page.property("sectionId") == "themes", "a switch lands on the look's Themes"
+    slot = "activePage" if look == "reprise" else "topPage"
+    page = until(lambda: (p := root.property(slot)) is not None and p.property("sectionId") == "themes" and p, "a switch lands on the look's Themes")
     content = js(page, "content")
     rows = content["rows"] if isinstance(content, dict) else content
     assert any(r.get("key") == "affiliation" for r in rows)
+    settle(window)
     window.close()
-    pump(50)
