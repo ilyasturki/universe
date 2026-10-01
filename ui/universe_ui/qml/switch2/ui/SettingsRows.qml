@@ -200,7 +200,13 @@ FocusScope {
         }
         if (event.isAutoRepeat)
             return;
-        if (api.keys.isAccept(event)) {
+        if (api.keys.isFirst(event) || api.keys.isLast(event)) {
+            event.accepted = true;
+            var s = stops();
+            var end = s.length === 0 ? index : s[api.keys.isFirst(event) ? 0 : s.length - 1];
+            Sound.play(end === index ? "edge" : "tick");
+            index = end;
+        } else if (api.keys.isAccept(event)) {
             event.accepted = true;
             if (currentRow && !currentRow.heading && currentRow.type !== "info" && currentRow.type !== "static" && !currentRow.disabled)
                 rows.activated(index, currentRow);
@@ -252,6 +258,8 @@ FocusScope {
                 readonly property bool disabled: entry.disabled === true
                 readonly property bool info: entry.type === "info"
                 readonly property bool hasDetail: entry.detail !== undefined && entry.detail !== ""
+                // A line under the label inside the row's own height, where `detail` adds a band below it.
+                readonly property bool hasSecondary: entry.secondary !== undefined && entry.secondary !== ""
                 readonly property bool hasFix: entry.fix !== undefined && entry.fix !== ""
                 readonly property bool explains: hasFix || entry.wraps === true
                 readonly property bool hasGlyph: entry.slot !== undefined && String(entry.slot) !== "" && entry.family !== undefined
@@ -394,13 +402,27 @@ FocusScope {
                     Label {
                         id: label
                         x: rows.inset + (lead.visible ? lead.width + Theme.dp(8) : 0) + (swatch.visible ? swatch.width + Theme.dp(30) : 0)
-                        height: rows.rowHeight
+                        y: row.hasSecondary ? (rows.rowHeight - height - secondary.height - Theme.dp(4)) / 2 : 0
+                        height: row.hasSecondary ? implicitHeight : rows.rowHeight
                         width: (row.changed ? ownTag.x : control.x) - x - Theme.dp(24)
                         verticalAlignment: Text.AlignVCenter
                         text: row.path !== "" ? "<font color=\"" + Theme.textSecondary + "\">" + row.esc(row.path) + " › </font>" + row.esc(row.entry.label || "") : row.entry.label || ""
                         textFormat: row.path !== "" ? Text.StyledText : Text.PlainText
                         color: row.ink
                         elide: Text.ElideRight
+                    }
+
+                    Label {
+                        id: secondary
+                        x: label.x
+                        anchors.top: label.bottom
+                        anchors.topMargin: Theme.dp(4)
+                        width: label.width
+                        visible: row.hasSecondary
+                        text: row.entry.secondary || ""
+                        color: row.disabled || row.entry.dim === true ? Theme.textDisabled : Theme.textSecondary
+                        elide: Text.ElideRight
+                        font.pixelSize: Theme.dp(Theme.fontSmall)
                     }
 
                     Rectangle {

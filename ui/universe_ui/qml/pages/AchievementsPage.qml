@@ -86,6 +86,7 @@ FocusScope {
     AchievementList {
         id: list
 
+        objectName: "achievements"
         anchors.top: header.bottom
         anchors.topMargin: Theme.dp(32)
         anchors.bottom: hintBar.top

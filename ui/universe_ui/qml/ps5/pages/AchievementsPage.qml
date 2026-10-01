@@ -9,6 +9,7 @@ import "Home.js" as Home
 FocusScope {
     id: page
 
+    objectName: "achievements"
     property var shell: null
     property var args: ({})
     readonly property var game: args && args.gameId ? api.allGames.byId(args.gameId) : null

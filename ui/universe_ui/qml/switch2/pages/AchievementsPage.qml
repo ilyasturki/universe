@@ -46,44 +46,18 @@ FocusScope {
         }
     }
 
-    readonly property var entries: {
-        var unlocked = rows.filter(function (r) {
-            return r.unlocked;
-        });
-        var locked = rows.filter(function (r) {
-            return !r.unlocked;
-        });
-        var row = function (r) {
-            return {
-                key: r.key,
-                label: r.name,
-                type: "static",
-                dim: !r.unlocked,
-                display: r.unlocked ? r.dateText : "Locked",
-                detail: [r.description, r.rarityText].filter(Boolean).join(" · ")
-            };
+    readonly property var entries: rows.map(function (r) {
+        return {
+            key: r.key,
+            label: r.name,
+            secondary: r.description,
+            type: "static",
+            dim: !r.unlocked,
+            icon: r.icon,
+            iconSlot: true,
+            display: r.unlocked ? r.dateText : r.rarityText
         };
-        var out = [];
-        if (unlocked.length > 0)
-            out = out.concat([
-                {
-                    key: "unlocked",
-                    heading: true,
-                    label: "Unlocked",
-                    display: String(unlocked.length)
-                }
-            ], unlocked.map(row));
-        if (locked.length > 0)
-            out = out.concat([
-                {
-                    key: "locked",
-                    heading: true,
-                    label: "Locked",
-                    display: String(locked.length)
-                }
-            ], locked.map(row));
-        return out;
-    }
+    })
 
     PageHeader {
         id: header
@@ -105,9 +79,10 @@ FocusScope {
     SettingsRows {
         id: list
 
-        x: Theme.dp(530)
-        y: Theme.dp(226)
-        width: Theme.dp(1150)
+        objectName: "achievements"
+        x: Theme.dp(120)
+        y: Theme.dp(160)
+        width: parent.width - x * 2
         height: parent.height - y - Theme.dp(Theme.hintBarHeight) - Theme.dp(20)
         focus: true
         model: page.entries

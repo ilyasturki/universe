@@ -1,6 +1,11 @@
 import json
 import os
 
+import pytest
+from PySide6.QtCore import Q_ARG, QMetaObject, QObject, Qt
+from PySide6.QtTest import QTest
+from test_render import render
+
 from conftest import pump, until
 
 
@@ -95,3 +100,26 @@ def test_a_replay_shows_the_stamped_unlocks_again_and_a_stale_one_is_no_news(api
     until(lambda: len(seen) == 3)
     assert [i["key"] for i in seen] == ["combo", "rooftops", "detective"], "each stamped key, known or not, in the stamp's order"
     assert seen[-1]["name"] and seen[-1]["gameId"] == "batman-arkham-origins"
+
+
+@pytest.mark.parametrize("look", ["reprise", "switch2", "ps5"])
+def test_each_looks_page_ends_on_the_folded_row_and_home_end_reach_either_end(api, fake, look):
+    api.theme.set(look)
+    api.theme.takeLanding()
+    _engine, window = render(api, activate=True)
+    root = window.property("contentItem").childItems()[0].property("item")
+    if look == "reprise":
+        root.openSub("pages/AchievementsPage.qml", {"game": api.allGames.byId("batman-arkham-origins")})
+    else:
+        QMetaObject.invokeMethod(root, "push", Q_ARG("QVariant", "pages/AchievementsPage.qml"), Q_ARG("QVariant", {"gameId": "batman-arkham-origins"}))
+    store = api.screens.achievements
+    page = root if look == "reprise" else until(lambda: root.property("topPage"))
+    cursor = page if page.objectName() == "achievements" else until(lambda: page.findChild(QObject, "achievements"))
+    until(lambda: not store.loading and store.count == 6)
+    keys = [r["key"] for r in store.rows]
+    assert keys[-1] == "hidden" and keys.count("hidden") == 1
+    QTest.keyClick(window, Qt.Key.Key_End)
+    until(lambda: cursor.property("index") == len(keys) - 1, "End reaches the folded row")
+    QTest.keyClick(window, Qt.Key.Key_Home)
+    until(lambda: cursor.property("index") == 0, "Home the first one")
+    window.close()
