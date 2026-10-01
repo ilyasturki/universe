@@ -15,10 +15,6 @@ FocusScope {
 
     readonly property var form: api.screens.onboarding
     readonly property var login: api.screens.login
-    readonly property var current: form.steps[form.step] || {
-        title: "",
-        subtitle: ""
-    }
     readonly property bool last: form.step >= form.steps.length - 1
     property string source: ""
 
@@ -44,7 +40,7 @@ FocusScope {
     })
 
     function activate(index, row) {
-        if (form.busy || row.type === "info" || row.type === "static") {
+        if (row.type === "info" || row.type === "static") {
             Sound.play("edge");
         } else if (row.key === "link") {
             Sound.play("ok");
@@ -160,7 +156,7 @@ FocusScope {
 
             Label {
                 width: parent.width
-                text: page.current.title
+                text: page.form.title
                 font.pixelSize: Theme.dp(Theme.fontTitle)
                 elide: Text.ElideRight
             }
@@ -168,7 +164,7 @@ FocusScope {
             Label {
                 width: parent.width
                 visible: text !== ""
-                text: page.form.busy && page.form.count === 0 ? "Looking at this machine…" : page.current.subtitle
+                text: page.form.loading ? "Looking at this machine…" : page.form.subtitle
                 color: Theme.textSecondary
                 font.pixelSize: Theme.dp(Theme.fontSmall)
                 elide: Text.ElideRight

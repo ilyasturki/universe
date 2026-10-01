@@ -12,30 +12,11 @@ FocusScope {
     property var args: ({})
     readonly property var form: api.screens.onboarding
     readonly property var login: api.screens.login
-    readonly property var current: form.steps[form.step] || {
-        title: "",
-        subtitle: ""
-    }
     readonly property bool last: form.step >= form.steps.length - 1
     property string source: ""
 
     signal closeRequested
     signal message(string text)
-
-    // Quiet rows stay out, a launcher with nothing to bring over or a signed-in store's sign-in, unless that is all of them.
-    readonly property var groups: {
-        var all = form.groups, rows = form.rows;
-        var kept = all.map(function (g) {
-            return Object.assign({}, g, {
-                rows: g.rows.filter(function (i) {
-                    return rows[i].quiet !== true;
-                })
-            });
-        }).filter(function (g) {
-            return g.rows.length > 0;
-        });
-        return kept.length > 0 ? kept : all;
-    }
 
     readonly property string backLabel: form.step > 0 ? "Back" : "Skip setup"
     readonly property string nextLabel: last ? "Finish" : "Continue"
@@ -43,7 +24,7 @@ FocusScope {
     readonly property var hints: editor.open ? editor.hints : [acceptLabel !== "" && {
             glyph: "A",
             label: acceptLabel,
-            dim: !nav.activeFocus && (!cards.currentRow || form.busy)
+            dim: !nav.activeFocus && !cards.currentRow
         },
         {
             glyph: "B",
@@ -62,7 +43,7 @@ FocusScope {
     }
 
     function activate(index, row) {
-        if (form.busy || row.type === "info" || row.type === "static") {
+        if (row.type === "info" || row.type === "static") {
             Sound.edge();
         } else if (row.key === "link") {
             Sound.enter();
@@ -177,7 +158,7 @@ FocusScope {
 
             Text {
                 width: parent.width
-                text: page.current.title
+                text: page.form.title
                 color: Theme.text
                 font.family: Theme.sans
                 font.weight: Font.Bold
@@ -188,7 +169,7 @@ FocusScope {
             Text {
                 width: parent.width
                 visible: text !== ""
-                text: page.form.busy && page.form.count === 0 ? "Looking at this machine…" : page.current.subtitle
+                text: page.form.loading ? "Looking at this machine…" : page.form.subtitle
                 color: Theme.textMuted
                 font.family: Theme.sans
                 font.pixelSize: Theme.dp(21)
@@ -207,7 +188,7 @@ FocusScope {
             columns: 1
             compact: true
             rows: page.form.rows
-            groups: page.groups
+            groups: page.form.groups
             dimmed: editor.open
 
             onActivated: function (index, row) {

@@ -298,7 +298,7 @@ def test_the_wizard_opens_on_first_run_and_runs_again_from_about(empty_api, empt
     engine, window = render(empty_api, activate=True)
     root = window.property("contentItem").childItems()[0].property("item")
     form = empty_api.screens.onboarding
-    until(lambda: opened() and not form.busy and form.stepId == "found" and form.count == 6)
+    until(lambda: opened() and not form.busy and form.stepId == "found" and form.count == 5)
     press(Qt.Key.Key_I)
     until(lambda: form.stepId == "stores", "X moves on")
     press(Qt.Key.Key_Escape)
