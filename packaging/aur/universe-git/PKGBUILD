@@ -21,7 +21,7 @@ makedepends=(
   'scdoc'
 )
 checkdepends=('tzdata')
-# makepkg's -flto C objects (ring's) are GCC bitcode that rust-lld cannot link; Cargo.toml strips, so a debug package would be empty
+# makepkg's -flto C objects (aws-lc's) are GCC bitcode that rust-lld cannot link; Cargo.toml strips, so a debug package would be empty
 options=('!lto' '!debug')
 # the stub is the flake's galaxyServiceStub
 source=(

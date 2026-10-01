@@ -107,6 +107,8 @@
         env.UNIVERSE_GIT_REV = gitRev;
         # chrono ignores TZDIR, so the zone is given as a file
         preCheck = "export TZ=${pkgs.tzdata}/share/zoneinfo/Europe/Paris";
+        # reqwest's platform verifier refuses to build a client on an empty CA store
+        nativeCheckInputs = [ pkgs.cacert ];
         nativeBuildInputs = [
           pkgs.pkg-config
           pkgs.installShellFiles

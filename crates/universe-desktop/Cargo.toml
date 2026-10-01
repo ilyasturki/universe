@@ -18,7 +18,7 @@ gettext-rs = { version = "0.7", features = ["gettext-system"] }
 tracing = "0.1"
 unicode-normalization = "0.1"
 qrcode = { version = "0.14", default-features = false }
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
 
 [build-dependencies]
 glib-build-tools = "0.22"
