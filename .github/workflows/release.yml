@@ -88,6 +88,23 @@ jobs:
           ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
           commit_message: ${{ github.ref_name }}
           force_push: true
+  # The COPR project builds with the network on (cargo fetches the crates), for Fedora 44 and newer: older ones ship a PySide6 under 6.11
+  copr:
+    needs: notes
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: 'grep -Eqx "Version: +${GITHUB_REF_NAME#v}" packaging/rpm/universe.spec'
+      - run: dnf install -y -q copr-cli rpm-build rpmdevtools > /dev/null
+      - run: spectool --get-files --all --directory . packaging/rpm/universe.spec
+      - run: rpmbuild -bs --define "_sourcedir $PWD" --define "_srcrpmdir $PWD" packaging/rpm/universe.spec
+      # COPR_CONFIG is the ~/.config/copr that copr.fedorainfracloud.org/api hands out; its token lasts 180 days
+      - run: |
+          printf '%s\n' "$COPR_CONFIG" > "$RUNNER_TEMP/copr"
+          copr-cli --config "$RUNNER_TEMP/copr" build universe universe-*.src.rpm
+        env:
+          COPR_CONFIG: ${{ secrets.COPR_CONFIG }}
   aur-bin:
     needs: upload
     runs-on: ubuntu-latest
