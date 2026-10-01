@@ -271,6 +271,11 @@ class Look:
         self.root = self.window.property("contentItem").childItems()[0].property("item")
         self.home = until(lambda: self.root.property("activePage") if theme == "reprise" else self.root.findChild(QObject, "homePage"))
 
+    def close(self):
+        """The window closed and its engine dropped now, not whenever the collector gets to it."""
+        self.window.close()
+        del self.engine
+
     def opened(self):
         if self.theme == "reprise":
             return self.root.property("subOpen") is True and self.root.property("subSource") == "pages/OnboardingPage.qml"
@@ -369,7 +374,7 @@ def test_the_setup_in_each_look(empty_api, empty, theme):
         until(lambda: home.property("tileSelected") is False and home.property("currentGame") is not None)
     elif theme == "switch2":
         until(lambda: home.property("onSetup") is False and home.property("index") <= home.property("allIndex"))
-    look.window.close()
+    look.close()
 
 
 @pytest.mark.parametrize("theme", LOOKS)
@@ -386,4 +391,4 @@ def test_a_step_with_nothing_to_do_lands_on_its_button(empty_api, empty, theme):
     until(lambda: form.idle is True and look.nav_focused(), "the summary does nothing: Finish has the focus")
     look.press(Qt.Key.Key_Return)
     until(lambda: empty.onboarded() is True and not look.opened(), "A finishes")
-    look.window.close()
+    look.close()
