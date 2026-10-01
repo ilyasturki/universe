@@ -1120,7 +1120,8 @@ emulator's own auto-mapping would, player `n` being the `n`th pad in SDL's order
 | `flycast` | `emu.cfg [input]` | stale `maple_sdl_joystick_*` gone, `device2-4` on for held pads |
 | `scummvm` | `scummvm.ini` / `~/.scummvmrc` | `joystick_num` = the first pad |
 
-`layout` picks the face buttons of a Nintendo diamond (Switch, 3DS, Wii U, DS, GBA, SNES, the
+A game's page shows the module's rows on emulator games only (`[applies]`): `wiimote` on Wii games,
+`layout` and `shoulders` on the runners whose writer reads them. `layout` picks the face buttons of a Nintendo diamond (Switch, 3DS, Wii U, DS, GBA, SNES, the
 Wii's Classic Controller): `positional` (A on the right, as on a Switch and as these emulators map
 by themselves) or `xbox` (A at the bottom), per game over a global default; GameCube keeps
 Dolphin's own preset and N64 mupen64plus's (A bottom, B left). `wiimote` picks how a Wii game holds
@@ -1157,9 +1158,16 @@ written whole, missing or not.
 | — | — | `universe setup` | after an install: on GNOME, writes the `universe@ilyasturki.github.io` extension the binary carries into `~/.local/share/gnome-shell/extensions/` (rewritten when stale; left to a system copy when there is none there) and adds it to `org.gnome.shell enabled-extensions` (out of `disabled-extensions`, which overrides it), read by the shell at the next login; then prints `doctor` |
 
 A module entry is `{id, name, version, description, dir, enabled, available, missing: [bin],
-unset: [key], hooks: {}, settings: [Setting]}`, and
+unset: [key], hooks: {}, settings: [Setting], applies: {runner_kinds: [kind]}}`, and
 `Setting` = `{"key", "type": "bool|string|int|enum|path", "default", "label", "description",
-"scope": "global|game", "choices": [], "choice_labels": {value: label}, "dynamic": bool, "required": bool}`.
+"scope": "global|game", "choices": [], "choice_labels": {value: label}, "dynamic": bool, "required": bool,
+"runners": [id], "platforms": [name]}`.
+A game's page (the `Form::Game` form, every look's game settings) shows a module's game-scope settings
+only on the games `applies.runner_kinds` names by their runner's kind (`emulator`, `proton`, `wine`,
+`linux`), and of those only the settings whose `runners` holds the game's runner (its canonical id) and
+whose `platforms` holds its platform; an empty list takes every game. A source's game-scope setting
+follows its own `runners` and `platforms` the same way. Nothing else changes: a hidden setting keeps
+its value and still reaches the hooks.
 `label` names the setting in a few words; `description`, empty when the manifest gives none, says what it
 does and shows under it. `choice_labels` is what a choice reads as, by stored value: a frontend shows the
 label and writes the value, and a value without one reads as itself.
@@ -1469,6 +1477,9 @@ timeout_s    = 20                 # for blocking hooks; the sum bounds the game 
 cpu_weight   = 100                # default 20
 memory_high  = "4G"               # default 2G
 
+[applies]                         # optional: the games whose page shows the game-scope settings
+runner_kinds = ["emulator"]       # emulator, proton, wine, linux; absent or empty: every game
+
 [[settings]]
 key = "enabled"                   # reserved: always present, game scope
 type = "bool"
@@ -1486,6 +1497,16 @@ choices = ["auto", "120", "60"]   # suggestions on an int or a string; a name am
 label = "Frame rate"              # a few words: the row's name
 description = "Auto follows the screen's refresh rate."   # optional: what it does, under the row
 choice_labels = { auto = "The screen's" }   # optional: what a choice reads as, by stored value; the value is what is written
+
+[[settings]]
+key = "wiimote"
+type = "enum"
+default = "nunchuk"
+choices = ["nunchuk", "sideways"]
+scope = "game"
+runners = ["dolphin"]             # optional, game scope: shown only on these runners' games (canonical ids)
+platforms = ["Nintendo Wii"]      # optional, game scope: shown only on these platforms' games
+label = "Wii controller"
 
 [[settings]]
 key = "model"

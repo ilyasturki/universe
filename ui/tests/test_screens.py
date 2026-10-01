@@ -161,15 +161,30 @@ def test_a_module_row_shows_choice_labels_and_sends_the_stored_value(api, fake):
     assert fake.settings("the-technomancer")["capture"]["source"] == other, "the picked label is written as its stored value"
 
 
+@pytest.mark.parametrize(
+    ("game", "shown"),
+    [
+        ("lego-batman", ["enabled", "layout", "wiimote", "shoulders"]),
+        ("mini-metro", ["enabled", "layout", "shoulders"]),
+        ("the-technomancer", []),
+    ],
+    ids=["wii", "switch", "proton"],
+)
+def test_a_module_setting_shows_on_the_games_it_applies_to(api, fake, game, shown):
+    form = api.screens.gameSettings
+    form.load(game)
+    assert list(rows_by_key(form, "controls")) == shown
+
+
 def test_modules_list(api, fake):
     journal_module = next(m for m in fake.core._data["modules"] if m["id"] == "journal")
     journal_module.update(enabled=False, available=False, missing=["ffmpeg"])
     form = api.screens.modules
     form.load()
-    assert [r["module"] for r in form.rows] == ["capture", "journal", "screenshot"], "the manifests' order, sources apart"
+    assert [r["module"] for r in form.rows] == ["capture", "journal", "screenshot", "controls"], "the manifests' order, sources apart"
     assert all(r["type"] == "action" and r["key"] == "module" and r["switch"] is True and r["source"] is False for r in form.rows)
     assert [(g["title"], [form.rows[i]["module"] for i in g["rows"]], g["off"]) for g in form.groups] == [
-        ("", ["capture", "screenshot"], False),
+        ("", ["capture", "screenshot", "controls"], False),
         ("Off", ["journal"], True),
     ]
     capture = form.rows[form.indexOf("capture")]

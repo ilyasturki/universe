@@ -484,10 +484,11 @@ impl Core {
             out.push(Field::new(key, label, "int", "Artwork").about("", true).plain(if n == 0 { String::new() } else { n.to_string() }));
         }
 
-        for m in self.modules.read().await.iter().filter(|m| m.enabled) {
+        let platform = r.effective.platform.as_str();
+        for m in self.modules.read().await.iter().filter(|m| m.enabled && m.manifest.applies.takes(spec.kind.as_str())) {
             let name = if m.manifest.name.is_empty() { m.id() } else { &m.manifest.name };
             let global = config.modules.settings.get(m.id());
-            for s in with_enabled(&m.manifest.settings).iter().filter(|s| s.scope == "game") {
+            for s in with_enabled(&m.manifest.settings).iter().filter(|s| s.scope == "game" && s.applies_to(spec.id, platform)) {
                 let from_config = table_value(global, &s.key);
                 let (inherited, fallback) =
                     if from_config.is_empty() { (render(&toml_to_json(&s.default)), Origin::Default) } else { (from_config, Origin::Global) };
@@ -499,7 +500,7 @@ impl Core {
         if let Some(source) = self.sources.read().await.iter().find(|s| s.id() == kind && s.enabled) {
             let defaults = source.merged_settings(&Config { sources: Default::default(), ..config.clone() }, None);
             let global = config.sources.settings.get(kind);
-            for s in source.manifest.settings.iter().filter(|s| s.scope == "game") {
+            for s in source.manifest.settings.iter().filter(|s| s.scope == "game" && s.applies_to(spec.id, platform)) {
                 let from_config = table_value(global, &s.key);
                 let (inherited, fallback) =
                     if from_config.is_empty() { (render(defaults.get(&s.key).unwrap_or(&NULL)), Origin::Default) } else { (from_config, Origin::Global) };
@@ -710,6 +711,51 @@ description = "The emulator also gets HOME."
         );
         let guide = field(&core.form(&Form::Module("controls".into()), None).await.unwrap(), "guide").clone();
         assert_eq!(guide.description, "The emulator also gets HOME.");
+    }
+
+    #[tokio::test]
+    async fn a_module_setting_shows_on_the_games_it_applies_to() {
+        let _sb = sandbox();
+        controls_module(
+            r#"
+[applies]
+runner_kinds = ["emulator"]
+
+[[settings]]
+key = "layout"
+type = "enum"
+default = "positional"
+scope = "game"
+choices = ["positional", "xbox"]
+
+[[settings]]
+key = "wiimote"
+type = "enum"
+default = "nunchuk"
+scope = "game"
+choices = ["nunchuk", "sideways"]
+platforms = ["Nintendo Wii"]
+
+[[settings]]
+key = "dolphin_only"
+type = "bool"
+default = false
+scope = "game"
+runners = ["dolphin"]
+"#,
+        );
+        let mut proton = Game::new("Hades");
+        proton.launch.runner = "proton".into();
+        proton.save().unwrap();
+        let (core, _) = open().await;
+        let keys = |fields: Vec<Field>| fields.into_iter().filter(|f| f.key.starts_with("modules.controls.")).map(|f| f.key).collect::<Vec<_>>();
+
+        let gamecube = keys(core.form(&Form::Game("sample".into()), None).await.unwrap());
+        assert_eq!(gamecube, ["modules.controls.enabled", "modules.controls.layout", "modules.controls.dolphin_only"], "no Wii row on a GameCube game");
+        core.set("sample", "platform", "Nintendo Wii").await.unwrap();
+        let wii = keys(core.form(&Form::Game("sample".into()), None).await.unwrap());
+        assert!(wii.contains(&"modules.controls.wiimote".to_string()), "{wii:?}");
+        assert_eq!(keys(core.form(&Form::Game("hades".into()), None).await.unwrap()), Vec::<String>::new(), "a Proton game shows no emulator module");
     }
 
     #[test]

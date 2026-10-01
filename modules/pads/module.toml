@@ -7,6 +7,9 @@ description = "An emulator sees one virtual PlayStation-class pad per player, wi
 [requires]
 bins = ["systemd-run", "systemctl"]
 
+[applies]
+runner_kinds = ["emulator"]
+
 [hooks]
 pre-launch  = "bin/pre"
 freeze      = "bin/freeze"

@@ -74,6 +74,13 @@ def _setting_row(section, key, setting, value, choices=None, module="", **kw):
     return row
 
 
+def _applies(owner, setting, runner, runner_kind, platform):
+    """Whether a game's page shows a game-scope setting: its module's runner kinds, its own runners and platforms."""
+    kinds = (owner.get("applies") or {}).get("runner_kinds") or []
+    runners, platforms = setting.get("runners") or [], setting.get("platforms") or []
+    return (not kinds or runner_kind in kinds) and (not runners or runner in runners) and (not platforms or platform in platforms)
+
+
 def _plural(n, word):
     return f"{n} {word}{'' if n == 1 else 's'}"
 
@@ -634,12 +641,13 @@ def build_game(client, game_id, screen_mode):
     modules = {m["id"]: m for m in client.modules()}
     own_modules = game.get("modules") or {}
     set_modules = config_set.get("modules") or {}
+    runner, platform = str(effective.get("runner") or "proton"), str(effective.get("platform") or game.get("platform") or "")
     for module_id, values in client.settings(game_id).items():
         module = modules.get(module_id) or {}
         name = module.get("name", module_id)
         own, global_set = own_modules.get(module_id) or {}, set_modules.get(module_id) or {}
         for setting in module.get("settings") or []:
-            if setting.get("scope") != "game":
+            if setting.get("scope") != "game" or not _applies(module, setting, runner, runner_kind, platform):
                 continue
             key = setting["key"]
             value = values.get(key, setting.get("default"))
@@ -658,7 +666,7 @@ def build_game(client, game_id, screen_mode):
             _add(rows, groups, name, row, meta=_meta(module))
     kind = _source_kind(game.get("source"))
     source = next((s for s in client.sources() if s["id"] == kind and s.get("enabled")), None) if kind not in ("", "manual") else None
-    game_settings = [s for s in (source or {}).get("settings") or [] if s.get("scope") == "game"]
+    game_settings = [s for s in (source or {}).get("settings") or [] if s.get("scope") == "game" and _applies({}, s, runner, runner_kind, platform)]
     if source and game_settings:
         name = source.get("name", kind)
         values = client.sourceSettingsOf(kind, game_id)

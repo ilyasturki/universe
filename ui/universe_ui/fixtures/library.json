@@ -438,6 +438,67 @@
         {"key": "window", "type": "bool", "default": true, "label": "The game's window alone, not every monitor", "scope": "game", "dynamic": false, "advanced": false},
         {"key": "cursor", "type": "bool", "default": false, "label": "Show the cursor in screenshots", "scope": "game", "dynamic": false, "advanced": false}
       ]
+    },
+    {
+      "id": "controls",
+      "name": "Emulator controls",
+      "version": "0.1.0",
+      "description": "Maps the pads you hold to the emulator's players at every launch. HOME, capture and the back paddles stay Universe's.",
+      "enabled": true,
+      "available": true,
+      "missing": [],
+      "applies": {"runner_kinds": ["emulator"]},
+      "settings": [
+        {
+          "key": "enabled",
+          "type": "bool",
+          "default": true,
+          "label": "Set up controllers",
+          "description": "Map each pad you hold to a player at every launch. Off keeps the controller settings made in the emulator.",
+          "scope": "game"
+        },
+        {
+          "key": "layout",
+          "type": "enum",
+          "default": "positional",
+          "label": "Nintendo button layout",
+          "description": "Where A sits in Switch, Wii U, 3DS, DS, GBA and SNES games. GameCube and N64 games keep the emulator's own.",
+          "scope": "game",
+          "choices": ["positional", "xbox"],
+          "choice_labels": {"positional": "Switch (A on the right)", "xbox": "Xbox (A at the bottom)"},
+          "runners": ["eden", "ryujinx", "dolphin", "cemu", "azahar", "melonds", "mgba", "snes9x"]
+        },
+        {
+          "key": "wiimote",
+          "type": "enum",
+          "default": "nunchuk",
+          "label": "Wii controller",
+          "description": "The controller a Wii game expects. Most take the Nunchuk; 2D games like New Super Mario Bros. Wii hold the remote sideways.",
+          "scope": "game",
+          "choices": ["nunchuk", "sideways", "classic"],
+          "choice_labels": {"nunchuk": "Remote and Nunchuk", "sideways": "Remote sideways", "classic": "Classic Controller"},
+          "platforms": ["Nintendo Wii"]
+        },
+        {
+          "key": "shoulders",
+          "type": "enum",
+          "default": "standard",
+          "label": "Bumpers and triggers",
+          "description": "Swapped exchanges the two. GameCube L and R then sit on the bumpers, Z on the triggers.",
+          "scope": "game",
+          "choices": ["standard", "swapped"],
+          "choice_labels": {"standard": "As on the console", "swapped": "Swapped"},
+          "runners": ["eden", "ryujinx", "dolphin", "cemu", "azahar", "melonds", "mgba", "snes9x", "mupen64plus", "rpcs3", "pcsx2", "duckstation", "ppsspp"]
+        },
+        {
+          "key": "guide",
+          "type": "bool",
+          "default": false,
+          "label": "Share HOME with the emulator",
+          "description": "The emulator also gets HOME, for the console's own HOME or PS button. Universe's menu still opens on it.",
+          "scope": "global"
+        }
+      ]
     }
   ],
   "sources": [
