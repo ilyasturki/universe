@@ -420,6 +420,10 @@ class Onboarding(RowsForm):
         super()._set_rows(rows, groups)
         self.idleChanged.emit()
 
+    def _added(self):
+        """Games came in, or are on their way: leaving the setup then skips nothing."""
+        return any(launcher["state"] in RUNNING or (launcher["state"] == "imported" and launcher["count"]) for launcher in self._launchers)
+
     def _idle(self):
         """No row on the step does anything: the looks put the focus on Continue, or Finish."""
         return all(row["type"] in ("static", "info") for row in self._rows)
@@ -432,3 +436,4 @@ class Onboarding(RowsForm):
     subtitle = Property(str, lambda self: self._head()[1], notify=headChanged)
     loading = Property(bool, lambda self: self._loading, notify=loadingChanged)
     idle = Property(bool, _idle, notify=idleChanged)
+    added = Property(bool, _added, notify=headChanged)

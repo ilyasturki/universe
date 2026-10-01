@@ -6,6 +6,7 @@ Item {
     id: card
 
     property string source: ""
+    property real qrSize: Theme.dp(300)
     readonly property var login: api.screens.login
 
     height: Math.max(Theme.dp(74), head.height) + body.height + Theme.dp(8) * 2 + 2
@@ -44,7 +45,7 @@ Item {
         QrCode {
             id: qr
             y: Theme.dp(18)
-            width: Theme.dp(300)
+            width: card.qrSize
             height: width
             matrix: card.login.matrix
             visible: card.login.url !== ""

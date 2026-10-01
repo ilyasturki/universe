@@ -17,8 +17,10 @@ FocusScope {
     readonly property var login: api.screens.login
     readonly property bool last: form.step >= form.steps.length - 1
     property string source: ""
+    // A store's sign-in card is up: the list keeps that store's rows alone, so they fit beside it.
+    readonly property bool signing: qrCard.visible
 
-    readonly property string backLabel: form.step > 0 ? "Back" : "Skip setup"
+    readonly property string backLabel: form.step > 0 ? "Back" : form.added ? "Close" : "Skip setup"
     readonly property string nextLabel: last ? "Finish" : "Continue"
     readonly property var hints: {
         var row = rows.currentRow;
@@ -33,7 +35,11 @@ FocusScope {
 
     Component.onCompleted: form.load()
 
-    readonly property var content: Forms.grouped(form.groups, form.rows, function (src, i) {
+    readonly property var content: Forms.grouped(signing ? form.groups.filter(function (g) {
+        return g.rows.some(function (i) {
+            return form.rows[i].module === page.source;
+        });
+    }) : form.groups, form.rows, function (src, i) {
         return Object.assign({}, src, {
             form: i
         });
@@ -72,12 +78,28 @@ FocusScope {
         form.next();
     }
 
+    // B on the first step asks before the setup is skipped, unless games came in: then it only closes.
     function retreat() {
-        Sound.play("back");
-        if (form.step > 0)
-            form.back();
-        else
-            form.finish();
+        if (form.step > 0 || form.added) {
+            Sound.play("back");
+            form.step > 0 ? form.back() : form.finish();
+            return;
+        }
+        shell.dialogAsk({
+            message: "Skip setup?",
+            detail: "It runs again from Settings › About whenever you like.",
+            buttons: ["Keep going", "Skip"],
+            index: 0
+        }, function (i) {
+            if (i === 1)
+                form.finish();
+        });
+    }
+
+    function settle() {
+        rows.reset();
+        nav.index = 1;
+        form.idle ? nav.forceActiveFocus() : rows.forceActiveFocus();
     }
 
     Keys.onPressed: function (event) {
@@ -101,11 +123,7 @@ FocusScope {
             page.shell.pop();
         }
         function onStepChanged() {
-            Qt.callLater(function () {
-                rows.reset();
-                nav.index = 1;
-                rows.forceActiveFocus();
-            });
+            Qt.callLater(page.settle);
         }
     }
 
@@ -132,6 +150,9 @@ FocusScope {
         readonly property real room: parent.height - Theme.dp(Theme.hintBarHeight) - Theme.dp(120)
         readonly property real loginRoom: qrCard.visible ? qrCard.height + gap : 0
         readonly property real navRoom: nav.height + gap
+        // A store's heading and two rows, the one in focus and the next: what the list keeps while the card is up.
+        readonly property real signRows: rows.headingHeight + rows.rowHeight * 2
+        readonly property real rowsRoom: room - pad * 2 - head.height - gap - rows.room - loginRoom - navRoom
 
         anchors.horizontalCenter: parent.horizontalCenter
         y: (parent.height - Theme.dp(Theme.hintBarHeight) - height) / 2
@@ -174,11 +195,15 @@ FocusScope {
         SettingsRows {
             id: rows
 
+            objectName: "setupRows"
             shell: page.shell
             x: card.pad
             y: head.y + head.height + card.gap + rows.room
             width: parent.width - card.pad * 2
-            height: Math.min(rows.contentHeight + rows.room * 2, card.room - card.pad * 2 - head.height - card.gap - rows.room - card.loginRoom - card.navRoom)
+            // Whole rows only: a row cut in half reads as a layout fault, the scrollbar says there is more.
+            height: Math.min(rows.contentHeight + rows.room * 2, Math.max(page.signing ? card.signRows : 0, Math.floor((card.rowsRoom - rows.room * 2) / rows.rowHeight) * rows.rowHeight + rows.room * 2))
+            // The settings page's bar hugs the screen's edge; the card's keeps to its margin.
+            scrollbarRoom: card.pad / 2
             model: page.content
             focus: true
 
@@ -199,6 +224,8 @@ FocusScope {
             y: rows.y + rows.height + card.gap
             width: parent.width - card.pad * 2
             source: page.form.stepId === "stores" ? page.source : ""
+            // The code shrinks before the rows of the store it signs in to are cut.
+            qrSize: Math.max(Theme.dp(150), Math.min(Theme.dp(282), card.room - card.pad * 2 - head.height - card.gap - rows.room - card.signRows - card.navRoom - card.gap - Theme.dp(48)))
         }
 
         FocusScope {
@@ -206,6 +233,7 @@ FocusScope {
 
             property int index: 1
 
+            objectName: "setupNav"
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom

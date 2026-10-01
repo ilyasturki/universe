@@ -2,7 +2,6 @@ import pytest
 from PySide6.QtCore import Q_ARG, QMetaObject, QObject, Qt
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QTest
-from test_onboarding import empty, empty_api, signed_out  # noqa: F401  (fixtures)
 from test_render import render
 
 from conftest import record, settle, until
@@ -281,46 +280,3 @@ def test_the_controllers_page_tests_the_buttons_full_width(ps5, api):
     click(window, Qt.Key.Key_Escape)
     until(lambda: not screen.testing and (focused_row(page) or {}).get("key") == "test", "B leaves the test on its row")
     assert warnings == []
-
-
-def test_the_wizard_opens_on_first_run_and_runs_again_from_about(empty_api, empty):  # noqa: F811
-    def press(key, times=1):
-        for _ in range(times):
-            QTest.keyClick(window, key)
-
-    def opened():
-        top = root.property("topPage")
-        return top is not None and top.property("form") is not None and top.property("last") is False
-
-    signed_out(empty)
-    empty_api.theme.set("ps5")
-    empty_api.theme.takeLanding()
-    engine, window = render(empty_api, activate=True)
-    root = window.property("contentItem").childItems()[0].property("item")
-    form = empty_api.screens.onboarding
-    until(lambda: opened() and not form.busy and form.stepId == "found" and form.count == 5)
-    press(Qt.Key.Key_I)
-    until(lambda: form.stepId == "stores", "X moves on")
-    press(Qt.Key.Key_Escape)
-    until(lambda: form.stepId == "found" and opened(), "B goes back a step, the setup stays")
-    press(Qt.Key.Key_Down, 6)
-    press(Qt.Key.Key_Return)
-    until(lambda: form.stepId == "stores", "Down past the last row reaches the buttons, A on Continue moves on")
-    press(Qt.Key.Key_Down, 5)
-    press(Qt.Key.Key_Left)
-    press(Qt.Key.Key_Return)
-    until(lambda: form.stepId == "found", "the Back button goes back")
-    press(Qt.Key.Key_Escape)
-    until(lambda: empty.onboarded() is True and root.property("depth") == 0, "B on the first step skips the setup")
-    QMetaObject.invokeMethod(root, "push", Q_ARG("QVariant", "pages/SettingsPage.qml"), Q_ARG("QVariant", {"section": "about"}))
-    until(lambda: (top := root.property("topPage")) is not None and top.property("sectionId") == "about" and top.property("activeFocus"))
-    press(Qt.Key.Key_Down)
-    press(Qt.Key.Key_Right)
-    press(Qt.Key.Key_Return)
-    until(lambda: root.property("depth") == 2 and opened() and form.stepId == "found", "Settings › About runs it again")
-    press(Qt.Key.Key_Return)
-    until(lambda: empty_api.allGames.count == 2, "A on the Lutris row imports behind the setup")
-    press(Qt.Key.Key_Escape)
-    until(lambda: root.property("depth") == 1 and root.findChild(QObject, "homePage") is not None)
-    window.close()
-    del engine

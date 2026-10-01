@@ -216,63 +216,134 @@ def test_read_only_config_skips_preferences(empty_api, empty, config_owner, owne
     assert form.stepId == "done" and form.rows[-1]["key"] == "read_only" and owner in form.rows[-1]["detail"]
 
 
-@pytest.mark.parametrize("theme", ["reprise", "switch2"])
-def test_the_wizard_opens_on_first_run_in_both_looks(empty_api, empty, theme):
-    from PySide6.QtCore import QObject, Qt
-    from PySide6.QtTest import QTest
+LOOKS = ["reprise", "switch2", "ps5"]
 
-    def opened():
-        return (
-            root.property("subOpen") is True and root.property("subSource") == "pages/OnboardingPage.qml"
-            if theme == "reprise"
-            else root.property("depth") == 1 and root.property("topPage").property("last") is False
-        )
 
-    def press(key, times=1):
+class Look:
+    """The setup as one look draws it: its window, whether the page is up, a key pressed."""
+
+    def __init__(self, api, theme):
+        from PySide6.QtCore import QObject
+
+        self.theme = theme
+        api.theme.set(theme)
+        api.theme.takeLanding()
+        self.engine, self.window = render(api, activate=True)
+        self.root = self.window.property("contentItem").childItems()[0].property("item")
+        self.home = until(lambda: self.root.property("activePage") if theme == "reprise" else self.root.findChild(QObject, "homePage"))
+
+    def opened(self):
+        if self.theme == "reprise":
+            return self.root.property("subOpen") is True and self.root.property("subSource") == "pages/OnboardingPage.qml"
+        top = self.root.property("topPage")
+        return top is not None and top.property("form") is not None and top.property("last") is False
+
+    def focused(self, name):
+        """Whether the page's `setupNav` (Back and Continue) or `setupRows` has the focus."""
+        from PySide6.QtCore import QObject
+
+        page = self.root if self.theme == "reprise" else self.root.property("topPage")
+        # A closed page's items linger until deleted; only the live one can hold the focus.
+        return page is not None and any(item.property("activeFocus") is True for item in page.findChildren(QObject, name))
+
+    def nav_focused(self):
+        return self.focused("setupNav")
+
+    def rows_focused(self):
+        return self.focused("setupRows")
+
+    def press(self, key, times=1):
+        from PySide6.QtTest import QTest
+
         for _ in range(times):
-            QTest.keyClick(window, key)
+            QTest.keyClick(self.window, key)
+
+    def pick_second(self):
+        """The second answer of the look's question: down its list in Reprise, right along its buttons on the stack looks."""
+        from PySide6.QtCore import Qt
+
+        self.press(Qt.Key.Key_Down if self.theme == "reprise" else Qt.Key.Key_Right)
+        self.press(Qt.Key.Key_Return)
+
+    def reopen(self):
+        """The setup again: the empty Home's Set up entry, Settings › About on the PS5 look."""
+        from PySide6.QtCore import Q_ARG, QMetaObject, Qt
+
+        if self.theme == "ps5":
+            QMetaObject.invokeMethod(self.root, "push", Q_ARG("QVariant", "pages/SettingsPage.qml"), Q_ARG("QVariant", {"section": "about"}))
+            until(lambda: (top := self.root.property("topPage")) is not None and top.property("sectionId") == "about" and top.property("activeFocus"))
+            self.press(Qt.Key.Key_Down)
+            self.press(Qt.Key.Key_Right)
+        else:
+            if self.theme == "reprise":
+                self.press(Qt.Key.Key_Up)
+            self.press(Qt.Key.Key_Right)
+            until(lambda: self.home.property("onSetup") is True)
+        self.press(Qt.Key.Key_Return)
+
+
+@pytest.mark.parametrize("theme", LOOKS)
+def test_the_setup_in_each_look(empty_api, empty, theme):
+    from PySide6.QtCore import Qt
 
     signed_out(empty)
-    empty_api.theme.set(theme)
-    empty_api.theme.takeLanding()
-    _engine, window = render(empty_api, activate=True)
-    root = window.property("contentItem").childItems()[0].property("item")
-    home = until(lambda: root.property("activePage") if theme == "reprise" else root.findChild(QObject, "homePage"))
+    look = Look(empty_api, theme)
     form = empty_api.screens.onboarding
-    until(lambda: opened() and not form.busy and form.stepId == "found" and form.count == 5)
-    press(Qt.Key.Key_I)
+    until(lambda: look.opened() and not form.loading and form.stepId == "found" and form.count == 5)
+    look.press(Qt.Key.Key_I)
     until(lambda: form.stepId == "stores", "X moves on")
-    press(Qt.Key.Key_Escape)
-    until(lambda: form.stepId == "found" and opened(), "B goes back a step, the dialog stays")
-    press(Qt.Key.Key_Down, 6)
-    press(Qt.Key.Key_Return)
-    until(lambda: form.stepId == "stores", "Down past the last row reaches the buttons, A on Continue moves on")
-    press(Qt.Key.Key_Down, 5)
-    press(Qt.Key.Key_Left)
-    press(Qt.Key.Key_Return)
+    look.press(Qt.Key.Key_Escape)
+    until(lambda: form.stepId == "found" and look.opened(), "B goes back a step, the setup stays")
+    look.press(Qt.Key.Key_Down, 6)
+    until(look.nav_focused, "Down past the last row reaches the buttons")
+    look.press(Qt.Key.Key_Return)
+    until(lambda: form.stepId == "stores", "A on Continue moves on")
+    look.press(Qt.Key.Key_Down, 5)
+    look.press(Qt.Key.Key_Left)
+    look.press(Qt.Key.Key_Return)
     until(lambda: form.stepId == "found", "the Back button goes back")
-    press(Qt.Key.Key_Escape)
-    until(lambda: empty.onboarded() is True and not opened(), "B on the first step skips the setup")
-    if theme == "reprise":
-        press(Qt.Key.Key_Up)
-    press(Qt.Key.Key_Right)
-    until(lambda: home.property("onSetup") is True)
-    press(Qt.Key.Key_Return)
-    until(lambda: opened() and form.stepId == "found", "the empty Home's Set up entry runs it again")
-    press(Qt.Key.Key_Return)
-    until(lambda: empty_api.allGames.count == 2, "A on the Lutris row imports behind the dialog")
-    press(Qt.Key.Key_Escape)
-    until(lambda: not opened())
+    look.press(Qt.Key.Key_Escape)
+    look.press(Qt.Key.Key_Return)
+    until(lambda: look.opened() and form.stepId == "found" and not empty.onboarded(), "B on the first step asks first: Keep going stays")
+    look.press(Qt.Key.Key_Escape)
+    look.pick_second()
+    until(lambda: empty.onboarded() is True and not look.opened(), "Skip skips it")
+    look.reopen()
+    until(lambda: look.opened() and form.stepId == "found", "it runs again")
+    until(look.rows_focused)
+    look.press(Qt.Key.Key_Return)
+    until(lambda: empty_api.allGames.count == 2, "A on the Lutris row imports behind the setup")
+    assert form.added is True
+    look.press(Qt.Key.Key_Escape)
+    until(lambda: not look.opened(), "with games in, B closes without asking")
+    home = look.home
     if theme == "reprise":
         until(
             lambda: home.property("tileSelected") is False and (game := home.property("currentGame")) is not None and game.property("id") is not None,
             "the rail that filled behind the dialog lands on a game",
         )
-        press(Qt.Key.Key_Down)
-        press(Qt.Key.Key_Right, 2)
+        look.press(Qt.Key.Key_Down)
+        look.press(Qt.Key.Key_Right, 2)
         until(lambda: home.property("tileSelected") is True, "Down leaves the hero pills for the rail, Right past the last game reaches the Library tile")
-        press(Qt.Key.Key_Left)
+        look.press(Qt.Key.Key_Left)
         until(lambda: home.property("tileSelected") is False and home.property("currentGame") is not None)
-    else:
+    elif theme == "switch2":
         until(lambda: home.property("onSetup") is False and home.property("index") <= home.property("allIndex"))
-    window.close()
+    look.window.close()
+
+
+@pytest.mark.parametrize("theme", LOOKS)
+def test_a_step_with_nothing_to_do_lands_on_its_button(empty_api, empty, theme):
+    from PySide6.QtCore import Qt
+
+    look = Look(empty_api, theme)
+    form = empty_api.screens.onboarding
+    until(lambda: look.opened() and not form.loading and form.stepId == "found")
+    until(look.rows_focused, "the found step's rows come first")
+    for step in range(1, len(form.steps)):
+        look.press(Qt.Key.Key_I)
+        until(lambda step=step: form.step == step, "X moves on")
+    until(lambda: form.idle is True and look.nav_focused(), "the summary does nothing: Finish has the focus")
+    look.press(Qt.Key.Key_Return)
+    until(lambda: empty.onboarded() is True and not look.opened(), "A finishes")
+    look.window.close()

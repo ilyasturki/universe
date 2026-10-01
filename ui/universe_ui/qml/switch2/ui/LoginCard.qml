@@ -7,9 +7,10 @@ Item {
     id: card
 
     property string source: ""
+    property real qrSize: Theme.dp(282)
     readonly property var login: api.screens.login
 
-    height: Theme.dp(330)
+    height: Math.max(qrSize + Theme.dp(48), lines.height + Theme.dp(60))
     visible: source !== "" && login.source === source && (login.url !== "" || login.status !== "")
 
     Rectangle {
@@ -24,7 +25,7 @@ Item {
         id: qr
         x: Theme.dp(24)
         y: Theme.dp(24)
-        width: Theme.dp(282)
+        width: card.qrSize
         height: width
         active: card.login.url !== ""
         sourceComponent: Base.QrCode {
@@ -33,6 +34,7 @@ Item {
     }
 
     Column {
+        id: lines
         x: qr.active ? qr.x + qr.width + Theme.dp(30) : Theme.dp(30)
         y: Theme.dp(30)
         width: parent.width - x - Theme.dp(30)

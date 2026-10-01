@@ -14,14 +14,16 @@ FocusScope {
     readonly property var login: api.screens.login
     readonly property bool last: form.step >= form.steps.length - 1
     property string source: ""
+    // A store's sign-in card is up: the list keeps that store's rows alone, so they fit beside it.
+    readonly property bool signing: loginCard.visible
 
     signal closeRequested
     signal message(string text)
 
-    readonly property string backLabel: form.step > 0 ? "Back" : "Skip setup"
+    readonly property string backLabel: form.step > 0 ? "Back" : form.added ? "Close" : "Skip setup"
     readonly property string nextLabel: last ? "Finish" : "Continue"
     readonly property string acceptLabel: nav.activeFocus ? (nav.index === 1 ? nextLabel : backLabel) : selectLabel(cards.currentRow)
-    readonly property var hints: editor.open ? editor.hints : [acceptLabel !== "" && {
+    readonly property var hints: editor.open ? editor.hints : confirm.open ? confirm.hints : [acceptLabel !== "" && {
             glyph: "A",
             label: acceptLabel,
             dim: !nav.activeFocus && !cards.currentRow
@@ -29,6 +31,10 @@ FocusScope {
         {
             glyph: "B",
             label: backLabel
+        },
+        {
+            glyph: "X",
+            label: nextLabel
         }
     ].filter(Boolean)
 
@@ -73,16 +79,35 @@ FocusScope {
         form.next();
     }
 
+    // B on the first step asks before the setup is skipped, unless games came in: then it only closes.
     function retreat() {
-        Sound.cancel();
-        if (form.step > 0)
-            form.back();
-        else
-            form.finish();
+        if (form.step > 0 || form.added) {
+            Sound.cancel();
+            form.step > 0 ? form.back() : form.finish();
+            return;
+        }
+        var back = nav.activeFocus ? nav : cards;
+        confirm.ask({
+            message: "Skip setup?",
+            detail: "It runs again from Settings › About whenever you like.",
+            no: "Keep going",
+            yes: "Skip",
+            index: 0
+        }, function (yes) {
+            back.forceActiveFocus();
+            if (yes)
+                form.finish();
+        });
+    }
+
+    function settle() {
+        cards.reset();
+        nav.index = 1;
+        form.idle ? nav.forceActiveFocus() : cards.forceActiveFocus();
     }
 
     Keys.onPressed: function (event) {
-        if (event.isAutoRepeat || editor.open)
+        if (event.isAutoRepeat || editor.open || confirm.open)
             return;
         if (api.keys.isCancel(event)) {
             event.accepted = true;
@@ -102,11 +127,7 @@ FocusScope {
             page.closeRequested();
         }
         function onStepChanged() {
-            Qt.callLater(function () {
-                cards.reset();
-                nav.index = 1;
-                cards.forceActiveFocus();
-            });
+            Qt.callLater(page.settle);
         }
     }
 
@@ -135,6 +156,9 @@ FocusScope {
         readonly property real room: hintBar.y - Theme.dp(96)
         readonly property real loginRoom: loginCard.visible ? loginCard.height + gap : 0
         readonly property real navRoom: nav.height + gap
+        // A store's heading and its three sign-in rows: what the list keeps while the card is up.
+        readonly property real signRows: Theme.dp(300)
+        readonly property real cardsRoom: room - pad * 2 - head.height - gap - loginRoom - navRoom
 
         anchors.horizontalCenter: parent.horizontalCenter
         y: (hintBar.y - height) / 2
@@ -155,6 +179,15 @@ FocusScope {
             y: panel.pad
             width: parent.width - panel.pad * 2
             spacing: Theme.dp(4)
+
+            Text {
+                width: parent.width
+                visible: !page.form.loading && page.form.steps.length > 1
+                text: (page.form.step + 1) + " / " + page.form.steps.length
+                color: Theme.textMuted
+                font.family: Theme.sans
+                font.pixelSize: Theme.dp(19)
+            }
 
             Text {
                 width: parent.width
@@ -180,16 +213,21 @@ FocusScope {
         SettingsCards {
             id: cards
 
+            objectName: "setupRows"
             x: panel.pad
             y: head.y + head.height + panel.gap
             width: parent.width - panel.pad * 2
-            height: Math.min(cards.layout.height + cards.captionHeight, panel.room - panel.pad * 2 - head.height - panel.gap - panel.loginRoom - panel.navRoom)
+            height: Math.min(cards.layout.height + cards.captionHeight, Math.max(page.signing ? panel.signRows : 0, panel.cardsRoom))
             focus: true
             columns: 1
             compact: true
             rows: page.form.rows
-            groups: page.form.groups
-            dimmed: editor.open
+            groups: page.signing ? page.form.groups.filter(function (g) {
+                return g.rows.some(function (i) {
+                    return page.form.rows[i].module === page.source;
+                });
+            }) : page.form.groups
+            dimmed: editor.open || confirm.open
 
             onActivated: function (index, row) {
                 page.activate(index, row);
@@ -209,6 +247,8 @@ FocusScope {
             y: cards.y + cards.height + panel.gap
             width: parent.width - panel.pad * 2
             source: page.form.stepId === "stores" ? page.source : ""
+            // The code shrinks before the rows of the store it signs in to are cut.
+            qrSize: Math.max(Theme.dp(180), Math.min(Theme.dp(300), panel.room - panel.pad * 2 - head.height - panel.gap - panel.signRows - panel.navRoom - panel.gap - Theme.dp(150)))
         }
 
         FocusScope {
@@ -216,6 +256,7 @@ FocusScope {
 
             property int index: 1
 
+            objectName: "setupNav"
             x: panel.pad
             y: panel.height - panel.pad - height
             width: parent.width - panel.pad * 2
@@ -278,6 +319,13 @@ FocusScope {
 
             onClosed: cards.forceActiveFocus()
         }
+    }
+
+    ConfirmDialog {
+        id: confirm
+
+        anchors.fill: parent
+        z: 4
     }
 
     HintBar {

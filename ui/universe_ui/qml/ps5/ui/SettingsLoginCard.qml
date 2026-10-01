@@ -7,6 +7,7 @@ Item {
     id: card
 
     property string source: ""
+    property real qrSize: Theme.dp(256)
     readonly property var login: api.screens.login
 
     height: Math.max(tile.visible ? tile.y + tile.height : 0, info.y + info.height) + Theme.dp(22)
@@ -24,7 +25,7 @@ Item {
         id: tile
         x: Theme.dp(22)
         y: Theme.dp(22)
-        width: Theme.dp(256)
+        width: card.qrSize
         height: width
         radius: Theme.dp(8)
         color: "#ffffff"

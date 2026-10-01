@@ -18,8 +18,10 @@ FocusScope {
     readonly property var login: api.screens.login
     readonly property bool last: form.step >= form.steps.length - 1
     property string source: ""
+    // A store's sign-in card is up: the list keeps that store's rows alone, so they fit beside it.
+    readonly property bool signing: qrCard.visible
 
-    readonly property string backLabel: form.step > 0 ? "Back" : "Skip Setup"
+    readonly property string backLabel: form.step > 0 ? "Back" : form.added ? "Close" : "Skip Setup"
     readonly property string nextLabel: last ? "Finish" : "Continue"
     readonly property var hints: {
         var row = rows.currentRow;
@@ -42,7 +44,11 @@ FocusScope {
 
     Component.onCompleted: form.load()
 
-    readonly property var content: Forms.grouped(form.groups, form.rows, function (src, i) {
+    readonly property var content: Forms.grouped(signing ? form.groups.filter(function (g) {
+        return g.rows.some(function (i) {
+            return form.rows[i].module === page.source;
+        });
+    }) : form.groups, form.rows, function (src, i) {
         return Object.assign({}, src, {
             form: i
         });
@@ -81,12 +87,28 @@ FocusScope {
         form.next();
     }
 
+    // B on the first step asks before the setup is skipped, unless games came in: then it only closes.
     function retreat() {
-        Sound.play("back");
-        if (form.step > 0)
-            form.back();
-        else
-            form.finish();
+        if (form.step > 0 || form.added) {
+            Sound.play("back");
+            form.step > 0 ? form.back() : form.finish();
+            return;
+        }
+        shell.dialogAsk({
+            message: "Skip setup?",
+            detail: "It runs again from Settings › About whenever you like.",
+            buttons: ["Keep going", "Skip"],
+            index: 0
+        }, function (i) {
+            if (i === 1)
+                form.finish();
+        });
+    }
+
+    function settle() {
+        rows.reset();
+        nav.index = 1;
+        form.idle ? nav.forceActiveFocus() : rows.forceActiveFocus();
     }
 
     Keys.onPressed: function (event) {
@@ -110,11 +132,7 @@ FocusScope {
             page.shell.pop();
         }
         function onStepChanged() {
-            Qt.callLater(function () {
-                rows.reset();
-                nav.index = 1;
-                rows.forceActiveFocus();
-            });
+            Qt.callLater(page.settle);
         }
     }
 
@@ -135,6 +153,8 @@ FocusScope {
         readonly property real gap: Theme.dp(28)
         readonly property real floor: page.height - Theme.dp(96)
         readonly property real loginRoom: qrCard.visible ? qrCard.height + gap : 0
+        // A store's heading and two rows, the one in focus and the next: what the list keeps while the card is up.
+        readonly property real signRows: rows.headingHeight + rows.rowHeight * 2
 
         anchors.horizontalCenter: parent.horizontalCenter
         width: Math.min(Theme.dp(1100), page.width - Theme.dp(Theme.edge * 2))
@@ -199,7 +219,8 @@ FocusScope {
             x: Theme.dp(16)
             y: column.rowsTop
             width: parent.width - Theme.dp(32)
-            height: Math.max(Theme.dp(98), Math.min(rows.contentHeight + Theme.dp(8), nav.y - column.gap - column.loginRoom - y))
+            objectName: "setupRows"
+            height: Math.max(page.signing ? column.signRows : rows.rowHeight, Math.min(rows.contentHeight + Theme.dp(8), nav.y - column.gap - column.loginRoom - y))
             model: page.content
             focus: true
 
@@ -220,6 +241,8 @@ FocusScope {
             y: rows.y + rows.height + column.gap
             width: rows.width
             source: page.form.stepId === "stores" ? page.source : ""
+            // The code shrinks before the rows of the store it signs in to are cut.
+            qrSize: Math.max(Theme.dp(150), Math.min(Theme.dp(256), nav.y - column.gap - column.rowsTop - column.signRows - column.gap - Theme.dp(44)))
         }
 
         FocusScope {
@@ -227,6 +250,7 @@ FocusScope {
 
             property int index: 1
 
+            objectName: "setupNav"
             anchors.horizontalCenter: parent.horizontalCenter
             y: column.floor - height - Theme.dp(24)
             width: buttons.width
