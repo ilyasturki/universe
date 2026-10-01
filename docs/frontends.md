@@ -1000,8 +1000,8 @@ install folder and the preferences were skipped. `idle` is true when no row on t
 anything: the looks then put the focus on Continue (Finish on `done`). `added` is true once games
 came in or are on their way. Under the rows sit two buttons, Back ("Skip setup" on the first step,
 "Close" once `added`) and Continue ("Finish" on the last), reached with Down past the last row,
-Left/Right between them, A to press one — B and X do the same from anywhere in the dialog, every
-look's hint bar showing both; B on the first step asks "Skip setup?" first (Keep going, Skip),
+Left/Right between them, A to press one — B and X do the same from anywhere in the dialog, the
+hint bar showing both in Reprise and PS5, their glyphs on the buttons in Switch 2; B on the first step asks "Skip setup?" first (Keep going, Skip),
 unless `added`. Reprise and Switch 2 count the steps ("2 / 5") over the title, PS5 draws them as
 dots. The Reprise Home rail lands on its first game when it fills while the page is up (the setup
 importing behind the dialog, the add page), as a cold start does.
