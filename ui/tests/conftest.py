@@ -26,11 +26,12 @@ def pytest_runtest_makereport(item, call):
 
 @pytest.fixture(autouse=True)
 def fast_clock(monkeypatch):
-    """FakeCore's delays in milliseconds, and a session that runs until the test stops it or calls `fake.core.end_session()`."""
-    from universe_ui import fake_core
+    """FakeCore's delays and Home's poll of it in milliseconds, and a session that runs until the test stops it or calls `fake.core.end_session()`."""
+    from universe_ui import fake_core, home
 
     for name, seconds in {"STEP_S": 0.01, "WINDOW_S": 0.02, "UNLOCK_S": 0.05, "SESSION_S": None}.items():
         monkeypatch.setattr(fake_core, name, seconds)
+    monkeypatch.setattr(home, "POLL_MS", 30)
 
 
 @pytest.fixture(scope="session")
