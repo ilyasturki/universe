@@ -618,7 +618,6 @@ def test_the_dock_renders_over_a_running_game(api, fake, tmp_path):
     stop(api)
     window.close()
     overlay.close()
-    pump(50)
 
 
 def test_the_docks_achievements_open_in_its_tray_while_the_source_tracks_them(api, fake, tmp_path):
@@ -662,7 +661,6 @@ def test_the_docks_achievements_open_in_its_tray_while_the_source_tracks_them(ap
     stop(api)
     window.close()
     overlay.close()
-    pump(50)
 
 
 def test_a_burst_of_unlocks_waits_its_turn_behind_three_cards(api, fake, tmp_path, monkeypatch):
@@ -686,7 +684,6 @@ def test_a_burst_of_unlocks_waits_its_turn_behind_three_cards(api, fake, tmp_pat
     until(lambda: api.home.bannersWaiting == 1 and len(cards()) == 3, "the next three came in as the first left")
     window.close()
     overlay.close()
-    pump(50)
 
 
 def test_the_docks_output_row_switches_once_the_cursor_rests(api, fake, tmp_path, monkeypatch):
@@ -720,7 +717,6 @@ def test_the_docks_output_row_switches_once_the_cursor_rests(api, fake, tmp_path
     stop(api)
     window.close()
     overlay.close()
-    pump(50)
 
 
 def test_home_over_the_poster_raises_home_and_quit_and_home_drops_the_poster(api, fake, tmp_path, monkeypatch, held):
@@ -770,7 +766,6 @@ def test_home_over_the_poster_raises_home_and_quit_and_home_drops_the_poster(api
     stop(api)
     window.close()
     overlay.close()
-    pump(50)
 
 
 def test_the_dock_lists_the_sessions_shots_and_trashes_one(api, fake, tmp_path):
@@ -813,7 +808,6 @@ def test_the_dock_lists_the_sessions_shots_and_trashes_one(api, fake, tmp_path):
     stop(api)
     window.close()
     overlay.close()
-    pump(50)
 
 
 def red_fraction(image):
@@ -859,7 +853,6 @@ def test_home_from_the_game_zooms_the_frame_into_its_tile(api, fake, monkeypatch
     assert flip.property("covering") is False and root.property("tabIndex") == 1, "a game that leaves by itself gets no zoom of its stale frame"
     stop(api)
     window.close()
-    pump(50)
 
 
 def test_an_output_picked_becomes_current_and_brings_its_level(api, fake):
