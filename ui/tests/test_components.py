@@ -226,15 +226,18 @@ def test_a_notice_is_put_to_the_user_before_every_install_of_its_component(api, 
     assert setup.rows[index]["detail"] == notice
     assert setup.runImport(index) is True
     assert proposed == [("", "eden", "Eden", "0.2.1")] and form.job is None, "setup asks first, nothing installs yet"
+    finished = record(fake.jobFinished)
     assert form.installFor("", "eden") is True
-    _job, ok, _text = wait_for(fake.jobFinished, 5000)
+    _job, ok, _text = until(lambda: finished)[0]
     assert ok is True
 
 
 def test_the_core_refuses_an_install_whose_notice_was_not_accepted(api, fake):
+    finished = record(fake.jobFinished)
     fake.componentInstall("eden", "")
-    _job, ok, _text = wait_for(fake.jobFinished, 5000)
+    _job, ok, _text = until(lambda: finished)[0]
     assert ok is False
     fake.componentInstall("eden", "", True)
-    _job, ok, _text = wait_for(fake.jobFinished, 5000)
+    until(lambda: len(finished) == 2)
+    _job, ok, _text = finished[1]
     assert ok is True
