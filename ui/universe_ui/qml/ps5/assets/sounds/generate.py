@@ -85,6 +85,13 @@ SOUNDS = {
         (at(160), tone(784, 460, gain=0.18, curve=2.0, harmonics=((1, 1.0), (2, 0.2)))),
         (at(300), tone(1047, 520, gain=0.16, curve=1.9)),
     ),
+    "boot": mix(
+        (0, whoosh(1500, gain=0.12, low=240, high=1400, peak=0.35, seed=9)),
+        (at(120), tone(392, 1400, gain=0.11, attack=0.08, curve=3.4, harmonics=((1, 1.0), (2, 0.18)))),
+        (at(330), tone(587, 1250, gain=0.09, attack=0.06, curve=3.4, harmonics=((1, 1.0), (2, 0.12)))),
+        (at(540), tone(784, 1100, gain=0.08, attack=0.05, curve=3.3)),
+        (at(750), tone(1175, 950, gain=0.05, attack=0.04, curve=3.2)),
+    ),
 }
 
 if __name__ == "__main__":
