@@ -13,6 +13,7 @@ THEMES = [
         "frame": True,
         "ground": "#0e0f13",
         "detail": "Dark, cinematic: the game's art behind everything.",
+        "unlocked": "ACHIEVEMENT UNLOCKED",
     },
     {
         "id": "switch2",
@@ -22,6 +23,7 @@ THEMES = [
         "frame": False,
         "ground": "#ebebeb",
         "detail": "The Switch 2 HOME menu.",
+        "unlocked": "ACHIEVEMENT UNLOCKED",
     },
     {
         "id": "ps5",
@@ -31,6 +33,7 @@ THEMES = [
         "frame": False,
         "ground": "#0b0d12",
         "detail": "The PS5 home screen: the game's world behind a row of tiles.",
+        "unlocked": "TROPHY EARNED",
     },
 ]
 AFFILIATION = "Not affiliated with Nintendo or Sony"
@@ -128,6 +131,8 @@ class ThemeSelector(QObject):
     # Whether the look bridges the swap with the game's last frame; without it HOME need not wait for one.
     frame = Property(bool, lambda self: bool(self._current["frame"]), notify=changed)
     ground = Property(str, lambda self: self._current["ground"], notify=changed)
+    # The heading of the overlay's card for an achievement unlocked mid-game, in the look's own words.
+    unlocked = Property(str, lambda self: self._current["unlocked"], notify=changed)
     fontPath = Property(str, _font, _set_font, notify=fontChanged)
     # A folder of WAVs named as the look's sounds (ok.wav, tick.wav…): each one there replaces the bundled one.
     soundsPath = Property(str, _sounds, _set_sounds, notify=soundsChanged)
