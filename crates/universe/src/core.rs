@@ -2433,12 +2433,10 @@ install) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":t
 
     #[tokio::test]
     async fn a_purge_keeps_a_prefix_another_library_game_shares() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let dir = fake_source("");
         let prefixes = dir.path().join("prefixes");
         std::fs::write(dir.path().join("config/config.toml"), format!("[paths]\nprefixes_root = \"{}\"\n[modules]\nenabled = []\n", prefixes.display()))
             .unwrap();
-        std::env::set_var("XDG_DATA_HOME", dir.path().join("share"));
         let both = prefixes.join("kh");
         std::fs::create_dir_all(&both).unwrap();
         for title in ["One", "Two"] {

@@ -1670,22 +1670,9 @@ mod tests {
     }
 
     #[tokio::test]
-    #[allow(clippy::await_holding_lock)]
     async fn an_entry_with_a_notice_installs_only_once_it_is_accepted() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let dir = tempfile::tempdir().unwrap();
-        for (var, sub) in [
-            ("UNIVERSE_DATA_HOME", "data"),
-            ("UNIVERSE_CACHE_HOME", "cache"),
-            ("UNIVERSE_STATE_HOME", "state"),
-            ("UNIVERSE_CONFIG_HOME", "config"),
-            ("UNIVERSE_MODULES_PATH", "modules"),
-            ("UNIVERSE_SOURCES_PATH", "sources"),
-        ] {
-            std::fs::create_dir_all(dir.path().join(sub)).unwrap();
-            std::env::set_var(var, dir.path().join(sub));
-        }
-        std::fs::write(dir.path().join("config/config.toml"), "[modules]\nenabled = []\n").unwrap();
+        let env = paths::test_env();
+        std::fs::write(env.path().join("config/config.toml"), "[modules]\nenabled = []\n").unwrap();
         let base = serve(vec![("/emu.AppImage", FAKE_APPIMAGE.to_vec())]);
         let image = |name: &str| {
             let mut e =
@@ -1698,7 +1685,7 @@ mod tests {
             generated_at: String::new(),
             components: BTreeMap::from([("eden".into(), image("Eden")), ("cemu".into(), image("Cemu"))]),
         };
-        let file = dir.path().join("catalogue.json");
+        let file = env.path().join("catalogue.json");
         std::fs::write(&file, serde_json::to_vec(&catalogue).unwrap()).unwrap();
         std::env::set_var("UNIVERSE_CATALOGUE", &file);
         let core = crate::core::Core::open_with(Config::load().unwrap(), crate::host::Host::memory().0).await.unwrap();
@@ -1710,7 +1697,6 @@ mod tests {
         assert!(installed("eden").is_empty(), "nothing is downloaded before the notice is accepted");
         assert_eq!(core.component_install("eden", "", true, None).await.unwrap(), "1.0");
         assert_eq!(core.component_install("cemu", "", false, None).await.unwrap(), "1.0", "an entry without a notice asks nothing");
-        std::env::remove_var("UNIVERSE_CATALOGUE");
     }
 
     #[test]
