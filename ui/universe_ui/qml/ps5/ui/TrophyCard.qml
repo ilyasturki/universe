@@ -2,7 +2,7 @@ import QtQuick
 import "../core"
 import "../../ui" as Base
 
-// One trophy of the list: its icon, its name over what it asks, and at the right when it was earned or how rare it is.
+// One trophy of the list: its icon, its name over what it asks, and at the right when it was earned and how rare it is.
 Item {
     id: card
 
@@ -13,7 +13,12 @@ Item {
     signal picked
 
     readonly property bool unlocked: trophy.unlocked === true
-    readonly property bool masked: trophy.hidden > 0
+    readonly property int hidden: trophy.hidden || 0
+
+    // The console's grades of rarity, by the share of players who earned it.
+    function grade(r) {
+        return r < 5 ? "Ultra rare" : r < 15 ? "Very rare" : r < 50 ? "Rare" : "Common";
+    }
 
     Rectangle {
         anchors.fill: parent
@@ -27,7 +32,7 @@ Item {
         id: badge
         x: Theme.dp(20)
         anchors.verticalCenter: parent.verticalCenter
-        width: Theme.dp(72)
+        width: Theme.dp(64)
         height: width
         icon: card.trophy.icon || ""
         unlocked: card.unlocked
@@ -41,11 +46,11 @@ Item {
         anchors.right: side.left
         anchors.rightMargin: Theme.dp(20)
         anchors.verticalCenter: parent.verticalCenter
-        spacing: Theme.dp(6)
+        spacing: Theme.dp(4)
 
         Label {
             width: parent.width
-            text: card.trophy.name || ""
+            text: card.hidden > 0 ? card.hidden + (card.hidden === 1 ? " hidden trophy" : " hidden trophies") : card.trophy.name || ""
             color: card.unlocked ? Theme.text : Theme.textSecondary
             elide: Text.ElideRight
             font.weight: Font.DemiBold
@@ -57,10 +62,7 @@ Item {
             visible: text !== ""
             text: card.trophy.description || ""
             color: Theme.textMuted
-            wrapMode: Text.WordWrap
-            maximumLineCount: 2
             elide: Text.ElideRight
-            lineHeight: 1.15
             font.pixelSize: Theme.dp(Theme.fontSmall)
         }
     }
@@ -74,27 +76,17 @@ Item {
 
         Label {
             anchors.right: parent.right
-            visible: text !== ""
-            text: card.unlocked ? card.trophy.dateText || "" : card.masked ? "" : "Locked"
-            color: card.unlocked ? Theme.text : Theme.textMuted
+            visible: card.unlocked
+            text: card.trophy.dateText || ""
             font.pixelSize: Theme.dp(Theme.fontTiny)
         }
 
         Label {
             anchors.right: parent.right
             visible: text !== ""
-            text: card.trophy.rarity !== undefined && card.trophy.rarity >= 0 ? (card.trophy.rarity < 10 ? card.trophy.rarity.toFixed(1) : Math.round(card.trophy.rarity)) + "%" : ""
+            text: card.trophy.rarity !== undefined && card.trophy.rarity >= 0 ? card.grade(card.trophy.rarity) + "  ·  " + (card.trophy.rarity < 10 ? card.trophy.rarity.toFixed(1) : Math.round(card.trophy.rarity)) + "%" : ""
             color: Theme.textMuted
             font.pixelSize: Theme.dp(Theme.fontTiny)
-        }
-
-        Glyph {
-            anchors.right: parent.right
-            visible: card.masked
-            width: Theme.dp(30)
-            height: width
-            kind: "eye-off"
-            tint: Theme.textMuted
         }
     }
 

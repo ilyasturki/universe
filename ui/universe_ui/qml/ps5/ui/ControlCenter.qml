@@ -1234,7 +1234,7 @@ FocusScope {
 
                             Label {
                                 width: parent.width
-                                text: modelData.name
+                                text: modelData.hidden ? modelData.hidden + (modelData.hidden === 1 ? " hidden trophy" : " hidden trophies") : modelData.name
                                 elide: Text.ElideRight
                                 color: modelData.unlocked ? Theme.text : Theme.textSecondary
                             }

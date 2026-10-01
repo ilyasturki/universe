@@ -2,10 +2,9 @@ import QtQuick
 import "../core"
 import "../sound"
 import "../ui"
-import "../../ui" as Base
 import "Home.js" as Home
 
-// The console's Trophies for one game: the tally at the top, the list at the left, the lit one told in full at the right.
+// The console's Trophies for one game: the tally at the top, then one wide card a trophy.
 FocusScope {
     id: page
 
@@ -46,7 +45,6 @@ FocusScope {
         }
         return out.concat(folded);
     }
-    readonly property var current: index >= 0 && index < rows.length ? rows[index] : null
     readonly property int progress: store.total > 0 ? Math.round(100 * store.unlocked / store.total) : 0
 
     readonly property var orders: [
@@ -67,11 +65,6 @@ FocusScope {
             label: "Name (A–Z)"
         }
     ]
-
-    // The console's grades of rarity, by the share of players who earned it.
-    function rarityName(r) {
-        return r < 0 ? "" : r < 5 ? "Ultra rare" : r < 15 ? "Very rare" : r < 50 ? "Rare" : "Common";
-    }
 
     function step(d) {
         var next = Math.max(0, Math.min(rows.length - 1, index + d));
@@ -148,7 +141,7 @@ FocusScope {
         }
         if (screen) {
             event.accepted = true;
-            step(screen * 5);
+            step(screen * Math.max(1, Math.floor(list.height / (list.cardHeight + list.spacing)) - 1));
             return;
         }
         if (event.isAutoRepeat)
@@ -186,51 +179,23 @@ FocusScope {
         trailing: page.store.loading ? "Asking the store…" : ""
     }
 
-    Row {
+    Label {
         id: tally
 
         x: Theme.dp(Theme.edge)
         y: header.height + Theme.dp(6)
-        spacing: Theme.dp(64)
         visible: page.store.total > 0
-
-        Column {
-            spacing: Theme.dp(2)
-
-            Label {
-                text: "Progress"
-                color: Theme.textSecondary
-                font.pixelSize: Theme.dp(Theme.fontSmall)
-            }
-
-            Label {
-                text: page.progress + "%"
-                font.weight: Font.Light
-                font.pixelSize: Theme.dp(44)
-            }
-        }
-
-        Column {
-            spacing: Theme.dp(2)
-
-            Label {
-                text: "Earned"
-                color: Theme.textSecondary
-                font.pixelSize: Theme.dp(Theme.fontSmall)
-            }
-
-            Label {
-                text: page.store.unlocked + "/" + page.store.total
-                font.weight: Font.Light
-                font.pixelSize: Theme.dp(44)
-            }
-        }
+        text: page.store.unlocked + "/" + page.store.total + "  ·  " + page.progress + "%"
+        font.weight: Font.Light
+        font.pixelSize: Theme.dp(36)
     }
 
     Rectangle {
+        id: bar
+
         x: tally.x
-        y: tally.y + tally.height + Theme.dp(16)
-        width: list.width
+        y: tally.y + tally.height + Theme.dp(12)
+        width: parent.width - x - Theme.dp(Theme.columnRight)
         height: Theme.dp(6)
         radius: height / 2
         visible: tally.visible
@@ -252,18 +217,6 @@ FocusScope {
     }
 
     Label {
-        x: Theme.dp(Theme.edge)
-        y: header.height + Theme.dp(150)
-        width: list.width
-        visible: page.game !== null && page.rows.length > 0
-        text: page.game ? page.game.title.toUpperCase() : ""
-        color: Theme.textSecondary
-        elide: Text.ElideRight
-        font.letterSpacing: Theme.dp(1)
-        font.pixelSize: Theme.dp(Theme.fontSmall)
-    }
-
-    Label {
         anchors.centerIn: parent
         width: parent.width * 0.6
         visible: page.rows.length === 0
@@ -277,16 +230,17 @@ FocusScope {
         id: list
 
         readonly property real room: Theme.dp(Theme.ringGap + Theme.ringLine + 8)
+        readonly property real cardHeight: Theme.dp(100)
 
         x: Theme.dp(Theme.edge) - room
-        y: header.height + Theme.dp(196) - room
-        width: Math.min(Theme.dp(760), (parent.width - Theme.dp(Theme.edge + Theme.columnRight)) * 0.5) + room * 2
+        y: bar.y + bar.height + Theme.dp(28) - room
+        width: parent.width - Theme.dp(Theme.edge + Theme.columnRight) + room * 2
         height: parent.height - y - Theme.dp(40)
         model: page.rows
         currentIndex: page.index
         interactive: false
         clip: true
-        spacing: Theme.dp(16)
+        spacing: Theme.dp(12)
         highlightFollowsCurrentItem: true
         highlightMoveDuration: Theme.durScroll
         preferredHighlightBegin: room
@@ -301,7 +255,7 @@ FocusScope {
 
         delegate: Item {
             width: list.width
-            height: Theme.dp(132)
+            height: list.cardHeight
 
             TrophyCard {
                 x: list.room
@@ -330,154 +284,5 @@ FocusScope {
         anchors.bottom: list.bottom
         anchors.bottomMargin: list.room
         flickable: list
-    }
-
-    Item {
-        id: detail
-
-        readonly property var trophy: page.current
-
-        x: list.x + list.width + Theme.dp(56)
-        y: header.height + Theme.dp(196)
-        width: parent.width - x - Theme.dp(Theme.columnRight)
-        height: parent.height - y - Theme.dp(40)
-        visible: trophy !== null
-
-        Rectangle {
-            anchors.fill: parent
-            anchors.margins: -Theme.dp(24)
-            radius: Theme.dp(Theme.radiusCard + 2)
-            color: Qt.rgba(0.07, 0.075, 0.1, 0.72)
-            border.width: 1
-            border.color: Theme.glassEdge
-        }
-
-        Row {
-            id: lead
-            width: parent.width
-            spacing: Theme.dp(28)
-
-            Base.AchievementBadge {
-                width: Theme.dp(128)
-                height: width
-                icon: detail.trophy ? detail.trophy.icon : ""
-                unlocked: detail.trophy ? detail.trophy.unlocked : false
-                checked: detail.trophy ? detail.trophy.unlocked : false
-                tint: Theme.text
-            }
-
-            Label {
-                anchors.verticalCenter: parent.verticalCenter
-                width: parent.width - Theme.dp(128 + 28)
-                text: detail.trophy ? detail.trophy.name : ""
-                wrapMode: Text.WordWrap
-                maximumLineCount: 3
-                elide: Text.ElideRight
-                font.weight: Font.DemiBold
-                font.pixelSize: Theme.dp(36)
-            }
-        }
-
-        Label {
-            id: detailsCaption
-            y: lead.height + Theme.dp(34)
-            text: "Details"
-            color: Theme.textSecondary
-            font.pixelSize: Theme.dp(Theme.fontSmall)
-        }
-
-        Column {
-            anchors.top: detailsCaption.bottom
-            anchors.topMargin: Theme.dp(10)
-            width: parent.width
-
-            Repeater {
-                model: {
-                    var t = detail.trophy;
-                    if (!t)
-                        return [];
-                    var out = [
-                        {
-                            glyph: "info",
-                            value: t.description || "No description.",
-                            caption: "Description"
-                        },
-                        {
-                            glyph: t.unlocked ? "trophy" : "lock",
-                            value: t.unlocked ? "Earned " + t.dateText : t.hidden ? "Hidden until earned" : "Not earned yet",
-                            caption: "Status"
-                        }
-                    ];
-                    if (t.rarity >= 0)
-                        out.push({
-                            glyph: "pulse",
-                            value: page.rarityName(t.rarity) + "  |  " + t.rarityText + " earned",
-                            caption: "Rarity"
-                        });
-                    out.push({
-                        glyph: "",
-                        value: page.game ? page.game.title : "",
-                        caption: "Trophy set"
-                    });
-                    return out;
-                }
-
-                Item {
-                    width: parent.width
-                    height: Math.max(Theme.dp(112), texts.height + Theme.dp(36))
-
-                    Rectangle {
-                        x: Theme.dp(72)
-                        anchors.bottom: parent.bottom
-                        width: parent.width - x
-                        height: 1
-                        color: Theme.hairline
-                        visible: index < 3
-                    }
-
-                    Glyph {
-                        x: Theme.dp(4)
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: Theme.dp(40)
-                        height: width
-                        visible: modelData.glyph !== ""
-                        kind: modelData.glyph
-                    }
-
-                    TileArt {
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: Theme.dp(48)
-                        height: width
-                        radius: Theme.dp(6)
-                        visible: modelData.glyph === ""
-                        game: page.game
-                    }
-
-                    Column {
-                        id: texts
-                        x: Theme.dp(72)
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: parent.width - x
-                        spacing: Theme.dp(6)
-
-                        Label {
-                            width: parent.width
-                            text: modelData.value
-                            wrapMode: Text.WordWrap
-                            maximumLineCount: 3
-                            elide: Text.ElideRight
-                            lineHeight: 1.15
-                            font.pixelSize: Theme.dp(29)
-                        }
-
-                        Label {
-                            text: modelData.caption
-                            color: Theme.textMuted
-                            font.pixelSize: Theme.dp(Theme.fontSmall)
-                        }
-                    }
-                }
-            }
-        }
     }
 }
