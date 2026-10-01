@@ -175,6 +175,7 @@ every 10 s, since the 30-minute timeout writes no file.
 | `session_window()` | `session_window()` | `universe session-window [--json]` | the running game's window as the desktop lists it (see Desktop; `{id, pid, wm_class, title, focused, x, y, width, height, hidden, minimized}`, `id` the desktop's own handle as a string): the largest visible toplevel whose pid is in the unit's cgroup — gamescope's when the game runs inside it. `None` before it maps; `Unavailable` where the profile has no window list |
 | `wait_session_window(session_id, timeout)` | `wait_session_window(session_id, timeout_ms)` | `universe session-window --wait <secs> [--json]` | blocks until that window is up, then `Activate`s it (focus and raise) and returns it; `None` when the session ended first or the timeout ran out (the CLI prints `null`, exit 0); `Unavailable` where the profile has no window list, at once. Polls the desktop every 150 ms |
 | `focus_session()` / `focus_pid(pid)` | `focus_session()` / `focus_pid(pid)` | — | `Activate` on the game's window / on the largest window of a process (a frontend's own, once the game is gone). On the launcher's gamescope (see Gamescope) `focus_session` shows the game again and `focus_pid(own pid)` takes the screen back from it |
+| `host_focus()` / `summon()` | `host_focus()` / `summon()` | — | `{launcher, session}`: whether the desktop's focused window is the launcher's or its running game's; `summon` raises the launcher's window (gamescope's when it runs nested). See Desktop |
 | `freeze(on)` | `freeze(on)` | — | `FreezeUnit` / `ThawUnit` on the running game's unit: every process of it stops in place, then the `freeze` / `thaw` hooks run (the capture module pauses its recorder). A stop job thaws on its own, so `stop` works on a frozen game |
 | `volume(change, value)` | `volume(change, value=0)` | — | the default sink through `wpctl`: `up` / `down` by `controller.volume_step`, `mute` toggles, `set` to `value` percent, `get`; returns `{percent, muted, output}` |
 | `outputs()` / `set_output(id)` | `outputs()` / `set_output(id)` | `universe output [<id>] [--json]` | the playback outputs, from one `pw-dump`: each output route of a card whose `available` is not `no` (jacks without detection say `unknown`) that the card's current profile plays or an available profile could, then each sink no route stands for (a filter, a pro-audio profile). `[{id, label, device, current}]`: `id` is `<device.name>/<route name>`, or the sink's `node.name`; `label` the route's description, `device` the card's; `current` marks the effective default sink's route (`default.audio.sink`, not the configured one, which can name a sink of a profile gone). `set_output` switches the card's profile when the route needs it (the one keeping the current input, else the highest priority), waits up to 3 s for the sink to come up, sets its route with `wpctl set-route`, then `wpctl set-default`: WirePlumber keeps it, the desktop follows. Returns the new sink's `volume("get")`; `Invalid` for an id not listed |
@@ -1173,8 +1174,14 @@ set when the manifest names a `choices_exec`: `<module dir>/<choices_exec> <key>
 socket first (`HYPRLAND_INSTANCE_SIGNATURE`, `NIRI_SOCKET`, `SWAYSOCK`), then `XDG_CURRENT_DESKTOP`
 (GNOME, KDE, Cinnamon), then an X11 session (`XDG_SESSION_TYPE=x11`, or `DISPLAY` without
 `WAYLAND_DISPLAY`: Xfce, MATE, i3 and the like); anything else, COSMIC or Cinnamon on Wayland
-included, is `none`. Inside the launcher's gamescope none of it is asked: gamescope focuses, draws the
-OSD on the launcher's overlay and takes the screenshots itself.
+included, is `none`. Inside the launcher's gamescope, gamescope focuses the game, draws the OSD on the
+launcher's overlay and takes the screenshots itself: the desktop is asked only whose window has the
+focus (`host_focus`) and to bring gamescope's up (`summon`). gamescope gives its children
+`XDG_CURRENT_DESKTOP=gamescope`, `XDG_SESSION_TYPE=x11` and its own Xwayland's `DISPLAY`, so the
+launcher hands the desktop's on to the gamescope it starts as `UNIVERSE_HOST_XDG_CURRENT_DESKTOP`,
+`UNIVERSE_HOST_XDG_SESSION_TYPE`, `UNIVERSE_HOST_DISPLAY` and `UNIVERSE_HOST_WAYLAND_DISPLAY` (empty
+where it had none), which detection reads inside it; inside a gamescope that hands nothing on
+(Steam's) its Xwayland is no X11 desktop.
 
 | profile | windows (`session_window`, focus) | OSD | screenshots | cursor hiding (`desktop.hide_cursor`) |
 |---|---|---|---|---|
@@ -1186,6 +1193,19 @@ OSD on the launcher's overlay and takes the screenshots itself.
 | `niri` | `niri msg -j windows`, `action focus-window` | a notification | `grim` of the output | — (its config's `cursor { hide-after-inactive-ms }`) |
 | `x11` | EWMH: `_NET_CLIENT_LIST`, a `_NET_ACTIVE_WINDOW` request as a pager's (source 2, past focus-stealing prevention) | a notification | the X server's root image | — |
 | `none` | `Unavailable` | — | gpu-screen-recorder | — |
+
+`host_focus()` names the focused toplevel to the launcher: `launcher` when its pid is this
+process's or that of the gamescope it runs in (not Steam's), `session` when it is the running
+game's (the launcher's gamescope's pid, else a process in the unit's cgroup), both false for
+another app's or none; always `{launcher: true}` on the launcher's own screen
+(`UNIVERSE_OWN_GAMESCOPE=drm`) and under Steam's Game Mode; `Unavailable` where the profile has no
+window list (GNOME without the extension, `none`). Every profile reads it off its window list but
+KDE, where one KWin script per call would cost a file, a load and up to 5 s: `universe-focus-<pid>`
+stays loaded and calls back with the active window's pid on each `windowActivated`
+(`clientActivated` on Plasma 5). Each read asks `isScriptLoaded` and loads it again after a KWin
+restart; `$XDG_RUNTIME_DIR/universe/kwin-focus-scripts` lists the ones loaded, and those of
+processes that ended without unloading theirs are unloaded at the next load. `summon()` activates
+the largest window of the same pids.
 
 A notification OSD is `org.freedesktop.Notifications.Notify` with the `value` hint (mako, dunst,
 swaync, fnott and xfce4-notifyd draw it as a bar) and `x-canonical-private-synchronous`, replacing
@@ -1238,7 +1258,7 @@ written as `<key>.<name>` (`entry_key`), `""` removing it.
 
 | Rust | Python | CLI | Role |
 |---|---|---|---|
-| `controller_state()` | `controller_state()` | `universe controller ls` | `{enabled, hold_ms, volume_step (a percent, number), families: [{id, name, slots: [{id, label, codes, extra}]}], macros: [Macro], presets: [{id, label, hold_only}]}`; the CLI adds `devices`, the pads readable now with every slot's code or `bound: false` |
+| `controller_state()` | `controller_state()` | `universe controller ls` | `{enabled, hold_ms, volume_step (a percent, number), home_summons, families: [{id, name, slots: [{id, label, codes, extra}]}], macros: [Macro], presets: [{id, label, hold_only}]}`; the CLI adds `devices`, the pads readable now with every slot's code or `bound: false` |
 | `controller_pads()` | `controller_pads()` | — | the `devices` list alone, in the shape `watch` announces; for a frontend whose watcher waits on the lock |
 | `set_controller_macro(macro)` | same | `universe controller bind <family> <button> <press\|hold> <action> [--keys K] [--command C]` | validates, replaces the macro with the same family, button and trigger |
 | `remove_controller_macro(family, button, trigger)` | same | `universe controller unbind <family> <button> [trigger]` | an empty trigger removes both |
@@ -1404,6 +1424,7 @@ rawg_file = "~/.config/rawg/api_key"
 enabled = true
 hold_ms = 600                        # a press this long is a hold
 volume_step = 2                      # percent of the normal volume per press, 1–100 ("precise" = 2, "normal" = 6 still read)
+home_summons = true                  # HOME pressed in another app brings Universe's big screen up; false drops the press
 # [controller.buttons.xbox-elite]    # learned codes: a slot's list replaces its seeds, [] leaves it unbound
 # paddle_p1 = ["BTN_GRIPR", "BTN_TRIGGER_HAPPY5"]
 # [controller.axes.8bitdo-pro-3]     # learned axes: a role's evdev axis, `-` when the pad reads it backwards

@@ -19,6 +19,11 @@ stays home with the game pinned first: A resumes it, its menu quits it.
 B held opens the power menu: quit the launcher, suspend, reboot or power off
 the machine; Settings › About shows its build and opens the same menu.
 
+The gamepad acts only while the launcher has the desktop's focus: with another
+app in front its presses are dropped, and HOME brings the launcher up instead
+(Settings › Controller › HOME opens Universe turns that off). Pad macros fire
+whatever has the focus.
+
 # OPTIONS
 
 *--windowed*
@@ -90,7 +95,7 @@ plain wheel too when nothing behind it scrolls. The cursor shows while the mouse
 	Replace the XDG directories, as for *universe*(1).
 
 *UNIVERSE_UI_INPUT_LOG*
-	Set, logs every switch between pad, keyboard and mouse with the event that caused it: for a hint bar that flips on its own.
+	Set, logs every switch between pad, keyboard and mouse with the event that caused it: for a hint bar that flips on its own. Also every change of the desktop's focus, each pad key dropped while the launcher does not have it, and each B held long enough for the power menu.
 
 # SEE ALSO
 

@@ -26,6 +26,7 @@ One context property, `api`:
 | `api.memory` | `get`/`set`/`has`/`unset`, persisted to `$XDG_STATE_HOME/universe/ui-memory.json` |
 | `api.universe` | the client: every core call, plus the signals below. `adoptScope()` and `pendingJournals()` wrap `adopt_scope` and `pending_journals`; their failures get a log line, not a toast. `recordings(id)` is the client's own: `sessions(id)` kept to the rows with a `recording` |
 | `api.pad` | `rightX`: the right stick as a value, 0 without a controller |
+| `api.focus` | whether the launcher has the desktop's focus (see "Focus"): `active` (it has, or nobody can tell), `elsewhere` (another app has: neither the launcher nor its game), `mode` (`always`, `host`, `qt`), `changed()` |
 | `api.power` | the batteries the kernel lists under `/sys/class/power_supply`: `sources` (`kind` `system` or `pad`, `percent`, `charging`, `inputs` — the pad's evdev nodes), `count`; polled every 10 s, plus what the controller watcher reads off a pad the kernel keeps no supply for (an 8BitDo's HID report, BlueZ's `Battery1` for a pad in BLE mode), reported through `report(event, name, battery)` and dropped with the pad; the kernel's reading wins where both exist. Reprise and the PS5 look draw them next to every clock (`ui/PowerBadge.qml`: one glyph and percent per source, the pad the controller page has current in green, one at 15 % or under in red); the Switch 2 look, like the console, puts the machine's own battery by its clock as a bare cell and a pad's charge on its controller page, next to the pad it belongs to; `--fake` reads `fixtures/power_supply` |
 | `api.network` | the link the machine is online through, read from `/sys/class/net` every 10 s: `kind` (`wifi`, `wired` — a cable wins — or `""` offline; links with no device, such as `lo` or a VPN, never count), `bars` (the Wi-Fi signal as 1–3 arcs from `/proc/net/wireless`, 0 otherwise). The Switch 2 look draws it between its clock and battery; `--fake` reads `fixtures/net` |
 | `api.system` | what logind will do with the machine: `actions`, the ones of `suspend`, `reboot` and `power_off` it would carry out (the core's `power_actions()`, read once at startup), `run(action)` (`power(action)` off the UI thread; `reboot` and `power_off` stop a running session first, so its `session-end` runs before the machine goes down), `failed(action, message)` when logind refuses. `--fake` records the call and does nothing. `steam`: the launcher runs in Steam's Game Mode (the core's `under_steam()`): no power actions (the menu keeps Quit Universe alone, and says Steam's menu has the rest), no Sound section, no dock over a game, no MangoHud, frame limit or Pause on HOME rows. `deck`: `lcd` or `oled` on a Steam Deck. `controls`: the core's `system_controls()`, read after `apply_system()` at startup and on `reload()`; `set(id, value)` shows the value at once and writes it off the UI thread, a refusal raising `controlFailed(id, message)` and reading the machine back; `control(id)` one of them. Reprise lists them under Settings › System and in the dock's System group (a step writes once the cursor rests, 400 ms), Switch 2 under System Settings › Performance, the PS5 look under Settings › Performance and in the Control Center's System panel; `ui/Controls.js` turns one into rows any look uses. `--fake` lists an OLED Deck's under `UNIVERSE_DECK`, and plays Game Mode under `GAMESCOPE_WAYLAND_DISPLAY` with `UNIVERSE_FAKE_STEAM=1` |
@@ -265,6 +266,7 @@ flips to its HOME menu over the game (`toLauncher`) and back (`toGame`); Reprise
 resumes; the PS5 look opens its **Control Center** the same way (the dock contract: `open`,
 `closeDock()`, `dockClosed()` once its fade ends, `loading` for the reduced row), the hold going
 home as the console's does. With no session, Reprise treats it as Start (the game menu).
+HOME pressed while another app has the focus is not HOME: see "Focus".
 
 The dock is `ui/Dock.qml` in the overlay window: the game's card at the left (its art, PLAYING or
 PAUSED, the title), a row of round buttons at the right (`row` in `Dock.qml`), a group's settings
@@ -349,6 +351,39 @@ card, so gamescope's own default (2) is back. Those are the keys that reach a ru
 rest of the launch form — the runner, Proton, the resolution, the Launch section — is baked into
 the process or the gamescope it started in, so the dock does not offer them.
 
+## Focus
+
+The launcher acts on the pad only while it has the desktop's focus. Inside its own nested
+gamescope (the default fullscreen mode) Qt never learns that the focus left: gamescope passes no
+focus change on to its clients. So `api.focus` (`universe_ui/focus.py`) asks the desktop every
+500 ms through the core's `host_focus()` (`api.md` § Desktop): the focused toplevel is the
+launcher's when its pid is this process's or the gamescope's it runs in, its game's when the pid
+runs in the session's unit. On the desktop (`--windowed`, or no gamescope) it follows Qt's
+application state, and asks the desktop only while Qt says another window has the focus, to tell
+the launcher's game from another app. On a screen of its own (`UNIVERSE_OWN_GAMESCOPE=drm`), under
+Steam's Game Mode and offscreen nothing else can have the focus: always focused. Where the desktop
+cannot tell (GNOME without the extension, Cinnamon on Wayland, no window list, an error; the reason
+logged once) the launcher behaves as if focused, as before.
+
+While another app has the focus (`active` false):
+
+- the pad thread reads nothing (`GamepadThread.setCovered`, as under a game: held keys are released,
+  the right stick is centred, a press already on its way is dropped with its release);
+- B held as the focus leaves opens no power menu (`keys.dropHold()`);
+- the Controller section's learn, walk and test stop (`focusLost()`);
+- `Theme.covered` holds every loop and clock, and a playing recording pauses (Reprise's
+  Recordings, the PS5 and Switch 2 players), staying paused when the focus comes back;
+- HOME from that app brings the launcher up and does nothing more: `summon()` activates its window
+  (gamescope's when nested) and asks the desktop again. With `controller.home_summons` off (the
+  Controller section's "HOME opens Universe", under Advanced; the GTK app's Preferences ›
+  Controller) the press is dropped. HOME from the launcher or from its own game is HOME as
+  before, and so is HOME where the desktop cannot tell.
+
+Pad macros (screenshot, volume, MangoHud) fire whatever has the focus: the watcher reads the pads
+for the whole system. A focus change is seen within a poll; on KDE the core's answer comes from a
+script left running in KWin, which pushes each change. `UNIVERSE_UI_INPUT_LOG` logs every change,
+every pad key the gate drops and every power-menu hold.
+
 ## Qt and QML notes
 
 These cost real time to discover; they are properties of Qt 6.11 / PySide6 6.11, not of Universe.
@@ -375,10 +410,12 @@ These cost real time to discover; they are properties of Qt 6.11 / PySide6 6.11,
   `OpacityMask`, `FastBlur`, `ColorOverlay` and `ShaderEffect` render nothing. The affected components
   test `GraphicsInfo.api === GraphicsInfo.Software` and degrade — square corners, no blur, untinted
   icons, a still focus ring instead of the Switch 2 look's shader. On screen nothing changes.
-- **Keys posted while a game holds focus are dropped** by Qt: there is no active item, so
-  `--keys` scripting cannot drive the host behind a running game, and neither can the gamepad
-  (`focusWindow()` is null). That is the wanted behaviour: home is operable once the game has
-  handed the focus back (Alt-Tab, or its own exit, after which `focusLauncher()` asks for it).
+- **Keys posted while another window holds the focus are dropped** by Qt on the desktop
+  (`--windowed`): `focusWindow()` is null, so `--keys` scripting cannot drive the host behind a
+  running game. Inside the launcher's nested gamescope Qt keeps the focus whatever the desktop
+  does, so the pad's gate there is `api.focus`, not Qt (see "Focus"). `Pad:A`, `PadHold:A` and
+  `PadRelease:A` post through the pad thread and meet that gate as the pad's presses do;
+  `Press:slot` and `Unpress:slot` reach the controller screen as a watcher line, HOME's included.
 - **A list property is re-read for every element when a method is called on it in place.**
   `store.rows.filter(...)`, `store.rows.indexOf(x)`, or `store.rows[i]` inside a loop over
   `store.rows.length`, makes the engine fetch and convert the whole property (every dict of every
@@ -386,11 +423,12 @@ These cost real time to discover; they are properties of Qt 6.11 / PySide6 6.11,
   per 250 rows. Bind the property to a local first (`var all = store.rows; all.filter(...)`, or a
   `property var` of the page) and it is read once. `readonly property var rows: store.rows` is
   fine; so is a single `store.rows.length` or `store.rows[3]`.
-- **Behind a game the scene holds still.** `Theme.covered` is `api.home.underGame` (bound by the
-  root): the game is on screen over the launcher, which happens inside gamescope alone (on the
-  desktop the launcher is a window of its own, and Alt-Tab must find it live). The hero's drift, the session badge's pulse and second hand
-  and the clock pause on it and catch up when the launcher is back, so nothing repaints
-  under the game. The host's polls keep their cadence (the HOME flip is as fast as before) but
+- **Behind a game or another app the scene holds still.** `Theme.covered` (the core `Theme`, which
+  the PS5 and Switch 2 ones read) is `api.home.underGame || !api.focus.active`, bound by each
+  look's root: the game is on screen over the launcher, which happens inside gamescope alone, or
+  another app has the focus. The hero's drift, the session badge's pulse and second hand, the
+  Switch 2 focus ring's sweep, its marquees and its tiles' install stripes, and the clock pause on
+  it and catch up when the launcher is back, so nothing repaints unseen. The host's polls keep their cadence (the HOME flip is as fast as before) but
   answer off the UI thread, and the pad thread reads no button while covered, so a press meant
   for the game costs the launcher nothing.
 - **Pages load asynchronously.** The tab, detail and sub-page `Loader`s are `asynchronous`, so
@@ -407,7 +445,8 @@ These cost real time to discover; they are properties of Qt 6.11 / PySide6 6.11,
 - **Gamepad.** SDL2 in a `QThread`, `SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS=1`, hot-plug. Each
   button becomes the keyboard key Pegasus already bound to that action, so the theme's key logic is
   untouched. Axes use hysteresis — 0.5 to press, 0.3 to release — and arrows repeat after 350 ms
-  every 90 ms. Nothing is posted when no window has focus.
+  every 90 ms. Nothing is read while the game is on screen or another app has the focus
+  (`setCovered`, see "Focus").
 
 | Pad | Key | Action |
 |---|---|---|
@@ -1021,6 +1060,10 @@ screen restarts it after `restart_ms`, doubling up to 30 s until it stays up. A 
 reconnects under a new node becomes current again; a learn the watcher times out clears the
 learning state with a message.
 
+Another app taking the focus stops a learn, the walk (keeping what it set up, as Enter does) and
+the live view (`focusLost()`, see "Focus"). The Advanced row's cards are Timing (`controller.hold_ms`,
+`controller.volume_step`) and HOME ("HOME opens Universe", the `controller.home_summons` toggle).
+
 The page suspends the watcher while the section has the focus, so a back button pressed while
 looking at its row fires nothing, and nothing shows either: the SDL mapper is still turning the
 pad into keys, and the rows are for binding. The live view (`setTesting(true)`, from the test
@@ -1102,6 +1145,10 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
 - **Steam Deck**: on a Deck (`deck::model()`), Preferences › System sets what `system_controls()`
   lists but the backlight, which the desktop sets, through `set_system`; like `universe-ui`, the app
   calls `apply_system()` at startup.
+- **Controller**: Preferences › Controller runs the watcher while its page shows. The window losing
+  the focus (`is-active`) ends a learn, the walk and the button test, so a press made in another app
+  teaches the page nothing; its Big Screen group holds "HOME Opens Universe" (`controller.home_summons`,
+  see "Focus").
 - **State**: `$XDG_STATE_HOME/universe/desktop.json` holds the window size, the sidebar's pick, the
   sort, whether hidden games show and whether the first run was seen. A recording's frames come
   from `universe::frames`, the Qt host's cache.
