@@ -1528,6 +1528,48 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_steamgriddb_key_fills_what_the_stores_lack_and_leads_when_preferred() {
+        let (_env, mut game) = setup("hollow-knight");
+        game.title = "Hollow Knight".into();
+        game.source.kind = "steam".into();
+        game.source.id = "367520".into();
+        game.save().unwrap();
+        note_source_art(&game.media_dir(), &BTreeMap::new(), 367520).unwrap();
+        let mut keyed = keyless();
+        keyed.keys.sgdb = "k".into();
+        let mut answers = steam_answers(367520);
+        answers.push((
+            format!("{SGDB}/search/autocomplete/Hollow%20Knight"),
+            br#"{"data":[{"id":7,"name":"Hollow Knight","release_date":1487894400,"verified":true}]}"#.to_vec(),
+        ));
+        for (slot, endpoint, dims) in SGDB_PLAN {
+            let mut url = format!("{SGDB}/{endpoint}/game/7?types=static,animated&page=0");
+            if let Some(d) = dims {
+                url.push_str(&format!("&dimensions={d}"));
+            }
+            let page = serde_json::json!({"data": [{"id": 100, "url": format!("https://sgdb/{slot}.png"), "thumb": format!("https://sgdb/{slot}-t.png"), "upvotes": 3, "score": 1, "language": "en", "nsfw": false}], "page": 0, "limit": 50, "total": 1});
+            answers.push((url, serde_json::to_vec(&page).unwrap()));
+            answers.push((format!("https://sgdb/{slot}.png"), if slot == "logo" { logo() } else { png(60, 60) }));
+        }
+        let net = saved(answers);
+
+        refresh_with(&net, &keyed, &game, false).await.unwrap();
+        let got = sources(&game);
+        assert_eq!((got["box_front"].as_str(), got["logo"].as_str()), ("steam", "steam"), "the stores come first");
+        assert_eq!(got["square"], "sgdb", "SteamGridDB fills what they lack, the made square not needed");
+        let page = candidates_with(&net, &keyed, &game, "box_front", 0).await.unwrap();
+        assert!(page.sgdb_key);
+        assert_eq!(page.items.iter().map(|c| (c.provider.as_str(), c.score)).collect::<Vec<_>>(), [("steam", 0), ("sgdb", 3001)]);
+        assert_eq!(page.entry.map(|e| (e.provider, e.id, e.name)), Some(("sgdb".to_string(), 7, "Hollow Knight".to_string())));
+
+        keyed.keys.prefer_sgdb = true;
+        refresh_with(&net, &keyed, &game, true).await.unwrap();
+        assert_eq!(sources(&game)["box_front"], "sgdb", "preferred, it leads");
+        let page = candidates_with(&net, &keyed, &game, "box_front", 0).await.unwrap();
+        assert_eq!(page.items.first().map(|c| c.provider.as_str()), Some("sgdb"));
+    }
+
+    #[tokio::test]
     async fn a_title_nothing_names_is_a_miss_asked_once() {
         let (_env, mut game) = setup("nothing");
         game.title = "Nothing Like It".into();
