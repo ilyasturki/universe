@@ -55,7 +55,7 @@ for p in python3 python3.14 python3.13 python3.12 python3.11; do
         break
     fi
 done
-[ -n "$python" ] || die "Python 3.11 to 3.14 is needed for the UI (PySide6); install python3.11 or later"
+[ -n "$python" ] || die "Python 3.11 to 3.14 is needed for the UI (PySide6); install python3.14 (sudo dnf install python3.14 on Fedora 45, whose python3 is 3.15)"
 "$python" -c 'import venv, ensurepip' 2>/dev/null || die "$python cannot make a venv: install python3-venv (Debian, Ubuntu) or python3-pip"
 
 work="$(mktemp -d)"

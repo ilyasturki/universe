@@ -49,7 +49,7 @@ Not affiliated with Nintendo or Sony. Nintendo Switch is a trademark of Nintendo
 
 ## Install
 
-x86_64 Linux with a systemd user session and Python 3.11 to 3.14. gamescope is optional but on by default.
+x86_64 Linux with a systemd user session and Python 3.11 to 3.14 (on Fedora 45, whose python3 is 3.15, `sudo dnf install python3.14` first). gamescope is optional but on by default.
 
 **Arch Linux** (AUR): `universe` builds the latest release, `universe-bin` installs its prebuilt build, `universe-git` builds `main`. `universe-desktop`, `universe-desktop-bin` and `universe-desktop-git` add Universe Desktop, the GTK app for mouse and keyboard, to each.
 
