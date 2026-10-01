@@ -39,12 +39,14 @@ type = "path"
 default = ""
 label = "Install folder"
 description = "Empty installs into the library's games folder."
+keywords = ["install folder", "directory"]
 
 [[settings]]
 key = "with_dlcs"
 type = "bool"
 default = true
 label = "Install owned DLCs"
+keywords = ["dlc", "expansions", "addons"]
 
 [[settings]]
 key = "anticheat_runtimes"

@@ -13,7 +13,8 @@ from .launch import build_launch
 from .runners import build_runner
 from .settings import ADVANCED_KEY, ModuleApi, SourceApi, build_game, build_page
 
-# Words a setting is known by that its label and description do not carry; keyed by the row's key without `launch.`.
+# Words a core setting is known by that its label and description do not carry, keyed by the row's key without `launch.`; a module's or a
+# source's come from its manifest's `keywords`.
 SYNONYMS = {
     "gamescope": ["compositor", "window", "fullscreen"],
     "gamescope_resolution": ["res", "1080p", "1440p", "4k", "720p", "render scale", "downscale"],
@@ -69,23 +70,6 @@ SYNONYMS = {
     "cursor_extension": ["gnome", "shell extension", "cursor"],
     "hold_ms": ["long press", "hold", "duration", "milliseconds"],
     "volume_step": ["volume", "loudness", "sound", "percent"],
-    "codec": ["av1", "hevc", "h264", "h265", "encoder"],
-    "quality": ["bitrate", "size", "compression"],
-    "container": ["mkv", "mp4", "format"],
-    "audio": ["sound", "microphone", "tracks"],
-    "audio_codec": ["opus", "aac", "sound"],
-    "audio_bitrate": ["kbps", "sound quality"],
-    "min_duration_s": ["short sessions", "discard", "minimum length"],
-    "window_wait_s": ["timeout", "delay"],
-    "source": ["window", "screen", "capture", "picker"],
-    "cursor": ["mouse", "pointer"],
-    "provider": ["openai", "codex", "claude", "model", "ai"],
-    "model": ["gpt", "claude", "llm", "ai"],
-    "language": ["locale", "french", "english"],
-    "platform": ["windows", "linux", "depot"],
-    "with_dlcs": ["dlc", "expansions", "addons"],
-    "games_dir": ["install folder", "directory"],
-    "scan_dirs": ["scan", "folders", "detect"],
     "theme": ["look", "skin", "appearance", "dark", "switch", "reprise"],
     "boot_intro": ["intro", "boot", "splash", "logo", "startup", "animation", "movie"],
     "enabled": ["on", "off", "enable", "disable", "toggle"],
@@ -436,6 +420,7 @@ class SettingsSearch(QObject):
                         key=key,
                         module=str(row.get("module") or ""),
                         advanced=bool(row.get("advanced")),
+                        synonyms=row.get("keywords") or (),
                     )
                 )
 
@@ -485,6 +470,7 @@ class SettingsSearch(QObject):
                             module=ident[0],
                             advanced=bool(row.get("advanced")),
                             games=[],
+                            synonyms=row.get("keywords") or (),
                         )
                     entry.games.append(
                         {

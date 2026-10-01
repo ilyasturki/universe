@@ -30,6 +30,7 @@ type = "enum"
 default = "auto"
 label = "Entry language"
 description = "Auto writes in the game's on-screen language."
+keywords = ["locale", "french", "english"]
 choice_labels = { auto = "Auto", fr = "French", en = "English", es = "Spanish", de = "German", it = "Italian", pt = "Portuguese", ja = "Japanese" }
 scope = "game"
 choices = ["auto", "fr", "en", "es", "de", "it", "pt", "ja"]
@@ -40,6 +41,7 @@ type = "enum"
 default = ""
 label = "Writing model"
 description = "The provider that writes the entries."
+keywords = ["openai", "codex", "claude", "model", "ai"]
 choice_labels = { codex = "Codex", openai = "OpenAI-compatible API", stub = "Stub (no model)" }
 scope = "global"
 required = true
@@ -52,6 +54,7 @@ type = "string"
 default = ""
 label = "Model"
 description = "The model the provider is asked for."
+keywords = ["gpt", "claude", "llm", "ai"]
 scope = "global"
 choices_exec = "bin/choices"
 

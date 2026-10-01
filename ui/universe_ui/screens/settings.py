@@ -65,6 +65,7 @@ def _setting_row(section, key, setting, value, choices=None, module="", **kw):
     choices = [str(c) for c in setting.get("choices") or []] if choices is None else choices
     label = setting.get("label") or setting["key"]
     row = _row(section, key, label, setting.get("type", "string"), value, choices, module, detail=str(setting.get("description") or ""), **kw)
+    row["keywords"] = [str(k) for k in setting.get("keywords") or []]
     labels = setting.get("choice_labels") or {}
     if labels and choices:
         row["choices"] = [labels.get(c, c) for c in choices]

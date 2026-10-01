@@ -95,6 +95,8 @@ pub struct Setting {
     pub required: bool,
     /// Binaries a chosen value needs, by value; a missing one makes the module unavailable.
     pub requires_bins: BTreeMap<String, Vec<String>>,
+    /// Words a settings search finds the setting by that its label and description do not carry.
+    pub keywords: Vec<String>,
     /// Runner ids whose games show this game-scope setting; empty takes every runner.
     pub runners: Vec<String>,
     /// Platforms whose games show this game-scope setting (`Nintendo Wii`); empty takes every platform.
@@ -115,6 +117,7 @@ impl Default for Setting {
             advanced: false,
             required: false,
             requires_bins: BTreeMap::new(),
+            keywords: vec![],
             runners: vec![],
             platforms: vec![],
         }
@@ -248,6 +251,7 @@ pub fn setting_json(s: &Setting) -> serde_json::Value {
         "dynamic": !s.choices_exec.is_empty(),
         "advanced": s.advanced || s.scope == "config",
         "required": s.required,
+        "keywords": s.keywords,
         "runners": s.runners,
         "platforms": s.platforms,
     })

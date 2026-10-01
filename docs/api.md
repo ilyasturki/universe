@@ -1163,7 +1163,8 @@ A module entry is `{id, name, version, description, dir, enabled, available, mis
 unset: [key], hooks: {}, settings: [Setting], applies: {runner_kinds: [kind]}}`, and
 `Setting` = `{"key", "type": "bool|string|int|enum|path", "default", "label", "description",
 "scope": "global|game", "choices": [], "choice_labels": {value: label}, "dynamic": bool, "required": bool,
-"runners": [id], "platforms": [name]}`.
+"keywords": [word], "runners": [id], "platforms": [name]}`. `keywords` are words a settings search finds the
+setting by that its label and description do not carry (`h265` for a codec).
 A game's page (the `Form::Game` form, every look's game settings) shows a module's game-scope settings
 only on the games `applies.runner_kinds` names by their runner's kind (`emulator`, `proton`, `wine`,
 `linux`), and of those only the settings whose `runners` holds the game's runner (its canonical id) and
@@ -1500,6 +1501,7 @@ choices = ["auto", "120", "60"]   # suggestions on an int or a string; a name am
 label = "Frame rate"              # a few words: the row's name
 description = "Auto follows the screen's refresh rate."   # optional: what it does, under the row
 choice_labels = { auto = "The screen's" }   # optional: what a choice reads as, by stored value; the value is what is written
+keywords = ["fps", "hz"]          # optional: words a settings search finds it by besides its label and description
 
 [[settings]]
 key = "wiimote"

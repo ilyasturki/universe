@@ -35,6 +35,7 @@ type = "enum"
 default = "screen"
 label = "Capture"
 description = "A window is picked once, in the desktop's dialog."
+keywords = ["window", "screen", "capture", "picker"]
 choice_labels = { screen = "The whole screen", window = "One window" }
 scope = "game"
 choices = ["screen", "window"]
@@ -44,6 +45,7 @@ key = "cursor"
 type = "bool"
 default = false
 label = "Show the cursor in the recording"
+keywords = ["mouse", "pointer"]
 scope = "game"
 
 [[settings]]
@@ -52,6 +54,7 @@ type = "enum"
 default = "auto"
 label = "Video codec"
 description = "Auto takes the best the GPU encodes; AV1 keeps files small."
+keywords = ["av1", "hevc", "h264", "h265", "encoder"]
 choice_labels = { auto = "Auto", av1_10bit = "AV1 10-bit", av1 = "AV1", hevc_10bit = "HEVC 10-bit", hevc = "HEVC", h264 = "H.264" }
 scope = "global"
 choices = ["auto", "av1_10bit", "av1", "hevc_10bit", "hevc", "h264"]
@@ -62,6 +65,7 @@ type = "enum"
 default = "very_high"
 label = "Quality"
 description = "Constant quality, held under a bitrate ceiling."
+keywords = ["bitrate", "size", "compression"]
 choice_labels = { medium = "Medium", high = "High", very_high = "Very high", ultra = "Ultra" }
 scope = "global"
 choices = ["medium", "high", "very_high", "ultra"]
@@ -93,6 +97,7 @@ type = "enum"
 default = "mkv"
 label = "Container"
 description = "MKV survives a crash; MP4 plays anywhere."
+keywords = ["mkv", "mp4", "format"]
 choice_labels = { mkv = "MKV", mp4 = "MP4" }
 scope = "global"
 choices = ["mkv", "mp4"]
@@ -104,6 +109,7 @@ type = "enum"
 default = "output"
 label = "Audio"
 description = "Output is what the speakers play; the microphone gets a track of its own."
+keywords = ["sound", "microphone", "tracks"]
 choice_labels = { output = "Output", "output+input" = "Output and microphone", none = "None" }
 scope = "global"
 choices = ["output", "output+input", "none"]
@@ -113,6 +119,7 @@ key = "audio_codec"
 type = "enum"
 default = "opus"
 label = "Audio codec"
+keywords = ["opus", "aac", "sound"]
 choice_labels = { opus = "Opus", aac = "AAC", flac = "FLAC" }
 scope = "global"
 choices = ["opus", "aac", "flac"]
@@ -124,6 +131,7 @@ type = "int"
 default = "auto"
 label = "Audio bitrate"
 description = "In kbps; auto leaves it to gpu-screen-recorder."
+keywords = ["kbps", "sound quality"]
 choice_labels = { auto = "Auto" }
 scope = "global"
 choices = ["auto", "96", "128", "160", "192", "256", "320"]
@@ -135,6 +143,7 @@ type = "int"
 default = 240
 label = "Shortest recording kept"
 description = "In seconds; a shorter recording is thrown away."
+keywords = ["short sessions", "discard", "minimum length"]
 scope = "global"
 advanced = true
 
@@ -144,6 +153,7 @@ type = "int"
 default = 60
 label = "Window wait"
 description = "In seconds: how long the game's window may take before the pick. Past it, the screen is recorded."
+keywords = ["timeout", "delay"]
 scope = "global"
 advanced = true
 

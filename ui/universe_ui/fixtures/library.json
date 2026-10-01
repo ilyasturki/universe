@@ -272,19 +272,21 @@
           "default": "window",
           "label": "Capture",
           "description": "A window is picked once, in the desktop's dialog.",
+          "keywords": ["window", "screen", "capture", "picker"],
           "scope": "game",
           "choices": ["window", "screen"],
           "choice_labels": {"window": "One window", "screen": "The whole screen"},
           "dynamic": false,
           "advanced": false
         },
-        {"key": "cursor", "type": "bool", "default": false, "label": "Show the cursor in the recording", "scope": "game", "dynamic": false, "advanced": false},
+        {"key": "cursor", "type": "bool", "default": false, "label": "Show the cursor in the recording", "keywords": ["mouse", "pointer"], "scope": "game", "dynamic": false, "advanced": false},
         {
           "key": "codec",
           "type": "enum",
           "default": "av1_10bit",
           "label": "Video codec",
           "description": "Auto takes the best the GPU encodes; AV1 keeps files small.",
+          "keywords": ["av1", "hevc", "h264", "h265", "encoder"],
           "choice_labels": {"auto": "Auto", "av1_10bit": "AV1 10-bit", "av1": "AV1", "hevc_10bit": "HEVC 10-bit", "hevc": "HEVC", "h264": "H.264"},
           "scope": "global",
           "choices": ["av1_10bit", "av1", "hevc", "h264"],
@@ -297,6 +299,7 @@
           "default": "very_high",
           "label": "Quality",
           "description": "Constant quality, held under a bitrate ceiling.",
+          "keywords": ["bitrate", "size", "compression"],
           "choice_labels": {"medium": "Medium", "high": "High", "very_high": "Very high", "ultra": "Ultra"},
           "scope": "global",
           "choices": ["medium", "high", "very_high", "ultra"],
@@ -333,6 +336,7 @@
           "default": "mkv",
           "label": "Container",
           "description": "MKV survives a crash; MP4 plays anywhere.",
+          "keywords": ["mkv", "mp4", "format"],
           "choice_labels": {"mkv": "MKV", "mp4": "MP4"},
           "scope": "global",
           "choices": ["mkv", "mp4"],
@@ -345,6 +349,7 @@
           "default": "output+input",
           "label": "Audio",
           "description": "Output is what the speakers play; the microphone gets a track of its own.",
+          "keywords": ["sound", "microphone", "tracks"],
           "choice_labels": {"output": "Output", "output+input": "Output and microphone", "none": "None"},
           "scope": "global",
           "choices": ["output", "output+input", "none"],
@@ -356,6 +361,7 @@
           "type": "enum",
           "default": "opus",
           "label": "Audio codec",
+          "keywords": ["opus", "aac", "sound"],
           "choice_labels": {"opus": "Opus", "aac": "AAC", "flac": "FLAC"},
           "scope": "global",
           "choices": ["opus", "aac", "flac"],
@@ -368,19 +374,21 @@
           "default": "auto",
           "label": "Audio bitrate",
           "description": "In kbps; auto leaves it to gpu-screen-recorder.",
+          "keywords": ["kbps", "sound quality"],
           "choice_labels": {"auto": "Auto"},
           "scope": "global",
           "choices": ["auto", "96", "128", "160", "192", "256", "320"],
           "dynamic": false,
           "advanced": true
         },
-        {"key": "min_duration_s", "type": "int", "default": 240, "label": "Shortest recording kept", "description": "In seconds; a shorter recording is thrown away.", "scope": "global", "dynamic": false, "advanced": true},
+        {"key": "min_duration_s", "type": "int", "default": 240, "label": "Shortest recording kept", "description": "In seconds; a shorter recording is thrown away.", "keywords": ["short sessions", "discard", "minimum length"], "scope": "global", "dynamic": false, "advanced": true},
         {
           "key": "window_wait_s",
           "type": "int",
           "default": 60,
           "label": "Window wait",
           "description": "In seconds: how long the game's window may take before the pick. Past it, the screen is recorded.",
+          "keywords": ["timeout", "delay"],
           "scope": "global",
           "dynamic": false,
           "advanced": true
@@ -427,8 +435,8 @@
       "missing": [],
       "settings": [
         {"key": "enabled", "type": "bool", "default": true, "label": "Write a journal entry after each session", "description": "From the session's recording and screenshots.", "scope": "game", "advanced": false},
-        {"key": "language", "type": "enum", "default": "fr", "label": "Entry language", "description": "Auto writes in the game's on-screen language.", "choice_labels": {"auto": "Auto", "fr": "French", "en": "English", "es": "Spanish", "de": "German", "it": "Italian", "pt": "Portuguese", "ja": "Japanese"}, "scope": "game", "choices": ["fr", "en"], "advanced": false},
-        {"key": "provider", "type": "enum", "default": "", "label": "Writing model", "description": "The provider that writes the entries.", "choice_labels": {"codex": "Codex", "openai": "OpenAI-compatible API", "stub": "Stub (no model)"}, "scope": "global", "choices": ["codex", "openai", "stub"], "required": true, "advanced": false},
+        {"key": "language", "type": "enum", "default": "fr", "label": "Entry language", "description": "Auto writes in the game's on-screen language.", "keywords": ["locale", "french", "english"], "choice_labels": {"auto": "Auto", "fr": "French", "en": "English", "es": "Spanish", "de": "German", "it": "Italian", "pt": "Portuguese", "ja": "Japanese"}, "scope": "game", "choices": ["fr", "en"], "advanced": false},
+        {"key": "provider", "type": "enum", "default": "", "label": "Writing model", "description": "The provider that writes the entries.", "keywords": ["openai", "codex", "claude", "model", "ai"], "choice_labels": {"codex": "Codex", "openai": "OpenAI-compatible API", "stub": "Stub (no model)"}, "scope": "global", "choices": ["codex", "openai", "stub"], "required": true, "advanced": false},
         {"key": "base_url", "type": "string", "default": "https://api.openai.com/v1", "label": "API endpoint", "description": "For the OpenAI-compatible API.", "scope": "global", "advanced": false},
         {"key": "api_key", "type": "string", "default": "", "label": "API key", "description": "For the OpenAI-compatible API.", "scope": "global", "advanced": false},
         {
@@ -437,6 +445,7 @@
           "default": "gpt-5.6-sol",
           "label": "Model",
           "description": "The model the provider is asked for.",
+          "keywords": ["gpt", "claude", "llm", "ai"],
           "scope": "global",
           "choices": [],
           "dynamic": true,
@@ -456,7 +465,7 @@
       "settings": [
         {"key": "enabled", "type": "bool", "default": true, "label": "Take screenshots", "scope": "game", "dynamic": false, "advanced": false},
         {"key": "window", "type": "bool", "default": true, "label": "The game's window alone, not every monitor", "scope": "game", "dynamic": false, "advanced": false},
-        {"key": "cursor", "type": "bool", "default": false, "label": "Show the cursor in screenshots", "scope": "game", "dynamic": false, "advanced": false}
+        {"key": "cursor", "type": "bool", "default": false, "label": "Show the cursor in screenshots", "keywords": ["mouse", "pointer"], "scope": "game", "dynamic": false, "advanced": false}
       ]
     },
     {
@@ -537,10 +546,10 @@
       "capabilities": ["achievements"],
       "login": {"kind": "code", "hint": "Sign in at the link. The address it lands on ends in code=…: enter what follows code=, or the whole address.", "purpose": "install games"},
       "settings": [
-        {"key": "games_dir", "type": "path", "default": "/mnt/games/PC", "label": "Install folder", "description": "Empty installs into the library's games folder.", "scope": "global", "choices": [], "dynamic": false, "advanced": false},
-        {"key": "scan_dirs", "type": "string", "default": "", "label": "Scanned folders", "description": "Comma-separated; empty scans the install folder.", "scope": "global", "choices": [], "dynamic": false, "advanced": true},
-        {"key": "platform", "type": "enum", "default": "windows", "label": "Depot platform", "description": "The depot gogdl downloads; a Windows build runs through Proton.", "choice_labels": {"windows": "Windows", "linux": "Linux"}, "scope": "global", "choices": ["windows", "linux"], "dynamic": false, "advanced": false},
-        {"key": "with_dlcs", "type": "bool", "default": true, "label": "Install owned DLCs", "description": "Installs the DLCs you own along with the game.", "scope": "global", "choices": [], "dynamic": false, "advanced": false},
+        {"key": "games_dir", "type": "path", "default": "/mnt/games/PC", "label": "Install folder", "description": "Empty installs into the library's games folder.", "keywords": ["install folder", "directory"], "scope": "global", "choices": [], "dynamic": false, "advanced": false},
+        {"key": "scan_dirs", "type": "string", "default": "", "label": "Scanned folders", "description": "Comma-separated; empty scans the install folder.", "keywords": ["scan", "folders", "detect"], "scope": "global", "choices": [], "dynamic": false, "advanced": true},
+        {"key": "platform", "type": "enum", "default": "windows", "label": "Depot platform", "description": "The depot gogdl downloads; a Windows build runs through Proton.", "keywords": ["windows", "linux", "depot"], "choice_labels": {"windows": "Windows", "linux": "Linux"}, "scope": "global", "choices": ["windows", "linux"], "dynamic": false, "advanced": false},
+        {"key": "with_dlcs", "type": "bool", "default": true, "label": "Install owned DLCs", "description": "Installs the DLCs you own along with the game.", "keywords": ["dlc", "expansions", "addons"], "scope": "global", "choices": [], "dynamic": false, "advanced": false},
         {"key": "auth_path", "type": "path", "default": "~/.config/gogdl/auth.json", "label": "gogdl token file", "description": "The token file gogdl writes at login.", "scope": "global", "choices": [], "dynamic": false, "advanced": true},
         {"key": "install_timeout_s", "type": "int", "default": 7200, "label": "Install time limit", "description": "In seconds; a longer install or update is stopped.", "scope": "global", "choices": [], "dynamic": false, "advanced": true},
         {"key": "achievements", "type": "bool", "default": true, "label": "Achievements", "description": "Comet stands in for GOG Galaxy, so games unlock theirs.", "scope": "game", "choices": [], "dynamic": false, "advanced": false}
@@ -561,8 +570,8 @@
       "capabilities": ["achievements", "uninstall"],
       "login": {"kind": "code", "hint": "Sign in at the link, then enter the authorizationCode the page shows, or the whole page.", "purpose": "install games"},
       "settings": [
-        {"key": "games_dir", "type": "path", "default": "/mnt/games/PC", "label": "Install folder", "description": "Empty installs into the library's games folder.", "scope": "global", "choices": [], "dynamic": false, "advanced": false},
-        {"key": "with_dlcs", "type": "bool", "default": true, "label": "Install owned DLCs", "scope": "global", "choices": [], "dynamic": false, "advanced": false},
+        {"key": "games_dir", "type": "path", "default": "/mnt/games/PC", "label": "Install folder", "description": "Empty installs into the library's games folder.", "keywords": ["install folder", "directory"], "scope": "global", "choices": [], "dynamic": false, "advanced": false},
+        {"key": "with_dlcs", "type": "bool", "default": true, "label": "Install owned DLCs", "keywords": ["dlc", "expansions", "addons"], "scope": "global", "choices": [], "dynamic": false, "advanced": false},
         {"key": "achievements", "type": "bool", "default": true, "label": "Achievements", "description": "Fetched from Epic after each session.", "scope": "game", "choices": [], "dynamic": false, "advanced": false}
       ]
     },
@@ -581,8 +590,8 @@
       "capabilities": ["uninstall"],
       "login": {"kind": "key", "hint": "Open the link, generate an API key, then enter it.", "purpose": "install games"},
       "settings": [
-        {"key": "games_dir", "type": "path", "default": "/mnt/games/PC", "label": "Install folder", "description": "Empty installs into the library's games folder.", "scope": "global", "choices": [], "dynamic": false, "advanced": false},
-        {"key": "platform", "type": "enum", "default": "linux", "label": "Build to install when a game has both", "choice_labels": {"linux": "Linux", "windows": "Windows"}, "scope": "global", "choices": ["linux", "windows"], "dynamic": false, "advanced": false}
+        {"key": "games_dir", "type": "path", "default": "/mnt/games/PC", "label": "Install folder", "description": "Empty installs into the library's games folder.", "keywords": ["install folder", "directory"], "scope": "global", "choices": [], "dynamic": false, "advanced": false},
+        {"key": "platform", "type": "enum", "default": "linux", "label": "Build to install when a game has both", "keywords": ["windows", "linux", "depot"], "choice_labels": {"linux": "Linux", "windows": "Windows"}, "scope": "global", "choices": ["linux", "windows"], "dynamic": false, "advanced": false}
       ]
     },
     {

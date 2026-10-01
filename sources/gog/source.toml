@@ -42,6 +42,7 @@ type = "path"
 default = ""
 label = "Install folder"
 description = "Empty installs into the library's games folder."
+keywords = ["install folder", "directory"]
 
 [[settings]]
 key = "scan_dirs"
@@ -49,6 +50,7 @@ type = "string"
 default = ""
 label = "Scanned folders"
 description = "Comma-separated; empty scans the install folder."
+keywords = ["scan", "folders", "detect"]
 advanced = true
 
 [[settings]]
@@ -57,6 +59,7 @@ type = "enum"
 default = "windows"
 label = "Depot platform"
 description = "The depot gogdl downloads; a Windows build runs through Proton."
+keywords = ["windows", "linux", "depot"]
 choice_labels = { windows = "Windows", linux = "Linux" }
 choices = ["windows", "linux"]
 
@@ -66,6 +69,7 @@ type = "bool"
 default = true
 label = "Install owned DLCs"
 description = "Installs the DLCs you own along with the game."
+keywords = ["dlc", "expansions", "addons"]
 
 [[settings]]
 key = "auth_path"

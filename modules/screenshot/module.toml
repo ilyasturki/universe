@@ -27,4 +27,5 @@ key = "cursor"
 type = "bool"
 default = false
 label = "Show the cursor in screenshots"
+keywords = ["mouse", "pointer"]
 scope = "game"

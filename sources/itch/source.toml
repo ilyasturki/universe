@@ -27,12 +27,14 @@ type = "path"
 default = ""
 label = "Install folder"
 description = "Empty installs into the library's games folder."
+keywords = ["install folder", "directory"]
 
 [[settings]]
 key = "platform"
 type = "enum"
 default = "linux"
 label = "Build to install when a game has both"
+keywords = ["windows", "linux", "depot"]
 choice_labels = { linux = "Linux", windows = "Windows" }
 choices = ["linux", "windows"]
 
