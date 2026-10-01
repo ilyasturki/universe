@@ -241,7 +241,6 @@ FocusScope {
         anchors.right: parent.right
         sideMargin: grid.sideMargin
         store: panel.trophies
-        pane: false
         visible: panel.showsAchievements
     }
 
@@ -312,7 +311,7 @@ FocusScope {
             else if (event.key === Qt.Key_Down)
                 list.step(1);
             else if (screen)
-                list.step(screen * 5);
+                list.step(screen * list.perScreen);
             else
                 Sound.edge();
             return;

@@ -9,6 +9,7 @@ Rectangle {
     property bool unlocked: true
     property bool checked: false
     property color tint: Theme.text
+    property color checkInk: Theme.onLight
 
     radius: width * 0.18
     color: Qt.rgba(1, 1, 1, unlocked ? 0.1 : 0.05)
@@ -36,21 +37,21 @@ Rectangle {
     }
 
     Rectangle {
-        visible: badge.checked
+        visible: badge.checked && !art.visible
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         anchors.margins: parent.width * 0.05
         width: parent.width * 0.34
         height: width
         radius: width / 2
-        color: Theme.text
+        color: badge.tint
 
         MenuGlyph {
             anchors.centerIn: parent
             width: parent.width * 0.62
             height: width
             kind: "check"
-            tint: Theme.onLight
+            tint: badge.checkInk
         }
     }
 }

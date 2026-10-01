@@ -2,20 +2,17 @@ import QtQuick
 import "../core"
 import "../sound"
 
-// A game's achievements as a list, the lit one told in full beside it: the Achievements page and the dock's tray.
+// A game's achievements in one column, each row with its description and its date once unlocked, its rarity while locked: the Achievements page and the dock's tray.
 Item {
     id: list
 
     property var store: null
     property int index: 0
     property real sideMargin: Theme.dp(90)
-    property real listWidth: Theme.dp(760)
-    // Off (the dock's tray): the list alone, each row with its description and date.
-    property bool pane: true
-    readonly property real rowHeight: Theme.dp(pane ? 104 : 92)
+    readonly property real rowHeight: Theme.dp(80)
+    readonly property int perScreen: Math.max(1, Math.floor((view.height + view.spacing) / (rowHeight + view.spacing)))
 
     readonly property var rows: store ? store.rows : []
-    readonly property var current: index >= 0 && index < rows.length ? rows[index] : null
 
     onRowsChanged: {
         if (index >= rows.length)
@@ -48,8 +45,8 @@ Item {
         anchors.right: parent.right
         anchors.leftMargin: list.sideMargin
         anchors.rightMargin: list.sideMargin
-        height: list.pane ? 0 : count.height + Theme.dp(28)
-        visible: !list.pane && list.rows.length > 0
+        height: count.height + Theme.dp(24)
+        visible: list.rows.length > 0
 
         Text {
             id: count
@@ -68,6 +65,7 @@ Item {
             height: Theme.dp(6)
             radius: height / 2
             color: Theme.surface
+            visible: list.store.error === ""
 
             Rectangle {
                 width: list.store.total > 0 ? parent.width * list.store.unlocked / list.store.total : 0
@@ -75,6 +73,20 @@ Item {
                 radius: parent.radius
                 color: Theme.text
             }
+        }
+
+        // A refresh that failed keeps the list it had.
+        Text {
+            anchors.left: count.right
+            anchors.leftMargin: Theme.dp(24)
+            anchors.right: parent.right
+            anchors.verticalCenter: count.verticalCenter
+            visible: list.store.error !== ""
+            text: list.store.error
+            color: Theme.danger
+            font.family: Theme.sans
+            font.pixelSize: Theme.dp(20)
+            elide: Text.ElideRight
         }
     }
 
@@ -88,13 +100,14 @@ Item {
         anchors.top: tally.bottom
         anchors.bottom: parent.bottom
         anchors.left: parent.left
+        anchors.right: parent.right
         anchors.leftMargin: list.sideMargin
-        width: list.pane ? list.listWidth : list.width - list.sideMargin * 2
+        anchors.rightMargin: list.sideMargin
         model: list.rows
         currentIndex: list.index
         interactive: false
         clip: true
-        spacing: Theme.dp(12)
+        spacing: Theme.dp(8)
         highlightFollowsCurrentItem: true
         highlightMoveDuration: Theme.durNudge
         preferredHighlightBegin: 0
@@ -109,9 +122,9 @@ Item {
             lit: index === list.index
             muted: !modelData.unlocked
             title: modelData.name
-            subtitle: !list.pane ? modelData.description : modelData.unlocked ? modelData.dateText : modelData.rarityText !== "" ? modelData.rarityText : "Locked"
-            trailing: !list.pane && modelData.unlocked ? modelData.dateText : ""
-            leadWidth: Theme.dp(72)
+            subtitle: modelData.description
+            trailing: modelData.unlocked ? modelData.dateText : modelData.rarityText
+            leadWidth: Theme.dp(56)
             gap: Theme.dp(20)
 
             Pointer {
@@ -122,111 +135,14 @@ Item {
 
             AchievementBadge {
                 anchors.verticalCenter: parent.verticalCenter
-                width: Theme.dp(72)
+                width: Theme.dp(56)
                 height: width
                 icon: modelData.icon
                 unlocked: modelData.unlocked
                 checked: modelData.unlocked
                 tint: entry.lit ? Theme.onLight : Theme.text
+                checkInk: entry.lit ? Theme.text : Theme.onLight
             }
-        }
-    }
-
-    Column {
-        id: pane
-
-        anchors.top: view.top
-        anchors.left: view.right
-        anchors.leftMargin: Theme.dp(64)
-        anchors.right: parent.right
-        anchors.rightMargin: list.sideMargin
-        spacing: Theme.dp(18)
-        visible: list.pane && list.rows.length > 0
-
-        Text {
-            text: list.store.unlocked + " of " + list.store.total + " unlocked"
-            color: Theme.text
-            font.family: Theme.sans
-            font.weight: Font.DemiBold
-            font.pixelSize: Theme.dp(34)
-        }
-
-        Rectangle {
-            width: parent.width
-            height: Theme.dp(10)
-            radius: height / 2
-            color: Theme.surface
-
-            Rectangle {
-                width: list.store.total > 0 ? parent.width * list.store.unlocked / list.store.total : 0
-                height: parent.height
-                radius: parent.radius
-                color: Theme.text
-
-                Behavior on width {
-                    Ease {
-                        duration: Theme.durView
-                    }
-                }
-            }
-        }
-
-        Text {
-            width: parent.width
-            text: list.store.loading ? "Asking the store…" : list.store.error !== "" ? list.store.error : list.store.fetchedText !== "" ? "From the store on " + list.store.fetchedText : ""
-            color: list.store.error !== "" ? "#f0757a" : Theme.textMuted
-            font.family: Theme.sans
-            font.pixelSize: Theme.dp(20)
-            elide: Text.ElideRight
-        }
-
-        Item {
-            width: parent.width
-            height: Theme.dp(24)
-        }
-
-        AchievementBadge {
-            width: Theme.dp(160)
-            height: width
-            icon: list.current ? list.current.icon : ""
-            unlocked: list.current ? list.current.unlocked : false
-        }
-
-        Text {
-            width: parent.width
-            text: list.current ? list.current.name : ""
-            color: Theme.text
-            font.family: Theme.sans
-            font.weight: Font.DemiBold
-            font.pixelSize: Theme.dp(32)
-            wrapMode: Text.WordWrap
-        }
-
-        Text {
-            width: parent.width
-            visible: text !== ""
-            text: list.current ? list.current.description : ""
-            color: Theme.textSecondary
-            font.family: Theme.sans
-            font.pixelSize: Theme.dp(24)
-            wrapMode: Text.WordWrap
-        }
-
-        Text {
-            width: parent.width
-            text: !list.current ? "" : list.current.unlocked ? "Unlocked " + list.current.dateText : "Locked"
-            color: list.current && list.current.unlocked ? Theme.text : Theme.textMuted
-            font.family: Theme.sans
-            font.pixelSize: Theme.dp(22)
-        }
-
-        Text {
-            width: parent.width
-            visible: text !== ""
-            text: list.current ? list.current.rarityText : ""
-            color: Theme.textMuted
-            font.family: Theme.sans
-            font.pixelSize: Theme.dp(22)
         }
     }
 }

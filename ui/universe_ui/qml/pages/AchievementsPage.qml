@@ -55,7 +55,7 @@ FocusScope {
         } else if (vertical) {
             list.step(event.key === Qt.Key_Up ? -1 : 1);
         } else if (screen) {
-            list.step(screen * 5);
+            list.step(screen * list.perScreen);
         } else if (api.keys.isFirst(event) || api.keys.isLast(event)) {
             list.step((api.keys.isFirst(event) ? -1 : 1) * list.rows.length);
         } else {
