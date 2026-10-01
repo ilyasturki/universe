@@ -15,7 +15,7 @@ struct Display {
 
 impl Display {
     fn open() -> Result<Display, String> {
-        let (conn, screen) = x11rb::connect(super::x11_display().flatten().as_deref()).map_err(xerr)?;
+        let (conn, screen) = x11rb::connect(super::x11_display().as_deref()).map_err(xerr)?;
         let root = conn.setup().roots[screen].root;
         Ok(Display { conn, root })
     }

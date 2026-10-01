@@ -59,8 +59,26 @@ pub fn detect(config: &Config) -> Profile {
     }
 }
 
+/// What gamescope sets for its children (`XDG_CURRENT_DESKTOP=gamescope`, `XDG_SESSION_TYPE=x11`, its Xwayland's `DISPLAY`, no
+/// `WAYLAND_DISPLAY`): the launcher's own nested gamescope hands the desktop's on as `UNIVERSE_HOST_<VAR>`, empty where it had none.
+pub const HOST_VARS: [&str; 4] = ["XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE", "DISPLAY", "WAYLAND_DISPLAY"];
+
+pub fn host_var(key: &str) -> String {
+    format!("UNIVERSE_HOST_{key}")
+}
+
+fn handed() -> bool {
+    crate::nest::inside() && std::env::var_os(host_var("XDG_SESSION_TYPE")).is_some()
+}
+
+/// Inside a gamescope that handed the desktop's variables on, those, and no `GAMESCOPE_WAYLAND_DISPLAY`: that one is gamescope's.
 fn env(key: &str) -> Option<String> {
-    std::env::var(key).ok().filter(|v| !v.is_empty())
+    let name = match key {
+        "GAMESCOPE_WAYLAND_DISPLAY" if handed() => return None,
+        k if HOST_VARS.contains(&k) && handed() => host_var(k),
+        k => k.to_string(),
+    };
+    std::env::var(name).ok().filter(|v| !v.is_empty())
 }
 
 /// The compositors' own sockets first: XDG_CURRENT_DESKTOP is whatever the session file claims.
@@ -96,15 +114,12 @@ fn x11_session(var: &impl Fn(&str) -> Option<String>) -> bool {
         || (var("GAMESCOPE_WAYLAND_DISPLAY").is_none() && var("DISPLAY").is_some() && var("WAYLAND_DISPLAY").is_none())
 }
 
-/// The desktop's X server, not gamescope's: from inside the launcher's nested gamescope, the display it was started on.
-fn x11_display() -> Option<Option<String>> {
-    if !x11_session(&env) {
+/// The desktop's X server, never the Xwayland of a gamescope that handed nothing on.
+fn x11_display() -> Option<String> {
+    if (crate::nest::inside() && !handed()) || !x11_session(&env) {
         return None;
     }
-    if crate::nest::inside() {
-        return env(crate::nest::HOST_DISPLAY_ENV).map(Some);
-    }
-    Some(None)
+    env("DISPLAY")
 }
 
 fn x11_reachable() -> bool {
@@ -624,19 +639,21 @@ mod tests {
     }
 
     #[test]
-    fn inside_the_nested_gamescope_the_x11_desktop_is_the_display_it_started_on() {
+    fn inside_the_nested_gamescope_the_desktop_is_the_one_it_started_on() {
         let _env = crate::paths::test_env();
-        std::env::remove_var("GAMESCOPE_WAYLAND_DISPLAY");
-        std::env::set_var("XDG_SESSION_TYPE", "x11");
-        std::env::set_var("DISPLAY", ":0");
-        assert_eq!(x11_display(), Some(None), "the desktop's own DISPLAY");
-        std::env::set_var("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0");
-        std::env::set_var("DISPLAY", ":1");
-        assert_eq!(x11_display(), None, "gamescope's Xwayland is no desktop");
-        std::env::set_var(crate::nest::HOST_DISPLAY_ENV, ":0");
-        assert_eq!(x11_display(), Some(Some(":0".into())));
-        std::env::set_var("XDG_SESSION_TYPE", "wayland");
-        assert_eq!(x11_display(), None, "a Wayland desktop is asked over its own socket");
+        for var in ["GAMESCOPE_WAYLAND_DISPLAY", "WAYLAND_DISPLAY", "SWAYSOCK", "HYPRLAND_INSTANCE_SIGNATURE", "NIRI_SOCKET"] {
+            std::env::remove_var(var);
+        }
+        let set = |pairs: &[(&str, &str)]| pairs.iter().for_each(|(k, v)| std::env::set_var(k, v));
+        set(&[("XDG_SESSION_TYPE", "x11"), ("DISPLAY", ":0")]);
+        assert_eq!(x11_display().as_deref(), Some(":0"));
+        set(&[("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0"), ("XDG_CURRENT_DESKTOP", "gamescope"), ("DISPLAY", ":1")]);
+        assert_eq!(x11_display(), None, "a gamescope that handed nothing on: its Xwayland is no desktop");
+        let host = |pairs: &[(&str, &str)]| pairs.iter().for_each(|(k, v)| std::env::set_var(host_var(k), v));
+        host(&[("XDG_CURRENT_DESKTOP", ""), ("XDG_SESSION_TYPE", "x11"), ("DISPLAY", ":0"), ("WAYLAND_DISPLAY", "")]);
+        assert_eq!((from_env(&env), x11_display().as_deref()), (Profile::X11, Some(":0")));
+        host(&[("XDG_CURRENT_DESKTOP", "GNOME"), ("XDG_SESSION_TYPE", "wayland"), ("WAYLAND_DISPLAY", "wayland-0")]);
+        assert_eq!((from_env(&env), x11_display()), (Profile::Gnome, None), "GNOME's Xwayland is no X11 desktop");
     }
 
     #[test]

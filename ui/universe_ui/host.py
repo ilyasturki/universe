@@ -19,8 +19,8 @@ QML_DIR = Path(__file__).parent / "qml"
 READY_ENV = "UNIVERSE_HOST_READY"
 # The core's nest::OWN_ENV: the gamescope started here is the launcher's, not Steam's.
 OWN_ENV = "UNIVERSE_OWN_GAMESCOPE"
-# The core's nest::HOST_DISPLAY_ENV: inside its gamescope DISPLAY is gamescope's, and an X11 desktop is asked who has the focus.
-HOST_DISPLAY_ENV = "UNIVERSE_HOST_DISPLAY"
+# The core's desktop::HOST_VARS: gamescope sets its own for its children, and the core inside asks the desktop who has the focus.
+HOST_VARS = ("XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE", "DISPLAY", "WAYLAND_DISPLAY")
 # A gamescope that fails to start mostly exits at once; one that hangs (NVIDIA) shows nothing at all.
 READY_S = 30
 # Qt's dispatcher polling a closed fd: its notifier can no longer be unregistered, so the loop spins for good.
@@ -204,9 +204,7 @@ def run_in_gamescope(command, argv, ready_s=READY_S):
     ready = Path(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()) / f"universe-ui-ready-{os.getpid()}"
     ready.unlink(missing_ok=True)
     own = "nested" if os.environ.get("WAYLAND_DISPLAY") or os.environ.get("DISPLAY") else "drm"
-    env = {**os.environ, READY_ENV: str(ready), OWN_ENV: own}
-    if os.environ.get("DISPLAY"):
-        env[HOST_DISPLAY_ENV] = os.environ["DISPLAY"]
+    env = {**os.environ, READY_ENV: str(ready), OWN_ENV: own, **{f"UNIVERSE_HOST_{var}": os.environ.get(var, "") for var in HOST_VARS}}
     proc = subprocess.Popen(gamescope_argv(command, argv), env=env)
     stopping = []
 

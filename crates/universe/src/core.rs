@@ -82,7 +82,6 @@ pub(crate) fn passthrough_env() -> BTreeMap<String, String> {
         "RUST_LOG",
         "GAMESCOPE_WAYLAND_DISPLAY",
         crate::nest::OWN_ENV,
-        crate::nest::HOST_DISPLAY_ENV,
         "STEAM_GAME_DISPLAY_0",
         "SDL_VIDEODRIVER",
         "SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS",
@@ -90,6 +89,11 @@ pub(crate) fn passthrough_env() -> BTreeMap<String, String> {
     ] {
         if let Ok(v) = std::env::var(k) {
             env.insert(k.to_string(), v);
+        }
+    }
+    for var in crate::desktop::HOST_VARS.map(crate::desktop::host_var) {
+        if let Ok(v) = std::env::var(&var) {
+            env.insert(var, v);
         }
     }
     env.insert("PATH".into(), crate::tools::search_path().to_string_lossy().into_owned());
