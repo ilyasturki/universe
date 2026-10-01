@@ -752,6 +752,8 @@ class GameSettingsForm(RowsForm):
 
 def _state(entry):
     if not entry.get("available", True):
+        if entry.get("incompatible"):
+            return "unavailable: " + str(entry["incompatible"])
         missing = ", ".join(entry.get("missing") or [])
         return "unavailable" + (f": missing {missing}" if missing else "")
     return ""

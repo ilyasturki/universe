@@ -630,6 +630,11 @@ fn joined(v: &Value, sep: &str) -> String {
     v.as_array().map(|a| a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(sep)).unwrap_or_default()
 }
 
+/// A module's or a source's Missing column: the Universe it needs, else its missing binaries.
+fn missing(m: &Value) -> String {
+    m["incompatible"].as_str().filter(|i| !i.is_empty()).map(String::from).unwrap_or_else(|| joined(&m["missing"], ","))
+}
+
 fn hours(v: &Value) -> String {
     let h = v["stats"]["hours"].as_f64().unwrap_or(0.0);
     if h == 0.0 {
@@ -681,7 +686,7 @@ fn print_sources(list: &[Value], json: bool) -> anyhow::Result<()> {
             s(m, "version"),
             flag(&m["enabled"]),
             flag(&m["available"]),
-            joined(&m["missing"], ","),
+            missing(m),
             m["library_cached"].to_string(),
             s(m, "games_dir"),
         ]);
@@ -1311,15 +1316,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 let mut t = table(&["Id", "Name", "Version", "Enabled", "Available", "Missing", "Hooks"]);
                 for m in list {
                     let hooks: Vec<String> = m["hooks"].as_object().map(|o| o.keys().cloned().collect()).unwrap_or_default();
-                    t.add_row(vec![
-                        s(&m, "id"),
-                        s(&m, "name"),
-                        s(&m, "version"),
-                        flag(&m["enabled"]),
-                        flag(&m["available"]),
-                        joined(&m["missing"], ","),
-                        hooks.join(","),
-                    ]);
+                    t.add_row(vec![s(&m, "id"), s(&m, "name"), s(&m, "version"), flag(&m["enabled"]), flag(&m["available"]), missing(&m), hooks.join(",")]);
                 }
                 println!("{t}");
             }

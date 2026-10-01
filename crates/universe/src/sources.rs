@@ -67,6 +67,8 @@ pub struct Source {
     pub enabled: bool,
     pub available: bool,
     pub missing: Vec<String>,
+    /// Why `[requires] core` rules out this Universe; empty when it fits.
+    pub incompatible: String,
 }
 
 impl Source {
@@ -85,6 +87,10 @@ impl Source {
     }
     pub fn active(&self) -> bool {
         self.enabled && self.available
+    }
+    /// Why the source is unavailable: the Universe its manifest asks for, else the binaries it misses.
+    pub fn unavailable(&self) -> String {
+        modules::unavailable(&self.incompatible, &self.missing)
     }
     pub fn can(&self, capability: &str) -> bool {
         self.manifest.capabilities.iter().any(|c| c == capability)
@@ -108,6 +114,7 @@ impl Source {
             "enabled": self.enabled,
             "available": self.available,
             "missing": self.missing,
+            "incompatible": self.incompatible,
             "capabilities": self.manifest.capabilities,
             "hooks": hooks,
             "settings": self.manifest.settings.iter().map(modules::setting_json).collect::<Vec<_>>(),
@@ -156,8 +163,9 @@ pub fn discover(config: &Config) -> Vec<Source> {
         })
         .map(|(dir, m)| {
             let missing = modules::missing_bins(&m.requires);
+            let incompatible = modules::incompatible(&m.requires);
             let enabled = config.sources.enabled.iter().any(|e| e == &m.id);
-            Source { available: missing.is_empty(), missing, enabled, dir, manifest: m }
+            Source { available: missing.is_empty() && incompatible.is_empty(), missing, incompatible, enabled, dir, manifest: m }
         })
         .collect()
 }
@@ -287,7 +295,7 @@ choices = ["windows", "linux"]
 "#,
         )
         .unwrap();
-        let source = Source { available: false, missing: vec!["x".into()], enabled: true, dir: PathBuf::from("/s"), manifest: m };
+        let source = Source { available: false, missing: vec!["x".into()], incompatible: String::new(), enabled: true, dir: PathBuf::from("/s"), manifest: m };
         let cfg: Config = toml::from_str("[paths]\ngames_root = \"/mnt/games\"\n[sources.gog]\nplatform = \"linux\"").unwrap();
         let merged = source.merged_settings(&cfg, None);
         assert_eq!(merged["games_dir"], "/mnt/games", "an empty games_dir is paths.games_root");

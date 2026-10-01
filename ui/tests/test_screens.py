@@ -176,6 +176,14 @@ def test_a_module_setting_shows_on_the_games_it_applies_to(api, fake, game, show
     assert list(rows_by_key(form, "controls")) == shown
 
 
+def test_a_module_for_another_universe_says_which(api, fake):
+    why = "needs Universe >=9.0.0, this is 0.0.9"
+    next(m for m in fake.core._data["modules"] if m["id"] == "journal").update(available=False, missing=[], incompatible=why)
+    form = api.screens.module
+    form.load("journal")
+    assert why in form.info["warning"] and "missing" not in form.info["warning"]
+
+
 def test_modules_list(api, fake):
     journal_module = next(m for m in fake.core._data["modules"] if m["id"] == "journal")
     journal_module.update(enabled=False, available=False, missing=["ffmpeg"])

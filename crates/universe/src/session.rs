@@ -156,7 +156,7 @@ impl Core {
         base.set("SESSION_STARTED_AT", started.to_rfc3339());
 
         for m in self.modules.read().await.iter().filter(|m| m.enabled && !m.available) {
-            tracing::warn!("module {} is enabled but its hooks are skipped: missing {} (see `universe doctor`)", m.id(), m.missing.join(", "));
+            tracing::warn!("module {} is enabled but its hooks are skipped: {} (see `universe doctor`)", m.id(), m.unavailable());
         }
         let env_file = paths::state_home().join(format!("env-{session_id}"));
         std::fs::create_dir_all(paths::state_home())?;

@@ -506,6 +506,11 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
         if !m.enabled {
             continue;
         }
+        if !m.incompatible.is_empty() {
+            let fix = format!("update Universe or the {} module, or turn it off", m.manifest.name);
+            push("requires-core", "Universe version", false, m.incompatible.clone(), fix, m.id());
+            continue;
+        }
         if !m.needs_setup() {
             reported.extend(hook_checks(Hooker::Module(m.clone()), config).await);
         }
@@ -526,6 +531,11 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
         }
     }
     for m in sources.iter().filter(|m| m.enabled) {
+        if !m.incompatible.is_empty() {
+            let fix = format!("update Universe or the {} source, or turn it off", m.manifest.name);
+            push("requires-core", "Universe version", false, m.incompatible.clone(), fix, m.id());
+            continue;
+        }
         for b in &m.manifest.requires.bins {
             let (ok, detail) = match (which(b), crate::tools::find(b)) {
                 (Some(path), _) => (true, path),
@@ -638,7 +648,7 @@ choices = ["codex"]
 "#,
         )
         .unwrap();
-        Module { available: true, missing: vec![], unset: vec![], enabled: true, dir: dir.to_path_buf(), manifest }
+        Module { available: true, missing: vec![], incompatible: String::new(), unset: vec![], enabled: true, dir: dir.to_path_buf(), manifest }
     }
 
     #[tokio::test]
@@ -690,7 +700,7 @@ echo '{"check":"gog-comet","label":"GOG achievements (comet)","ok":false,"detail
             "id = \"gog\"\nname = \"GOG\"\nexe = \"bin/source\"\n[hooks]\ncheck = \"bin/check\"\n[[settings]]\nkey = \"achievements\"\ntype = \"bool\"\ndefault = true\n",
         )
         .unwrap();
-        let source = Source { available: true, missing: vec![], enabled: true, dir: env.path().to_path_buf(), manifest };
+        let source = Source { available: true, missing: vec![], incompatible: String::new(), enabled: true, dir: env.path().to_path_buf(), manifest };
         let checks = hook_checks(Hooker::Source(source), &toml::from_str("").unwrap()).await;
         let seen: Vec<_> = checks.iter().map(|c| (c.check.as_str(), c.ok, c.module.as_str(), c.component.as_str())).collect();
         assert_eq!(seen, [("gog-comet", false, "gog", "comet")]);

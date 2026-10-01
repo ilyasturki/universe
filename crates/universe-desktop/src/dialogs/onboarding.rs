@@ -36,6 +36,9 @@ fn unusable(via: &str, sources: &[Value]) -> Option<String> {
     }
     match sources.iter().find(|s| s["id"] == via) {
         None => Some(gettext("no {} source").replace("{}", via)),
+        Some(s) if s["available"].as_bool() == Some(false) && s["incompatible"].as_str().is_some_and(|i| !i.is_empty()) => {
+            s["incompatible"].as_str().map(String::from)
+        }
         Some(s) if s["available"].as_bool() == Some(false) => {
             let missing: Vec<&str> = s["missing"].as_array().map(|m| m.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
             Some(gettext("needs {}").replace("{}", &if missing.is_empty() { gettext("its programs") } else { missing.join(", ") }))

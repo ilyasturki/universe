@@ -39,6 +39,7 @@ impl Applies {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct Requires {
+    /// Comparators on Universe's version, comma-separated (`>=0.1.0, <0.2.0`); a bare version means `>=`, empty takes any.
     pub core: String,
     pub bins: Vec<String>,
     /// System tools (`components::SYSTEM` ids) Universe proposes to install while the module is on.
@@ -131,6 +132,8 @@ pub struct Module {
     pub enabled: bool,
     pub available: bool,
     pub missing: Vec<String>,
+    /// Why `[requires] core` rules out this Universe; empty when it fits.
+    pub incompatible: String,
     /// `required` settings still without a value: the module is enabled but does nothing.
     pub unset: Vec<String>,
 }
@@ -154,6 +157,11 @@ impl Module {
         self.enabled && self.available
     }
 
+    /// Why the module is unavailable: the Universe its manifest asks for, else the binaries it misses.
+    pub fn unavailable(&self) -> String {
+        unavailable(&self.incompatible, &self.missing)
+    }
+
     /// Enabled and available, but a `required` setting has no value: its hooks run and do nothing.
     pub fn needs_setup(&self) -> bool {
         self.enabled && self.available && !self.unset.is_empty()
@@ -172,6 +180,7 @@ impl Module {
             "enabled": self.enabled,
             "available": self.available,
             "missing": self.missing,
+            "incompatible": self.incompatible,
             "unset": self.unset,
             "hooks": hooks,
             "settings": self.settings_json(),
@@ -308,6 +317,49 @@ pub fn read_manifests<M: serde::de::DeserializeOwned>(
     found
 }
 
+pub(crate) fn unavailable(incompatible: &str, missing: &[String]) -> String {
+    if incompatible.is_empty() {
+        format!("missing {}", missing.join(", "))
+    } else {
+        incompatible.to_string()
+    }
+}
+
+fn version(text: &str) -> Option<(u64, u64, u64)> {
+    let mut parts = text.split('.').map(|p| p.parse::<u64>().ok());
+    let v = (parts.next()??, parts.next().unwrap_or(Some(0))?, parts.next().unwrap_or(Some(0))?);
+    parts.next().is_none().then_some(v)
+}
+
+/// Whether `running` fits `range`, `[requires] core`'s comparators; `Err` names what cannot be read.
+pub fn core_fits(range: &str, running: &str) -> Result<bool, String> {
+    let running = version(running).ok_or_else(|| format!("Universe's own version {running:?} is not X.Y.Z"))?;
+    let mut fits = true;
+    for comparator in range.split(',').map(str::trim).filter(|c| !c.is_empty()) {
+        let at = comparator.find(|c: char| c.is_ascii_digit()).unwrap_or(comparator.len());
+        let (op, wanted) = comparator.split_at(at);
+        let wanted = version(wanted.trim()).ok_or_else(|| format!("[requires] core {range:?}: {comparator:?} is no version"))?;
+        fits &= match op.trim() {
+            "" | ">=" => running >= wanted,
+            ">" => running > wanted,
+            "<=" => running <= wanted,
+            "<" => running < wanted,
+            "=" => running == wanted,
+            other => return Err(format!("[requires] core {range:?}: {other:?} is no comparator (>=, >, <=, <, =)")),
+        };
+    }
+    Ok(fits)
+}
+
+/// Why `[requires] core` rules out the running Universe, empty when it fits.
+pub fn incompatible(requires: &Requires) -> String {
+    match core_fits(&requires.core, crate::VERSION) {
+        Ok(true) => String::new(),
+        Ok(false) => format!("needs Universe {}, this is {}", requires.core.trim(), crate::VERSION),
+        Err(e) => e,
+    }
+}
+
 pub fn missing_bins(requires: &Requires) -> Vec<String> {
     requires.bins.iter().filter(|b| crate::runners::on_path(b).is_none() && crate::tools::find(b).is_none()).cloned().collect()
 }
@@ -340,8 +392,9 @@ pub fn discover(config: &Config) -> Vec<Module> {
         .into_values()
         .map(|(dir, m)| {
             let (missing, unset) = wants(&m, config.modules.settings.get(&m.id));
+            let incompatible = incompatible(&m.requires);
             let enabled = config.modules.enabled.iter().any(|e| e == &m.id);
-            Module { available: missing.is_empty(), missing, unset, enabled, dir, manifest: m }
+            Module { available: missing.is_empty() && incompatible.is_empty(), missing, incompatible, unset, enabled, dir, manifest: m }
         })
         .collect()
 }
@@ -584,7 +637,15 @@ scope = "config"
 "#,
         )
         .unwrap();
-        let module = Module { available: false, missing: vec!["x".into()], unset: vec![], enabled: true, dir: PathBuf::from("/m"), manifest: m };
+        let module = Module {
+            available: false,
+            missing: vec!["x".into()],
+            incompatible: String::new(),
+            unset: vec![],
+            enabled: true,
+            dir: PathBuf::from("/m"),
+            manifest: m,
+        };
         let cfg: Config = toml::from_str("[modules.capture]\ncodec = \"hevc\"\ngsr_extra_args = \"-cr full\"").unwrap();
         let mut g = crate::game::Game::new("X");
         g.modules.insert("capture".into(), toml::from_str("cursor = true").unwrap());
@@ -612,6 +673,24 @@ scope = "config"
             (Some(false), Some(true)),
             "a config-scope setting is advanced"
         );
+    }
+
+    #[test]
+    fn a_core_range_is_comparators_and_a_bare_version_is_a_floor() {
+        assert_eq!(core_fits("", "0.0.9"), Ok(true));
+        assert_eq!(core_fits("0.0.9", "0.0.9"), Ok(true), "a bare version is >=");
+        assert_eq!(core_fits("0.1", "0.0.9"), Ok(false));
+        assert_eq!(core_fits(">=0.0.5, <0.1.0", "0.0.9"), Ok(true));
+        assert_eq!(core_fits(">=0.0.5, <0.0.9", "0.0.9"), Ok(false));
+        assert_eq!(core_fits("=0.0.9", "0.0.9"), Ok(true));
+        assert!(core_fits("^0.1", "0.0.9").is_err() && core_fits(">=zero", "0.0.9").is_err(), "a range it cannot read never fits");
+        let module = |core: &str| {
+            let m: Manifest = toml::from_str(&format!("id = \"m\"\n[requires]\ncore = \"{core}\"\n")).unwrap();
+            incompatible(&m.requires)
+        };
+        assert_eq!(module(""), "");
+        assert_eq!(module(">=99.0.0"), format!("needs Universe >=99.0.0, this is {}", crate::VERSION));
+        assert!(module("~1").contains("no comparator"), "a malformed range is the reason, not a crash");
     }
 
     #[tokio::test]
@@ -646,7 +725,8 @@ choices_exec = "bin/choices"
 "#,
         )
         .unwrap();
-        let module = Module { available: true, missing: vec![], unset: vec![], enabled: true, dir: env.path().to_path_buf(), manifest: m };
+        let module =
+            Module { available: true, missing: vec![], incompatible: String::new(), unset: vec![], enabled: true, dir: env.path().to_path_buf(), manifest: m };
         let cfg: Config = toml::from_str("").unwrap();
         let settings = module.merged_settings(&cfg, None);
         assert_eq!(setting_choices(&module, &settings, "provider").await.unwrap(), vec!["codex", "claude"]);

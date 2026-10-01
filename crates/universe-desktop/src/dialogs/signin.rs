@@ -18,6 +18,10 @@ fn text(v: &Value, key: &str) -> String {
 pub fn status(source: &Value) -> String {
     let missing: Vec<String> = source["missing"].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
     if source["available"].as_bool() == Some(false) {
+        let incompatible = text(source, "incompatible");
+        if !incompatible.is_empty() {
+            return incompatible;
+        }
         return gettext("Missing {}").replace("{}", &missing.join(", "));
     }
     if source["enabled"].as_bool() != Some(true) {

@@ -1159,7 +1159,7 @@ written whole, missing or not.
 | `doctor()` | `doctor()` | `universe doctor` | `[{check, label, ok, detail, fix, module, component}]` (`component` the component whose install fixes it — a runner not found, a fetched tool, the default Proton's family when the catalogue has a build for it, a system tool PackageKit can install — else empty; `components-fhs` on NixOS once Universe holds a downloaded runner; `check` a stable id, `label` its plain name, `detail` the problem when not `ok`, `fix` what to do about it, empty when `ok`, worded for the distribution: NixOS options on NixOS, the Arch, Fedora or Debian package names elsewhere): the config file (absent: defaults; read-only), the systemd user manager (250 or later, for `ExitType=cgroup`) and cgroup v2, umu-run (or python3 for the one Universe would fetch), MangoHud and its 32-bit layer, gamescope and mangoapp, required binaries of the enabled modules and sources (`module` names the one, or `core`, `runners`, `media`, `controller`; a tool Universe fetches is fine missing), one line per `required` setting an enabled module is still waiting on, the lines of each enabled module's and source's `check` hook (the journal's `codex-signin`, the capture's `gpu-screen-recorder`, `gsr-cli` and `gsr-kms-server`, GOG's `gog-auth` and `gog-comet`), Proton, the desktop (`desktop`, then per profile the programs it drives, `desktop-<program>`, a notification daemon where the OSD is a notification, `cursor` where the profile cannot hide it), the cursor and Universe extensions on GNOME, tokens, one `runner-<id>` check per runner a library game uses (its program resolved), `runner-eden-stop` when Eden is one (its `[UI] confirmStop` at `2`, else a stop shows its "close?" question); `modules` and `sources` say what `config.toml` enables that is not found |
 | — | — | `universe setup` | after an install: on GNOME, writes the `universe@ilyasturki.github.io` extension the binary carries into `~/.local/share/gnome-shell/extensions/` (rewritten when stale; left to a system copy when there is none there) and adds it to `org.gnome.shell enabled-extensions` (out of `disabled-extensions`, which overrides it), read by the shell at the next login; then prints `doctor` |
 
-A module entry is `{id, name, version, description, dir, enabled, available, missing: [bin],
+A module entry is `{id, name, version, description, dir, enabled, available, missing: [bin], incompatible,
 unset: [key], hooks: {}, settings: [Setting], applies: {runner_kinds: [kind]}}`, and
 `Setting` = `{"key", "type": "bool|string|int|enum|path", "default", "label", "description",
 "scope": "global|game", "choices": [], "choice_labels": {value: label}, "dynamic": bool, "required": bool,
@@ -1175,7 +1175,10 @@ its value and still reaches the hooks.
 does and shows under it. `choice_labels` is what a choice reads as, by stored value: a frontend shows the
 label and writes the value, and a value without one reads as itself.
 `missing` holds the manifest's absent binaries plus those the chosen value of a `requires_bins`
-setting asks for, so a module is available or not by what it is set to. `unset` lists the
+setting asks for, so a module is available or not by what it is set to. `incompatible` says why
+`[requires] core` rules out the running Universe (`needs Universe >=0.2.0, this is 0.0.9`, or the
+comparator it cannot read), empty when it fits: such a module is unavailable, its hooks never run, and
+`doctor` gives one `requires-core` line for it; a source's entry carries the same. `unset` lists the
 `required` settings still empty on an enabled module: its hooks run and do nothing, `doctor` says
 which, and the settings page sends the cursor there when the module is switched on. `choices` binds an `enum`; on an `int`
 or a `string` it lists suggestions, any value stays accepted — except that an `int` also
@@ -1463,6 +1466,7 @@ version = "0.0.9"
 description = "Records each session."   # optional, one or two sentences; the module's page shows it under the name
 
 [requires]
+core = ">=0.0.9, <0.1.0"          # optional: comparators (>=, >, <=, <, =) on Universe's version, comma-separated, a bare version meaning >=
 bins = ["gpu-screen-recorder"]    # a missing binary makes the module "unavailable" and it is never run
 system = ["gpu-screen-recorder"]  # system tools (gamescope, mangohud, gpu-screen-recorder) Settings › Runners proposes to install while the module is on
 

@@ -1173,7 +1173,7 @@ impl Core {
             return Err(Error::Unavailable(format!("{JOURNAL_MODULE} is not enabled")));
         }
         if !m.available {
-            return Err(Error::Unavailable(format!("{JOURNAL_MODULE}: missing {}", m.missing.join(", "))));
+            return Err(Error::Unavailable(format!("{JOURNAL_MODULE}: {}", m.unavailable())));
         }
         if m.needs_setup() {
             return Err(Error::Unavailable(format!("{JOURNAL_MODULE}: {} not set", m.unset.join(", "))));
@@ -1509,7 +1509,7 @@ impl Core {
     pub async fn source(&self, id: &str) -> Result<Source> {
         let m = self.source_or_hint(id).await?;
         if !m.available {
-            return Err(Error::Unavailable(format!("{id}: missing {}", m.missing.join(", "))));
+            return Err(Error::Unavailable(format!("{id}: {}", m.unavailable())));
         }
         if !m.enabled {
             return Err(Error::Unavailable(format!("{id} is disabled")));

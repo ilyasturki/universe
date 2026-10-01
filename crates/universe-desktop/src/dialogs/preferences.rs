@@ -438,7 +438,10 @@ fn module_status(module: &Value) -> String {
     let (enabled, available) = (module["enabled"].as_bool() == Some(true), module["available"].as_bool() != Some(false));
     let missing = list(module, "missing").join(", ");
     let unset = list(module, "unset");
+    let incompatible = text(module, "incompatible");
     match (enabled, available) {
+        (true, false) if !incompatible.is_empty() => gettext("On, but skipped: {}").replace("{}", &incompatible),
+        (false, false) if !incompatible.is_empty() => incompatible,
         (true, false) => gettext("On, but skipped: missing {}").replace("{}", &missing),
         (false, false) => gettext("Needs {}").replace("{}", &missing),
         (true, true) if !unset.is_empty() => gettext("Waiting on {}").replace("{}", &unset.join(", ")),

@@ -105,7 +105,9 @@ def _unusable(source, via):
     """Why a launcher's games cannot go to the source that adopts them; empty when they can."""
     if source is None:
         return f"no {via} source"
-    return "" if source.get("available", True) else "needs " + ", ".join(source.get("missing") or ["its programs"])
+    if source.get("available", True):
+        return ""
+    return str(source.get("incompatible") or "") or "needs " + ", ".join(source.get("missing") or ["its programs"])
 
 
 def _shown(entries):
