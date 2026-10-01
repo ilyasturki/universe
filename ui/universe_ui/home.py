@@ -36,9 +36,10 @@ class Home(QObject):
     bannersWaitingChanged = Signal()
     stopping = Signal(str)
 
-    def __init__(self, client, controller, screen_mode: Callable[[], dict] = dict, parent=None, frames=lambda: True, focus=None):
+    def __init__(self, client, controller, screen_mode: Callable[[], dict] = dict, parent=None, frames=lambda: True, focus=None, boot=None):
         super().__init__(parent)
         self._client = client
+        self._boot = boot
         self._controller = controller
         self._focus = focus
         # A HOME press made in another app, its release dropped with it.
@@ -239,6 +240,8 @@ class Home(QObject):
 
     @Slot(bool)
     def guide(self, pressed):
+        if self._boot is not None and self._boot.takes("guide", pressed):
+            return
         self._held = bool(pressed)
         if pressed:
             self._hold_from_game = self._shown == "game" and self._session() is not None

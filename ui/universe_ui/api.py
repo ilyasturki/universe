@@ -7,6 +7,7 @@ from typing import cast
 from PySide6.QtCore import QEvent, QObject, Qt, QTimer, Signal, Slot
 
 from . import keyboard
+from .boot import Boot
 from .focus import Focus
 from .home import Home
 from .models import Collection, CollectionGames, Game, GameListModel, ObjectListModel, collection_key
@@ -148,8 +149,9 @@ class Keys(QObject):
     modeChanged = Signal()
 
     # Watches the window's own key events, so the hold counts whatever page has the focus and however it takes B.
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, boot=None):
         super().__init__(parent)
+        self._boot = boot
         self._hold = QTimer(self)
         self._hold.setSingleShot(True)
         self._hold.setInterval(CANCEL_HOLD_MS)
@@ -223,6 +225,8 @@ class Keys(QObject):
             # A key with no keysym is not typing: InputPlumber's keyboard target sends KEY_UNKNOWN for every pad button.
             elif source is None and event.key() not in (0, Qt.Key.Key_unknown):
                 self._set_mode("keyboard", event)
+            if self._boot_takes(int(event.key()), kind == QEvent.Type.KeyPress):
+                return True
             if not event.isAutoRepeat() and event.key() in HOLD_KEYS:
                 if kind == QEvent.Type.KeyPress:
                     self._hold.start()
@@ -231,9 +235,22 @@ class Keys(QObject):
         elif kind in (QEvent.Type.TouchBegin, QEvent.Type.TouchUpdate):
             # A finger on a Deck's screen: the pad's glyphs in the hints, no cursor, no hover.
             self._set_mode("pad", event)
+            return self._boot_takes("touch", True)
+        elif kind in (QEvent.Type.TouchEnd, QEvent.Type.TouchCancel):
+            return self._boot_takes("touch", False)
         elif kind in (QEvent.Type.MouseMove, QEvent.Type.MouseButtonPress, QEvent.Type.Wheel) and not from_touch(event):
             self._set_mode("mouse", event)
+            if kind == QEvent.Type.MouseButtonPress:
+                return self._boot_takes("mouse", True)
+            if kind == QEvent.Type.Wheel and self._boot is not None and self._boot.running:
+                self._boot.skip()
+                return True
+        elif kind in (QEvent.Type.MouseButtonRelease, QEvent.Type.MouseButtonDblClick):
+            return self._boot_takes("mouse", kind == QEvent.Type.MouseButtonDblClick)
         return False
+
+    def _boot_takes(self, ident, pressed):
+        return self._boot is not None and self._boot.takes(ident, pressed)
 
     # "pad" | "keyboard" | "mouse": whatever was used last, a touch counting as the pad. The hints read it; a hover counts only under a mouse.
     mode = Property(str, lambda self: self._mode, notify=modeChanged)
@@ -464,17 +481,19 @@ class System(QObject):
 
 
 class Api(QObject):
-    def __init__(self, client, memory_path=None, fullscreen=False, theme="", power_root=None, net_root=None, parent=None):
+    # boot: whether this start may open on the startup animation; Settings › Themes can still turn it off.
+    def __init__(self, client, memory_path=None, fullscreen=False, theme="", power_root=None, net_root=None, boot=False, parent=None):
         super().__init__(parent)
         self._client = client
-        self._keys = Keys(self)
+        self._memory = Memory(memory_path, self)
+        self._theme = ThemeSelector(self._memory, theme, self)
+        self._boot = Boot(boot and self._theme.bootIntro, self)
+        self._keys = Keys(self, boot=self._boot)
         self._keys.setLayout(keyboard.rows(**client.keyboardLayout()))
         self._pad = Pad(self)
         self._power = Power(power_root or SYSFS, self)
         self._network = Network(os.path.join(net_root, "class"), os.path.join(net_root, "wireless"), self) if net_root else Network(parent=self)
         self._system = System(client, self)
-        self._memory = Memory(memory_path, self)
-        self._theme = ThemeSelector(self._memory, theme, self)
         self._library = Library(client, self)
         self._modes = {}
         self._screens = Screens(client, self._memory, self.screenMode, self._library.allGames, self._power, self._theme_list, self)
@@ -483,7 +502,7 @@ class Api(QObject):
         controller.walkChanged.connect(lambda: self._pad.setMuted(controller.testing or controller.walking))
         self._focus = Focus(client, parent=self)
         self._focus.changed.connect(self._on_focus)
-        self._home = Home(client, controller, self.screenMode, self, frames=lambda: self._theme.frame, focus=self._focus)
+        self._home = Home(client, controller, self.screenMode, self, frames=lambda: self._theme.frame, focus=self._focus, boot=self._boot)
         self._window = None
         self._fullscreen = fullscreen
 
@@ -496,6 +515,7 @@ class Api(QObject):
     def attachWindow(self, window):
         self._window = window
         self._keys.watch(window)
+        self._boot.watch(window)
         window.screenChanged.connect(lambda screen: self._modes.clear())
 
     def shutdown(self):
@@ -538,4 +558,5 @@ class Api(QObject):
     screens = Property(QObject, lambda self: self._screens, constant=True)
     theme = Property(QObject, lambda self: self._theme, constant=True)
     home = Property(QObject, lambda self: self._home, constant=True)
+    boot = Property(QObject, lambda self: self._boot, constant=True)
     fullscreen = Property(bool, lambda self: self._fullscreen, constant=True)

@@ -12,12 +12,66 @@ FocusScope {
 
     Component.onCompleted: {
         Sound.preload();
+        if (api.boot.running)
+            blank();
+        else
+            start();
+    }
+
+    function start() {
         if (api.theme.takeLanding() === "themes")
             push("pages/SettingsPage.qml", {
                 section: "themes"
             });
         else if (api.screens.onboarding.needed)
             push("pages/OnboardingPage.qml", {});
+    }
+
+    // Under the startup animation: the ground alone, then the row slides in and the bars settle as it fades, all at once after a skip.
+    property real rowReveal: 1.0
+    property real chromeReveal: 1.0
+
+    function blank() {
+        rowReveal = 0;
+        chromeReveal = 0;
+    }
+
+    Connections {
+        target: api.boot
+        function onLanded(skipped) {
+            if (skipped) {
+                revealAnim.stop();
+                root.rowReveal = 1;
+                root.chromeReveal = 1;
+            } else {
+                revealAnim.restart();
+            }
+            root.start();
+        }
+    }
+
+    ParallelAnimation {
+        id: revealAnim
+
+        NumberAnimation {
+            target: root
+            property: "rowReveal"
+            to: 1
+            duration: 480
+            easing.type: Easing.OutCubic
+        }
+        SequentialAnimation {
+            PauseAnimation {
+                duration: 240
+            }
+            NumberAnimation {
+                target: root
+                property: "chromeReveal"
+                to: 1
+                duration: 320
+                easing.type: Easing.OutCubic
+            }
+        }
     }
 
     Binding {
@@ -366,12 +420,20 @@ FocusScope {
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
+            opacity: root.chromeReveal
+            transform: Translate {
+                y: -(1 - root.chromeReveal) * Theme.dp(24)
+            }
         }
 
         HomePage {
             id: home
             objectName: "homePage"
             anchors.fill: parent
+            opacity: root.rowReveal
+            transform: Translate {
+                x: (1 - root.rowReveal) * Theme.dp(80)
+            }
             shell: root
             focus: root.onHome && root.homeFocus === "home"
             onEscapedDown: {
@@ -388,6 +450,10 @@ FocusScope {
             y: Theme.dp(Theme.barY)
             items: root.barItems
             focus: root.onHome && root.homeFocus === "bar"
+            opacity: root.chromeReveal
+            transform: Translate {
+                y: (1 - root.chromeReveal) * Theme.dp(24)
+            }
             onActivated: function (item) {
                 root.openBar(item);
             }

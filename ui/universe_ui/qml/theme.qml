@@ -10,10 +10,79 @@ FocusScope {
 
     Component.onCompleted: {
         Sound.preload();
+        if (api.boot.running)
+            blank();
+        else
+            start();
+    }
+
+    function start() {
         if (api.theme.landing === "themes")
             tabIndex = settingsTab;
         else if (api.screens.onboarding.needed)
             openSetup();
+    }
+
+    // Under the startup animation: the ground alone, then the backdrop, the page and the bars come in as it fades, all at once after a skip.
+    property real backdropReveal: 1.0
+    property real pageReveal: 1.0
+    property real chromeReveal: 1.0
+
+    function blank() {
+        backdropReveal = 0;
+        pageReveal = 0;
+        chromeReveal = 0;
+    }
+
+    Connections {
+        target: api.boot
+        function onLanded(skipped) {
+            if (skipped) {
+                revealAnim.stop();
+                root.backdropReveal = 1;
+                root.pageReveal = 1;
+                root.chromeReveal = 1;
+            } else {
+                revealAnim.restart();
+            }
+            root.start();
+        }
+    }
+
+    ParallelAnimation {
+        id: revealAnim
+
+        NumberAnimation {
+            target: root
+            property: "backdropReveal"
+            to: 1
+            duration: 450
+            easing.type: Easing.InOutQuad
+        }
+        SequentialAnimation {
+            PauseAnimation {
+                duration: 200
+            }
+            NumberAnimation {
+                target: root
+                property: "pageReveal"
+                to: 1
+                duration: 420
+                easing.type: Easing.OutCubic
+            }
+        }
+        SequentialAnimation {
+            PauseAnimation {
+                duration: 420
+            }
+            NumberAnimation {
+                target: root
+                property: "chromeReveal"
+                to: 1
+                duration: 300
+                easing.type: Easing.OutCubic
+            }
+        }
     }
 
     // The bar shows the first barCount; the Library sits past them, opened from Home and lit as Home.
@@ -737,6 +806,13 @@ FocusScope {
         }
     }
 
+    Rectangle {
+        anchors.fill: parent
+        color: Theme.ground
+        opacity: 1 - root.backdropReveal
+        visible: opacity > 0
+    }
+
     Item {
         anchors.fill: parent
         opacity: (root.launching || root.detailOpen) ? 0.0 : 1.0
@@ -782,6 +858,7 @@ FocusScope {
             })
             currentIndex: root.tabIndex < root.barCount ? root.tabIndex : 0
             focus: root.focusOwner === "chrome"
+            opacity: root.chromeReveal
 
             onTabRequested: function (index) {
                 root.goToTab(index);
@@ -803,6 +880,10 @@ FocusScope {
             anchors.bottom: hintBar.top
             anchors.left: parent.left
             anchors.right: parent.right
+            opacity: root.pageReveal
+            transform: Translate {
+                y: (1 - root.pageReveal) * Theme.dp(28)
+            }
 
             Repeater {
                 model: root.tabs
@@ -927,7 +1008,7 @@ FocusScope {
             anchors.bottom: parent.bottom
             anchors.left: parent.left
             anchors.right: parent.right
-            opacity: root.subOpen && root.subArgs.setup ? 0.0 : 1.0
+            opacity: root.subOpen && root.subArgs.setup ? 0.0 : root.chromeReveal
             visible: opacity > 0.01
             hints: confirm.open ? confirm.hints : root.menuOpen ? gameMenu.hints : root.focusOwner === "chrome" ? tabBar.hints : root.focusOwner === "search" ? (searchLoader.item ? searchLoader.item.hints : []) : !root.activePage ? [] : root.activePage.modal ? root.activePage.hints : root.activePage.hints.concat([
                 {

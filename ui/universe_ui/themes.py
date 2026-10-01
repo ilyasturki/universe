@@ -37,6 +37,7 @@ AFFILIATION = "Not affiliated with Nintendo or Sony"
 TRADEMARKS = "Nintendo Switch is a trademark of Nintendo; PlayStation and PS5 are trademarks of Sony Interactive Entertainment."
 DEFAULT = "reprise"
 MEMORY_KEY = "theme"
+BOOT_KEY = "bootIntro"
 
 
 def theme_by_id(ident):
@@ -47,6 +48,7 @@ class ThemeSelector(QObject):
     changed = Signal()
     fontChanged = Signal()
     soundsChanged = Signal()
+    bootChanged = Signal()
 
     def __init__(self, memory, initial="", parent=None):
         super().__init__(parent)
@@ -107,6 +109,14 @@ class ThemeSelector(QObject):
             return {}
         return {n[:-4].lower(): "file://" + os.path.join(folder, n) for n in names if n.lower().endswith(".wav")}
 
+    def _boot(self):
+        return self._memory.get(BOOT_KEY) is not False
+
+    def _set_boot(self, on):
+        if bool(on) != self._boot():
+            self._memory.set(BOOT_KEY, bool(on))
+            self.bootChanged.emit()
+
     themes = Property(list, lambda self: [dict(t) for t in THEMES], constant=True)
     affiliation = Property(str, lambda self: AFFILIATION, constant=True)
     trademarks = Property(str, lambda self: TRADEMARKS, constant=True)
@@ -123,3 +133,5 @@ class ThemeSelector(QObject):
     soundsPath = Property(str, _sounds, _set_sounds, notify=soundsChanged)
     # {name: file URL} of the WAVs in soundsPath
     soundFiles = Property("QVariantMap", _sound_files, notify=soundsChanged)
+    # The startup animation, every look's: on until ui-memory.json's bootIntro says false.
+    bootIntro = Property(bool, _boot, _set_boot, notify=bootChanged)

@@ -15,12 +15,30 @@ FocusScope {
         Sound.preload();
         // The search from home finds the sections before Settings has ever been opened.
         api.screens.search.sections = Sections.forSearch(api.system);
+        if (api.boot.running)
+            home.blank();
+        else
+            start();
+    }
+
+    function start() {
         if (api.theme.takeLanding() === "themes")
             push("pages/SettingsPage.qml", {
                 section: "themes"
             });
         else if (api.screens.onboarding.needed)
             push("pages/OnboardingPage.qml", {});
+    }
+
+    // The startup animation done: the home builds itself up from black, as back from a game, or comes in at once after a skip.
+    Connections {
+        target: api.boot
+        function onLanded(skipped) {
+            home.rebuild();
+            if (skipped)
+                home.finishRebuild();
+            root.start();
+        }
     }
 
     Binding {

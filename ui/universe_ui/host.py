@@ -43,6 +43,9 @@ def parse_args(argv):
     parser.add_argument("--key-delay", type=int, default=1200, metavar="MS", help="delay before the first key")
     parser.add_argument("--size", metavar="WxH", help="window size, implies --windowed (default 1920x1080)")
     parser.add_argument("--theme", default="", metavar="ID", help="the look for this run: reprise or switch2")
+    parser.add_argument(
+        "--boot", action=argparse.BooleanOptionalAction, default=None, help="open on the startup animation, or not (default: fullscreen starts only)"
+    )
     args = parser.parse_args(argv)
     args.fake = args.fake or args.fake_launch
     args.fullscreen = not (args.windowed or args.size)
@@ -60,6 +63,13 @@ def build_client(args):
     import universe_core
 
     return CoreClient(universe_core.Core())
+
+
+# A session chain that covers the start itself passes --no-boot; a forced --boot still yields to Settings › Themes.
+def boot_wanted(args, client, restarts=0):
+    if args.boot is not None:
+        return args.boot
+    return args.fullscreen and not args.fake and not args.keys and not restarts and not client.currentSession and not client.underSteam
 
 
 def quit_on_signals(app, on_signal=None):
@@ -311,7 +321,13 @@ def run(argv=None):
     if not args.fake:
         client.adoptScope()
     api = Api(
-        client, fullscreen=args.fullscreen, theme=args.theme, power_root=FAKE_POWER if args.fake else None, net_root=FAKE_NET if args.fake else None, parent=app
+        client,
+        fullscreen=args.fullscreen,
+        theme=args.theme,
+        power_root=FAKE_POWER if args.fake else None,
+        net_root=FAKE_NET if args.fake else None,
+        boot=boot_wanted(args, client, int(os.environ.get(RESTARTS_ENV) or 0)),
+        parent=app,
     )
     quit_on_signals(app)
 
