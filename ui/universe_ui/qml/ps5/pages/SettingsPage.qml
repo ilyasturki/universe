@@ -492,6 +492,13 @@ FocusScope {
                 };
             }).concat([
                 {
+                    label: api.theme.affiliation,
+                    key: "affiliation",
+                    type: "info",
+                    display: "",
+                    detail: api.theme.trademarks
+                },
+                {
                     heading: true,
                     part: true,
                     label: "Font",

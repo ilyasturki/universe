@@ -32,6 +32,8 @@ Reprise, a port of my [Pegasus theme](https://github.com/ilyasturki/pegasus-them
 
 ![The Switch 2 look](docs/images/switch2.jpg)
 
+Not affiliated with Nintendo or Sony. Nintendo Switch is a trademark of Nintendo; PlayStation and PS5 are trademarks of Sony Interactive Entertainment.
+
 ## Also
 
 - HOME over a running game: pause, screenshot, MangoHud, volume, quit.

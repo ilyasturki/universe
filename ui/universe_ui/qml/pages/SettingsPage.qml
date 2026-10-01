@@ -382,9 +382,16 @@ FocusScope {
                 choices: themeNames(),
                 detail: ""
             });
+            rows.push({
+                section: "Themes",
+                key: "affiliation",
+                label: api.theme.affiliation,
+                type: "info",
+                detail: api.theme.trademarks
+            });
             groups.push({
                 title: "Look",
-                rows: [0]
+                rows: [0, 1]
             });
             return {
                 rows: rows,

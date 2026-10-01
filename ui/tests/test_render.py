@@ -1,5 +1,6 @@
 import os
 
+import pytest
 from PySide6.QtCore import Q_ARG, Q_RETURN_ARG, QMetaObject, QObject, Qt, QUrl
 from PySide6.QtGui import QColor
 from PySide6.QtQml import QQmlApplicationEngine
@@ -1510,5 +1511,21 @@ def test_the_sound_section_plays_through_the_output_picked_in_both_looks(api, fa
     QMetaObject.invokeMethod(page, "activate", Q_ARG("QVariant", 2), Q_ARG("QVariant", rows[2]))
     wait_for(api.home.outputsChanged, 3000)
     assert [r["label"] for r in page.property("content").toVariant() if r["value"]] == ["HDMI / DisplayPort"]
+    window.close()
+    pump(50)
+
+
+@pytest.mark.parametrize("look", ["reprise", "switch2", "ps5"])
+def test_each_looks_themes_page_says_it_is_not_affiliated(api, look):
+    _engine, window = render(api)
+    for step in ["ps5", "reprise"] if look == "reprise" else [look]:
+        api.theme.set(step)
+        settle(window)
+    root = window.property("contentItem").childItems()[0].property("item")
+    page = root.property("activePage") if look == "reprise" else root.property("topPage")
+    assert page.property("sectionId") == "themes", "a switch lands on the look's Themes"
+    content = js(page, "content")
+    rows = content["rows"] if isinstance(content, dict) else content
+    assert any(r.get("key") == "affiliation" for r in rows)
     window.close()
     pump(50)

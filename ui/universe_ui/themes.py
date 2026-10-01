@@ -33,6 +33,8 @@ THEMES = [
         "detail": "The PS5 home screen: the game's world behind a row of tiles.",
     },
 ]
+AFFILIATION = "Not affiliated with Nintendo or Sony"
+TRADEMARKS = "Nintendo Switch is a trademark of Nintendo; PlayStation and PS5 are trademarks of Sony Interactive Entertainment."
 DEFAULT = "reprise"
 MEMORY_KEY = "theme"
 
@@ -106,6 +108,8 @@ class ThemeSelector(QObject):
         return {n[:-4].lower(): "file://" + os.path.join(folder, n) for n in names if n.lower().endswith(".wav")}
 
     themes = Property(list, lambda self: [dict(t) for t in THEMES], constant=True)
+    affiliation = Property(str, lambda self: AFFILIATION, constant=True)
+    trademarks = Property(str, lambda self: TRADEMARKS, constant=True)
     current = Property(str, lambda self: self._current["id"], notify=changed)
     landing = Property(str, lambda self: self._landing, notify=changed)
     name = Property(str, lambda self: self._current["name"], notify=changed)
