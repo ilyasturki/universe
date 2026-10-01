@@ -30,6 +30,11 @@ Item {
         leave.start();
     }
 
+    Component.onCompleted: {
+        if (api.boot.running)
+            chime.source = api.theme.soundFiles.boot || Qt.resolvedUrl("../" + api.theme.entry.replace(/[^\/]*$/, "") + "assets/sounds/boot.wav");
+    }
+
     Connections {
         target: api.boot
         function onStarted() {
@@ -113,7 +118,6 @@ Item {
 
     SoundEffect {
         id: chime
-        source: api.theme.soundFiles.boot || Qt.resolvedUrl("../" + api.theme.entry.replace(/[^\/]*$/, "") + "assets/sounds/boot.wav")
     }
 
     SequentialAnimation {
