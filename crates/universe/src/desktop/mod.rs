@@ -96,9 +96,19 @@ fn x11_session(var: &impl Fn(&str) -> Option<String>) -> bool {
         || (var("GAMESCOPE_WAYLAND_DISPLAY").is_none() && var("DISPLAY").is_some() && var("WAYLAND_DISPLAY").is_none())
 }
 
-/// The desktop's X server, not gamescope's.
+/// The desktop's X server, not gamescope's: from inside the launcher's nested gamescope, the display it was started on.
+fn x11_display() -> Option<Option<String>> {
+    if !x11_session(&env) {
+        return None;
+    }
+    if crate::nest::inside() {
+        return env(crate::nest::HOST_DISPLAY_ENV).map(Some);
+    }
+    Some(None)
+}
+
 fn x11_reachable() -> bool {
-    !crate::nest::inside() && x11_session(&env)
+    x11_display().is_some()
 }
 
 const DRM_DIR: &str = "/sys/class/drm";
@@ -346,6 +356,20 @@ pub struct Toplevel {
     pub minimized: bool,
 }
 
+/// What the desktop's focused toplevel is to a launcher: its own window (gamescope's, when it runs nested) or its running game's.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+pub struct HostFocus {
+    pub launcher: bool,
+    pub session: bool,
+}
+
+impl HostFocus {
+    /// `pid` is the focused toplevel's, 0 when none has the focus.
+    pub fn of(pid: i64, launcher: &[i64], in_session: impl Fn(i64) -> bool) -> HostFocus {
+        HostFocus { launcher: pid > 0 && launcher.contains(&pid), session: pid > 0 && in_session(pid) }
+    }
+}
+
 fn unsupported(profile: Profile, what: &str) -> String {
     match profile {
         Profile::None => format!("no desktop profile ({what} needs one: desktop.profile)"),
@@ -374,6 +398,14 @@ pub async fn activate_window(profile: Profile, id: &str) -> Result<bool, String>
         Profile::Niri => niri::activate_window(id).await,
         Profile::X11 | Profile::Cinnamon if x11_reachable() => x11::activate_window(id).await,
         p => Err(unsupported(p, "window list")),
+    }
+}
+
+/// The pid of the toplevel that has the focus, 0 when none has; KDE's comes from a script left running in KWin, which pushes each change.
+pub async fn focused_pid(profile: Profile) -> Result<i64, String> {
+    match profile {
+        Profile::Kde => kde::focused_pid().await,
+        p => Ok(list_windows(p).await?.iter().find(|w| w.focused).map_or(0, |w| w.pid)),
     }
 }
 
@@ -583,6 +615,31 @@ mod tests {
     }
 
     #[test]
+    fn the_focused_window_is_the_launchers_its_games_or_another_apps() {
+        let (launcher, game) = ([10, 20], |pid| pid == 30);
+        assert_eq!(HostFocus::of(20, &launcher, game), HostFocus { launcher: true, session: false }, "the toplevel of the gamescope it runs nested in");
+        assert_eq!(HostFocus::of(30, &launcher, game), HostFocus { launcher: false, session: true });
+        assert_eq!(HostFocus::of(40, &launcher, game), HostFocus::default());
+        assert_eq!(HostFocus::of(0, &[0], |_| true), HostFocus::default(), "nothing has the focus");
+    }
+
+    #[test]
+    fn inside_the_nested_gamescope_the_x11_desktop_is_the_display_it_started_on() {
+        let _env = crate::paths::test_env();
+        std::env::remove_var("GAMESCOPE_WAYLAND_DISPLAY");
+        std::env::set_var("XDG_SESSION_TYPE", "x11");
+        std::env::set_var("DISPLAY", ":0");
+        assert_eq!(x11_display(), Some(None), "the desktop's own DISPLAY");
+        std::env::set_var("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0");
+        std::env::set_var("DISPLAY", ":1");
+        assert_eq!(x11_display(), None, "gamescope's Xwayland is no desktop");
+        std::env::set_var(crate::nest::HOST_DISPLAY_ENV, ":0");
+        assert_eq!(x11_display(), Some(Some(":0".into())));
+        std::env::set_var("XDG_SESSION_TYPE", "wayland");
+        assert_eq!(x11_display(), None, "a Wayland desktop is asked over its own socket");
+    }
+
+    #[test]
     fn a_process_is_in_its_unit_or_under_it() {
         let cg = "/user.slice/user-1000.slice/user@1000.service/app.slice/universe-game-x-s.service";
         assert!(cgroup_matches(&format!("0::{cg}\n"), cg));
@@ -649,6 +706,11 @@ mod live {
         eprintln!("{profile:?}: {windows:#?}");
         let w = windows.iter().find(|w| w.pid > 0).expect("a window with a pid");
         assert!(rt.block_on(super::activate_window(profile, &w.id)).unwrap(), "{w:?}");
+        let focused = (0..30).any(|_| {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            rt.block_on(super::focused_pid(profile)) == Ok(w.pid)
+        });
+        assert!(focused, "{profile:?}: the focus never named pid {}: {:?}", w.pid, rt.block_on(super::focused_pid(profile)));
         let gone = if profile == super::Profile::Hyprland { "0xdead" } else { "4000000000" };
         assert!(!rt.block_on(super::activate_window(profile, gone)).unwrap());
         let undo = rt.block_on(super::hide_cursor(profile, ""));

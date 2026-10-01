@@ -51,6 +51,9 @@ pub fn inside() -> bool {
 /// Set by the launcher on the gamescope it starts for itself: `drm` straight on the screen, `nested` in a desktop's window.
 pub const OWN_ENV: &str = "UNIVERSE_OWN_GAMESCOPE";
 
+/// The desktop's X display, set by the launcher on its nested gamescope: inside, `DISPLAY` is gamescope's own Xwayland.
+pub const HOST_DISPLAY_ENV: &str = "UNIVERSE_HOST_DISPLAY";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Own {
     Drm,

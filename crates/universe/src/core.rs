@@ -82,6 +82,7 @@ pub(crate) fn passthrough_env() -> BTreeMap<String, String> {
         "RUST_LOG",
         "GAMESCOPE_WAYLAND_DISPLAY",
         crate::nest::OWN_ENV,
+        crate::nest::HOST_DISPLAY_ENV,
         "STEAM_GAME_DISPLAY_0",
         "SDL_VIDEODRIVER",
         "SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS",
@@ -623,15 +624,51 @@ impl Core {
                 return n.show(self.launcher_pid(), false, unit.as_deref());
             }
         }
+        self.activate_largest(&[i64::from(pid)]).await
+    }
+
+    async fn activate_largest(&self, pids: &[i64]) -> Result<()> {
         let profile = self.desktop().await;
         let windows = crate::desktop::list_windows(profile).await.map_err(Error::Unavailable)?;
-        let w = windows
-            .iter()
-            .filter(|w| w.pid == pid as i64 && !w.hidden)
-            .max_by_key(|w| w.width * w.height)
-            .ok_or_else(|| Error::NotFound(format!("no window of pid {pid}")))?;
+        let w = windows.iter().filter(|w| pids.contains(&w.pid) && !w.hidden).max_by_key(|w| w.width * w.height).ok_or_else(|| {
+            let pids: Vec<String> = pids.iter().map(i64::to_string).collect();
+            Error::NotFound(format!("no window of pid {}", pids.join(" or ")))
+        })?;
         crate::desktop::activate_window(profile, &w.id).await.map_err(Error::Unavailable)?;
         Ok(())
+    }
+
+    /// This process and, unless it is Steam's, the gamescope it runs in: the toplevel the desktop shows for the launcher.
+    fn launcher_pids(&self) -> Vec<i64> {
+        let own = i64::from(std::process::id());
+        match self.nest().filter(|n| !n.steam) {
+            Some(n) => vec![own, i64::from(n.pid)],
+            None => vec![own],
+        }
+    }
+
+    /// Whether the desktop has the launcher's window focused, or its running game's; `Unavailable` where the profile cannot tell.
+    /// On a screen of its own and under Steam's Game Mode there is nothing else to focus: the launcher always is.
+    pub async fn host_focus(&self) -> Result<crate::desktop::HostFocus> {
+        if self.under_steam() || crate::nest::own() == Some(crate::nest::Own::Drm) {
+            return Ok(crate::desktop::HostFocus { launcher: true, session: false });
+        }
+        let pid = crate::desktop::focused_pid(self.desktop().await).await.map_err(Error::Unavailable)?;
+        let launcher = self.launcher_pids();
+        let current = if pid > 0 && !launcher.contains(&pid) { self.current().await } else { None };
+        let gamescope = current.as_ref().map_or(0, |c| i64::from(c.gamescope_pid));
+        let cgroup = match &current {
+            Some(c) if gamescope == 0 => self.host.units.cgroup(&c.unit).await,
+            _ => None,
+        };
+        Ok(crate::desktop::HostFocus::of(pid, &launcher, |p| {
+            (gamescope != 0 && p == gamescope) || cgroup.as_deref().is_some_and(|cg| crate::desktop::pid_in_cgroup(p, cg))
+        }))
+    }
+
+    /// Raises the launcher's window on the desktop (gamescope's when it runs nested): HOME pressed while another app has the focus.
+    pub async fn summon(&self) -> Result<()> {
+        self.activate_largest(&self.launcher_pids()).await
     }
 
     pub fn nest_game_shown(&self) -> Result<bool> {

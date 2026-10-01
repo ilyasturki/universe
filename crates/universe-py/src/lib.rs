@@ -212,6 +212,12 @@ impl Core {
     fn focus_pid(&self, py: Python<'_>, pid: u32) -> PyResult<()> {
         self.run(py, |c| async move { c.focus_pid(pid).await })
     }
+    fn host_focus(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.value(py, |c| c.host_focus())
+    }
+    fn summon(&self, py: Python<'_>) -> PyResult<()> {
+        self.run(py, |c| c.summon())
+    }
     fn freeze(&self, py: Python<'_>, on: bool) -> PyResult<()> {
         self.run(py, |c| async move { c.freeze(on).await })
     }

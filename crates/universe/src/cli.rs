@@ -2021,6 +2021,7 @@ fn config_keys() -> Vec<String> {
             "controller.enabled",
             "controller.hold_ms",
             "controller.volume_step",
+            "controller.home_summons",
         ]
         .map(String::from),
     );

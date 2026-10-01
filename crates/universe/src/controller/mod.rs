@@ -71,6 +71,8 @@ pub struct ControllerConfig {
     pub enabled: bool,
     pub hold_ms: u64,
     pub volume_step: u8,
+    /// HOME pressed while another app has the focus raises the launcher; off, the press is dropped.
+    pub home_summons: bool,
     /// family → slot → learned codes, first present on the pad wins
     pub buttons: BTreeMap<String, BTreeMap<String, Vec<String>>>,
     /// family → stick or trigger (`lx ly rx ry lt rt`) → the axis learned for it, `ABS_Z-` when it runs backwards
@@ -81,7 +83,7 @@ pub struct ControllerConfig {
 
 impl Default for ControllerConfig {
     fn default() -> Self {
-        ControllerConfig { enabled: true, hold_ms: 600, volume_step: 2, buttons: BTreeMap::new(), axes: BTreeMap::new(), macros: None }
+        ControllerConfig { enabled: true, hold_ms: 600, volume_step: 2, home_summons: true, buttons: BTreeMap::new(), axes: BTreeMap::new(), macros: None }
     }
 }
 
@@ -463,6 +465,7 @@ pub fn state_json(config: &ControllerConfig) -> serde_json::Value {
         "enabled": config.enabled,
         "hold_ms": config.hold_ms,
         "volume_step": config.volume_step,
+        "home_summons": config.home_summons,
         "families": families,
         "macros": config.macros(),
         "presets": PRESETS.iter().map(|p| serde_json::json!({"id": p.id, "label": p.label, "hold_only": p.hold_only})).collect::<Vec<_>>(),
@@ -726,6 +729,13 @@ mod tests {
         assert_eq!(volume_step_value("10").unwrap(), 10);
         assert!(volume_step_value("0").is_err() && volume_step_value("101").is_err() && volume_step_value("precise").is_err());
         assert_eq!(state_json(&cfg)["volume_step"], 2);
+    }
+
+    #[test]
+    fn home_summons_the_launcher_unless_turned_off() {
+        assert!(toml::from_str::<ControllerConfig>("").unwrap().home_summons);
+        let off: ControllerConfig = toml::from_str("home_summons = false").unwrap();
+        assert_eq!(state_json(&off)["home_summons"], false);
     }
 
     #[test]
