@@ -129,7 +129,10 @@ def gsr_cli(session_id, *command, timeout=30):
     return subprocess.run(["gsr-cli", "-ipc", ipc_socket(session_id), *command], capture_output=True, text=True, timeout=timeout, check=False)
 
 
-def wait_recorder(session_id, timeout_s=5, alive=None):
+RECORDER_WAIT_S = float(os.environ.get("CAPTURE_RECORDER_WAIT_S") or 5)
+
+
+def wait_recorder(session_id, timeout_s=RECORDER_WAIT_S, alive=None):
     """The socket comes up with the recorder, a moment after its unit; `alive` false cuts the wait short."""
     deadline = time.monotonic() + timeout_s
     while True:

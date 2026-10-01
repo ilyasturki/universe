@@ -99,6 +99,7 @@ def env_for(tmp_path, fakebin, settings, extra=None):
     env["JOURNAL_DIR"] = str(tmp_path / "journal")
     env["SCREENSHOTS_DIR"] = str(tmp_path / "screenshots")
     env["UNIVERSE_BIN"] = str(fakebin["bin"] / "universe")
+    env["CAPTURE_RECORDER_WAIT_S"] = "0.3"
     env["MODULE_SETTINGS_JSON"] = json.dumps(settings)
     env.setdefault("SESSION_SCREEN", "DP-1")
     home = tmp_path / "home"

@@ -168,6 +168,7 @@ def run_process(tmp_path, fakebin, settings, extra_env=None, recording=None):
         {
             "PATH": f"{fakebin}:{env.get('PATH', '')}",
             "UNIVERSE_BIN": str(fakebin / "universe"),
+            "JOURNAL_CORE_BACKOFF_S": "0",
             "GAME_ID": "testgame",
             "GAME_SLUG": "testgame",
             "GAME_TITLE": "Test Game: Redux",

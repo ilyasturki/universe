@@ -215,7 +215,7 @@ def read_entries(journal_dir):
 
 
 CORE_ATTEMPTS = 3
-CORE_BACKOFF_S = 2
+CORE_BACKOFF_S = float(os.environ.get("JOURNAL_CORE_BACKOFF_S") or 2)
 
 
 def _journal_add(sid, entry_json):
