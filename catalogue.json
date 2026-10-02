@@ -360,7 +360,8 @@
    ],
    "homepage": "https://git.eden-emu.dev/eden-emu/eden",
    "kind": "emulator",
-   "name": "Eden"
+   "name": "Eden",
+   "notice": "Eden emulates the Nintendo Switch, and Nintendo named it in a DMCA notice in February 2026. Universe ships no keys or firmware: you supply your own."
   },
   "flycast": {
    "builds": [
@@ -942,6 +943,20 @@
       {
        "arch": "x86_64",
        "format": "appimage",
+       "sha256": "25a6ac72d5c6beba45325ad6008e5e9f888e4400e20bb38674eacc7a1e6674b5",
+       "size": 94058255,
+       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-18f18b305f9dcfbaa5fb601cee3e367751dcaf52/rpcs3-v0.0.43-20176-18f18b30_linux64.AppImage"
+      }
+     ],
+     "channel": "rolling",
+     "date": "2026-10-02T10:42:35Z",
+     "version": "0.0.43-20176-18f18b30"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "appimage",
        "sha256": "f28d9502d63b1064ded1c80d61ea7072f776749f4841d9b9bd85439345395ccd",
        "size": 94067157,
        "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-83b1e072990e839903c67401d1a6d7d1910a5824/rpcs3-v0.0.43-20144-83b1e072_linux64.AppImage"
@@ -1223,21 +1238,21 @@
       {
        "arch": "x86_64",
        "format": "appimage",
-       "sha256": "93c0ba9470ec7bb18178c2d24f954e626807fac350b9b6c9505c36d6dcedca21",
+       "sha256": "7e7046762e0df753c679582a893cbf2f7e648e62aa3eeea80f0529507530f977",
        "size": 66832888,
        "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-x86_64.AppImage"
       },
       {
        "arch": "aarch64",
        "format": "appimage",
-       "sha256": "0b2837528e29d48c821778f822377fc41575f06a88747187b12b61bb4c43c967",
-       "size": 67045896,
+       "sha256": "5105dca8a529acbcdf8dee5a0b57a7ecbaa4309c8d5ea4d67e0941478ecc90cd",
+       "size": 67041800,
        "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-aarch64.AppImage"
       }
      ],
      "channel": "rolling",
-     "date": "2026-10-01T10:50:25Z",
-     "version": "2026.10.01"
+     "date": "2026-10-02T02:42:19Z",
+     "version": "2026.10.02"
     }
    ],
    "homepage": "https://github.com/Vita3K/Vita3K",
@@ -1364,6 +1379,6 @@
    "name": "xemu"
   }
  },
- "generated_at": "2026-10-01T11:42:09Z",
+ "generated_at": "2026-10-02T11:11:37Z",
  "schema": 1
 }
