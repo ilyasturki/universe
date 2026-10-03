@@ -250,6 +250,20 @@
       {
        "arch": "x86_64",
        "format": "appimage",
+       "sha256": "c2fd26257ac5cfefe4f77b61b04b8fe299f9c4e0cf6b851fc5259c815979466a",
+       "size": 92725536,
+       "url": "https://github.com/stenzek/duckstation/releases/download/v0.1-11894/DuckStation-x64.AppImage"
+      }
+     ],
+     "channel": "rolling",
+     "date": "2026-09-12T12:20:15Z",
+     "version": "0.1-11894"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "appimage",
        "sha256": "c5c8a9de4dfc10e794137dcb8bab9760ca578df2aa7be8c1215171bebbba5965",
        "size": 92709152,
        "url": "https://github.com/stenzek/duckstation/releases/download/v0.1-11826/DuckStation-x64.AppImage"
@@ -943,6 +957,20 @@
       {
        "arch": "x86_64",
        "format": "appimage",
+       "sha256": "7b5a1a53c946e59758c8c84944c40fd88dba178817ca3047a52b4582c7a6f2e5",
+       "size": 94034651,
+       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-e8b4646145c76da683d39cd019ae7dd57e77cfac/rpcs3-v0.0.43-20185-e8b46461_linux64.AppImage"
+      }
+     ],
+     "channel": "rolling",
+     "date": "2026-10-03T08:41:36Z",
+     "version": "0.0.43-20185-e8b46461"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "appimage",
        "sha256": "25a6ac72d5c6beba45325ad6008e5e9f888e4400e20bb38674eacc7a1e6674b5",
        "size": 94058255,
        "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-18f18b305f9dcfbaa5fb601cee3e367751dcaf52/rpcs3-v0.0.43-20176-18f18b30_linux64.AppImage"
@@ -1007,20 +1035,6 @@
      "channel": "rolling",
      "date": "2026-09-28T10:37:48Z",
      "version": "0.0.42-20073-105c4988"
-    },
-    {
-     "assets": [
-      {
-       "arch": "x86_64",
-       "format": "appimage",
-       "sha256": "e4cfefe4c6cbc7e44b523cfa2d181236449d5664ffd0c1786a68d81054a5e02e",
-       "size": 93989924,
-       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-3fa07db78b44f8705d1ee8cd3f41b42bad725bf7/rpcs3-v0.0.42-20069-3fa07db7_linux64.AppImage"
-      }
-     ],
-     "channel": "rolling",
-     "date": "2026-09-27T15:27:30Z",
-     "version": "0.0.42-20069-3fa07db7"
     }
    ],
    "homepage": "https://github.com/RPCS3/rpcs3-binaries-linux",
@@ -1029,6 +1043,21 @@
   },
   "shadps4": {
    "builds": [
+    {
+     "assets": [
+      {
+       "appimage": "Shadps4-sdl.AppImage",
+       "arch": "x86_64",
+       "format": "zip",
+       "sha256": "a6e3b83fd6c9ea7b29c37e77e1aa687802d4ecd98c2ea794ca9e1d97b24a0cf9",
+       "size": 32964443,
+       "url": "https://github.com/shadps4-emu/shadPS4/releases/download/v.0.19.0/shadps4-linux-sdl-0.19.0.zip"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-10-02T14:03:45Z",
+     "version": "0.19.0"
+    },
     {
      "assets": [
       {
@@ -1238,21 +1267,21 @@
       {
        "arch": "x86_64",
        "format": "appimage",
-       "sha256": "7e7046762e0df753c679582a893cbf2f7e648e62aa3eeea80f0529507530f977",
-       "size": 66832888,
+       "sha256": "949fed1c4989403821f567157f95182bc667786491f998aefcd903187edc2e0d",
+       "size": 70232568,
        "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-x86_64.AppImage"
       },
       {
        "arch": "aarch64",
        "format": "appimage",
-       "sha256": "5105dca8a529acbcdf8dee5a0b57a7ecbaa4309c8d5ea4d67e0941478ecc90cd",
-       "size": 67041800,
+       "sha256": "fb9faa0085ecc441ffbaf9569ffd9bbbed2fe4169f691b52e0c95e886e162287",
+       "size": 70638088,
        "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-aarch64.AppImage"
       }
      ],
      "channel": "rolling",
-     "date": "2026-10-02T02:42:19Z",
-     "version": "2026.10.02"
+     "date": "2026-10-03T08:25:49Z",
+     "version": "2026.10.03"
     }
    ],
    "homepage": "https://github.com/Vita3K/Vita3K",
@@ -1379,6 +1408,6 @@
    "name": "xemu"
   }
  },
- "generated_at": "2026-10-02T11:11:37Z",
+ "generated_at": "2026-10-03T10:29:16Z",
  "schema": 1
 }
