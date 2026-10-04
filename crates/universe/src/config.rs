@@ -145,6 +145,19 @@ pub struct SystemConfig {
     pub fan: String,
 }
 
+impl SystemConfig {
+    /// A control's kept value; none for the backlight, which the system keeps.
+    pub fn get(&self, id: &str) -> Option<&str> {
+        match id {
+            "tdp" => Some(&self.tdp),
+            "gpu" => Some(&self.gpu),
+            "refresh" => Some(&self.refresh),
+            "fan" => Some(&self.fan),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Paths {

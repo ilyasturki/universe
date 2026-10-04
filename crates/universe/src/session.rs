@@ -57,6 +57,10 @@ pub enum Undo {
         env: BTreeMap<String, String>,
     },
     Hud,
+    /// The machine's controls the game's own changed, by control id: the values its end puts back.
+    System {
+        before: BTreeMap<String, String>,
+    },
 }
 
 pub fn read_marker() -> Option<Marker> {
@@ -93,6 +97,29 @@ fn update_marker(f: impl FnOnce(&mut Marker)) -> Result<()> {
     std::fs::write(&tmp, serde_json::to_string(&m)?)?;
     std::fs::rename(&tmp, &p)?;
     Ok(())
+}
+
+/// A control the running game's own just changed: the first value noted is the one its end puts back.
+pub(crate) fn system_before(id: &str, value: &str) -> Result<()> {
+    update_marker(|m| match m.undo.iter_mut().find_map(|u| if let Undo::System { before } = u { Some(before) } else { None }) {
+        Some(before) => {
+            before.entry(id.into()).or_insert_with(|| value.into());
+        }
+        None => m.undo.push(Undo::System { before: BTreeMap::from([(id.into(), value.into())]) }),
+    })
+}
+
+/// A new value of the machine's own for a control the running game changed: its end puts that one back.
+pub(crate) fn system_ends_at(id: &str, value: &str) -> Result<()> {
+    update_marker(|m| {
+        for u in &mut m.undo {
+            if let Undo::System { before } = u {
+                if let Some(v) = before.get_mut(id) {
+                    *v = value.into();
+                }
+            }
+        }
+    })
 }
 
 impl Core {
@@ -260,6 +287,20 @@ impl Core {
             self.apply_mangoapp(r.effective.mangohud, true)?;
             undo.push(Undo::Hud);
         }
+        let own: Vec<(&String, &String)> = r.game.system.iter().filter(|(_, v)| !v.is_empty()).collect();
+        if !own.is_empty() {
+            let controls = self.system_controls().await;
+            let before: BTreeMap<String, String> =
+                own.iter().filter_map(|(id, _)| controls.iter().find(|c| c.id == id.as_str())).map(|c| (c.id.to_string(), c.value.clone())).collect();
+            if !before.is_empty() {
+                undo.push(Undo::System { before: before.clone() });
+            }
+            for (id, value) in own.into_iter().filter(|(id, _)| before.contains_key(*id)) {
+                if let Err(e) = self.apply_system_one(id, value).await {
+                    tracing::warn!("system.{id} = {value}: {e}");
+                }
+            }
+        }
         write_marker(&Marker { current: current.clone(), hook_env, undo: undo.clone(), command: plan.command_line(), stopped: false })?;
         tracing::info!("launch {}: {}", r.game.id, plan.command_line());
         let budget: u64 = 60 + self.hook_modules(r, "session-end").await.iter().map(|m| m.timeout().as_secs()).sum::<u64>();
@@ -301,6 +342,13 @@ impl Core {
                 Undo::PostCommand { command, cwd, env } => {
                     if let Err(e) = launcher::run_shell(command, env, Path::new(cwd)).await {
                         tracing::warn!("post_command: {e}");
+                    }
+                }
+                Undo::System { before } => {
+                    for (id, value) in before {
+                        if let Err(e) = self.apply_system_one(id, value).await {
+                            tracing::warn!("system.{id} = {value}: {e}");
+                        }
                     }
                 }
             }
@@ -535,6 +583,7 @@ pub(crate) mod tests {
                 Undo::PostCommand { .. } => "post_command",
                 Undo::Cursor { .. } => "cursor",
                 Undo::Hud => "hud",
+                Undo::System { .. } => "system",
             })
             .collect()
     }
@@ -855,6 +904,44 @@ pub(crate) mod tests {
         assert_eq!(lines.len(), 2, "{lines:?}");
         assert!(lines[0].starts_with(&format!("pre {sid} 77 {{")) && lines[1].starts_with(&format!("end {sid} 77 {{")), "{lines:?}");
         assert!(lines[0].contains("\"extras\":false"), "the game's own setting: {}", lines[0]);
+    }
+
+    #[tokio::test]
+    async fn a_decks_controls_set_during_a_game_come_back_at_its_next_launch() {
+        let _sb = sandbox();
+        let deck = crate::hardware::tests::deck();
+        let (host, memory) = Host::memory();
+        let host = Host { machine: crate::hardware::Machine::at(deck.path()), ..host };
+        let core = Core::open_with(crate::config::Config::load().unwrap(), host).await.unwrap();
+        let cap = deck.path().join("sys/class/hwmon/hwmon5/power1_cap");
+        let watts = || std::fs::read_to_string(&cap).unwrap().trim().to_string();
+        let finish = |sid: &str| memory.finish(&format!("universe-game-sample-{sid}.service"), 0);
+
+        let sid = core.launch("sample", "", "").await.unwrap();
+        core.set_system_for("sample", "tdp", "9").await.unwrap();
+        assert_eq!(watts(), "9000000", "set during the game, on at once");
+        assert_eq!(core.get("sample").await.unwrap().game.system["tdp"], "9", "and kept as the game's own");
+        finish(&sid);
+        core.session_end("sample", &sid, None, None).await.unwrap();
+        assert_eq!(watts(), "15000000", "its end puts the machine's own back");
+
+        let sid = core.launch("sample", "", "").await.unwrap();
+        assert_eq!(watts(), "9000000", "the next launch brings the game's back");
+        assert_eq!(undo_steps(&read_marker().unwrap()), ["post_command", "cursor", "system"]);
+        core.set_system("tdp", "12").await.unwrap();
+        assert_eq!(watts(), "9000000", "the machine's own waits while the game holds its own");
+        finish(&sid);
+        core.session_end("sample", &sid, None, None).await.unwrap();
+        assert_eq!(watts(), "12000000", "then comes on with its end");
+
+        let sid = core.launch("sample", "", "").await.unwrap();
+        core.set_system_all("sample", "tdp", "10").await.unwrap();
+        assert_eq!(watts(), "10000000", "every game's value is on at once");
+        assert!(core.get("sample").await.unwrap().game.system.is_empty(), "the game lets its own go");
+        assert_eq!(core.config.read().await.system.tdp, "10");
+        finish(&sid);
+        core.session_end("sample", &sid, None, None).await.unwrap();
+        assert_eq!(watts(), "10000000", "and stays after the game");
     }
 
     #[tokio::test]

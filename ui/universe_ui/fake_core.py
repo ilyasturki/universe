@@ -329,6 +329,8 @@ class FakeCore:
         self._process = None
         self._session = None
         self._session_started = None
+        # The controls the running game's own changed, as they were before: its end puts them back.
+        self._system_before = {}
         self._stopped = False
         self._closed = False
         self._installing, self._cancel = "", ""
@@ -1103,6 +1105,10 @@ class FakeCore:
             self._session_started = time.monotonic()
             self._stopped = False
             self.hud_shown = bool(self._resolved(game)["effective"].get("mangohud"))
+            own = {k: v for k, v in (game.get("system") or {}).items() if v}
+            self._system_before = {c["id"]: c["value"] for c in self.system if c["id"] in own}
+            for c in self.system:
+                c["value"] = own.get(c["id"], c["value"])
             self._marker().write_text(json.dumps({**current, "hook_env": [], "undo": []}))
         self._later(UNLOCK_S, lambda: self._unlock_one(ident))
         if self._fake_launch and shutil.which("sleep"):
@@ -1133,6 +1139,9 @@ class FakeCore:
             if not current or self._closed:
                 return
             self.game_shown = self.frozen = self.hud_shown = False
+            for c in self.system:
+                c["value"] = self._system_before.get(c["id"], c["value"])
+            self._system_before = {}
             duration = max(1, round(time.monotonic() - (self._session_started or time.monotonic())))
             game = self._game(current["id"])
             stats = game.setdefault("stats", {"hours": 0, "play_count": 0, "last_played": None})
@@ -1300,13 +1309,36 @@ class FakeCore:
     def system_controls(self):
         return [dict(c) for c in self.system] if self.deck_model() and not self.under_steam() else []
 
-    def set_system(self, ident, value):
+    def _control(self, ident):
         control = next((c for c in self.system if c["id"] == ident), None)
         if control is None:
             raise UniverseError("Invalid", f"no system control '{ident}'")
         if self.system_error:
             raise UniverseError("Unavailable", self.system_error)
-        control["value"] = value
+        return control
+
+    def set_system(self, ident, value):
+        control = self._control(ident)
+        running = self._session and self._game(self._session["id"])
+        if not (running and (running.get("system") or {}).get(ident)):
+            control["value"] = value
+        if ident in self._system_before:
+            self._system_before[ident] = value
+
+    def set_system_for(self, game, ident, value):
+        control = self._control(ident)
+        own = self._game(game)
+        if self._session and self._session["id"] == game:
+            self._system_before.setdefault(ident, control["value"])
+            control["value"] = value
+        own.setdefault("system", {})[ident] = value
+        self._write_game(own)
+
+    def set_system_all(self, game, ident, value):
+        own = self._game(game)
+        (own.get("system") or {}).pop(ident, None)
+        self._write_game(own)
+        self.set_system(ident, value)
 
     def apply_system(self):
         self.system_applied += 1

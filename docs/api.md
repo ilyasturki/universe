@@ -22,8 +22,9 @@ operation; a dash means the surface doesn't expose it.
   `ExitType=cgroup` — it lives as long as any process of the game lives. Its
   `ExecStopPost=universe session-end <id> <session>` runs when the cgroup empties, whatever became
   of the launcher: it appends the `sessions.jsonl` line, undoes what the launch began in reverse
-  order (the cursor hiding, `post_command` for `pre_command`) as the marker lists them, then runs
-  the `session-end` hooks, then the `post-process` hooks.
+  order (the cursor hiding, `post_command` for `pre_command`, the machine's controls the game's own
+  `[system]` changed, see System) as the marker lists them, then runs the `session-end` hooks, then
+  the `post-process` hooks.
 - **Who owns the game's lifetime** depends on the launcher. One that called `adopt_scope()` — the UI,
   and `universe play` without `--no-wait` — was moved into `universe-launcher-<pid>.scope`, and every
   game it launches carries `BindsTo=` + `After=` that scope: the game goes down with the launcher
@@ -1510,8 +1511,10 @@ Access menu has them).
 |---|---|---|---|
 | `deck::model()` | `deck_model()` | — | `lcd` or `oled` on a Steam Deck (DMI: Valve's Jupiter or Galileo board), else none; `UNIVERSE_DECK=lcd\|oled\|none` stands in for the read |
 | `system_controls()` | `system_controls()` | — | `[{id, label, detail, kind, value, min, max, step, unit, choices}]`, each only where this machine has it and this user can set it: `brightness` (range, %: the first `/sys/class/backlight`, amdgpu's first), `refresh` (range, Hz: a Deck's panel, 40–60 LCD or 45–90 OLED, on the launcher's own gamescope straight on the screen only), `tdp` (range, W: amdgpu's hwmon `power1_cap`, bounded by `power1_cap_min`/`_max`), `gpu` (choice: `auto` or a clock in 100 MHz steps over `pp_od_clk_voltage`'s `OD_RANGE`), `fan` (toggle: SteamOS's `jupiter-fan-control` service, off leaving the fan to the firmware); empty under Steam |
-| `set_system(id, value)` | `set_system(id, value)` | — | applies it and, but for `brightness`, keeps it in `[system]`. The backlight goes through logind's `Session.SetBrightness` (no polkit), else the file; the power cap and the clock through the file when it is writable, else SteamOS's `steamos-priv-write` (which leaves the file writable after its first write); a pinned clock writes `manual`, then `s 0 N`, `s 1 N` and `c`; the refresh through gamescope's `GAMESCOPE_DYNAMIC_REFRESH`; the fan through `jupiter-fan-control --enable\|--disable`. `Invalid` on an unknown id or value, `Unavailable` where the machine has no such control or the helper refuses |
-| `apply_system()` | `apply_system()` | — | `[system]` put back, a failure logged: the power limit and the clocks do not outlive a reboot. The UI calls it at startup |
+| `set_system(id, value)` | `set_system(id, value)` | — | the machine's own value: applies it (but not while the running game holds its own `[system]` value, whose session's end puts this one back instead) and, but for `brightness`, keeps it in `[system]`. The backlight goes through logind's `Session.SetBrightness` (no polkit), else the file; the power cap and the clock through the file when it is writable, else SteamOS's `steamos-priv-write` (which leaves the file writable after its first write); a pinned clock writes `manual`, then `s 0 N`, `s 1 N` and `c`; the refresh through gamescope's `GAMESCOPE_DYNAMIC_REFRESH`; the fan through `jupiter-fan-control --enable\|--disable`. `Invalid` on an unknown id or value, `Unavailable` where the machine has no such control or the helper refuses |
+| `set_system_for(game, id, value)` | `set_system_for(game, id, value)` | — | the game's own value, kept in its `game.toml [system]`: applied now when the game is the one running, else at its next launch. A launch puts the game's `[system]` values on after reading the machine's, which its session's end puts back (a `system` step in the marker's `undo`); one set mid-session is read the same way first. A Steam Deck's per-game profile, the quick settings' A |
+| `set_system_all(game, id, value)` | `set_system_all(game, id, value)` | — | the game lets its own value go and `set_system(id, value)` makes it the machine's own, which every game without its own then runs with: the quick settings' Y |
+| `apply_system()` | `apply_system()` | — | `[system]` put back, then the running game's own over it, a failure logged: the power limit and the clocks do not outlive a reboot. The UI calls it at startup |
 
 ## config.toml
 
@@ -1563,7 +1566,7 @@ whats_new = false                    # the first start after an update opens wha
 auto_backup = true                   # a backup of the game's saves after each session
 keep = 5                             # backups kept per game (1 to 255), the oldest going first
 
-[system]                             # the machine's controls as last set (see System), put back at the launcher's start outside Steam; "" leaves one as the system has it
+[system]                             # the machine's controls as last set (see System), put back at the launcher's start outside Steam; "" leaves one as the system has it; a game's own game.toml [system] holds the same ids, brightness too
 tdp = ""                             # watts
 gpu = ""                             # auto, or MHz
 refresh = ""                         # Hz, a Deck's panel on the launcher's own gamescope

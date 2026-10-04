@@ -8,6 +8,9 @@ use crate::{Error, Result};
 /// clock files (and leaves them group-writable after), `jupiter-fan-control --enable|--disable` runs its fan curve.
 const HELPERS: &str = "usr/bin/steamos-polkit-helpers";
 
+/// Every control's id, as `Core::system_controls` lists the ones this machine has.
+pub const CONTROLS: [&str; 5] = ["brightness", "refresh", "tdp", "gpu", "fan"];
+
 /// One of the machine's own controls. `range` steps from `min` to `max`; `choice` picks one of `choices`; `toggle` is "on" or "off".
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Control {
@@ -240,7 +243,7 @@ fn od_sclk(text: &str) -> Option<u32> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     const OD: &str = "OD_SCLK:\n0:        1200Mhz\n1:        1200Mhz\nOD_RANGE:\nSCLK:     200Mhz       1600Mhz\nCCLK:     1400Mhz       3500Mhz\n";
@@ -251,7 +254,7 @@ mod tests {
         std::fs::write(path, text).unwrap();
     }
 
-    fn deck() -> tempfile::TempDir {
+    pub(crate) fn deck() -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();
         let r = dir.path();
         put(r, "sys/class/backlight/amdgpu_bl0/brightness", "2048\n");

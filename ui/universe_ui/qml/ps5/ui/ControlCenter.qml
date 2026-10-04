@@ -374,7 +374,7 @@ FocusScope {
 
     // A setting of the game's own: what changes here is this game's, △ gives its value to every game.
     function scoped(item) {
-        return !!item && (!!item.key || item.id === "pause");
+        return !!item && (!!item.key || item.id === "pause" || (!!item.sys && !!session && !!session.id));
     }
 
     function allGames(item) {
@@ -384,7 +384,9 @@ FocusScope {
         }
         var toggle = item.kind === "toggle";
         var value = toggle ? (isOn(item) ? "true" : "false") : String(vals[item.id] || "");
-        if (!api.home.setLaunchValueAll(item.key || "pause_on_home", value)) {
+        if (item.sys)
+            api.system.setAll(session.id, item.sys, vals[item.id]);
+        else if (!api.home.setLaunchValueAll(item.key || "pause_on_home", value)) {
             Sound.play("edge");
             return;
         }
@@ -433,7 +435,7 @@ FocusScope {
         if (item.sys) {
             var on = vals[item.id] !== "on";
             patch(item.id, on ? "on" : "off");
-            api.system.set(item.sys, on ? "on" : "off");
+            api.system.setFor(session ? session.id : "", item.sys, on ? "on" : "off");
         } else if (item.id === "pause")
             api.home.setPauseOnHome(!vals.pause);
         else if (item.id === "hud") {
@@ -630,7 +632,7 @@ FocusScope {
             api.system.controls.forEach(function (c) {
                 var want = cc.vals["sys_" + c.id];
                 if (want !== undefined && want !== c.value)
-                    api.system.set(c.id, want);
+                    api.system.setFor(cc.session ? cc.session.id : "", c.id, want);
             });
         }
     }

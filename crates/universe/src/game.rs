@@ -29,6 +29,9 @@ pub struct Game {
     /// The game-scope settings of the source it came from, by source id.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub sources: BTreeMap<String, toml::Table>,
+    /// The machine's controls while the game runs, by control id (`tdp = "9"`): a Steam Deck's per-game profile.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub system: BTreeMap<String, String>,
     /// Parked data (lutris, repack pins…): kept verbatim so nothing is lost.
     #[serde(flatten)]
     pub extra: BTreeMap<String, toml::Value>,
@@ -148,6 +151,7 @@ impl Default for Game {
             saves: Saves::default(),
             modules: BTreeMap::new(),
             sources: BTreeMap::new(),
+            system: BTreeMap::new(),
             extra: BTreeMap::new(),
         }
     }
@@ -378,6 +382,7 @@ pub fn set_key(game_toml: &Path, key: &str, value: &str) -> crate::Result<Game> 
         "saves",
         "modules",
         "sources",
+        "system",
     ];
     if !allowed.contains(&top) {
         return Err(crate::Error::Invalid(format!("unknown key {key}")));

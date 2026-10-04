@@ -861,14 +861,14 @@ impl Core {
         if self.under_steam() {
             return vec![];
         }
-        let m = crate::hardware::Machine::default();
+        let m = &self.host.machine;
         let mut out: Vec<crate::hardware::Control> = [m.brightness(), self.refresh_control(), m.tdp(), m.gpu_clock()].into_iter().flatten().collect();
         out.extend(m.fan().await);
         out
     }
 
-    async fn apply_system_one(&self, id: &str, value: &str) -> Result<()> {
-        let m = crate::hardware::Machine::default();
+    pub(crate) async fn apply_system_one(&self, id: &str, value: &str) -> Result<()> {
+        let m = &self.host.machine;
         let number = || value.parse::<u32>().map_err(|_| Error::Invalid(format!("{id}: a number, not '{value}'")));
         match id {
             "brightness" => m.set_brightness(number()?).await,
@@ -886,10 +886,21 @@ impl Core {
         }
     }
 
-    /// Applied now; kept in `[system]` to be put back at the next start, but for the backlight, which the system keeps.
+    /// The machine's own value: kept in `[system]` to be put back at the next start, but for the backlight, which the
+    /// system keeps; applied now unless the running game holds its own, and what that session's end puts back.
     pub async fn set_system(&self, id: &str, value: &str) -> Result<()> {
         self.steam_owns("The system's controls")?;
-        self.apply_system_one(id, value).await?;
+        let running = self.current().await;
+        let held = match &running {
+            Some(c) => self.get(&c.id).await.is_ok_and(|r| r.game.system.get(id).is_some_and(|v| !v.is_empty())),
+            None => false,
+        };
+        if !held {
+            self.apply_system_one(id, value).await?;
+        }
+        if running.is_some() {
+            crate::session::system_ends_at(id, value)?;
+        }
         if id == "brightness" {
             return Ok(());
         }
@@ -897,17 +908,46 @@ impl Core {
         self.reload_config().await
     }
 
-    /// `[system]` put back: the power limit and the clocks do not outlive a reboot.
+    /// Kept in `game.toml [system]`, put on by its launches and taken off by their ends; applied now when `game` runs.
+    pub async fn set_system_for(&self, game: &str, id: &str, value: &str) -> Result<()> {
+        self.steam_owns("The system's controls")?;
+        if !crate::hardware::CONTROLS.contains(&id) {
+            return Err(Error::Invalid(format!("no system control '{id}'")));
+        }
+        let r = self.get(game).await?;
+        if self.current().await.is_some_and(|c| c.id == game) {
+            let before = self.system_controls().await.into_iter().find(|c| c.id == id).map(|c| c.value);
+            self.apply_system_one(id, value).await?;
+            if let Some(before) = before {
+                crate::session::system_before(id, &before)?;
+            }
+        }
+        crate::game::set_key(&r.game.toml_path(), &format!("system.{id}"), value)?;
+        self.reload_game(game).await
+    }
+
+    /// The machine's own value, which `game` then follows: its `[system]` lets the control go.
+    pub async fn set_system_all(&self, game: &str, id: &str, value: &str) -> Result<()> {
+        let r = self.get(game).await?;
+        crate::game::set_key(&r.game.toml_path(), &format!("system.{id}"), "")?;
+        self.reload_game(game).await?;
+        self.set_system(id, value).await
+    }
+
+    /// `[system]` put back: the power limit and the clocks do not outlive a reboot; a running game's own over it.
     pub async fn apply_system(&self) {
         if self.under_steam() {
             return;
         }
         let saved = self.config.read().await.system.clone();
-        for (id, value) in [("tdp", &saved.tdp), ("gpu", &saved.gpu), ("refresh", &saved.refresh), ("fan", &saved.fan)] {
-            if !value.is_empty() {
-                if let Err(e) = self.apply_system_one(id, value).await {
-                    tracing::warn!("system.{id} = {value}: {e}");
-                }
+        let mut values: BTreeMap<String, String> =
+            crate::hardware::CONTROLS.iter().filter_map(|id| saved.get(id).map(|v| (id.to_string(), v.to_string()))).collect();
+        if let Some(c) = self.current().await {
+            values.extend(self.get(&c.id).await.map(|r| r.game.system).unwrap_or_default().into_iter().filter(|(_, v)| !v.is_empty()));
+        }
+        for (id, value) in values.iter().filter(|(_, v)| !v.is_empty()) {
+            if let Err(e) = self.apply_system_one(id, value).await {
+                tracing::warn!("system.{id} = {value}: {e}");
             }
         }
     }

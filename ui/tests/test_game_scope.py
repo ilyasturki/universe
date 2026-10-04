@@ -108,33 +108,58 @@ def test_a_value_only_the_game_holds_offers_no_other_games(game_page, fake, look
     click(window, Qt.Key.Key_Escape)
 
 
-@pytest.mark.parametrize("look", list(OVERLAYS))
-def test_a_quick_setting_is_the_games_and_y_gives_it_to_every_game(api, fake, look):
-    api.theme.set(look)
-    api.theme.takeLanding()
-    engine, window = render(api)
-    overlay = host.create_overlay(engine, window.size())
-    api.home.attachOverlay(overlay)
-    overlay.show()
-    settle(overlay)
-    fake.launch("mirrors-edge", "")
-    until(lambda: api.home.shown == "game")
+def land(api, look, overlay, group, row):
+    """Opens the quick settings over the running game on one row of a group: (panel, the scope line)."""
     api.home.openDock()
     overlay.requestActivate()
     until(overlay.isActive)
     panel = overlay.property("contentItem").childItems()[0].property("item")
     until(lambda: panel.property("open") is True)
     if look == "reprise":
-        panel.setProperty("index", [b["id"] for b in value(panel, "buttons")].index("perf"))
+        panel.setProperty("index", [b["id"] for b in value(panel, "buttons")].index(group))
         click(overlay, Qt.Key.Key_Return)
         until(lambda: panel.property("opened") is True)
-        panel.setProperty("sub", [c["id"] for c in value(panel, "current")["children"]].index("fps"))
+        panel.setProperty("sub", [c["id"] for c in value(panel, "current")["children"]].index(row))
     else:
-        panel.setProperty("icon", [i["id"] for i in value(panel, "icons")].index("perf"))
+        panel.setProperty("icon", [i["id"] for i in value(panel, "icons")].index(group))
         panel.setProperty("zone", "panel")
-        panel.setProperty("row", [r["id"] for r in value(panel, "panelRows")].index("fps"))
+        panel.setProperty("row", [r["id"] for r in value(panel, "panelRows")].index(row))
     scope = overlay.findChild(QObject, OVERLAYS[look])
     until(lambda: scope.property("visible") is True, "the panel says the setting is this game's and Y gives it to all")
+    return panel, scope
+
+
+@pytest.fixture
+def overlay(api):
+    """A look's window and the overlay its quick settings draw on, once a game runs."""
+    opened = []
+
+    def open_overlay(look):
+        api.theme.set(look)
+        api.theme.takeLanding()
+        engine, window = render(api)
+        layer = host.create_overlay(engine, window.size())
+        api.home.attachOverlay(layer)
+        layer.show()
+        opened.append((engine, window, layer))
+        settle(layer)
+        until(lambda: api.home.shown == "game")
+        return layer
+
+    yield open_overlay
+    if api.universe.currentSession is not None:
+        api.home.stop()
+        until(lambda: api.universe.currentSession is None)
+    for _engine, window, layer in opened:
+        window.close()
+        layer.close()
+
+
+@pytest.mark.parametrize("look", list(OVERLAYS))
+def test_a_quick_setting_is_the_games_and_y_gives_it_to_every_game(overlay, api, fake, look):
+    fake.launch("mirrors-edge", "")
+    overlay = overlay(look)
+    panel, scope = land(api, look, overlay, "perf", "fps")
     if where := os.environ.get("UNIVERSE_TEST_SHOTS"):
         until(lambda: panel.property("shown") is True and scope.property("opacity") == 1)
         pump(800)
@@ -144,7 +169,32 @@ def test_a_quick_setting_is_the_games_and_y_gives_it_to_every_game(api, fake, lo
     click(overlay, Qt.Key.Key_F)
     until(lambda: (fake.config()["set"].get("launch") or {}).get("fps_limit") == picked, "Y: every game's")
     assert "fps_limit" not in fake.game("mirrors-edge")["launch"], "the game follows it"
+
+
+@pytest.mark.parametrize("look", list(OVERLAYS))
+def test_a_decks_control_set_in_a_game_is_its_own_until_y_makes_it_the_machines(monkeypatch, overlay, api, fake, look):
+    monkeypatch.setenv("UNIVERSE_DECK", "oled")
+    api.system.reload()
+    until(lambda: (api.system.control("tdp") or {}).get("value") == "15")
+
+    def own():
+        return (fake.game("mirrors-edge").get("system") or {}).get("tdp")
+
+    def watts():
+        return api.system.control("tdp")["value"]
+
+    fake.launch("mirrors-edge", "")
+    overlay = overlay(look)
+    land(api, look, overlay, "system", "sys_tdp")
+    click(overlay, Qt.Key.Key_Left)
+    until(lambda: own() == "14", "a step is this game's")
+    api.home.stop()
+    until(lambda: api.universe.currentSession is None and watts() == "15", "its end puts the machine's own back")
+    fake.launch("mirrors-edge", "")
+    until(lambda: api.home.shown == "game" and watts() == "14", "its next launch brings the game's back")
+    land(api, look, overlay, "system", "sys_tdp")
+    click(overlay, Qt.Key.Key_F)
+    until(lambda: own() is None, "Y: the game lets its own go")
     api.home.stop()
     until(lambda: api.universe.currentSession is None)
-    window.close()
-    overlay.close()
+    assert watts() == "14", "the machine's own now, kept after the game"

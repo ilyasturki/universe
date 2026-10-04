@@ -14,6 +14,7 @@ use crate::{Error, Result};
 pub struct Host {
     pub units: Units,
     pub shell: Shell,
+    pub machine: crate::hardware::Machine,
 }
 
 impl Host {
@@ -21,13 +22,16 @@ impl Host {
         Host {
             units: Units::Systemd(Systemd::default()),
             shell: Shell::Live { profile: crate::desktop::detect(cfg), extension: cfg.desktop.cursor_extension.clone() },
+            machine: crate::hardware::Machine::default(),
         }
     }
 
+    /// No sysfs at all: a test's core never reaches the machine's controls unless it is handed a fake one.
     #[cfg(test)]
     pub fn memory() -> (Host, Arc<Memory>) {
         let m = Arc::new(Memory::default());
-        (Host { units: Units::Memory(m.clone()), shell: Shell::Memory(m.clone()) }, m)
+        let machine = crate::hardware::Machine::at(Path::new("/nonexistent/universe-test-sysfs"));
+        (Host { units: Units::Memory(m.clone()), shell: Shell::Memory(m.clone()), machine }, m)
     }
 }
 

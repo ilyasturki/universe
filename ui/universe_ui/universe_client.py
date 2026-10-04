@@ -360,6 +360,12 @@ class CoreClient(QObject):
     def setSystemAsync(self, ident, value, on_reply, on_error):
         self._call_async(lambda: self._core.set_system(ident, value), lambda _: on_reply(), on_error=on_error)
 
+    def setSystemForAsync(self, game, ident, value, on_reply, on_error):
+        self._call_async(lambda: self._core.set_system_for(game, ident, value), lambda _: on_reply(), on_error=on_error)
+
+    def setSystemAllAsync(self, game, ident, value, on_reply, on_error):
+        self._call_async(lambda: self._core.set_system_all(game, ident, value), lambda _: on_reply(), on_error=on_error)
+
     def applySystemAsync(self, on_done):
         self._call_async(self._core.apply_system, lambda _: on_done(), on_error=lambda e: on_done())
 

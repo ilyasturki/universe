@@ -436,6 +436,9 @@ class System(QObject):
         client.powerActionsAsync(self._set_actions)
         # What `[system]` kept goes back first: the power limit and the clocks do not outlive a reboot.
         client.applySystemAsync(self.reload)
+        # A launch puts the game's own controls on and its end takes them off.
+        client.sessionStarted.connect(lambda *_: self.reload())
+        client.sessionEnded.connect(lambda *_: self.reload())
 
     def _set_actions(self, ids):
         self._actions = ids
@@ -455,8 +458,7 @@ class System(QObject):
         self.controlsChanged.emit()
 
     # The row shows the value at once; a refusal puts the machine's own back and says why.
-    @Slot(str, str)
-    def set(self, ident, value):
+    def _shown(self, ident, value):
         self._controls = [{**c, "value": value} if c["id"] == ident else c for c in self._controls]
         self.controlsChanged.emit()
 
@@ -464,7 +466,25 @@ class System(QObject):
             self.controlFailed.emit(ident, e.message or e.kind)
             self.reload()
 
-        self._client.setSystemAsync(ident, value, lambda: None, refused)
+        return refused
+
+    # The machine's own value.
+    @Slot(str, str)
+    def set(self, ident, value):
+        self._client.setSystemAsync(ident, value, lambda: None, self._shown(ident, value))
+
+    # The game's own while `game` names one, put on by its launches; else the machine's own.
+    @Slot(str, str, str)
+    def setFor(self, game, ident, value):
+        if not game:
+            self.set(ident, value)
+            return
+        self._client.setSystemForAsync(game, ident, value, lambda: None, self._shown(ident, value))
+
+    # The machine's own value, which `game` then follows instead of its own.
+    @Slot(str, str, str)
+    def setAll(self, game, ident, value):
+        self._client.setSystemAllAsync(game, ident, value, lambda: None, self._shown(ident, value))
 
     @Slot(str, result="QVariant")
     def control(self, ident):

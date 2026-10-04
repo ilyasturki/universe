@@ -281,6 +281,12 @@ impl Core {
     fn set_system(&self, py: Python<'_>, id: String, value: String) -> PyResult<()> {
         self.run(py, |c| async move { c.set_system(&id, &value).await })
     }
+    fn set_system_for(&self, py: Python<'_>, game: String, id: String, value: String) -> PyResult<()> {
+        self.run(py, |c| async move { c.set_system_for(&game, &id, &value).await })
+    }
+    fn set_system_all(&self, py: Python<'_>, game: String, id: String, value: String) -> PyResult<()> {
+        self.run(py, |c| async move { c.set_system_all(&game, &id, &value).await })
+    }
     fn apply_system(&self, py: Python<'_>) {
         self.run_infallible(py, |c| c.apply_system())
     }
