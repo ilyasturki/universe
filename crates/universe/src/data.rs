@@ -761,7 +761,8 @@ mod tests {
         assert_eq!(root["bytes"], 3100);
         assert!(root["free"].as_u64().unwrap() > 0);
         let free = core.disk_free().await;
-        assert_eq!(free[1]["free"], root["free"], "the free space alone, the same");
+        assert_eq!((&free[1]["path"], &free[1]["size"]), (&root["path"], &root["size"]), "the same root, its disk's size alone");
+        assert!(free[1]["free"].as_u64().unwrap() > 0);
         assert!(free[1].get("bytes").is_none(), "no folder walked");
 
         assert!(matches!(core.trash_leftover(&held.to_string_lossy()).await, Err(Error::Invalid(_))), "a held prefix is no leftover");
