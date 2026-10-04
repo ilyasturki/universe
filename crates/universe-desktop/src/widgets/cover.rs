@@ -54,8 +54,7 @@ mod imp {
     impl ObjectImpl for Cover {
         fn constructed(&self) {
             self.parent_constructed();
-            let size = self.art_width.get().min(self.art_height.get()) * 9 / 25;
-            self.placeholder.set_pixel_size(size);
+            self.fit_placeholder();
             self.frame.add_named(&self.placeholder, Some("placeholder"));
             self.frame.add_named(&self.picture, Some("art"));
             self.frame.set_visible_child_name("placeholder");
@@ -85,6 +84,10 @@ mod imp {
     }
 
     impl Cover {
+        pub(super) fn fit_placeholder(&self) {
+            self.placeholder.set_pixel_size(self.art_width.get().min(self.art_height.get()) * 9 / 25);
+        }
+
         fn set_path(&self, path: String) {
             if *self.path.borrow() == path {
                 return;
@@ -152,7 +155,7 @@ impl Cover {
         }
         self.set_art_width(width);
         self.set_art_height(height);
-        self.imp().placeholder.set_pixel_size(width.min(height) * 9 / 25);
+        self.imp().fit_placeholder();
         self.queue_resize();
         self.imp().load();
     }
