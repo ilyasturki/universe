@@ -295,6 +295,15 @@ class Storage(QObject):
         self._loading = False
         self._error = ""
         self._generation = 0
+        self._roots = []
+
+    @Slot()
+    def loadFree(self):
+        def landed(roots):
+            self._roots = roots or []
+            self.changed.emit()
+
+        self._client.diskFreeAsync(landed)
 
     @Slot()
     def load(self):
@@ -344,7 +353,7 @@ class Storage(QObject):
         return True
 
     def _free(self, root):
-        r = next((r for r in self._data.get("roots") or [] if r["id"] == root), None)
+        r = next((r for r in self._data.get("roots") or self._roots if r["id"] == root), None)
         return _size(r["free"]) if r and r.get("free") else ""
 
     rows = Property(list, lambda self: [dict(r) for r in self._rows], notify=changed)

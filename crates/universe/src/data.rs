@@ -262,6 +262,12 @@ impl Core {
         blocking(move || Ok(storage(&games, &config))).await
     }
 
+    /// `storage()`'s roots with their free space and no size: no folder walked, cheap enough for a home screen.
+    pub async fn disk_free(&self) -> Value {
+        let config = self.config.read().await.clone();
+        roots(&config).iter().map(|(id, path)| root_json(id, path, None)).collect()
+    }
+
     /// One of `storage()`'s leftovers to the trash, named by its path: nothing else is taken.
     pub async fn trash_leftover(&self, path: &str) -> Result<()> {
         let config = self.config.read().await.clone();
@@ -435,8 +441,8 @@ fn index(game: &Game, games: &[Resolved], config: &Config, uninstaller: Option<S
     })
 }
 
-fn storage(games: &[Resolved], config: &Config) -> Value {
-    let roots: Vec<Value> = [
+fn roots(config: &Config) -> [(&'static str, PathBuf); 7] {
+    [
         ("games", config.games_root()),
         ("prefixes", config.prefixes_root()),
         ("saves", config.saves_root()),
@@ -445,12 +451,19 @@ fn storage(games: &[Resolved], config: &Config) -> Value {
         ("components", crate::components::root()),
         ("logs", paths::state_home().join("logs")),
     ]
-    .into_iter()
-    .map(|(id, path)| {
-        let (free, total) = free_space(&path).unwrap_or((0, 0));
-        json!({"id": id, "path": path, "bytes": disk_usage(&path), "free": free, "size": total, "exists": path.is_dir()})
-    })
-    .collect();
+}
+
+fn root_json(id: &str, path: &Path, bytes: Option<u64>) -> Value {
+    let (free, total) = free_space(path).unwrap_or((0, 0));
+    let mut v = json!({"id": id, "path": path, "free": free, "size": total, "exists": path.is_dir()});
+    if let Some(b) = bytes {
+        v["bytes"] = b.into();
+    }
+    v
+}
+
+fn storage(games: &[Resolved], config: &Config) -> Value {
+    let roots: Vec<Value> = roots(config).iter().map(|(id, path)| root_json(id, path, Some(disk_usage(path)))).collect();
     let mut sized: Vec<Value> = games
         .iter()
         .filter(|r| r.game.removed_at.is_empty())
@@ -586,6 +599,9 @@ mod tests {
         let root = storage["roots"].as_array().unwrap().iter().find(|r| r["id"] == "prefixes").unwrap().clone();
         assert_eq!(root["bytes"], 3100);
         assert!(root["free"].as_u64().unwrap() > 0);
+        let free = core.disk_free().await;
+        assert_eq!(free[1]["free"], root["free"], "the free space alone, the same");
+        assert!(free[1].get("bytes").is_none(), "no folder walked");
 
         assert!(matches!(core.trash_leftover(&held.to_string_lossy()).await, Err(Error::Invalid(_))), "a held prefix is no leftover");
         assert!(matches!(core.trash_leftover("/etc").await, Err(Error::Invalid(_))));

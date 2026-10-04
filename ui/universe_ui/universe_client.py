@@ -419,6 +419,9 @@ class CoreClient(QObject):
     def storageAsync(self, on_reply, on_error=None):
         self._call_async(self._core.storage, on_reply, on_error)
 
+    def diskFreeAsync(self, on_reply):
+        self._call_async(self._core.disk_free, on_reply, lambda e: None)
+
     def trashLeftoverAsync(self, path, on_reply, on_error=None):
         self._call_async(lambda: self._core.trash_leftover(path), on_reply, on_error)
 

@@ -864,6 +864,9 @@ class FakeCore:
             "leftover_bytes": sum(item["bytes"] for item in self._leftovers),
         }
 
+    def disk_free(self):
+        return [{k: v for k, v in r.items() if k != "bytes"} for r in self.storage()["roots"]]
+
     def trash_leftover(self, path):
         if not any(item["path"] == path for item in self._leftovers):
             raise UniverseError("Invalid", f"{path} is no leftover: only what the Storage view lists goes to the trash")

@@ -134,6 +134,9 @@ impl Core {
     fn storage(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.value(py, |c| c.storage())
     }
+    fn disk_free(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.value_infallible(py, |c| c.disk_free())
+    }
     fn trash_leftover(&self, py: Python<'_>, path: String) -> PyResult<()> {
         self.run(py, |c| async move { c.trash_leftover(&path).await })
     }

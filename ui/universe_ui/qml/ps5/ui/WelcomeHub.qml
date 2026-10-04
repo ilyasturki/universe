@@ -138,6 +138,7 @@ FocusScope {
         if (Date.now() - readAt > 2000)
             refresh();
         api.screens.media.load();
+        api.screens.storage.loadFree();
         if (api.screens.modules.doctor.length === 0)
             api.screens.modules.loadDoctor();
     }
@@ -561,7 +562,7 @@ FocusScope {
 
             Label {
                 anchors.right: parent.right
-                text: hub.sources.freeSpace > 0 ? Format.bytes(hub.sources.freeSpace) : "—"
+                text: api.screens.storage.free !== "" ? api.screens.storage.free : "—"
                 font.weight: Font.DemiBold
                 font.pixelSize: Theme.dp(Theme.fontSmall)
             }
