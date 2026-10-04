@@ -541,7 +541,7 @@ FocusScope {
         if (description !== "")
             about.push({
                 caption: credits,
-                title: "About",
+                title: "Description",
                 body: description,
                 width: 1032,
                 open: {
@@ -557,11 +557,13 @@ FocusScope {
         if (game.players > 0)
             facts.push(game.players === 1 ? "Single player" : "Up to " + game.players + " players");
         facts.push((game.runnerName || game.runner || "") + (game.source ? " · " + game.source.toUpperCase() : ""));
+        facts = facts.filter(Boolean);
+        var publisher = game.publisherList.length > 0 ? game.publisherList[0] : "";
         about.push({
             badge: "info",
-            caption: "Information",
-            title: game.publisherList.length > 0 ? game.publisherList[0] : game.title,
-            body: facts.filter(Boolean).join("\n"),
+            caption: publisher !== "" ? "Publisher" : "Information",
+            title: publisher !== "" ? publisher : facts.shift() || "Information",
+            body: facts.join("\n"),
             open: {
                 page: "pages/SoftwareInfoPage.qml",
                 args: {

@@ -88,6 +88,16 @@ def test_the_hub_s_last_session_card_has_no_stray_separator_without_a_session_co
     assert body and not body.startswith("·") and not body.startswith(" ")
 
 
+def test_the_hub_s_facts_card_never_repeats_the_game_s_title(ps5):
+    _window, root = ps5
+    home = root.findChild(QObject, "homePage")
+    about = next(s for s in hub_of(home, id="the-technomancer", title="The Technomancer", genreList=["RPG"]) if s["title"] == "About")
+    facts = next(c for c in about["cards"] if c.get("badge") == "info")
+    assert facts["title"] != "The Technomancer"
+    about = next(s for s in hub_of(home, id="the-technomancer", title="The Technomancer", publisherList=["Focus"]) if s["title"] == "About")
+    assert next(c for c in about["cards"] if c.get("badge") == "info")["title"] == "Focus"
+
+
 def test_left_of_the_first_game_is_the_welcome_hub(ps5):
     window, root = ps5
     home = root.findChild(QObject, "homePage")
