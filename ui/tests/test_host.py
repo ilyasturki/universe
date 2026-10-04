@@ -56,7 +56,7 @@ def gamescope(monkeypatch, tmp_path, launcher):
         '  quits) touch "$UNIVERSE_HOST_READY"; echo 3 > "$UNIVERSE_HOST_DONE"; exit 0;;\n'
         '  crashes) touch "$UNIVERSE_HOST_READY"\n'
         '    [ "$(wc -l < "$XDG_RUNTIME_DIR/runs")" -gt "${FAKE_CRASHES:-99}" ] && echo 0 > "$UNIVERSE_HOST_DONE"; exit 0;;\n'
-        '  dies) exit 1;;\n  hangs) exec sleep 30;;\nesac\n'
+        "  dies) exit 1;;\n  hangs) exec sleep 30;;\nesac\n"
     )
     script.chmod(0o755)
     return [str(script)]
