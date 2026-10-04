@@ -38,6 +38,13 @@
           && !(lib.any (d: under d rel) pyOnly)
           && (
             lib.hasPrefix "crates" rel
+            # the components tests read the tools each shipped source pins
+            || (
+              under "sources" rel
+              && (
+                type == "directory" && lib.length (lib.splitString "/" rel) <= 2 || baseNameOf path == "source.toml"
+              )
+            )
             || lib.elem rel [
               "Cargo.toml"
               "Cargo.lock"
