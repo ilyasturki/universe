@@ -89,8 +89,8 @@ def test_an_update_opens_whats_new_once_and_about_opens_the_changelog(upgraded, 
     api.theme.takeLanding()
     engine, window = render(api, activate=True)
     root = window.property("contentItem").childItems()[0].property("item")
-    page = until(lambda: changelog_page(root, theme), "the start opens what's new")
-    assert page.property("fresh") is True and versions(value(page, "releases")) == ["0.0.3", "0.0.2"]
+    page = until(lambda: (p := changelog_page(root, theme)) and p.property("fresh") is True and p, "the start opens what's new")
+    assert versions(value(page, "releases")) == ["0.0.3", "0.0.2"]
     QTest.keyClick(window, Qt.Key.Key_Escape)
     until(lambda: not changelog_page(root, theme) and api.screens.changelog.pending == [], "B closes it, seen")
 
