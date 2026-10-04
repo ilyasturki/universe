@@ -1,5 +1,8 @@
 import base64
 import json
+import os
+import shutil
+import tomllib
 from fnmatch import fnmatch
 from pathlib import Path
 
@@ -140,7 +143,16 @@ def cores(app, tmp_path_factory):
         path = root / name
         path.parent.mkdir(parents=True, exist_ok=True)
         (path.write_bytes if isinstance(content, bytes) else path.write_text)(content)
+    # The core leaves out a module whose binary is missing: a stub stands in for each one this machine lacks.
+    stubs = root / "bin"
+    stubs.mkdir()
+    for manifest in [*ROOT.glob("modules/*/module.toml"), *ROOT.glob("sources/*/source.toml")]:
+        for name in tomllib.loads(manifest.read_text()).get("requires", {}).get("bins", []):
+            if shutil.which(name) is None:
+                (stubs / name).write_text("#!/bin/sh\nexit 1\n")
+                (stubs / name).chmod(0o755)
     with pytest.MonkeyPatch.context() as env:
+        env.setenv("PATH", f"{os.environ['PATH']}{os.pathsep}{stubs}")
         for kind in ("data", "config", "state", "cache"):
             env.setenv(f"UNIVERSE_{kind.upper()}_HOME", str(root / kind))
         for kind in ("modules", "sources"):
