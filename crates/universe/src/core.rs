@@ -448,6 +448,12 @@ impl Core {
         Ok(())
     }
 
+    /// For a frontend's start only: it records this version as seen (`changelog::whats_new`).
+    pub async fn whats_new(&self) -> Vec<crate::changelog::Release> {
+        let shown = self.config.read().await.desktop.whats_new;
+        blocking(move || Ok(crate::changelog::whats_new(shown))).await.unwrap_or_default()
+    }
+
     pub async fn discover(&self) -> crate::discover::Report {
         let config = self.config.read().await.clone();
         blocking(move || Ok(crate::discover::run(&config))).await.unwrap_or_default()

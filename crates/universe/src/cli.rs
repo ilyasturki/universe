@@ -2241,6 +2241,7 @@ fn config_keys() -> Vec<String> {
             "desktop.hide_cursor",
             "desktop.cursor_extension",
             "desktop.keep_awake",
+            "desktop.whats_new",
             "keys.sgdb",
             "keys.sgdb_file",
             "keys.prefer_sgdb",

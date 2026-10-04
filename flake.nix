@@ -42,6 +42,8 @@
               "Cargo.toml"
               "Cargo.lock"
               "rustfmt.toml"
+              # the core embeds the changelog for the apps' About and what's-new pages
+              "CHANGELOG.md"
               # the core embeds the shell extension for `universe setup`
               "extension"
               "extension/extension.js"

@@ -94,6 +94,10 @@ pub fn onboarded_file() -> PathBuf {
     state_home().join("onboarded")
 }
 
+pub fn last_version_file() -> PathBuf {
+    state_home().join("last-version")
+}
+
 pub fn cache_home() -> PathBuf {
     universe_home("UNIVERSE_CACHE_HOME", "XDG_CACHE_HOME", ".cache")
 }

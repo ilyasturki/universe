@@ -192,6 +192,7 @@ pub struct DesktopConfig {
     pub hide_cursor: bool,
     pub cursor_extension: String,
     pub keep_awake: bool,
+    pub whats_new: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -284,7 +285,7 @@ impl Default for LaunchDefaults {
 
 impl Default for DesktopConfig {
     fn default() -> Self {
-        DesktopConfig { profile: "auto".into(), hide_cursor: true, cursor_extension: String::new(), keep_awake: true }
+        DesktopConfig { profile: "auto".into(), hide_cursor: true, cursor_extension: String::new(), keep_awake: true, whats_new: false }
     }
 }
 

@@ -210,6 +210,16 @@ const CONFIG_KEYS: &[ConfigKey] = &[
         "Cursor extension",
         "Empty: the Universe extension hides the resting cursor. Else another GNOME Shell extension toggled to hide it, restored to its prior state after the session.",
     ),
+    ConfigKey {
+        advanced: false,
+        ..config_key(
+            "Updates",
+            "desktop.whats_new",
+            "bool",
+            "Show what's new after an update",
+            "The first start after an update opens the changes since the version you last ran.",
+        )
+    },
 ];
 
 const PROTON_BUILDS: &str = "A Proton build by name, for the Proton choices: the folder holding its `proton` script.";
