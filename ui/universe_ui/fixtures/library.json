@@ -404,16 +404,6 @@
           "advanced": true
         },
         {
-          "key": "va_encoder_opts",
-          "type": "string",
-          "default": "",
-          "label": "VA encoder properties",
-          "description": "key=value pairs replacing the quality preset, for window capture.",
-          "scope": "config",
-          "dynamic": false,
-          "advanced": true
-        },
-        {
           "key": "gsr_extra_args",
           "type": "string",
           "default": "",
@@ -451,7 +441,15 @@
           "dynamic": true,
           "dynamic_choices": ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.5"],
           "advanced": false
-        }
+        },
+        {"key": "api_key_file", "type": "path", "default": "", "label": "API key file", "description": "Read in place of the API key.", "scope": "global", "advanced": false},
+        {"key": "web_search", "type": "bool", "default": true, "label": "Let the model look the game up on the web", "scope": "global", "advanced": true},
+        {"key": "effort", "type": "enum", "default": "high", "label": "Reasoning effort", "choice_labels": {"minimal": "Minimal", "low": "Low", "medium": "Medium", "high": "High"}, "scope": "global", "advanced": true, "choices": ["minimal", "low", "medium", "high"]},
+        {"key": "attempts", "type": "int", "default": 2, "label": "Tries per session", "description": "Past them, the entry is put off.", "scope": "global", "advanced": true},
+        {"key": "request_timeout_s", "type": "int", "default": 900, "label": "Seconds a single try may take", "scope": "global", "advanced": true},
+        {"key": "max_images", "type": "int", "default": 40, "label": "Maximum images sent to the model", "scope": "global", "advanced": true},
+        {"key": "frame_long_edge", "type": "int", "default": 1568, "label": "Frame size", "description": "The long edge of the frames taken from the recording, in pixels.", "scope": "global", "advanced": true},
+        {"key": "prompt_file", "type": "path", "default": "", "label": "Prompt file", "description": "Its text replaces the built-in writing prompt.", "scope": "global", "advanced": true}
       ]
     },
     {

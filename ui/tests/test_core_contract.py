@@ -72,19 +72,14 @@ MAPS |= {"controller.axes", "controller.buttons", "settings.choice_labels"}
 # What a file sets as written, the config's or a game's own tables: no schema to hold either side to.
 OPAQUE = {"set", "modules", "sources", "runners", "proton"}
 
-STALE_CAPTURE = "the fixture's capture module still lists va_encoder_opts, which its manifest dropped (27e6851)"
-STALE_JOURNAL = "the fixture's journal module predates these settings of its manifest"
 HLTB = "the fixture's metadata.extra feeds HLTB and Metacritic rows the core has no field for"
 GAME_DRIFT = {
-    **{f"effective.modules.*.{key} only in the core": STALE_JOURNAL for key in ("api_key_file", "attempts", "effort", "frame_long_edge")},
-    **{f"effective.modules.*.{key} only in the core": STALE_JOURNAL for key in ("max_images", "prompt_file", "request_timeout_s", "web_search")},
-    "effective.modules.*.va_encoder_opts only in the fake": STALE_CAPTURE,
     "metadata.extra only in the fake": HLTB,
     "launch.* only in the core": "test_screens, test_game_scope, test_render, test_ps5_game and test_add read a reset as the key gone from launch;"
     " the core sends every key",
 }
 # What the fake knowingly answers otherwise, per read, as globs of `<path> only in the fake|core` or `<path>: <core types> | <fake types>`.
-KNOWN = {"list": GAME_DRIFT, "get": GAME_DRIFT, "module_settings": {"va_encoder_opts only in the fake": STALE_CAPTURE}}
+KNOWN = {"list": GAME_DRIFT, "get": GAME_DRIFT}
 # Reads of the machine: without a GPU or the default roots, the core answers nothing to compare.
 HOST = {"gpu", "disk_free"}
 

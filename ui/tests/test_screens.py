@@ -223,7 +223,6 @@ def test_module_form(api, fake):
         "min_duration_s",
         "window_wait_s",
         "ffmpeg_video_opts",
-        "va_encoder_opts",
         "gsr_extra_args",
     ], "the advanced settings, then the config-only ones"
     assert form.setValue(form.reveal("gsr_extra_args", "capture"), "-cr full") is True and fake.getSettings("capture", "")["gsr_extra_args"] == "-cr full"
