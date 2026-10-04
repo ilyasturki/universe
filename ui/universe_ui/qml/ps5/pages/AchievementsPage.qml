@@ -3,6 +3,7 @@ import "../core"
 import "../sound"
 import "../ui"
 import "Home.js" as Home
+import "../ui/Trophy.js" as Trophy
 
 // The console's Trophies for one game: the tally at the top, then one wide card a trophy.
 FocusScope {
@@ -74,6 +75,20 @@ FocusScope {
         }
         Sound.play("tick");
         index = next;
+    }
+
+    function openTrophy(t) {
+        if (!t || t.hidden) {
+            Sound.play("edge");
+            return;
+        }
+        Sound.play("ok");
+        var earned = t.unlocked ? "Earned " + Trophy.earned(t.unlockedAt).toLowerCase() : "Not earned yet";
+        shell.dialogAsk({
+            message: t.name,
+            detail: [t.description, [earned, Trophy.rarity(t.rarity)].filter(Boolean).join("  ·  ")].filter(Boolean).join("\n\n"),
+            buttons: ["OK"]
+        });
     }
 
     function refresh() {
@@ -157,7 +172,7 @@ FocusScope {
             options();
         } else if (api.keys.isAccept(event)) {
             event.accepted = true;
-            Sound.play("edge");
+            openTrophy(rows[index]);
         } else if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
             event.accepted = true;
             Sound.play("edge");

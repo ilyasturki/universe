@@ -114,6 +114,24 @@ def test_the_trophies_list_the_games_achievements_and_sort_them(ps5, api):
     assert store.count == 6, "X asks the store again"
 
 
+def test_a_on_a_trophy_opens_its_whole_text_and_a_hidden_one_stays_shut(ps5, api):
+    window, root = ps5
+    store = api.screens.achievements
+    page = push(root, "pages/AchievementsPage.qml", {"gameId": "batman-arkham-origins"})
+    until(lambda: store.count == 6 and len(value(page, "rows")) == 6)
+    dialog = root.findChild(QObject, "dialog")
+    trophy = value(page, "rows")[0]
+    click(window, Qt.Key.Key_Return)
+    until(lambda: dialog.property("open") is True)
+    assert dialog.property("message") == trophy["name"] and trophy["description"] in dialog.property("detail")
+    click(window, Qt.Key.Key_Return)
+    until(lambda: dialog.property("open") is False and page.property("activeFocus"))
+    click(window, Qt.Key.Key_End)
+    until(lambda: page.property("index") == 5)
+    click(window, Qt.Key.Key_Return)
+    assert dialog.property("open") is False, "a hidden trophy keeps its secret"
+
+
 def test_the_information_opens_a_screenshot_full_screen(ps5, api):
     window, root = ps5
     depth = root.property("depth")
