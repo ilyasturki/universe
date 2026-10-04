@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+import argparse
+import html
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+HEADING = re.compile(r"^## \[(?P<version>\d+\.\d+\.\d+)\](?: - (?P<date>\d{4}-\d{2}-\d{2}))?$")
+LINK = re.compile(r"^\[(?P<version>\d+\.\d+\.\d+)\]: (?P<url>\S+)$")
+COMPARE = re.compile(r"/compare/(?P<prev>[^/.]\S*)\.\.\.(?P<tag>\S+)$")
+INLINE = re.compile(r"`(?P<code>[^`]+)`|\*\*(?P<strong>.+?)\*\*|\*(?P<em>[^*]+)\*|\[(?P<text>[^\]]+)\]\([^)]+\)")
+FOOTER = """\
+---
+
+**Install or upgrade**
+
+- Arch Linux, from the AUR: `paru -S universe` (or `universe-bin`, `universe-git`), and `universe-desktop` for the GTK app
+- Fedora 44 and newer: `sudo dnf copr enable ilyasturki/universe`, then `sudo dnf install universe universe-desktop`
+- SteamOS, Bazzite and other distros: `curl -fsSL https://github.com/ilyasturki/universe/releases/latest/download/install.sh | sh`, run again to upgrade
+- Nix: the flake's Home Manager and NixOS modules (`inputs.universe.url = "github:ilyasturki/universe"`), `nix flake update universe` to upgrade
+"""
+
+
+class Release:
+    def __init__(self, version: str, date: str):
+        self.version = version
+        self.date = date
+        self.body: list[str] = []
+        self.link = ""
+
+    def text(self) -> str:
+        return "\n".join(self.body).strip("\n")
+
+    def sections(self) -> list[tuple[str, list[str]]]:
+        out: list[tuple[str, list[str]]] = []
+        for line in self.body:
+            if line.startswith("### "):
+                out.append((line[4:].strip(), []))
+            elif line.startswith("- ") and out:
+                out[-1][1].append(line[2:].strip())
+            elif line.startswith("  ") and out and out[-1][1]:
+                out[-1][1][-1] += " " + line.strip()
+        return out
+
+
+def parse(text: str) -> list[Release]:
+    releases: list[Release] = []
+    links: dict[str, str] = {}
+    for line in text.splitlines():
+        if m := HEADING.match(line):
+            releases.append(Release(m["version"], m["date"] or ""))
+        elif m := LINK.match(line):
+            links[m["version"]] = m["url"]
+        elif releases and not line.startswith("# "):
+            releases[-1].body.append(line)
+    for r in releases:
+        r.link = links.get(r.version, "")
+    return releases
+
+
+def find(version: str, path: Path) -> Release:
+    found = next((r for r in parse(path.read_text()) if r.version == version), None)
+    if found is None:
+        sys.exit(f"changelog: {path.name} has no '## [{version}]' section")
+    return found
+
+
+def problems(r: Release) -> list[str]:
+    out = []
+    if not r.date:
+        out.append(f"'## [{r.version}]' has no date: '## [{r.version}] - YYYY-MM-DD'")
+    if not any(items for _, items in r.sections()):
+        out.append(f"'## [{r.version}]' has no entries")
+    if not COMPARE.search(r.link):
+        out.append(f"no '[{r.version}]: https://github.com/ilyasturki/universe/compare/vPREV...v{r.version}' link at the bottom")
+    return out
+
+
+def notes(r: Release) -> str:
+    out = [r.text(), ""]
+    if m := COMPARE.search(r.link):
+        out += [f"Full changelog: [{m['prev']}...{m['tag']}]({r.link})", ""]
+    return "\n".join(out) + "\n" + FOOTER
+
+
+def markup(item: str) -> str:
+    out, at = [], 0
+    for m in INLINE.finditer(item):
+        out.append(html.escape(item[at : m.start()], quote=False))
+        if m["code"] is not None:
+            out.append(f"<code>{html.escape(m['code'], quote=False)}</code>")
+        elif m["text"] is not None:
+            out.append(html.escape(m["text"], quote=False))
+        else:
+            out.append(f"<em>{html.escape(m['strong'] or m['em'], quote=False)}</em>")
+        at = m.end()
+    out.append(html.escape(item[at:], quote=False))
+    return "".join(out)
+
+
+def metainfo(r: Release) -> str:
+    lines = [f'    <release version="{r.version}" date="{r.date}">', "      <description>"]
+    for title, items in r.sections():
+        lines += [f"        <p>{html.escape(title, quote=False)}</p>", "        <ul>"]
+        lines += [f"          <li>{markup(item)}</li>" for item in items]
+        lines.append("        </ul>")
+    lines += ["      </description>", "    </release>"]
+    return "\n".join(lines)
+
+
+def write_metainfo(r: Release, path: Path) -> None:
+    text = path.read_text()
+    element = metainfo(r)
+    own = re.compile(rf'^    <release version="{re.escape(r.version)}"[^\n]*?(?:/>|>.*?</release>)$', re.MULTILINE | re.DOTALL)
+    if own.search(text):
+        text = own.sub(lambda _: element, text, count=1)
+    elif "<releases>\n" in text:
+        text = text.replace("<releases>\n", f"<releases>\n{element}\n", 1)
+    else:
+        sys.exit(f"changelog: {path} has no <releases>")
+    path.write_text(text)
+
+
+def publish(r: Release) -> None:
+    subprocess.run(["gh", "release", "edit", f"v{r.version}", "--title", f"Universe {r.version}", "--notes-file", "-"], input=notes(r), text=True, check=True)
+    print(f"v{r.version}: release rewritten")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        prog="tools/changelog", description="A version's section of CHANGELOG.md, as the release workflow and `just bump` need it."
+    )
+    parser.add_argument("--file", type=Path, default=ROOT / "CHANGELOG.md")
+    sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("notes", help="the GitHub release body: the section, its compare link and the install footer").add_argument("version")
+    sub.add_parser("check", help="fail unless the version has a dated section with entries and a compare link").add_argument("version")
+    meta = sub.add_parser("metainfo", help="the AppStream <release> element; with FILE, written into it in place of that version's")
+    meta.add_argument("version")
+    meta.add_argument("metainfo", nargs="?", type=Path)
+    sub.add_parser("publish", help="rewrite each version's GitHub release (gh release edit): its title and its notes").add_argument("versions", nargs="+")
+    args = parser.parse_args()
+    if args.command == "publish":
+        for release in [find(v, args.file) for v in args.versions]:
+            publish(release)
+        return
+    release = find(args.version, args.file)
+    if args.command == "check":
+        if errors := problems(release):
+            sys.exit("\n".join(f"changelog: {e}" for e in errors))
+    elif args.command == "notes":
+        sys.stdout.write(notes(release))
+    elif args.metainfo:
+        write_metainfo(release, args.metainfo)
+    else:
+        print(metainfo(release))
+
+
+if __name__ == "__main__":
+    main()

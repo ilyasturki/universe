@@ -235,7 +235,7 @@ env:
     EOF
     echo "wrote $cfg"
 
-# Release, after /release wrote CHANGELOG.md's `## [X.Y.Z]`: rewrite every copy of the version, commit it with the changelog as `chore(release): vX.Y.Z`, tag vX.Y.Z (no push).
+# Release, after /release wrote CHANGELOG.md's `## [X.Y.Z] - YYYY-MM-DD`: rewrite every copy of the version, the metainfo's release notes, commit it with the changelog as `chore(release): vX.Y.Z`, tag vX.Y.Z (no push).
 bump level: check
     #!/usr/bin/env -S nix develop --quiet --command bash
     set -euo pipefail
@@ -252,7 +252,7 @@ bump level: check
     [[ "$new" != "$cur" ]] || { echo "bump: already at $cur" >&2; exit 1; }
     notes=(CHANGELOG.md README.md)
     git diff --quiet -- . "${notes[@]/#/:!}" && git diff --cached --quiet -- . "${notes[@]/#/:!}" || { echo "bump: working tree is not clean beyond ${notes[*]}" >&2; exit 1; }
-    grep -qxF "## [$new]" CHANGELOG.md || { echo "bump: CHANGELOG.md has no '## [$new]' section, the release notes come from it (/release writes it)" >&2; exit 1; }
+    tools/changelog check "$new" || { echo "bump: CHANGELOG.md's '## [$new] - YYYY-MM-DD' section is the release notes (/release writes it)" >&2; exit 1; }
     ! git rev-parse -q --verify "refs/tags/v$new" >/dev/null || { echo "bump: tag v$new exists" >&2; exit 1; }
     copies=(ui/pyproject.toml modules/*/module.toml sources/*/source.toml docs/api.md)
     pkgbuilds=(packaging/aur/universe/PKGBUILD packaging/aur/universe-bin/PKGBUILD)
@@ -262,7 +262,7 @@ bump level: check
     spec=packaging/rpm/universe.spec
     sed -i "s/^\(Version: *\)$cur$/\1$new/" "$spec"
     metainfo=crates/universe-desktop/data/io.github.ilyasturki.UniverseDesktop.metainfo.xml
-    sed -i "s|<releases>|<releases>\n    <release version=\"$new\" date=\"$(date +%F)\"/>|" "$metainfo"
+    tools/changelog metainfo "$new" "$metainfo"
     cargo update --workspace --offline --quiet
     git add Cargo.toml Cargo.lock "${pkgbuilds[@]}" "$spec" "$metainfo" "${copies[@]}" "${notes[@]}"
     git commit --quiet -m "chore(release): v$new"

@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.0.9]
+## [0.0.9] - 2026-09-30
 
 ### Added
 
@@ -16,13 +16,13 @@
 - Dolphin: a port past your connected pads that was left bound to one is unplugged, so one pad no longer drives two players.
 - Recording thumbnails are decoded on the strongest GPU that has a hardware decoder, not always the first render node, and in software when there is none.
 
-## [0.0.8]
+## [0.0.8] - 2026-09-28
 
 ### Fixed
 
 - The prebuilt release (`universe-x86_64-linux.tar.gz`) and the `universe-bin` AUR package, both missing from 0.0.7.
 
-## [0.0.7]
+## [0.0.7] - 2026-09-28
 
 ### Breaking
 
@@ -80,3 +80,7 @@
 ### Removed
 
 - Reprise favourites.
+
+[0.0.9]: https://github.com/ilyasturki/universe/compare/v0.0.8...v0.0.9
+[0.0.8]: https://github.com/ilyasturki/universe/compare/v0.0.7...v0.0.8
+[0.0.7]: https://github.com/ilyasturki/universe/compare/v0.0.6...v0.0.7

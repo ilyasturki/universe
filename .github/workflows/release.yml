@@ -9,15 +9,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
       - name: Notes from CHANGELOG.md
         run: |
-          awk -v head="## [${GITHUB_REF_NAME#v}]" '$0 == head { found = 1; next } /^## \[/ { if (found) exit } found' CHANGELOG.md > notes.md
-          grep -q '[^[:space:]]' notes.md || { echo "::error::CHANGELOG.md has no entries under ## [${GITHUB_REF_NAME#v}]"; exit 1; }
-          prev="$(git describe --tags --abbrev=0 "$GITHUB_REF_NAME^" 2>/dev/null || true)"
-          [ -z "$prev" ] || printf '\nFull changelog: [%s...%s](%s/%s/compare/%s...%s)\n' "$prev" "$GITHUB_REF_NAME" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$prev" "$GITHUB_REF_NAME" >> notes.md
-      - run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md
+          tools/changelog check "${GITHUB_REF_NAME#v}"
+          tools/changelog notes "${GITHUB_REF_NAME#v}" > notes.md
+      - run: gh release create "$GITHUB_REF_NAME" --title "Universe ${GITHUB_REF_NAME#v}" --notes-file notes.md
         env:
           GH_TOKEN: ${{ github.token }}
   # GTK 4.22 and libadwaita 1.9 are no older distro's: Universe Desktop is built on Arch, for the systems that have them
