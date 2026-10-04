@@ -31,6 +31,7 @@ pub fn section_title(section: &str) -> String {
         "Builds" => gettext("Builds"),
         "Options" => gettext("Options"),
         "Settings" => gettext("Settings"),
+        forms::GAME_DEFAULTS => gettext("Game Defaults"),
         other => other.to_string(),
     }
 }
@@ -47,7 +48,15 @@ fn origin_word(origin: Origin) -> String {
 
 /// A value as a row shows it: `auto` with what it comes to, words capitalised, units on numbers.
 fn show(field: &Field, value: &str) -> String {
-    let resolved = if value == field.value || value.is_empty() { field.resolved.as_str() } else { "" };
+    shown(field, value, if value == field.value || value.is_empty() { &field.resolved } else { "" })
+}
+
+/// What a reset would come to, as a row shows it: the inherited value, or what an unset key does (`linear`).
+fn inherited_shown(field: &Field) -> String {
+    shown(field, &field.inherited, &field.inherited_resolved)
+}
+
+fn shown(field: &Field, value: &str, resolved: &str) -> String {
     let unit = |n: &str| match field.kind.as_str() {
         "refresh" => gettext("{} Hz").replace("{}", n),
         "fps" => gettext("{} FPS").replace("{}", n),
@@ -77,12 +86,61 @@ fn show(field: &Field, value: &str) -> String {
 /// What picking the first entry of an inheriting list comes to: `Global · On`.
 fn inherit_label(field: &Field) -> String {
     let word = origin_word(field.fallback.unwrap_or(Origin::Default));
-    let shown = show(field, &field.inherited);
+    let shown = inherited_shown(field);
     if shown.is_empty() {
         word
     } else {
         format!("{word} · {shown}")
     }
+}
+
+/// A row's icon button, named on hover and to a screen reader: an icon alone leaves the row's value its room.
+fn labelled(icon: &str, label: &str) -> gtk::Button {
+    let button = gtk::Button::builder().icon_name(icon).valign(gtk::Align::Center).css_classes(["flat", "circular"]).build();
+    name(&button, label);
+    button
+}
+
+fn name(button: &gtk::Button, label: &str) {
+    button.set_tooltip_text(Some(label));
+    button.update_property(&[gtk::accessible::Property::Label(label)]);
+}
+
+/// A combo's chosen value shows bare in its row (`shown`: each listed label, then that bare one); its list says what
+/// each entry does (`Default · On`).
+fn bare_factory(shown: Rc<RefCell<Vec<(String, String)>>>) -> gtk::SignalListItemFactory {
+    let factory = gtk::SignalListItemFactory::new();
+    factory.connect_setup(|_, item| {
+        if let Some(item) = item.downcast_ref::<gtk::ListItem>() {
+            item.set_child(Some(&gtk::Label::builder().xalign(0.0).ellipsize(gtk::pango::EllipsizeMode::End).build()));
+        }
+    });
+    factory.connect_bind(move |_, item| {
+        let Some(item) = item.downcast_ref::<gtk::ListItem>() else { return };
+        let Some(listed) = item.item().and_downcast::<gtk::StringObject>().map(|s| s.string()) else { return };
+        if let Some(label) = item.child().and_downcast::<gtk::Label>() {
+            let shown = shown.borrow();
+            label.set_label(shown.iter().find(|(full, _)| *full == listed).map_or(listed.as_str(), |(_, bare)| bare.as_str()));
+        }
+    });
+    factory
+}
+
+fn listed_factory() -> gtk::SignalListItemFactory {
+    let factory = gtk::SignalListItemFactory::new();
+    factory.connect_setup(|_, item| {
+        if let Some(item) = item.downcast_ref::<gtk::ListItem>() {
+            item.set_child(Some(&gtk::Label::builder().xalign(0.0).build()));
+        }
+    });
+    factory.connect_bind(|_, item| {
+        let Some(item) = item.downcast_ref::<gtk::ListItem>() else { return };
+        let text = item.item().and_downcast::<gtk::StringObject>().map(|s| s.string());
+        if let (Some(label), Some(text)) = (item.child().and_downcast::<gtk::Label>(), text) {
+            label.set_label(&text);
+        }
+    });
+    factory
 }
 
 /// A list row's value shrinks beside a long subtitle: it shows the description's first clause, when short, the tooltip the rest.
@@ -103,7 +161,8 @@ fn wants_folder(key: &str) -> bool {
 
 enum Control {
     Switch(adw::SwitchRow),
-    Combo(adw::ComboRow, RefCell<Vec<String>>),
+    /// The values, then each listed label with what it reads as in the row.
+    Combo(adw::ComboRow, RefCell<Vec<String>>, Rc<RefCell<Vec<(String, String)>>>),
     Entry(adw::EntryRow),
     Secret(adw::PasswordEntryRow),
     Map(adw::PreferencesGroup, RefCell<Vec<gtk::Widget>>),
@@ -331,13 +390,13 @@ impl FormView {
 
     fn row(&self, field: &Field, group: &adw::PreferencesGroup) -> RowView {
         let origin = gtk::Label::builder().valign(gtk::Align::Center).css_classes(["dimmed", "caption"]).build();
-        let reset = gtk::Button::builder().icon_name("edit-undo-symbolic").valign(gtk::Align::Center).css_classes(["flat", "circular"]).build();
+        let reset = labelled("edit-undo-symbolic", &gettext("Reset"));
         let key = field.key.clone();
         let view = self.weak();
         reset.connect_clicked(move |_| {
             view.upgrade().inspect(|v| v.set(&key, ""));
         });
-        let promote = self.promote_button(&field.key, &field.label);
+        let promote = self.promote_button(&field.key, &field.label, &field.reach);
         let control = match field.kind.as_str() {
             "bool" => {
                 let row = adw::SwitchRow::builder().use_markup(false).title(field.label.clone()).build();
@@ -357,6 +416,7 @@ impl FormView {
             "secret" => {
                 let row = adw::PasswordEntryRow::builder().use_markup(false).title(field.label.clone()).show_apply_button(true).build();
                 row.set_tooltip_text(Some(&field.description));
+                row.add_suffix(&origin);
                 row.add_suffix(&reset);
                 row.add_suffix(&promote);
                 let (view, key) = (self.weak(), field.key.clone());
@@ -370,13 +430,17 @@ impl FormView {
                 let row = adw::ComboRow::builder().use_markup(false).title(field.label.clone()).build();
                 row.set_subtitle(&first_clause(&field.description));
                 row.set_tooltip_text(Some(field.description.as_str()).filter(|d| !d.is_empty()));
+                row.add_suffix(&origin);
                 row.add_suffix(&reset);
                 row.add_suffix(&promote);
+                let shown = Rc::new(RefCell::new(Vec::new()));
+                row.set_factory(Some(&bare_factory(shown.clone())));
+                row.set_list_factory(Some(&listed_factory()));
                 let (view, key) = (self.weak(), field.key.clone());
                 row.connect_selected_notify(move |row| {
                     let Some(v) = view.upgrade().filter(|v| !v.syncing.get()) else { return };
                     let value = v.rows.borrow().iter().find(|r| r.key == key).and_then(|r| match &r.control {
-                        Control::Combo(_, values) => values.borrow().get(row.selected() as usize).cloned(),
+                        Control::Combo(_, values, _) => values.borrow().get(row.selected() as usize).cloned(),
                         _ => None,
                     });
                     if let Some(value) = value {
@@ -384,7 +448,7 @@ impl FormView {
                     }
                 });
                 group.add(&row);
-                Control::Combo(row, RefCell::default())
+                Control::Combo(row, RefCell::default(), shown)
             }
             kind => {
                 let row = adw::EntryRow::builder().use_markup(false).title(field.label.clone()).show_apply_button(true).build();
@@ -423,14 +487,15 @@ impl FormView {
         let inheriting = field.origin.is_some() && field.own.is_empty();
         row.reset.set_visible(field.resettable);
         row.promote.set_visible(field.promotable);
-        row.reset.set_tooltip_text(Some(&gettext("Back to {}").replace("{}", &inherit_label(field))));
-        row.origin.set_visible(inheriting && field.origin != Some(Origin::Default));
+        name(&row.reset, &gettext("Back to {}").replace("{}", &inherit_label(field)));
+        // A game's or a runner's page tells its own values from what it inherits; on the others every value is config.toml's.
+        row.origin.set_visible(matches!(self.form, Form::Game(_) | Form::Runner(_)) && field.origin.is_some());
         row.origin.set_label(&field.origin.map(origin_word).unwrap_or_default());
         match &row.control {
             Control::Switch(r) => r.set_active(field.value == "true"),
             Control::Secret(r) => r.set_text(&field.value),
             Control::Entry(r) => r.set_text(&field.value),
-            Control::Combo(r, values) => {
+            Control::Combo(r, values, shown) => {
                 let mut list: Vec<String> = Vec::new();
                 if field.origin.is_some() {
                     list.push(String::new());
@@ -440,11 +505,21 @@ impl FormView {
                 if !list.contains(&current) {
                     list.push(current.clone());
                 }
-                let labels: Vec<String> =
-                    list.iter().map(|v| if v.is_empty() && field.origin.is_some() { inherit_label(field) } else { show(field, v) }).collect();
-                let labels: Vec<&str> = labels.iter().map(String::as_str).collect();
-                r.set_model(Some(&gtk::StringList::new(&labels)));
-                if labels.len() > 10 && r.expression().is_none() {
+                let inherit = |bare: bool| {
+                    if bare {
+                        Some(inherited_shown(field)).filter(|s| !s.is_empty()).unwrap_or_else(|| inherit_label(field))
+                    } else {
+                        inherit_label(field)
+                    }
+                };
+                let labels = |bare: bool| -> Vec<String> {
+                    list.iter().map(|v| if v.is_empty() && field.origin.is_some() { inherit(bare) } else { show(field, v) }).collect()
+                };
+                let listed = labels(false);
+                shown.replace(listed.iter().cloned().zip(labels(true)).collect());
+                let listed: Vec<&str> = listed.iter().map(String::as_str).collect();
+                r.set_model(Some(&gtk::StringList::new(&listed)));
+                if listed.len() > 10 && r.expression().is_none() {
                     r.set_expression(Some(gtk::PropertyExpression::new(gtk::StringObject::static_type(), None::<gtk::Expression>, "string")));
                     r.set_enable_search(true);
                 }
@@ -461,8 +536,9 @@ impl FormView {
                     r.set_use_markup(false);
                     r.set_title(&entry.name);
                     let key = format!("{}.{}", field.key, entry.name);
-                    if entry.origin == Origin::Global && field.key.starts_with("launch.") && matches!(self.form, Form::Game(_)) {
-                        r.add_suffix(&gtk::Label::builder().label(gettext("Global")).valign(gtk::Align::Center).css_classes(["dimmed", "caption"]).build());
+                    if field.key.starts_with("launch.") && matches!(self.form, Form::Game(_)) {
+                        let word = origin_word(entry.origin);
+                        r.add_suffix(&gtk::Label::builder().label(word).valign(gtk::Align::Center).css_classes(["dimmed", "caption"]).build());
                     }
                     if entry.resettable {
                         let remove = gtk::Button::builder()
@@ -478,7 +554,7 @@ impl FormView {
                         r.add_suffix(&remove);
                     }
                     if entry.promotable {
-                        r.add_suffix(&self.promote_button(&key, &entry.name));
+                        r.add_suffix(&self.promote_button(&key, &entry.name, &field.reach));
                     }
                     let view = self.weak();
                     r.connect_apply(move |r| {
@@ -548,27 +624,38 @@ impl FormView {
         });
     }
 
-    fn promote_button(&self, key: &str, label: &str) -> gtk::Button {
-        let button = gtk::Button::builder()
-            .icon_name("send-to-symbolic")
-            .tooltip_text(gettext("Apply to All Games"))
-            .valign(gtk::Align::Center)
-            .css_classes(["flat", "circular"])
-            .build();
-        let (view, key, label) = (self.weak(), key.to_string(), label.to_string());
+    /// The game's own value made the global one, for all the games `reach` names; those with their own keep theirs.
+    fn promote_button(&self, key: &str, label: &str, reach: &str) -> gtk::Button {
+        let button = labelled("send-to-symbolic", &gettext("Apply to all {}").replace("{}", reach));
+        let (view, key, label, reach) = (self.weak(), key.to_string(), label.to_string(), reach.to_string());
         button.connect_clicked(move |_| {
-            view.upgrade().inspect(|v| v.promote(&key, &label));
+            view.upgrade().inspect(|v| v.promote(&key, &label, &reach));
         });
         button
     }
 
-    fn promote(&self, key: &str, label: &str) {
-        let (form, key, label, view) = (self.form.clone(), key.to_string(), label.to_string(), self.weak());
+    /// The game's own value of `key` (a field's, or a map entry's) as its row reads it.
+    fn own_shown(&self, key: &str) -> String {
+        let fields = self.fields.borrow();
+        if let Some(f) = fields.iter().find(|f| f.key == key) {
+            return if f.kind == "bool" { show(f, &f.own).to_lowercase() } else { show(f, &f.own) };
+        }
+        let (map, name) = key.rsplit_once('.').unwrap_or((key, ""));
+        let entry = fields.iter().find(|f| f.key == map).and_then(|f| f.entries.iter().find(|e| e.name == name));
+        entry.map(|e| e.value.clone()).unwrap_or_default()
+    }
+
+    fn promote(&self, key: &str, label: &str, reach: &str) {
+        let said = gettext("{label} is now {value} for all {reach} without their own")
+            .replace("{label}", label)
+            .replace("{value}", &self.own_shown(key))
+            .replace("{reach}", reach);
+        let (form, key, view) = (self.form.clone(), key.to_string(), self.weak());
         glib::spawn_future_local(async move {
             let result = backend::call(move |core| async move { core.promote_field(&form, &key).await }).await;
             let Some(view) = view.upgrade() else { return };
             match result {
-                Ok(()) => view.toast(&gettext("{} now applies to every game").replace("{}", &label)),
+                Ok(()) => view.toast(&said),
                 Err(e) => view.toast(&e.to_string()),
             }
             view.load();
@@ -638,9 +725,15 @@ mod tests {
         assert_eq!(show(&field("fps", "auto", "60"), "60"), "60 FPS");
         assert_eq!(show(&field("resolution", "1920x1080", ""), "1920x1080"), "1920 × 1080");
         assert_eq!(show(&field("toggle", "on", ""), "on"), "On");
-        let mut filter = field("enum", "", "linear");
-        filter.fallback = Some(Origin::Default);
-        assert_eq!(inherit_label(&filter), "Default · linear");
+    }
+
+    #[test]
+    fn a_reset_names_where_the_value_comes_back_from_and_the_row_shows_it_bare() {
+        let filter = Field { fallback: Some(Origin::Default), own: "nearest".into(), inherited_resolved: "linear".into(), ..field("enum", "nearest", "") };
+        assert_eq!(inherit_label(&filter), "Default · linear", "what an unset filter comes to, though the game sets its own");
+        assert_eq!(inherited_shown(&filter), "linear", "the row's value, bare: its caption names the origin");
+        let rate = Field { fallback: Some(Origin::Global), inherited: "auto".into(), inherited_resolved: "144".into(), ..field("refresh", "60", "") };
+        assert_eq!(inherit_label(&rate), "Global · Auto · 144 Hz");
     }
 
     #[test]

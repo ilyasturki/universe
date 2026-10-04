@@ -1335,6 +1335,15 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
   (`components::on_jobs`; a store's or a scan leaves them be): the rows are rebuilt in one go where
   they stood, no spinner, the scroll and the focused row kept (`take_focus`, `refocus`). A Doctor check
   that an install fixes gets an Install button that runs the same flow.
+- **Settings forms** (`form_view.rs`, every page over `Core::form`): a change applies at once, to
+  the page's own scope. On a game's or a runner's page every row names where its value comes from
+  in a caption (This Game, Runner, Global, Default, Found), and a list shows its value bare, its
+  first entry naming what clearing the row comes to (`Default · On`). A row the page sets has a
+  reset button (`Back to Default · On`) and, on a game's page, one that applies the value to all
+  the games it reaches (`Apply to all Dolphin games`, `promote_field`), both named on hover and to
+  a screen reader; the toast says what came of it, as the looks' does. A module's and a source's
+  page ends in Game Defaults: the value every game takes unless it sets its own, where the
+  all-games one lands and where its reset undoes it.
 - **Undo, not confirmation**, for what can come back: hiding, favourites, removing a game, a
   screenshot, a recording, a journal entry. A removal is held (`Application::defer`) while its toast
   shows and done when the toast goes, or on quit; Undo, or Ctrl+Z for the newest toast, drops it.
