@@ -1,0 +1,37 @@
+path = ["shims"]
+
+[env]
+SHIM_STATE = "{tmp}/state.json"
+SHIM_LOG = "{tmp}/butler.log"
+
+[files]
+"games/celeste/game.x86_64" = ""
+"data/library.json" = '[{"id": "11", "title": "Celeste Classic"}]'
+"state.json" = '''{
+  "api_key": "good-key",
+  "games": {
+    "11": {"id": 11, "title": "Celeste Classic", "classification": "game", "stillCoverUrl": "https://img/c.png", "publishedAt": "2015-08-01T00:00:00Z"},
+    "14": {"id": 14, "title": "Windows Only", "classification": "game"}
+  },
+  "uploads": {
+    "11": [{"id": 103, "filename": "celeste-linux.tar.gz", "type": "default", "platforms": {"linux": "amd64"}, "size": 2000, "build": {"id": 5, "version": 3}}],
+    "14": [{"id": 141, "filename": "wo.zip", "type": "default", "platforms": {"windows": "all"}, "size": 700}]
+  },
+  "keys": [{"id": 911, "gameId": 11, "ownerId": 7}, {"id": 914, "gameId": 14, "ownerId": 7}],
+  "caves": {"cave-11": {
+    "id": "cave-11", "location": "loc", "folder": "celeste", "build": {"id": 5},
+    "game": {"id": 11, "title": "Celeste Classic", "classification": "game"},
+    "upload": {"id": 103, "filename": "celeste-linux.tar.gz", "type": "default", "platforms": {"linux": "amd64"}, "build": {"id": 5, "version": 3}}
+  }},
+  "locations": {"loc": "{tmp}/games"},
+  "queued": {},
+  "updates": [{"caveId": "cave-11", "direct": true, "choices": [{"upload": {"id": 103, "size": 2100, "platforms": {"linux": "amd64"}}, "build": {"id": 6, "version": 4, "userVersion": "1.1", "updatedAt": "2026-09-20T10:00:00Z"}}]}]
+}'''
+
+[args]
+"login <code>" = ["good-key"]
+"search <text>" = ["cel"]
+"info <id>" = ["11"]
+"install <id>" = ["14"]
+"update <id>" = ["11"]
+"uninstall <id>" = ["11"]

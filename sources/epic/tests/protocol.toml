@@ -1,0 +1,22 @@
+path = ["shims"]
+
+[env]
+SHIM_LOG = "{tmp}/legendary.log"
+SHIM_LATEST = "2.0"
+SHIM_LIBRARY = '[{"app_name": "Min", "app_title": "Hades", "asset_infos": {"Windows": {"build_version": "1.0"}}, "metadata": {"keyImages": [{"type": "DieselGameBoxTall", "url": "https://x/tall.jpg"}]}}]'
+
+[files]
+"home/.config/legendary/user.json" = '{"displayName": "Yasso"}'
+"home/.config/legendary/installed.json" = '{"Min": {"app_name": "Min", "title": "Hades", "version": "1.0", "install_path": "{tmp}/games/Hades", "executable": "Hades.exe", "install_size": 4194304, "is_dlc": false, "platform": "Windows"}}'
+"games/Hades/Hades.exe" = "MZ"
+"data/umu.json" = '{"Min": "umu-1145360"}'
+"data/library.json" ='[{"id": "Min", "title": "Hades"}]'
+
+[args]
+"login <code>" = ["good"]
+"search <text>" = ["had"]
+"info <id>" = ["Min"]
+"install <id>" = ["Min"]
+"update <id>" = ["Min"]
+"achievements <id>" = ["Min"]
+"uninstall <id>" = ["Min"]

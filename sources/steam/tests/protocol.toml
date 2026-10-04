@@ -1,0 +1,71 @@
+path = ["shims"]
+
+[settings]
+steam_root = "{tmp}/Steam"
+
+[env]
+SHIM_LOG = "{tmp}/shim.log"
+
+[files]
+"data/key.json" = '{"key": "0123456789abcdef0123456789ABCDEF", "steamid": "76561199038489031"}'
+"Steam/config/loginusers.vdf" = '''
+"users"
+{
+	"76561199038489031"
+	{
+		"AccountName"		"yasso"
+		"PersonaName"		"Yasso"
+		"Timestamp"		"1790529866"
+	}
+}
+'''
+"Steam/steamapps/appmanifest_480.acf" = '''
+"AppState"
+{
+	"appid"		"480"
+	"name"		"Spacewar"
+	"StateFlags"		"4"
+	"installdir"		"Spacewar"
+	"buildid"		"3538192"
+	"LastOwner"		"76561199038489031"
+	"SizeOnDisk"		"1906055"
+}
+'''
+"Steam/steamapps/common/Spacewar/SteamworksExample.exe" = "MZ"
+"Steam/steamapps/appmanifest_48700.acf" = '''
+"AppState"
+{
+	"appid"		"48700"
+	"name"		"Mount & Blade: Warband"
+	"StateFlags"		"6"
+	"installdir"		"MountBlade Warband"
+	"buildid"		"1"
+	"TargetBuildID"		"2"
+}
+'''
+"Steam/steamapps/common/MountBlade Warband/mb_warband.exe" = "MZ"
+"Steam/steamapps/appmanifest_582160.acf" = '''
+"AppState"
+{
+	"appid"		"582160"
+	"name"		"Assassin's Creed Origins"
+	"StateFlags"		"1026"
+	"installdir"		"Assassins Creed Origins"
+	"LastOwner"		"76561199038489031"
+	"BytesToDownload"		"1000"
+	"BytesDownloaded"		"250"
+}
+'''
+
+[args]
+"login <code>" = ["0123456789abcdef0123456789ABCDEF"]
+"search <text>" = ["space"]
+"info <id>" = ["480"]
+"install <id>" = ["480"]
+"update <id>" = ["480"]
+"achievements <id>" = ["480"]
+"uninstall <id>" = ["400"]
+
+[http]
+"https://api.steampowered.com/IPlayerService/GetOwnedGames/" = { response = { game_count = 1, games = [{ appid = 480, name = "Spacewar" }] } }
+"https://store.steampowered.com/api/storesearch/" = { total = 1, items = [{ type = "app", id = 480, name = "Spacewar" }] }
