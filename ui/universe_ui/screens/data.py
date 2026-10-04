@@ -10,10 +10,12 @@ OWNERS = {
     "universe": "Universe's prefix",
     "steam": "Steam's prefix",
     "lutris": "Lutris's prefix",
+    "wine": "Wine's default prefix",
     "elsewhere": "A prefix of its own",
 }
 OWNER_DETAILS = {
     "steam": "Steam's compatdata: it stays where Steam keeps it, and its saves are backed up from there.",
+    "wine": "Plain wine and other launchers share it: it stays where it is, and its saves are backed up from there.",
     "lutris": "Imported from Lutris. Moving it into Universe's prefixes keeps the game launchable.",
     "elsewhere": "Outside Universe's prefixes. Moving it there keeps the game launchable.",
 }

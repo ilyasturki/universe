@@ -221,6 +221,7 @@ fn prefix_row(list: &gtk::ListBox, id: &str, prefix: &Value, reload: Reload) -> 
         "universe" => gettext("Universe's Wine Prefix"),
         "steam" => gettext("Steam's Wine Prefix"),
         "lutris" => gettext("Lutris's Wine Prefix"),
+        "wine" => gettext("Wine's Default Prefix"),
         _ => gettext("A Wine Prefix of Its Own"),
     };
     let shared: Vec<String> = prefix["shared_with"].as_array().into_iter().flatten().filter_map(|v| v.as_str().map(String::from)).collect();

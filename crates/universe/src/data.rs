@@ -41,13 +41,18 @@ pub fn free_space(path: &Path) -> Option<(u64, u64)> {
     Some((st.f_bavail.saturating_mul(st.f_frsize), st.f_blocks.saturating_mul(st.f_frsize)))
 }
 
-/// `universe` under prefixes_root, `steam` in Steam's compatdata (never moved), `lutris` for an import, else `elsewhere`.
+/// `universe` under prefixes_root, `steam` in Steam's compatdata and `wine` for Wine's default prefix (both never moved),
+/// `lutris` for an import, else `elsewhere`.
 pub fn prefix_owner(prefix: &Path, game: &Game, config: &Config) -> &'static str {
     let names: Vec<_> = prefix.components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect();
+    // Plain wine, Lutris and other launchers all fall back on these two.
+    let defaults = [paths::home().join(".wine"), paths::xdg("XDG_DATA_HOME", ".local/share").join("wine/default")];
     if prefix.starts_with(config.prefixes_root()) {
         "universe"
     } else if names.windows(2).any(|w| w[0] == "steamapps" && w[1] == "compatdata") {
         "steam"
+    } else if defaults.iter().any(|d| d == prefix) {
+        "wine"
     } else if game.source.kind == "lutris" || !game.source.lutris_slug.is_empty() {
         "lutris"
     } else {
@@ -294,6 +299,7 @@ impl Core {
         match prefix_owner(&from, &r.game, &config) {
             "universe" => return Err(Error::Invalid(format!("{} is already under {}", from.display(), config.prefixes_root().display()))),
             "steam" => return Err(Error::Invalid(format!("{} is Steam's: it stays where Steam keeps it", from.display()))),
+            "wine" => return Err(Error::Invalid(format!("{} is Wine's default prefix: it stays where other launchers look for it", from.display()))),
             _ => {}
         }
         if !from.is_dir() {
@@ -576,6 +582,15 @@ mod tests {
         core.reload_all().await;
         assert!(matches!(core.move_prefix("plain-folder").await, Err(Error::Invalid(_))), "no drive_c, no Wine prefix");
         assert!(plain.is_dir());
+        for (title, default) in [("Dot Wine", home.join(".wine")), ("Shared Default", paths::xdg("XDG_DATA_HOME", ".local/share").join("wine/default"))] {
+            std::fs::create_dir_all(default.join("drive_c")).unwrap();
+            let g = proton_game(&env, title, &default);
+            core.reload_all().await;
+            let data = core.game_data(&g.id).await.unwrap();
+            assert_eq!((data["prefix"]["owner"].as_str(), data["prefix"]["movable"].as_bool()), (Some("wine"), Some(false)), "{title}");
+            assert!(matches!(core.move_prefix(&g.id).await, Err(Error::Invalid(_))), "Wine's default prefix never moves");
+            assert!(default.join("drive_c").is_dir());
+        }
     }
 
     #[tokio::test]
