@@ -53,7 +53,7 @@ exit "${{FAKE_KILL_EXIT:-0}}"''',
 if [ "${{FAKE_UNIVERSE_EXIT:-0}}" != "0" ]; then echo "universe: unavailable: no shell" >&2; exit "${{FAKE_UNIVERSE_EXIT}}"; fi
 case "$1" in
   screen-mode) hz="${{FAKE_REFRESH:-}}"; [ -n "$hz" ] || {{ [ "$2" = HDMI-A-1 ] && hz=60 || hz=120; }}
-    echo "{{\\"screen\\":\\"$2\\",\\"width\\":3840,\\"height\\":2160,\\"refresh\\":$hz}}"; exit 0;;
+    echo "{{\\"screen\\":\\"$2\\",\\"width\\":3840,\\"height\\":2160,\\"refresh\\":$hz,\\"vrr\\":false}}"; exit 0;;
   session-window) echo "${{FAKE_WINDOW_JSON:-null}}"; exit 0;;
 esac
 echo "/mnt/recordings/games/fake/session.mkv"
@@ -99,7 +99,7 @@ def env_for(tmp_path, fakebin, settings, extra=None):
     env["JOURNAL_DIR"] = str(tmp_path / "journal")
     env["SCREENSHOTS_DIR"] = str(tmp_path / "screenshots")
     env["UNIVERSE_BIN"] = str(fakebin["bin"] / "universe")
-    env["CAPTURE_RECORDER_WAIT_S"] = "0.3"
+    env["CAPTURE_RECORDER_WAIT_S"] = "0"
     env["MODULE_SETTINGS_JSON"] = json.dumps(settings)
     env.setdefault("SESSION_SCREEN", "DP-1")
     home = tmp_path / "home"
@@ -117,9 +117,9 @@ def universe_calls(fakebin):
     return path.read_text().splitlines() if path.exists() else []
 
 
-def osd_labels(fakebin):
+def osd_icons(fakebin):
     calls = universe_calls(fakebin)
-    return [calls[i + 3] for i, a in enumerate(calls) if a == "osd"]
+    return [calls[i + 2] for i, a in enumerate(calls) if a == "osd"]
 
 
 def run(script, env):
@@ -134,62 +134,106 @@ def pending_path(tmp_path):
     return str(tmp_path / "data" / "pending" / f"{SESSION_ID}.mkv")
 
 
-def test_start_composes_gsr_command(tmp_path, fakebin):
-    env = env_for(
-        tmp_path,
-        fakebin,
-        {
-            "enabled": True,
-            "cursor": True,
-            "codec": "hevc",
-            "fps": 30,
-            "audio": "output",
-        },
-    )
+def gsr_case(id, settings, want, token=None, **env):
+    return pytest.param(settings, want, token, env, id=id)
+
+
+@pytest.mark.parametrize(
+    ("settings", "want", "token", "env"),
+    [
+        gsr_case(
+            "defaults",
+            {},
+            {
+                "-w": ["DP-1"],
+                "-cursor": ["no"],
+                "-f": ["60"],
+                "-c": ["mkv"],
+                "-s": [],
+                "-k": ["av1_10bit"],
+                "-ffmpeg-video-opts": [QVBR_OPTS],
+                "-a": ["default_output"],
+                "-ac": ["opus"],
+                "-ab": [],
+                "-ipc": [_common.ipc_socket(SESSION_ID)],
+                "-write-first-frame-ts": ["yes"],
+            },
+        ),
+        gsr_case(
+            "chosen",
+            {
+                "cursor": True,
+                "codec": "hevc",
+                "fps": 30,
+                "quality": "high",
+                "container": "mp4",
+                "size": "2560x1440",
+                "audio": "output+input",
+                "audio_codec": "aac",
+                "audio_bitrate": 160,
+                "gsr_extra_args": "-cr full -keyint 2",
+            },
+            {
+                "-cursor": ["yes"],
+                "-k": ["hevc"],
+                "-f": ["30"],
+                "-ffmpeg-video-opts": ["rc_mode=QVBR;global_quality=27;b=10000000;maxrate=20000000;bufsize=40000000"],
+                "-c": ["mp4"],
+                "-s": ["2560x1440"],
+                "-a": ["default_output", "default_input"],
+                "-ac": ["aac"],
+                "-ab": ["160"],
+                "-cr": ["full"],
+                "-keyint": ["2"],
+            },
+        ),
+        gsr_case(
+            "own encoder options, no flac",
+            {"ffmpeg_video_opts": "rc_mode=CQP;qp=20", "audio": "none", "audio_codec": "flac"},
+            {"-ffmpeg-video-opts": ["rc_mode=CQP;qp=20"], "-a": [], "-ac": ["opus"]},
+        ),
+        gsr_case(
+            "codec auto, an older card",
+            {"codec": "auto"},
+            {"-k": ["hevc"], "-ffmpeg-video-opts": [QVBR_OPTS.replace("global_quality=95", "global_quality=22")]},
+            FAKE_CODECS="h264\nhevc",
+        ),
+        gsr_case("codec auto, no codec it knows", {}, {"-k": ["h264"]}, FAKE_CODECS="vp8"),
+        gsr_case("fps auto", {"fps": "auto"}, {"-f": ["120"]}),
+        gsr_case("fps auto, no mode", {"fps": "auto"}, {"-f": ["60"]}, FAKE_REFRESH="0"),
+        gsr_case("fps auto, no CLI", {"fps": "auto"}, {"-f": ["60"]}, FAKE_UNIVERSE_EXIT="1"),
+        gsr_case(
+            "window", {}, {"-w": ["portal"], "-restore-portal-session": ["yes"], "-portal-session-token-filepath": ["/t/dead-cells"]}, token="/t/dead-cells"
+        ),
+    ],
+)
+def test_gsr_args_carry_the_settings(fakebin, monkeypatch, settings, want, token, env):
+    monkeypatch.setenv("PATH", f"{fakebin['bin']}:{os.environ['PATH']}")
+    monkeypatch.setenv("UNIVERSE_BIN", str(fakebin["bin"] / "universe"))
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+    args = _common.gsr_args(settings, "DP-1", "/o.mkv", token, SESSION_ID)
+    assert args[0] == "gpu-screen-recorder" and flag_values(args, "-o") == ["/o.mkv"]
+    assert {flag: flag_values(args, flag) for flag in want} == want
+    assert universe_calls(fakebin) in ([], ["screen-mode", "DP-1", "--json"]), "the screen's mode is all it asks the CLI"
+
+
+def test_start_runs_the_recorder_under_record_in_a_unit_bound_to_the_game(tmp_path, fakebin):
+    env = env_for(tmp_path, fakebin, {"source": "screen", "codec": "hevc"}, extra={"GAME_ID": "sample"})
     result = run("start", env)
     assert result.returncode == 0, result.stderr
-
     args = (fakebin["logs"] / "systemd-run.args").read_text().splitlines()
-    assert f"--unit=universe-capture-{SESSION_ID}" in args
-    assert "--collect" in args
-    assert flag_values(args, "-p") == ["CPUWeight=100", "MemoryHigh=4G", f"BindsTo={GAME_UNIT}", f"After={GAME_UNIT}", "TimeoutStopSec=10"]
-    assert "gpu-screen-recorder" in args
-    assert flag_values(args, "-w") == ["DP-1"]
-    assert flag_values(args, "-cursor") == ["yes"]
-    assert flag_values(args, "-f") == ["30"]
-    assert flag_values(args, "-k") == ["hevc"]
-    assert flag_values(args, "-a") == ["default_output"]
-    assert flag_values(args, "-ffmpeg-video-opts") == [QVBR_OPTS.replace("global_quality=95", "global_quality=22")]
-    assert flag_values(args, "-o") == [pending_path(tmp_path)]
-
-
-def test_start_fps_auto_takes_the_screens_refresh_rate(tmp_path, fakebin):
-    env = env_for(tmp_path, fakebin, {"fps": "auto"})
-    result = run("start", env)
-    assert result.returncode == 0, result.stderr
-    args = (fakebin["logs"] / "systemd-run.args").read_text().splitlines()
-    assert flag_values(args, "-f") == ["120"]
-    assert (fakebin["logs"] / "universe.args").read_text() == "screen-mode\nDP-1\n--json\n"
-
-    env = env_for(tmp_path, fakebin, {"fps": "auto"}, extra={"SESSION_SCREEN": "HDMI-A-1"})
-    assert run("start", env).returncode == 0
-    args = (fakebin["logs"] / "systemd-run.args").read_text().splitlines()
-    assert flag_values(args, "-f") == ["60"]
-
-
-def test_start_fps_auto_falls_back_to_60_when_the_mode_is_unreadable(tmp_path, fakebin):
-    env = env_for(tmp_path, fakebin, {"fps": "auto"}, extra={"FAKE_REFRESH": "0"})
-    result = run("start", env)
-    assert result.returncode == 0, result.stderr
-    assert "fps auto" in result.stderr
-    args = (fakebin["logs"] / "systemd-run.args").read_text().splitlines()
-    assert flag_values(args, "-f") == ["60"]
-
-    env = env_for(tmp_path, fakebin, {"fps": "auto"}, extra={"FAKE_UNIVERSE_EXIT": "1"})
-    result = run("start", env)
-    assert result.returncode == 0, result.stderr
-    assert "no shell" in result.stderr
-    assert flag_values((fakebin["logs"] / "systemd-run.args").read_text().splitlines(), "-f") == ["60"]
+    assert f"--unit=universe-capture-{SESSION_ID}" in args and "--collect" in args
+    assert {"MemoryHigh=4G", f"BindsTo={GAME_UNIT}", f"After={GAME_UNIT}", "TimeoutStopSec=10"} <= set(flag_values(args, "-p"))
+    record = args.index(str(BIN_DIR / "record"))
+    assert args[record + 1 : record + 3] == ["--", "gpu-screen-recorder"]
+    gsr = args[record + 2 :]
+    assert (flag_values(gsr, "-w"), flag_values(gsr, "-k"), flag_values(gsr, "-o")) == (["DP-1"], ["hevc"], [pending_path(tmp_path)])
+    setenv = {a.split("=", 2)[1]: a.split("=", 2)[2] for a in args[:record] if a.startswith("--setenv=")}
+    assert setenv["SESSION_ID"] == SESSION_ID and setenv["MODULE_DATA_DIR"] == env["MODULE_DATA_DIR"] and setenv["GAME_ID"] == "sample"
+    assert setenv["PATH"] == env["PATH"], "gsr-cli and ffprobe are on the hook's PATH, not the manager's"
+    assert "TERM" not in setenv
+    assert universe_calls(fakebin) == [], "a screen recording waits on no window"
 
 
 @pytest.mark.parametrize(("distro", "fix"), [("arch", "install gpu-screen-recorder"), ("debian", "setcap")], ids=["arch", "elsewhere"])
@@ -230,8 +274,7 @@ def test_start_reports_a_recorder_gone_at_once(tmp_path, fakebin):
     env = env_for(tmp_path, fakebin, {}, extra={"FAKE_RECORDER_DOWN": "1", "FAKE_UNIT_STATE": "failed"})
     result = run("start", env)
     assert result.returncode == 1, result.stderr
-    assert "not being recorded" in result.stderr
-    assert "Recording failed" in osd_labels(fakebin)
+    assert osd_icons(fakebin) == ["dialog-warning-symbolic"]
 
 
 def test_start_opens_the_timeline_before_the_recorder(tmp_path, fakebin):
@@ -264,25 +307,16 @@ def _seed_pending(tmp_path):
     return mkv
 
 
-def test_stop_short_recording_is_trashed(tmp_path, fakebin):
-    mkv = _seed_pending(tmp_path)
+def test_stop_trashes_a_short_recording_and_its_timeline(tmp_path, fakebin):
     env = env_for(tmp_path, fakebin, {"min_duration_s": 240}, extra={"FAKE_DURATION": "5"})
+    assert run("start", env).returncode == 0
+    mkv = Path(pending_path(tmp_path))
+    mkv.write_bytes(b"x")
     result = run("stop", env)
     assert result.returncode == 0, result.stderr
     assert (fakebin["logs"] / "trash.args").read_text().splitlines() == [str(mkv)]
-    assert not mkv.exists()
-    assert not (fakebin["logs"] / "universe.args").exists()
-
-
-def test_stop_long_recording_files_via_cli(tmp_path, fakebin):
-    mkv = _seed_pending(tmp_path)
-    env = env_for(tmp_path, fakebin, {"min_duration_s": 240}, extra={"FAKE_DURATION": "999"})
-    result = run("stop", env)
-    assert result.returncode == 0, result.stderr
-
-    args = (fakebin["logs"] / "universe.args").read_text().splitlines()
-    assert args == ["recording-file", SESSION_ID, str(mkv)]
-    assert mkv.exists()  # the fake CLI does not itself move the file
+    assert not mkv.exists() and _timeline(tmp_path) is None
+    assert universe_calls(fakebin) == []
 
 
 def test_stop_cli_failure_leaves_file_and_exits_nonzero(tmp_path, fakebin):
@@ -300,46 +334,29 @@ def test_stop_no_recording_is_a_noop(tmp_path, fakebin):
     assert not (fakebin["logs"] / "universe.args").exists()
 
 
-WINDOW_JSON = '{"id":7,"pid":4242,"wm_class":"gamescope","title":"Dead Cells","focused":true,"width":3840,"height":2160,"hidden":false,"minimized":false}'
+WINDOW_JSON = (
+    '{"id":"7","pid":4242,"wm_class":"gamescope","title":"Dead Cells","focused":true,"x":0,"y":0,"width":3840,"height":2160,"hidden":false,"minimized":false}'
+)
 
 
 def test_start_window_records_through_the_portal_once_the_window_is_up(tmp_path, fakebin):
-    env = env_for(
-        tmp_path,
-        fakebin,
-        {"source": "window", "window_wait_s": 45},
-        extra={"FAKE_WINDOW_JSON": WINDOW_JSON, "GAME_ID": "dead-cells"},
-    )
+    env = env_for(tmp_path, fakebin, {"source": "window", "window_wait_s": 45}, extra={"FAKE_WINDOW_JSON": WINDOW_JSON, "GAME_ID": "dead-cells"})
     result = run("start", env)
     assert result.returncode == 0, result.stderr
-
-    assert (fakebin["logs"] / "universe.args").read_text() == "session-window\n--wait\n45\n--json\n"
+    assert universe_calls(fakebin) == ["session-window", "--wait", "45", "--json"], "the window came: no OSD"
     args = (fakebin["logs"] / "systemd-run.args").read_text().splitlines()
-    assert f"--unit=universe-capture-{SESSION_ID}" in args
-    assert f"BindsTo={GAME_UNIT}" in flag_values(args, "-p")
     assert flag_values(args, "-w") == ["portal"]
-    assert flag_values(args, "-restore-portal-session") == ["yes"]
     assert flag_values(args, "-portal-session-token-filepath") == [str(tmp_path / "data" / "portal" / "dead-cells")]
     assert (tmp_path / "data" / "portal").is_dir()
-    assert osd_labels(fakebin) == []
 
 
-def test_start_window_records_the_screen_when_no_window_shows_up(tmp_path, fakebin):
-    env = env_for(tmp_path, fakebin, {"source": "window", "window_wait_s": 0}, extra={"GAME_ID": "dead-cells"})
+@pytest.mark.parametrize("answer", [{"FAKE_WINDOW_JSON": "null"}, {"FAKE_UNIVERSE_EXIT": "1"}], ids=["no window in time", "the CLI fails"])
+def test_start_window_records_the_screen_when_no_window_comes(tmp_path, fakebin, answer):
+    env = env_for(tmp_path, fakebin, {"source": "window", "window_wait_s": 0}, extra={"GAME_ID": "dead-cells", **answer})
     result = run("start", env)
     assert result.returncode == 0, result.stderr
-    assert "no game window within 0s" in result.stderr
-    args = (fakebin["logs"] / "systemd-run.args").read_text().splitlines()
-    assert flag_values(args, "-w") == ["DP-1"]
-    assert osd_labels(fakebin) == ["Recording the screen"]
-
-
-def test_start_window_records_the_screen_when_the_cli_has_no_shell(tmp_path, fakebin):
-    env = env_for(tmp_path, fakebin, {"source": "window", "window_wait_s": 0}, extra={"FAKE_UNIVERSE_EXIT": "1", "GAME_ID": "dead-cells"})
-    result = run("start", env)
-    assert result.returncode == 0, result.stderr
-    assert "no shell" in result.stderr and "no game window" in result.stderr
     assert flag_values((fakebin["logs"] / "systemd-run.args").read_text().splitlines(), "-w") == ["DP-1"]
+    assert osd_icons(fakebin) == ["video-display-symbolic"], "the player is told"
 
 
 def test_show_osd_goes_through_the_core_past_a_dash_led_label(tmp_path, fakebin):
@@ -350,28 +367,6 @@ def test_show_osd_goes_through_the_core_past_a_dash_led_label(tmp_path, fakebin)
     )
     assert result.returncode == 0, result.stderr
     assert (fakebin["logs"] / "universe.args").read_text() == "osd\n--\nvideo-display-symbolic\n-1 frame\n"
-
-
-def test_start_screen_source_waits_on_no_window(tmp_path, fakebin):
-    env = env_for(tmp_path, fakebin, {"source": "screen"})
-    result = run("start", env)
-    assert result.returncode == 0, result.stderr
-    args = (fakebin["logs"] / "systemd-run.args").read_text().splitlines()
-    assert "gpu-screen-recorder" in args
-    assert "session-window" not in universe_calls(fakebin)
-
-
-def test_start_and_stop_follow_the_container(tmp_path, fakebin):
-    env = env_for(tmp_path, fakebin, {"container": "mp4", "min_duration_s": 240}, extra={"FAKE_DURATION": "999"})
-    assert run("start", env).returncode == 0
-    args = (fakebin["logs"] / "systemd-run.args").read_text().splitlines()
-    final = tmp_path / "data" / "pending" / f"{SESSION_ID}.mp4"
-    assert flag_values(args, "-o") == [str(final)]
-
-    final.write_bytes(b"x")
-    result = run("stop", env)
-    assert result.returncode == 0, result.stderr
-    assert (fakebin["logs"] / "universe.args").read_text().splitlines()[:3] == ["recording-file", SESSION_ID, str(final)]
 
 
 def _timeline(tmp_path):
@@ -398,8 +393,6 @@ def test_freeze_before_start_is_a_noop_and_start_catches_up(tmp_path, fakebin):
     assert _pauses(fakebin) == ["true"]
     args = (fakebin["logs"] / "gsr-cli.args").read_text().splitlines()
     assert args[:2] == ["-ipc", _common.ipc_socket(SESSION_ID)] and args[2] == "status", "the socket is waited for before the catch-up"
-    gsr = (fakebin["logs"] / "systemd-run.args").read_text().splitlines()
-    assert flag_values(gsr, "-ipc") == [_common.ipc_socket(SESSION_ID)] and flag_values(gsr, "-write-first-frame-ts") == ["yes"]
 
 
 def test_freeze_and_thaw_toggle_the_recorder_once_each(tmp_path, fakebin):
@@ -447,15 +440,15 @@ def test_stop_closes_an_open_pause_and_hands_the_timeline_over(tmp_path, fakebin
 
 
 def test_stop_falls_back_to_the_unit_when_the_socket_is_gone(tmp_path, fakebin):
-    env = env_for(tmp_path, fakebin, {"min_duration_s": 240}, extra={"FAKE_DURATION": "999"})
+    env = env_for(tmp_path, fakebin, {"container": "mp4", "min_duration_s": 240}, extra={"FAKE_DURATION": "999"})
     assert run("start", env).returncode == 0
-    mkv = tmp_path / "data" / "pending" / f"{SESSION_ID}.mkv"
-    mkv.write_bytes(b"x")
+    mp4 = tmp_path / "data" / "pending" / f"{SESSION_ID}.mp4"
+    assert flag_values((fakebin["logs"] / "systemd-run.args").read_text().splitlines(), "-o") == [str(mp4)]
+    mp4.write_bytes(b"x")
     result = run("stop", env)
     assert result.returncode == 0, result.stderr
-    assert "gsr-cli stop" in result.stderr
     assert (fakebin["logs"] / "systemctl.args").read_text().splitlines()[-3:] == ["--user", "stop", f"universe-capture-{SESSION_ID}.service"]
-    assert (fakebin["logs"] / "universe.args").read_text().splitlines()[:3] == ["recording-file", SESSION_ID, str(mkv)]
+    assert universe_calls(fakebin)[:3] == ["recording-file", SESSION_ID, str(mp4)], "the unit's file, whichever container"
 
 
 def test_stop_takes_started_at_from_the_first_frame(tmp_path, fakebin):
@@ -489,53 +482,6 @@ def test_stop_discards_an_unreadable_recording(tmp_path, fakebin):
     assert not (fakebin["logs"] / "universe.args").exists()
 
 
-def test_stop_drops_the_timeline_with_a_short_recording(tmp_path, fakebin):
-    env = env_for(tmp_path, fakebin, {"min_duration_s": 240}, extra={"FAKE_DURATION": "5"})
-    assert run("start", env).returncode == 0
-    (tmp_path / "data" / "pending" / f"{SESSION_ID}.mkv").write_bytes(b"x")
-    assert run("stop", env).returncode == 0
-    assert _timeline(tmp_path) is None
-    assert not (fakebin["logs"] / "universe.args").exists()
-
-
-def test_codec_auto_takes_the_best_the_card_encodes(fakebin, monkeypatch):
-    monkeypatch.setenv("PATH", f"{fakebin['bin']}:{os.environ.get('PATH', '')}")
-    auto = _common.gsr_args({"audio": "none"}, "DP-1", "/o.mkv")
-    assert flag_values(auto, "-k") == ["av1_10bit"] and auto.count(QVBR_OPTS) == 1, "the AV1 quality preset goes with the AV1 codec"
-    monkeypatch.setenv("FAKE_CODECS", "h264\nhevc")
-    older = _common.gsr_args({"codec": "auto", "audio": "none"}, "DP-1", "/o.mkv")
-    assert flag_values(older, "-k") == ["hevc"] and older[older.index("-ffmpeg-video-opts") + 1].startswith("rc_mode=QVBR;global_quality=22;")
-    monkeypatch.setenv("FAKE_CODECS", "vp8")
-    assert flag_values(_common.gsr_args({"audio": "none"}, "DP-1", "/o.mkv"), "-k") == ["h264"], "nothing known: h264, the one every card has"
-    assert flag_values(_common.gsr_args({"codec": "av1", "audio": "none"}, "DP-1", "/o.mkv"), "-k") == ["av1"], "a chosen codec is passed as is"
-
-
-def test_gsr_args_quality_presets_and_overrides(fakebin, monkeypatch):
-    monkeypatch.setenv("PATH", f"{fakebin['bin']}:{os.environ.get('PATH', '')}")
-    hevc = _common.gsr_args({"codec": "hevc", "quality": "high", "audio": "none"}, "DP-1", "/o.mkv")
-    assert hevc[hevc.index("-ffmpeg-video-opts") + 1] == "rc_mode=QVBR;global_quality=27;b=10000000;maxrate=20000000;bufsize=40000000"
-    raw = _common.gsr_args({"quality": "ultra", "ffmpeg_video_opts": "rc_mode=CQP;qp=20", "audio": "none"}, "DP-1", "/o.mkv")
-    assert raw[raw.index("-ffmpeg-video-opts") + 1] == "rc_mode=CQP;qp=20"
-    assert _common.gsr_args({"audio": "none"}, "DP-1", "/o.mkv").count(QVBR_OPTS) == 1
-
-
-def test_gsr_args_container_size_audio_and_extra_args():
-    args = _common.gsr_args(
-        {"container": "mp4", "size": "2560x1440", "audio": "output", "audio_codec": "aac", "audio_bitrate": 160, "gsr_extra_args": "-cr full -keyint 2"},
-        "DP-1",
-        "/o.mp4",
-    )
-    assert flag_values(args, "-c") == ["mp4"]
-    assert flag_values(args, "-s") == ["2560x1440"]
-    assert flag_values(args, "-ac") == ["aac"]
-    assert flag_values(args, "-ab") == ["160"]
-    assert args[args.index("-cr") :] == ["-cr", "full", "-keyint", "2", "-o", "/o.mp4"]
-    plain = _common.gsr_args({"audio": "none"}, "DP-1", "/o.mkv")
-    assert "-s" not in plain and "-ab" not in plain and "-a" not in plain and flag_values(plain, "-c") == ["mkv"]
-    assert flag_values(plain, "-cursor") == ["no"]
-    assert flag_values(_common.gsr_args({"audio": "output", "audio_codec": "flac"}, "DP-1", "/o.mkv"), "-ac") == ["opus"]
-
-
 def test_size_limit_and_audio_bitrate_parse():
     assert _common.size_limit({"size": "1920x1080"}) == (1920, 1080)
     for raw in ("native", "", "0x0", "wide", None):
@@ -545,18 +491,6 @@ def test_size_limit_and_audio_bitrate_parse():
         assert _common.audio_bitrate_kbps({"audio_bitrate": raw}) is None
     assert _common.gsr_extra_args({"gsr_extra_args": "-x 'a b'"}) == ["-x", "a b"]
     assert _common.gsr_extra_args({"gsr_extra_args": "-x 'unterminated"}) == []
-
-
-def test_start_runs_the_recorder_under_record_with_the_hooks_env(tmp_path, fakebin):
-    env = env_for(tmp_path, fakebin, {}, extra={"GAME_ID": "sample"})
-    assert run("start", env).returncode == 0
-    args = (fakebin["logs"] / "systemd-run.args").read_text().splitlines()
-    record = args.index(str(BIN_DIR / "record"))
-    assert args[record + 1] == "--" and args[record + 2] == "gpu-screen-recorder"
-    setenv = {a.split("=", 2)[1]: a.split("=", 2)[2] for a in args[:record] if a.startswith("--setenv=")}
-    assert setenv["SESSION_ID"] == SESSION_ID and setenv["MODULE_DATA_DIR"] == env["MODULE_DATA_DIR"] and setenv["GAME_ID"] == "sample"
-    assert setenv["PATH"] == env["PATH"], "gsr-cli and ffprobe are on the hook's PATH, not the manager's"
-    assert "TERM" not in setenv
 
 
 def test_record_hands_a_portal_recording_to_gsr_as_is(tmp_path, fakebin):
@@ -639,21 +573,25 @@ def _wait_for(pred, timeout_s=10):
     return False
 
 
-def _apply_env(monkeypatch, env):
-    """The supervisor runs in-process here: its children read the real environment."""
+def _supervise(tmp_path, livebin, monkeypatch, up=True, **extra):
+    """The supervisor in a thread on the session's open timeline, as bin/start leaves it; `up` waits for its first recorder."""
+    env = env_for(tmp_path, livebin, {}, extra=extra)
+    # The supervisor runs in-process here: its children read the real environment.
     for k, v in env.items():
         monkeypatch.setenv(k, v)
-
-
-def _recorder(tmp_path, livebin, env, extra_args=()):
     output = pending_path(tmp_path)
     Path(output).parent.mkdir(parents=True, exist_ok=True)
-    argv = ["gpu-screen-recorder", "-w", "DP-1", "-f", "60", *extra_args, "-o", output]
-    rec = _record.Recorder(argv, SESSION_ID, env["MODULE_DATA_DIR"], GAME_UNIT, drm_dir=str(livebin["drm"]))
+    with _common.timeline(env["MODULE_DATA_DIR"], SESSION_ID, create=True):
+        pass
+    rec = _record.Recorder(
+        ["gpu-screen-recorder", "-w", "DP-1", "-f", "60", "-o", output], SESSION_ID, env["MODULE_DATA_DIR"], GAME_UNIT, drm_dir=str(livebin["drm"])
+    )
     rec.poll_s = 0.05
     done = []
     thread = threading.Thread(target=lambda: done.append(rec.run()), daemon=True)
-    return thread, done
+    thread.start()
+    assert not up or _wait_for((livebin["logs"] / "gsr.current").exists)
+    return env, thread, done
 
 
 def _gsr_runs(livebin):
@@ -676,14 +614,7 @@ def _end_session(env, thread):
 
 
 def test_record_follows_the_monitor_that_replaces_the_recorded_one(tmp_path, livebin, monkeypatch):
-    env = env_for(tmp_path, livebin, {})
-    _apply_env(monkeypatch, env)
-    thread, done = _recorder(tmp_path, livebin, env)
-    thread.start()
-    assert _wait_for((livebin["logs"] / "gsr.current").exists)
-    with _common.timeline(env["MODULE_DATA_DIR"], SESSION_ID, create=True):
-        pass
-
+    env, thread, done = _supervise(tmp_path, livebin, monkeypatch)
     _plug(livebin, DP_1="disconnected")
     part1 = tmp_path / "data" / "pending" / f"{SESSION_ID}.part1.mkv"
     assert _wait_for(lambda: part1.exists() and not (livebin["logs"] / "gsr.current").exists())
@@ -701,7 +632,8 @@ def test_record_follows_the_monitor_that_replaces_the_recorded_one(tmp_path, liv
     assert flag_values(second, "-o") == [pending_path(tmp_path)]
     state = _timeline(tmp_path)
     assert state["screen"] == "HDMI-A-1" and not state["paused"]
-    assert osd_labels(livebin).count("Recording HDMI-A-1") == 1
+    calls = universe_calls(livebin)
+    assert sum(a == "osd" and "HDMI-A-1" in calls[i + 3] for i, a in enumerate(calls)) == 1, "the player is told the new monitor once"
 
     assert _end_session(env, thread) == pending_path(tmp_path)
     assert done == [0] and len(_gsr_runs(livebin)) == 2, "the session's own stop is not a switch"
@@ -709,16 +641,9 @@ def test_record_follows_the_monitor_that_replaces_the_recorded_one(tmp_path, liv
 
 def test_record_follows_a_screen_the_desktop_stops_drawing_on(tmp_path, livebin, monkeypatch):
     """Both cables stay in: only `enabled` says which screen the desktop moved to."""
-    env = env_for(tmp_path, livebin, {})
-    _apply_env(monkeypatch, env)
     _plug(livebin, HDMI_A_1="connected")
     _light(livebin, DP_1="enabled", HDMI_A_1="disabled")
-    thread, done = _recorder(tmp_path, livebin, env)
-    thread.start()
-    assert _wait_for((livebin["logs"] / "gsr.current").exists)
-    with _common.timeline(env["MODULE_DATA_DIR"], SESSION_ID, create=True):
-        pass
-
+    env, thread, done = _supervise(tmp_path, livebin, monkeypatch)
     _light(livebin, DP_1="disabled", HDMI_A_1="enabled")
     assert _wait_for(lambda: _timeline(tmp_path).get("screen") == "HDMI-A-1")
     assert flag_values(_gsr_runs(livebin)[1], "-w") == ["HDMI-A-1"]
@@ -728,15 +653,8 @@ def test_record_follows_a_screen_the_desktop_stops_drawing_on(tmp_path, livebin,
 
 
 def test_record_retries_while_the_new_monitor_settles(tmp_path, livebin, monkeypatch):
-    env = env_for(tmp_path, livebin, {})
-    _apply_env(monkeypatch, env)
     monkeypatch.setattr(_record, "RESTART_WAIT_S", 0.05)
-    thread, done = _recorder(tmp_path, livebin, env)
-    thread.start()
-    assert _wait_for((livebin["logs"] / "gsr.current").exists)
-    with _common.timeline(env["MODULE_DATA_DIR"], SESSION_ID, create=True):
-        pass
-
+    env, thread, done = _supervise(tmp_path, livebin, monkeypatch)
     (livebin["logs"] / "gsr.fail").touch()
     _plug(livebin, DP_1="disconnected", HDMI_A_1="connected")
     assert _wait_for(lambda: len(_gsr_runs(livebin)) >= 3)
@@ -750,15 +668,9 @@ def test_record_retries_while_the_new_monitor_settles(tmp_path, livebin, monkeyp
 
 
 def test_record_gives_up_when_the_new_monitor_never_takes(tmp_path, livebin, monkeypatch):
-    env = env_for(tmp_path, livebin, {})
-    _apply_env(monkeypatch, env)
     monkeypatch.setattr(_record, "RESTART_WAIT_S", 0.01)
     monkeypatch.setattr(_record, "RESTART_TRIES", 2)
-    thread, done = _recorder(tmp_path, livebin, env)
-    thread.start()
-    assert _wait_for((livebin["logs"] / "gsr.current").exists)
-    with _common.timeline(env["MODULE_DATA_DIR"], SESSION_ID, create=True):
-        pass
+    _, thread, done = _supervise(tmp_path, livebin, monkeypatch)
     (livebin["logs"] / "gsr.fail").touch()
     _plug(livebin, DP_1="disconnected", HDMI_A_1="connected")
     thread.join(timeout=10)
@@ -769,13 +681,7 @@ def test_record_gives_up_when_the_new_monitor_never_takes(tmp_path, livebin, mon
 
 
 def test_record_exits_with_a_recorder_that_dies_on_a_live_monitor(tmp_path, livebin, monkeypatch):
-    env = env_for(tmp_path, livebin, {})
-    _apply_env(monkeypatch, env)
-    thread, done = _recorder(tmp_path, livebin, env)
-    thread.start()
-    assert _wait_for((livebin["logs"] / "gsr.current").exists)
-    with _common.timeline(env["MODULE_DATA_DIR"], SESSION_ID, create=True):
-        pass
+    _, thread, done = _supervise(tmp_path, livebin, monkeypatch)
     Path(pending_path(tmp_path) + ".stopflag").touch()
     thread.join(timeout=10)
     assert done == [0] and len(_gsr_runs(livebin)) == 1
@@ -784,24 +690,15 @@ def test_record_exits_with_a_recorder_that_dies_on_a_live_monitor(tmp_path, live
 
 def test_record_reports_a_recorder_that_dies_at_once(tmp_path, livebin, monkeypatch):
     """bin/start opens the timeline first: without it the supervisor read the death as a session already over."""
-    env = env_for(tmp_path, livebin, {})
-    _apply_env(monkeypatch, env)
     (livebin["logs"] / "gsr.fail").touch()
-    with _common.timeline(env["MODULE_DATA_DIR"], SESSION_ID, create=True):
-        pass
-    thread, done = _recorder(tmp_path, livebin, env)
-    thread.start()
+    _, thread, done = _supervise(tmp_path, livebin, monkeypatch, up=False)
     thread.join(timeout=10)
     assert done == [3]
 
 
 def test_record_pauses_a_restarted_recorder_while_the_game_is_frozen(tmp_path, livebin, monkeypatch):
-    env = env_for(tmp_path, livebin, {}, extra={"FAKE_FREEZER_STATE": "frozen"})
-    _apply_env(monkeypatch, env)
-    thread, done = _recorder(tmp_path, livebin, env)
-    thread.start()
-    assert _wait_for((livebin["logs"] / "gsr.current").exists)
-    with _common.timeline(env["MODULE_DATA_DIR"], SESSION_ID, create=True) as state:
+    env, thread, done = _supervise(tmp_path, livebin, monkeypatch, FAKE_FREEZER_STATE="frozen")
+    with _common.timeline(env["MODULE_DATA_DIR"], SESSION_ID) as state:
         state["paused"] = True
         state["pauses"].append([_common.now_rfc3339(), None])
     _plug(livebin, DP_1="disconnected", HDMI_A_1="connected")
