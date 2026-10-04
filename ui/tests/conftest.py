@@ -34,6 +34,16 @@ def fast_clock(monkeypatch):
     monkeypatch.setattr(home, "POLL_MS", 30)
 
 
+# A key posted and never delivered would make the next test's own press of that key count as the pad's.
+@pytest.fixture(autouse=True)
+def posted_keys_cleared():
+    from universe_ui import gamepad
+
+    gamepad.POSTED.clear()
+    yield
+    gamepad.POSTED.clear()
+
+
 @pytest.fixture(scope="session")
 def app(xdg):
     from PySide6.QtGui import QGuiApplication

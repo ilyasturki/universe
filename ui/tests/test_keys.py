@@ -16,7 +16,6 @@ def mouse_move():
 
 def test_posted_keys_remember_who_posted_them(app):
     window = QWindow()
-    gamepad.POSTED.clear()
     assert gamepad.post_key(Qt.Key.Key_Return, True, window=window)
     assert gamepad.post_key(Qt.Key.Key_Return, True, window=window, source="pointer")
     assert gamepad.posted_source(Qt.Key.Key_Return, True) == "pad"
@@ -42,7 +41,6 @@ def test_the_mode_follows_the_last_device(app):
     assert keys.mode == "mouse"
     assert window.cursor().shape() == Qt.CursorShape.ArrowCursor
 
-    gamepad.POSTED.clear()
     gamepad.POSTED[(int(Qt.Key.Key_Return), True)] = ["pad"]
     keys.eventFilter(window, key_event(Qt.Key.Key_Return))
     assert keys.mode == "pad", "a key the pad posted is the pad's"
@@ -59,7 +57,6 @@ def test_a_key_without_a_keysym_is_not_the_keyboard(app):
     keys = Keys()
     window = QWindow()
     keys.watch(window)
-    gamepad.POSTED.clear()
     for key in (Qt.Key(0), Qt.Key.Key_unknown):
         keys.eventFilter(window, key_event(key))
         keys.eventFilter(window, key_event(key, pressed=False))
