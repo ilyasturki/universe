@@ -492,6 +492,21 @@ FocusScope {
                 {
                     heading: true,
                     part: true,
+                    label: "Sounds",
+                    display: ""
+                },
+                {
+                    label: "Sound folder",
+                    key: "sound_dir",
+                    type: "path",
+                    action: "sounds",
+                    value: api.theme.soundsPath,
+                    display: api.theme.soundsPath ? api.theme.soundsPath.split("/").pop() + " · " + Object.keys(api.theme.soundFiles).length + " sounds" : "Bundled",
+                    detail: "WAVs named ok.wav, tick.wav, boot.wav… replace the bundled ones."
+                },
+                {
+                    heading: true,
+                    part: true,
                     label: "Startup",
                     display: ""
                 },
@@ -672,6 +687,10 @@ FocusScope {
         } else if (row.action === "font") {
             rows.edit(row, function (path) {
                 api.theme.fontPath = path;
+            });
+        } else if (row.action === "sounds") {
+            rows.edit(row, function (path) {
+                api.theme.soundsPath = path;
             });
         } else if (row.action === "boot") {
             Sound.play("select");
