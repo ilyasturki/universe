@@ -1366,7 +1366,9 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
   that removes the files itself (`uninstall_via`), and removing with the prefix is offered only for
   one under `paths.prefixes_root`: a purge leaves a store's, Steam's `compatdata`.
 - **Stores**: the Store page's switcher lists the signed-in stores, each with its label and icon in
-  the library. The first run adopts what `discover()` finds through the store a launcher's `via`
+  the library; it hides with one, and the search names the store it asks ("Search GOG"). Each row
+  shows its verb — Play for a game installed and in the library, Resume, Install, Update — with a
+  menu beside it, and Refresh is the header's button. The first run adopts what `discover()` finds through the store a launcher's `via`
   names, turning it on when it is off; one that found nothing while signed out is listed on the
   stores step, and adopted again once its sign-in succeeds.
 - **Search provider**: `org.gnome.Shell.SearchProvider2` at
