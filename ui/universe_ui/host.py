@@ -10,7 +10,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, NamedTuple, cast
 
 if TYPE_CHECKING:
     from PySide6.QtQuick import QQuickWindow
@@ -29,6 +29,13 @@ DEAD_NOTIFIER = "QSocketNotifier: Invalid socket"
 OFF_THREAD_NOTIFIER = "Socket notifiers cannot be enabled or disabled from another thread"
 RESTARTS_ENV = "UNIVERSE_UI_RESTARTS"
 MAX_RESTARTS = 3
+# The core's nest::SESSION_ENV: the display manager started this gamescope, so quitting logs out.
+SESSION_ENV = "UNIVERSE_SESSION"
+# gamescope exits 0 whatever its child did: the launcher inside writes its own code here when it quits on purpose.
+DONE_ENV = "UNIVERSE_HOST_DONE"
+# As ChimeraOS's gamescope-session: that many runs in a row shorter than SHORT_S end the session.
+SHORT_RUNS = 5
+SHORT_S = 60
 
 
 def parse_args(argv):
@@ -46,7 +53,10 @@ def parse_args(argv):
     parser.add_argument(
         "--boot", action=argparse.BooleanOptionalAction, default=None, help="open on the startup animation, or not (default: fullscreen starts only)"
     )
+    parser.add_argument("--session", action="store_true", help="the display manager's session: gamescope on the whole screen, quitting logs out")
     args = parser.parse_args(argv)
+    if args.session and (args.windowed or args.size):
+        parser.error("--session takes the whole screen: no --windowed or --size")
     args.fake = args.fake or args.fake_launch
     args.fullscreen = not (args.windowed or args.size)
     args.size = args.size or "1920x1080"
@@ -204,17 +214,26 @@ def gamescope_argv(command, argv):
     return [*command, "--", *launcher_argv(argv)]
 
 
-def run_in_gamescope(command, argv, ready_s=READY_S):
-    """gamescope's exit code once the launcher inside it came up; None to run on the desktop instead."""
+class Run(NamedTuple):
+    up: bool
+    stopped: bool
+    code: int
+    # The launcher's own exit code when it quit on purpose, None when it died or never came up.
+    done: int | None
+
+
+def gamescope_once(command, argv, ready_s=READY_S, extra_env=None):
+    """One gamescope with the launcher inside, until it exits; one that shows no launcher within `ready_s` is stopped."""
     log = logging.getLogger("universe.host")
-    if not command:
-        log.warning("no gamescope: running on the desktop")
-        return None
-    # gamescope closes every inherited fd in its child: the launcher inside says it is up through a file.
-    ready = Path(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()) / f"universe-ui-ready-{os.getpid()}"
+    runtime = Path(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir())
+    # gamescope closes every inherited fd in its child: the launcher inside says it is up, then done, through files.
+    ready = runtime / f"universe-ui-ready-{os.getpid()}"
+    done = runtime / f"universe-ui-done-{os.getpid()}"
     ready.unlink(missing_ok=True)
+    done.unlink(missing_ok=True)
     own = "nested" if os.environ.get("WAYLAND_DISPLAY") or os.environ.get("DISPLAY") else "drm"
-    env = {**os.environ, READY_ENV: str(ready), OWN_ENV: own, **{f"UNIVERSE_HOST_{var}": os.environ.get(var, "") for var in HOST_VARS}}
+    host = {f"UNIVERSE_HOST_{var}": os.environ.get(var, "") for var in HOST_VARS}
+    env = {**os.environ, READY_ENV: str(ready), DONE_ENV: str(done), OWN_ENV: own, **host, **(extra_env or {})}
     proc = subprocess.Popen(gamescope_argv(command, argv), env=env)
     stopping = []
 
@@ -233,23 +252,69 @@ def run_in_gamescope(command, argv, ready_s=READY_S):
             except subprocess.TimeoutExpired:
                 if time.monotonic() < deadline or stopping:
                     continue
-                log.warning("gamescope showed no launcher within %d s: running on the desktop", ready_s)
+                log.warning("gamescope showed no launcher within %d s", ready_s)
                 proc.terminate()
                 try:
                     proc.wait(timeout=5)
                 except subprocess.TimeoutExpired:
                     proc.kill()
                     proc.wait()
-                return None
-            if stopping:
-                return code
-            log.warning("gamescope exited (%s) before the launcher came up: running on the desktop", code)
-            return None
-        return proc.wait()
+                return Run(up=False, stopped=False, code=proc.returncode, done=None)
+            if ready.exists():
+                break
+            if not stopping:
+                log.warning("gamescope exited (%s) before the launcher came up", code)
+            return Run(up=False, stopped=bool(stopping), code=code, done=None)
+        code = proc.wait()
+        try:
+            own_code = int(done.read_text())
+        except (OSError, ValueError):
+            own_code = None
+        return Run(up=True, stopped=bool(stopping), code=code, done=own_code)
     finally:
         ready.unlink(missing_ok=True)
+        done.unlink(missing_ok=True)
         for sig, handler in previous.items():
             signal.signal(sig, handler)
+
+
+def run_in_gamescope(command, argv, ready_s=READY_S):
+    """gamescope's exit code once the launcher inside it came up; None to run on the desktop instead."""
+    log = logging.getLogger("universe.host")
+    if not command:
+        log.warning("no gamescope: running on the desktop")
+        return None
+    run = gamescope_once(command, argv, ready_s)
+    if run.up or run.stopped:
+        return run.code
+    log.warning("running on the desktop")
+    return None
+
+
+def run_session(command, argv, ready_s=READY_S, short_s=SHORT_S):
+    """The launcher's exit code once it quits; with no desktop to fall back to, a gamescope that fails or keeps dying ends the session."""
+    log = logging.getLogger("universe.host")
+    if not command:
+        log.error("no gamescope: the session cannot start")
+        return 1
+    short = 0
+    while True:
+        started = time.monotonic()
+        run = gamescope_once(command, argv, ready_s, {SESSION_ENV: "1"})
+        if run.done is not None:
+            return run.done
+        if run.stopped:
+            return run.code
+        if not run.up:
+            log.error("ending the session")
+            return 1
+        short = short + 1 if time.monotonic() - started < short_s else 0
+        if short >= SHORT_RUNS:
+            log.error("the launcher died %d times in a row within %d s: ending the session", short, short_s)
+            return 1
+        log.warning("the launcher died: starting it again")
+        if argv[-1:] != ["--no-boot"]:
+            argv = [*argv, "--no-boot"]
 
 
 def mark_ready():
@@ -257,6 +322,14 @@ def mark_ready():
     if path:
         with contextlib.suppress(OSError):
             Path(path).touch()
+
+
+# Left in the environment: a launcher that restarts in place still says it quit.
+def mark_done(code):
+    path = os.environ.get(DONE_ENV, "")
+    if path:
+        with contextlib.suppress(OSError):
+            Path(path).write_text(str(code))
 
 
 def create_overlay(engine, size):
@@ -284,6 +357,11 @@ def run(argv=None):
     logging.basicConfig(level=logging.INFO, format="%(name)s: %(message)s")
 
     nested = bool(os.environ.get("GAMESCOPE_WAYLAND_DISPLAY"))
+    if args.session and not nested:
+        # The session's own screen: no desktop display to nest in, and a desktop name nothing detects as a desktop.
+        os.environ.pop("WAYLAND_DISPLAY", None)
+        os.environ.pop("DISPLAY", None)
+        os.environ.setdefault("XDG_CURRENT_DESKTOP", "Universe")
     # Before the core opens, the library is loaded once, inside gamescope; before the app, no display is held while it runs.
     if args.fullscreen and not nested:
         if args.fake:
@@ -291,6 +369,8 @@ def run(argv=None):
         else:
             from universe_core import host_gamescope
         command = host_gamescope("")
+        if args.session:
+            return run_session(command, argv)
         code = run_in_gamescope(command, argv)
         if code is not None:
             return code
@@ -393,6 +473,7 @@ def run(argv=None):
     if client.currentSession:
         client.stopNow("")
     api.shutdown()
+    mark_done(rc)
     return rc
 
 

@@ -44,12 +44,19 @@ def test_the_library_path_is_put_back_past_the_wrapper(monkeypatch, launcher):
 
 @pytest.fixture
 def gamescope(monkeypatch, tmp_path, launcher):
-    """A gamescope whose launcher comes up (`up`), that dies at start (`dies`) or that hangs showing nothing (`hangs`)."""
+    """A gamescope whose launcher comes up (`up`), quits on purpose with 3 (`quits`), dies after `FAKE_CRASHES` runs (`crashes`),
+    that dies at start (`dies`) or that hangs showing nothing (`hangs`). Each run's session flag and launcher argv land in `runs`."""
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
     script = tmp_path / "gamescope"
     script.write_text(
         '#!/bin/sh\necho "$UNIVERSE_OWN_GAMESCOPE" > "$XDG_RUNTIME_DIR/own"\n'
-        'case "$FAKE_GAMESCOPE" in\n  up) touch "$UNIVERSE_HOST_READY"; sleep 0.3; exit 7;;\n  dies) exit 1;;\n  hangs) exec sleep 30;;\nesac\n'
+        'shift 2; echo "${UNIVERSE_SESSION:-0} $*" >> "$XDG_RUNTIME_DIR/runs"\n'
+        'case "$FAKE_GAMESCOPE" in\n'
+        '  up) touch "$UNIVERSE_HOST_READY"; sleep 0.3; exit 7;;\n'
+        '  quits) touch "$UNIVERSE_HOST_READY"; echo 3 > "$UNIVERSE_HOST_DONE"; exit 0;;\n'
+        '  crashes) touch "$UNIVERSE_HOST_READY"\n'
+        '    [ "$(wc -l < "$XDG_RUNTIME_DIR/runs")" -gt "${FAKE_CRASHES:-99}" ] && echo 0 > "$UNIVERSE_HOST_DONE"; exit 0;;\n'
+        '  dies) exit 1;;\n  hangs) exec sleep 30;;\nesac\n'
     )
     script.chmod(0o755)
     return [str(script)]
@@ -89,6 +96,37 @@ def test_without_gamescope_it_stays_on_the_desktop():
     assert host.run_in_gamescope(None, []) is None
 
 
+def runs(tmp_path):
+    return (tmp_path / "runs").read_text().splitlines()
+
+
+def test_a_session_ends_with_the_code_the_launcher_quit_with(monkeypatch, gamescope, tmp_path):
+    monkeypatch.setenv("FAKE_GAMESCOPE", "quits")
+    assert host.run_session(gamescope, ["--session"]) == 3, "gamescope's own 0 says nothing of its child"
+    assert [r.split()[0] for r in runs(tmp_path)] == ["1"], "the launcher inside knows it is the session"
+
+
+@pytest.mark.parametrize("mode", ["dies", "hangs", "none"])
+def test_a_session_whose_gamescope_fails_ends_instead_of_falling_back_to_a_desktop(monkeypatch, gamescope, mode):
+    monkeypatch.setenv("FAKE_GAMESCOPE", mode)
+    assert host.run_session(None if mode == "none" else gamescope, [], ready_s=0.5) == 1, "the display manager shows its greeter again"
+
+
+def test_a_launcher_that_dies_comes_back_without_the_intro(monkeypatch, gamescope, tmp_path):
+    monkeypatch.setenv("FAKE_GAMESCOPE", "crashes")
+    monkeypatch.setenv("FAKE_CRASHES", str(host.SHORT_RUNS + 1))
+    assert host.run_session(gamescope, ["--session"], short_s=0) == 0, "runs that lasted are no crash loop"
+    launchers = [r.split()[1:] for r in runs(tmp_path)]
+    assert len(launchers) == host.SHORT_RUNS + 2
+    assert launchers[0] == ["--session"] and all(argv == ["--session", "--no-boot"] for argv in launchers[1:])
+
+
+def test_a_launcher_that_keeps_dying_at_once_ends_the_session(monkeypatch, gamescope, tmp_path):
+    monkeypatch.setenv("FAKE_GAMESCOPE", "crashes")
+    assert host.run_session(gamescope, []) == 1
+    assert len(runs(tmp_path)) == host.SHORT_RUNS
+
+
 class Supervised(Exception):
     pass
 
@@ -124,6 +162,38 @@ def test_the_launcher_inside_says_it_is_up_once(monkeypatch, tmp_path):
     monkeypatch.setenv(host.READY_ENV, str(mark))
     host.mark_ready()
     assert mark.exists() and host.READY_ENV not in os.environ, "a game or module started from here inherits no mark to set"
+
+
+def test_the_launcher_inside_says_it_quit_even_after_restarting_in_place(monkeypatch, tmp_path):
+    mark = tmp_path / "done"
+    monkeypatch.setenv(host.DONE_ENV, str(mark))
+    host.mark_done(0)
+    assert mark.read_text() == "0" and os.environ[host.DONE_ENV] == str(mark)
+
+
+def test_a_session_takes_the_screen_from_inside_a_desktop_too(monkeypatch, tmp_path):
+    import types
+
+    stub = types.ModuleType("universe_core")
+    stub.host_gamescope = lambda screen: GAMESCOPE
+    monkeypatch.setitem(sys.modules, "universe_core", stub)
+    monkeypatch.delenv("GAMESCOPE_WAYLAND_DISPLAY", raising=False)
+    monkeypatch.delenv("XDG_CURRENT_DESKTOP", raising=False)
+    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
+    monkeypatch.setenv("DISPLAY", ":0")
+    seen = []
+    monkeypatch.setattr(host, "run_session", lambda command, argv: seen.append((command, argv, dict(os.environ))) or 0)
+    monkeypatch.setattr(host, "run_in_gamescope", lambda command, argv: pytest.fail("a session has no desktop to come back to"))
+    assert host.run(["--session"]) == 0
+    command, argv, env = seen[0]
+    assert (command, argv) == (GAMESCOPE, ["--session"])
+    assert "WAYLAND_DISPLAY" not in env and "DISPLAY" not in env, "gamescope drives the screen itself"
+    assert env["XDG_CURRENT_DESKTOP"] == "Universe", "the desktop detection inside finds none"
+
+
+def test_a_session_cannot_be_windowed():
+    with pytest.raises(SystemExit):
+        host.parse_args(["--session", "--windowed"])
 
 
 def test_a_lost_display_ends_the_process_at_once_from_any_thread(monkeypatch):
