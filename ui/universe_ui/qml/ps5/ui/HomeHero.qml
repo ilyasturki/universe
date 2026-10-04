@@ -23,16 +23,7 @@ Item {
     signal pointed(int index)
 
     readonly property url logo: game && String(game.assets.logo) !== "" ? game.assets.logo : ""
-    readonly property url sideArt: {
-        if (!game)
-            return "";
-        var shots = game.assets.screenshotList;
-        if (String(game.assets.banner) !== "")
-            return game.assets.banner;
-        if (shots && shots.length > 1)
-            return shots[1];
-        return game.assets.boxFront;
-    }
+    readonly property url sideArt: Home.sideArt(game)
 
     Item {
         id: main

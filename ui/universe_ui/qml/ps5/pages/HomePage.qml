@@ -1202,6 +1202,7 @@ FocusScope {
 
         HomeHero {
             id: hero
+            objectName: "homeHero"
             width: parent.width
             height: page.height
             visible: page.rested !== null && page.rested.kind !== "welcome"

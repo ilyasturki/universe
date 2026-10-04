@@ -34,6 +34,21 @@ function art(game) {
     return { source: game.assets.boxFront, cropped: true };
 }
 
+// The hero's square side tile: a banner has its title baked in and loses it to the crop, so it comes last.
+function sideArt(game) {
+    if (!game)
+        return "";
+    var shots = game.assets.screenshotList || [];
+    var background = String(game.assets.background);
+    if (shots.length > 1 || (shots.length === 1 && background !== ""))
+        return shots[shots.length - 1];
+    if (background !== "")
+        return background;
+    if (String(game.assets.banner) !== "")
+        return game.assets.banner;
+    return game.assets.boxFront;
+}
+
 var PAGES = {
     info: "pages/SoftwareInfoPage.qml",
     trophies: "pages/AchievementsPage.qml",

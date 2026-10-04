@@ -1,5 +1,5 @@
 import pytest
-from PySide6.QtCore import Q_ARG, QMetaObject, QObject, Qt
+from PySide6.QtCore import Q_ARG, QMetaObject, QObject, Qt, QUrl
 from PySide6.QtTest import QTest
 from test_render import render
 
@@ -54,6 +54,15 @@ def test_down_goes_into_the_hero_then_the_hub_and_b_goes_back_up(ps5):
     until(lambda: home.property("zone") == "hub" and home.property("strip") == 0)
     QTest.keyClick(window, Qt.Key.Key_Escape)
     until(lambda: home.property("zone") == "rail" and home.property("scroll") == 0)
+
+
+def test_the_hero_side_tile_takes_a_screenshot_before_the_banner(ps5):
+    _window, root = ps5
+    home = root.findChild(QObject, "homePage")
+    game = home.property("currentGame")
+    side = root.findChild(QObject, "homeHero").property("sideArt").toString()
+    shots = [s.toString() if isinstance(s, QUrl) else QUrl.fromLocalFile(s).toString() for s in game.property("assets").property("screenshotList")]
+    assert side in shots, "the fixture's games have a banner too"
 
 
 def test_the_hub_hides_the_strips_above_and_fades_under_the_header(ps5):
