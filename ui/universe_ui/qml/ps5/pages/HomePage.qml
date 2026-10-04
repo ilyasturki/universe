@@ -1223,6 +1223,7 @@ FocusScope {
 
         Column {
             id: hub
+            objectName: "hub"
 
             y: Theme.dp(Theme.hubY)
             width: parent.width
@@ -1240,12 +1241,13 @@ FocusScope {
                 model: page.strips
 
                 HubStrip {
+                    objectName: "hubStrip"
                     width: hub.width
                     title: modelData.title
                     cards: modelData.cards
                     current: page.cardAt(index)
                     active: page.zone === "hub" && page.strip === index && page.activeFocus
-                    opacity: page.zone !== "hub" || Math.abs(index - page.strip) <= 1 ? 1.0 : 0.35
+                    opacity: page.zone !== "hub" ? 1.0 : index < page.strip ? 0.0 : index - page.strip <= 1 ? 1.0 : 0.35
                     onPointed: function (i) {
                         if (page.zone === "hub" && page.strip === index && page.cardAt(index) === i) {
                             page.activate();
@@ -1433,6 +1435,34 @@ FocusScope {
                     duration: Theme.durTab
                     easing.type: Easing.OutCubic
                 }
+            }
+        }
+    }
+
+    Rectangle {
+        objectName: "hubScrim"
+        width: parent.width
+        height: Theme.dp(Theme.headerY + 112)
+        opacity: page.zone === "hub" ? 1.0 : 0.0
+        visible: opacity > 0.01
+        gradient: Gradient {
+            GradientStop {
+                position: 0.0
+                color: Qt.rgba(0, 0, 0, 0.85)
+            }
+            GradientStop {
+                position: 0.6
+                color: Qt.rgba(0, 0, 0, 0.7)
+            }
+            GradientStop {
+                position: 1.0
+                color: Qt.rgba(0, 0, 0, 0)
+            }
+        }
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: Theme.durScroll
             }
         }
     }

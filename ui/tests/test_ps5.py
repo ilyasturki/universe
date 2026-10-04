@@ -56,6 +56,22 @@ def test_down_goes_into_the_hero_then_the_hub_and_b_goes_back_up(ps5):
     until(lambda: home.property("zone") == "rail" and home.property("scroll") == 0)
 
 
+def test_the_hub_hides_the_strips_above_and_fades_under_the_header(ps5):
+    window, root = ps5
+    home = root.findChild(QObject, "homePage")
+    scrim = root.findChild(QObject, "hubScrim")
+    QTest.keyClick(window, Qt.Key.Key_Down)
+    until(lambda: home.property("zone") == "hero")
+    assert scrim.property("visible") is False
+    QTest.keyClick(window, Qt.Key.Key_Down)
+    QTest.keyClick(window, Qt.Key.Key_Down)
+    until(lambda: home.property("strip") == 1)
+    hub = root.findChild(QObject, "hub")
+    strips = [s for s in hub.childItems() if s.objectName() == "hubStrip"]
+    until(lambda: strips[0].property("opacity") == 0 and scrim.property("opacity") == 1)
+    assert strips[1].property("opacity") == 1 and strips[2].property("opacity") == 1
+
+
 def test_left_of_the_first_game_is_the_welcome_hub(ps5):
     window, root = ps5
     home = root.findChild(QObject, "homePage")
