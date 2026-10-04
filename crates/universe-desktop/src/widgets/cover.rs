@@ -148,6 +148,18 @@ impl Cover {
         self.imp().placeholder.set_icon_name(Some(icon));
     }
 
+    /// Another size, the picture decoded again for it.
+    pub fn set_size(&self, width: i32, height: i32) {
+        if (self.art_width(), self.art_height()) == (width, height) {
+            return;
+        }
+        self.set_art_width(width);
+        self.set_art_height(height);
+        self.imp().placeholder.set_pixel_size(width.min(height) * 9 / 25);
+        self.queue_resize();
+        self.imp().load();
+    }
+
     /// Decodes the file again: the art under the same path was replaced.
     pub fn reload(&self) {
         covers::forget(&self.path());

@@ -1381,6 +1381,12 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
   (`--gapplication-service`, which stays up a minute between searches), whose `Exec` must name
   the wrapper by its absolute path: the bus runs it in its own environment. The desktop entry is
   `DBusActivatable`, so the app grid starts it that way too.
+- **Narrow windows**: under 730 px the sidebar folds away; the library's search names the view it
+  searches ("Search Nintendo Switch"), so the header says where you are with the sidebar hidden.
+  Under 600 px of content the cards shrink to 140×210 (`game_card::cover_size`, two columns on a
+  360 px screen); under 550 px Media's toggles turn to icons, named on hover. The running game sits in
+  a bar under every page (`playing_bar`, the window's own `NowPlaying`) whenever the sidebar's foot is
+  out of sight: folded, hidden with F9, or under a page pushed over the home.
 - **Game page** (`pages/game.rs`): the library's row draws the hero at once, the runner in its facts
   line included; the details (`get` and the screenshots' count: Your Play, About, the Gallery of the
   store's pictures, the achievement count) land next, whether the source lists achievements after

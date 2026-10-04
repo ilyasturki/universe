@@ -52,6 +52,10 @@ mod imp {
         pub store_page: TemplateChild<StorePage>,
         #[template_child]
         pub now_playing: TemplateChild<NowPlaying>,
+        #[template_child]
+        pub playing_bar: TemplateChild<adw::ToolbarView>,
+        #[template_child]
+        pub bottom_playing: TemplateChild<NowPlaying>,
         pub state: RefCell<State>,
         /// The player said to quit the running game: the next close goes through.
         pub closing: Cell<bool>,
@@ -99,6 +103,14 @@ mod imp {
             }
             obj.setup_actions();
             obj.setup_sidebar();
+            let win = obj.downgrade();
+            self.split_view.connect_show_sidebar_notify(move |_| {
+                win.upgrade().inspect(|win| win.sync_playing_bar());
+            });
+            let win = obj.downgrade();
+            self.navigation.connect_visible_page_notify(move |_| {
+                win.upgrade().inspect(|win| win.sync_playing_bar());
+            });
         }
     }
 
@@ -513,6 +525,8 @@ impl Window {
             "store" | "media" => key.as_str(),
             _ => {
                 imp.library_page.set_view(View::parse(&key));
+                // Its header has room for the search alone: the search names the view, the sidebar hidden or not.
+                imp.library_page.search_entry().set_placeholder_text(Some(&gettext("Search {}").replace("{}", &title)));
                 "library"
             }
         };
@@ -532,7 +546,16 @@ impl Window {
         let current = self.app().current();
         let cover = current.as_ref().and_then(|c| self.app().library().get(&c.id)).map(|g| g.cover()).unwrap_or_default();
         self.imp().now_playing.set_session(current.as_ref(), &cover);
+        self.imp().bottom_playing.set_session(current.as_ref(), &cover);
         self.sync_play_actions();
+        self.sync_playing_bar();
+    }
+
+    /// The running game under every page but the one whose sidebar shows it already.
+    fn sync_playing_bar(&self) {
+        let imp = self.imp();
+        let home = imp.navigation.visible_page().and_then(|p| p.tag()).as_deref() == Some("home");
+        imp.playing_bar.set_reveal_bottom_bars(playing_bar(self.app().current().is_some(), home, imp.split_view.shows_sidebar()));
     }
 
     /// A page showing one of these games reads it again.
@@ -766,5 +789,23 @@ impl Window {
                 }
             }
         }
+    }
+}
+
+/// Whether the running game's bar shows under the pages: not when the sidebar on screen holds it.
+fn playing_bar(running: bool, home: bool, sidebar: bool) -> bool {
+    running && !(home && sidebar)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_running_game_stays_in_reach_when_the_sidebar_does_not_show() {
+        assert!(!playing_bar(true, true, true), "the sidebar's foot has it");
+        assert!(playing_bar(true, true, false), "collapsed or hidden with F9");
+        assert!(playing_bar(true, false, true), "a game's page covers the sidebar");
+        assert!(!playing_bar(false, false, false));
     }
 }

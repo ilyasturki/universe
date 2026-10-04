@@ -126,6 +126,12 @@ impl GameCard {
         }
     }
 
+    /// Smaller art where the window is narrow: two columns on a phone's width rather than one.
+    pub fn set_compact(&self, compact: bool) {
+        let (width, height) = cover_size(compact);
+        self.imp().cover.set_size(width, height);
+    }
+
     fn reveal(&self) {
         let imp = self.imp();
         let shown = imp.motion.contains_pointer() || imp.options.is_active();
@@ -136,5 +142,28 @@ impl GameCard {
                 widget.add_css_class("hidden");
             }
         }
+    }
+}
+
+/// A card's art, width and height: 2:3 either way.
+pub fn cover_size(compact: bool) -> (i32, i32) {
+    if compact {
+        (140, 210)
+    } else {
+        (200, 300)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn compact_cards_fit_two_columns_on_a_phone() {
+        let (width, height) = cover_size(true);
+        assert_eq!(width * 3, height * 2, "box art keeps its shape");
+        // The grid's 18 px sides and each child's 6 px: two columns on a 360 px screen.
+        assert!(2 * (width + 12) + 36 <= 360);
+        assert_eq!(cover_size(false), (200, 300));
     }
 }

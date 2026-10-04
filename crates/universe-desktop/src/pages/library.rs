@@ -25,6 +25,11 @@ mod imp {
         pub stack: TemplateChild<adw::ViewStack>,
         #[template_child]
         pub grid: TemplateChild<gtk::GridView>,
+        #[template_child]
+        pub compact: TemplateChild<adw::Breakpoint>,
+        pub is_compact: Cell<bool>,
+        /// The cards the grid made, to resize when the breakpoint flips.
+        pub cards: RefCell<Vec<glib::WeakRef<GameCard>>>,
         pub view: RefCell<View>,
         pub sort: Cell<Sort>,
         pub show_hidden: Cell<bool>,
@@ -44,6 +49,9 @@ mod imp {
                 menu_button: TemplateChild::default(),
                 stack: TemplateChild::default(),
                 grid: TemplateChild::default(),
+                compact: TemplateChild::default(),
+                is_compact: Cell::new(false),
+                cards: RefCell::default(),
                 view: RefCell::new(View::All),
                 sort: Cell::new(Sort::LastPlayed),
                 show_hidden: Cell::new(false),
@@ -89,6 +97,14 @@ mod imp {
                 page.upgrade().inspect(|page| {
                     page.imp().grid.grab_focus();
                 });
+            });
+            let page = obj.downgrade();
+            self.compact.connect_apply(move |_| {
+                page.upgrade().inspect(|page| page.set_compact(true));
+            });
+            let page = obj.downgrade();
+            self.compact.connect_unapply(move |_| {
+                page.upgrade().inspect(|page| page.set_compact(false));
             });
             let page = obj.downgrade();
             self.grid.connect_activate(move |grid, position| {
@@ -148,8 +164,14 @@ impl LibraryPage {
         let filtered = gtk::FilterListModel::new(Some(library.store.clone()), Some(filter.clone()));
         let shown = gtk::SortListModel::new(Some(filtered), Some(sorter.clone()));
         let factory = gtk::SignalListItemFactory::new();
-        factory.connect_setup(|_, item| {
-            item.downcast_ref::<gtk::ListItem>().expect("a list item").set_child(Some(&GameCard::default()));
+        let page = self.downgrade();
+        factory.connect_setup(move |_, item| {
+            let card = GameCard::default();
+            if let Some(page) = page.upgrade() {
+                card.set_compact(page.imp().is_compact.get());
+                page.imp().cards.borrow_mut().push(card.downgrade());
+            }
+            item.downcast_ref::<gtk::ListItem>().expect("a list item").set_child(Some(&card));
         });
         factory.connect_bind(|_, item| {
             let item = item.downcast_ref::<gtk::ListItem>().expect("a list item");
@@ -178,6 +200,12 @@ impl LibraryPage {
             page.refilter();
             page.resort();
         });
+    }
+
+    fn set_compact(&self, compact: bool) {
+        let imp = self.imp();
+        imp.is_compact.set(compact);
+        imp.cards.borrow_mut().retain(|card| card.upgrade().inspect(|card| card.set_compact(compact)).is_some());
     }
 
     pub fn set_view(&self, view: View) {
