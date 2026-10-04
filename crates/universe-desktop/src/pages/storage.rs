@@ -7,6 +7,7 @@ use gtk::glib;
 use serde_json::Value;
 
 use crate::backend;
+use crate::dialogs::preferences::ListPage;
 use crate::pages::game_data::{act, confirm, home, size};
 use crate::window::Window;
 
@@ -17,7 +18,7 @@ fn text(v: &Value, key: &str) -> String {
 pub fn present(win: &Window) {
     let dialog = adw::PreferencesDialog::builder().title(gettext("Storage")).content_height(720).build();
     let view = StorageView::new(win);
-    dialog.add(&view.page);
+    dialog.add(&view.list.page);
     let held = RefCell::new(Some(view));
     dialog.connect_closed(move |_| {
         held.take();
@@ -27,49 +28,27 @@ pub fn present(win: &Window) {
 
 /// A page of its own, so it can sit in Preferences or in a dialog of its own alike.
 pub struct StorageView {
-    pub page: adw::PreferencesPage,
-    groups: RefCell<Vec<adw::PreferencesGroup>>,
+    pub list: Rc<ListPage>,
     win: glib::WeakRef<Window>,
 }
 
 impl StorageView {
     pub fn new(win: &Window) -> Rc<StorageView> {
-        let view = Rc::new(StorageView {
-            page: adw::PreferencesPage::builder().name("storage").title(gettext("Storage")).icon_name("drive-harddisk-symbolic").build(),
-            groups: RefCell::default(),
-            win: win.downgrade(),
-        });
+        let view = Rc::new(StorageView { list: ListPage::new("storage", &gettext("Storage"), "drive-harddisk-symbolic"), win: win.downgrade() });
         view.load();
         view
     }
 
-    fn clear(&self) {
-        for group in self.groups.take() {
-            self.page.remove(&group);
-        }
-    }
-
-    fn group(&self, title: &str, description: &str) -> adw::PreferencesGroup {
-        let group = adw::PreferencesGroup::builder().title(title).build();
-        if !description.is_empty() {
-            group.set_description(Some(description));
-        }
-        self.page.add(&group);
-        self.groups.borrow_mut().push(group.clone());
-        group
-    }
-
     pub fn load(self: &Rc<Self>) {
-        self.clear();
-        self.group("", "").add(&adw::Spinner::builder().height_request(48).margin_top(24).build());
+        self.list.loading();
         let weak = Rc::downgrade(self);
         glib::spawn_future_local(async move {
             let storage = backend::call(|core| async move { core.storage().await }).await;
             let Some(view) = weak.upgrade() else { return };
-            view.clear();
+            view.list.clear();
             match storage {
                 Ok(storage) => view.show(&storage, Rc::downgrade(&view)),
-                Err(e) => view.group(&gettext("Storage"), &e.to_string()).set_visible(true),
+                Err(e) => view.list.group(&gettext("Storage"), &e.to_string()).set_visible(true),
             }
         });
     }
@@ -84,7 +63,7 @@ impl StorageView {
             ("components", gettext("Runners and Tools")),
             ("logs", gettext("Logs")),
         ];
-        let folders = self.group(&gettext("Folders"), "");
+        let folders = self.list.group(&gettext("Folders"), "");
         for root in storage["roots"].as_array().into_iter().flatten() {
             let id = text(root, "id");
             let title = names.iter().find(|(k, _)| *k == id).map(|(_, n)| n.clone()).unwrap_or(id);
@@ -99,7 +78,7 @@ impl StorageView {
 
         let games = storage["games"].as_array().cloned().unwrap_or_default();
         let total: u64 = games.iter().map(|g| g["bytes"].as_u64().unwrap_or(0)).sum();
-        let list = self.group(&gettext("Games"), &glib::format_size(total));
+        let list = self.list.group(&gettext("Games"), &glib::format_size(total));
         for g in &games {
             let parts: Vec<String> =
                 [("install", gettext("Install")), ("prefix", gettext("Prefix")), ("saves", gettext("Saves")), ("recordings", gettext("Recordings"))]
@@ -128,7 +107,7 @@ impl StorageView {
         } else {
             gettext("{} that no game in the library uses. Nothing goes to the trash unless you ask.").replace("{}", &size(&storage["leftover_bytes"]))
         };
-        let group = self.group(&gettext("Leftovers"), &described);
+        let group = self.list.group(&gettext("Leftovers"), &described);
         for item in &leftovers {
             let title = match text(item, "kind").as_str() {
                 "prefix" => gettext("Prefix No Game Uses"),
