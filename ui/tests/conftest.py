@@ -177,6 +177,12 @@ def settle(screen, timeout_ms=5000):
     until(lambda: not screen.busy, "still busy", timeout_ms)
 
 
+def own(fake, key, game="the-technomancer"):
+    """The game's own launch value for `key`, None while it follows every game's."""
+    value = (fake.game(game).get("launch") or {}).get(key)
+    return None if value in ("", None) else value
+
+
 def index_of(form, key):
     return next(i for i, r in enumerate(form.rows) if r["key"] == key)
 

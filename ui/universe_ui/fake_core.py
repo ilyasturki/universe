@@ -45,6 +45,16 @@ GAME = {
     "metadata": dict.fromkeys(("sgdb_id", "gamesdb_id", "steam_appid", "metacritic", "players"), 0)
     | {"developers": [], "publishers": [], "genres": [], "summary": "", "description": ""},
     "modules": {},
+    "launch": {
+        **dict.fromkeys("runner runner_exe runner_build exe working_dir prefix proton arch wrapper pre_command post_command umu_id store".split(), ""),
+        **dict.fromkeys("gamescope_args gamescope_resolution gamescope_refresh gamescope_scaler gamescope_filter fps_limit".split(), ""),
+        **dict.fromkeys("esync fsync ntsync wayland hdr discrete_gpu dlss_upgrade fsr4_upgrade xess_upgrade optiscaler debug_log mangohud".split(), None),
+        **dict.fromkeys("pause_on_home gamescope gamescope_sharpness gamescope_adaptive_sync".split(), None),
+        "args": [],
+        "dll_overrides": {},
+        "env": {},
+        "options": {},
+    },
 }
 # The config sections the fixture leaves out, at the core's defaults.
 CONFIG = {

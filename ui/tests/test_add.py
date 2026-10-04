@@ -37,7 +37,7 @@ def test_add_game_flow(api, fake):
     ident = form.addGame("Hollow Knight")
     assert ident == "hollow-knight" and form.pendingFile == "" and len(said) == 1
     game = fake.game(ident)
-    assert game["launch"] == {"runner": "wine", "exe": "/games/Hollow_Knight/hollow_knight [GOG].exe"}
+    assert {k: v for k, v in game["launch"].items() if v not in ("", None, [], {})} == {"runner": "wine", "exe": "/games/Hollow_Knight/hollow_knight [GOG].exe"}
     assert form.addGame("again") == "", "nothing pending"
     form.setFile("/x/y.exe")
     form.cancel()

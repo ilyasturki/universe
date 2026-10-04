@@ -5,7 +5,7 @@ from looks import current_row, invoke, read, settle
 from PySide6.QtCore import QObject, Qt
 from PySide6.QtTest import QTest
 
-from conftest import record, until
+from conftest import own, record, until
 from universe_ui import host
 
 # What closes each look's keyboard on the value typed, and what gives it up.
@@ -14,12 +14,6 @@ GIVE_UP = {"reprise": Qt.Key.Key_Escape, "switch2": Qt.Key.Key_I, "ps5": Qt.Key.
 # The looks with quick settings over the game: Reprise's dock, the PS5 look's Control Center.
 PANEL = {"reprise": "dock", "ps5": "controlCenter"}
 SCOPE = {"reprise": "dockScope", "ps5": "ccScope"}
-
-
-def own(fake, key, game="the-technomancer"):
-    """The game's own launch value for `key`, None while it follows every game's."""
-    value = (fake.game(game).get("launch") or {}).get(key)
-    return None if value in ("", None) else value
 
 
 def everyones(fake, key):

@@ -6,7 +6,7 @@ from PySide6.QtCore import QObject, Qt
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QTest
 
-from conftest import pump, record, until
+from conftest import own, pump, record, until
 from universe_ui import host
 
 
@@ -793,7 +793,7 @@ def test_the_game_settings_page_applies_a_value_to_all_games(look, fake):
     look.press(Qt.Key.Key_F1)
     look.press(Qt.Key.Key_Down, [i["action"] for i in read(page, "moreItems")].index("promote"))
     look.press(Qt.Key.Key_Return)
-    until(lambda: fake.config()["set"]["launch"]["ntsync"] is False and "ntsync" not in fake.game("the-technomancer")["launch"])
+    until(lambda: fake.config()["set"]["launch"]["ntsync"] is False and own(fake, "ntsync") is None)
     until(lambda: current_row(page)["origin"] == "global" and page.property("canPromote") is False)
     assert len(messages) == 1, "the form's word on what came of it, once"
 
@@ -809,7 +809,7 @@ def test_game_settings_land_a_hit_behind_advanced_and_edit_it(look, api, fake):
         "changing the value is what sets it on the game",
     )
     look.press(Qt.Key.Key_I)
-    until(lambda: "ntsync" not in fake.game("the-technomancer")["launch"] and current_row(page)["origin"] != "game", "X drops the game's own value")
+    until(lambda: own(fake, "ntsync") is None and current_row(page)["origin"] != "game", "X drops the game's own value")
     look.press(Qt.Key.Key_F)
     until(lambda: form.showAdvanced is False and read(page, "sections") == sections, "Y: the rows go, the cards stay")
 
@@ -824,7 +824,7 @@ def test_the_game_settings_page_shows_an_advanced_change_with_advanced_off(look,
     assert form.showAdvanced is False
     look.press(Qt.Key.Key_I)
     until(
-        lambda: "prefix" not in fake.game("the-technomancer")["launch"] and current_row(page)["key"] == "launch.proton",
+        lambda: own(fake, "prefix") is None and current_row(page)["key"] == "launch.proton",
         "reset, the row goes back behind Advanced and the cursor to the card's first row",
     )
     assert form.showAdvanced is False and page.findChild(QObject, "cardSections").property("section") == proton

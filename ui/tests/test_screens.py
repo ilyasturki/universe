@@ -3,7 +3,7 @@ from collections import Counter
 
 import pytest
 
-from conftest import index_of, record, rows_by_key, settle, until
+from conftest import index_of, own, record, rows_by_key, settle, until
 
 PENDING = {
     "session": "20260912-200000",
@@ -342,7 +342,7 @@ def test_a_rows_origin_tells_the_games_own_values_and_a_reset_drops_one(api, fak
         "an empty working directory shows the program's folder the launch falls back to"
     )
     assert form.reset(index_of(form, "launch.proton")) is True
-    assert "proton" not in fake.game("the-technomancer")["launch"] and rows_by_key(form, "")["launch.proton"]["origin"] == "default", (
+    assert own(fake, "proton") is None and rows_by_key(form, "")["launch.proton"]["origin"] == "default", (
         "reset drops the game's own value: the row inherits again"
     )
     assert form.reset(index_of(form, "launch.proton")) is False, "nothing of the game's to drop"
@@ -352,7 +352,7 @@ def test_a_rows_origin_tells_the_games_own_values_and_a_reset_drops_one(api, fak
     vrr = index_of(form, "launch.gamescope_adaptive_sync")
     assert form.rows[vrr]["value"] == form.rows[vrr]["choices"][0] and form.rows[vrr]["choiceValues"][0] == "" and form.reset(vrr) is False
     assert form.setValue(vrr, "on") is True and fake.game("the-technomancer")["launch"]["gamescope_adaptive_sync"] == "on"
-    assert form.reset(vrr) is True and "gamescope_adaptive_sync" not in fake.game("the-technomancer")["launch"]
+    assert form.reset(vrr) is True and own(fake, "gamescope_adaptive_sync") is None
     assert form.reset(index_of(form, "launch.runner")) is False, "the runner has no global to go back to"
     capture = next(i for i, r in enumerate(form.rows) if r["module"] == "capture" and r["key"] == "enabled")
     assert form.rows[capture]["origin"] == "game" and form.reset(capture) is True
@@ -375,7 +375,7 @@ def test_game_settings_promote(api, fake):
     proton = index_of(form, "launch.proton")
     assert form.setValue(proton, "proton-cachyos") is True
     assert form.promotable(form.rows[proton]) is True and form.promote(proton) is True
-    assert fake.config()["set"]["launch"]["proton"] == "proton-cachyos" and "proton" not in game()["launch"]
+    assert fake.config()["set"]["launch"]["proton"] == "proton-cachyos" and own(fake, "proton") is None
     assert rows_by_key(form, "")["launch.proton"]["origin"] == "global", "the game follows the value it handed on"
     assert form.promote(index_of(form, "launch.proton")) is False, "nothing of the game's own left"
 
