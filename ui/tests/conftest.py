@@ -55,16 +55,43 @@ def app(xdg):
     return application
 
 
-# A FakeCore paints the fixture's art into the cache when it finds none: once here rather than in the first test's 2 s.
+# A FakeCore paints the fixture's art into the cache when it finds none: once a run, each xdist worker taking a copy, rather than in a first test's 2 s.
 @pytest.fixture(scope="session")
-def fixture_art(xdg):
+def fixture_art(app, xdg, tmp_path_factory):
+    import fcntl
     import json
+    import shutil
 
     from universe_ui.fake_core import FIXTURE
     from universe_ui.fixtures.art import paint_library
 
-    with open(FIXTURE) as f:
-        paint_library(json.load(f)["games"], os.path.join(os.environ["XDG_CACHE_HOME"], "universe", "fake-art"))
+    base = tmp_path_factory.getbasetemp()
+    painted = (base.parent if os.environ.get("PYTEST_XDIST_WORKER") else base) / "fake-art"
+    with open(f"{painted}.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        with open(FIXTURE) as f:
+            paint_library(json.load(f)["games"], str(painted))
+    shutil.copytree(painted, os.path.join(os.environ["XDG_CACHE_HOME"], "universe", "fake-art"), dirs_exist_ok=True)
+
+
+# A process's first window on a look costs about a second its next ones do not: paid here, rather than in the first test's 2 s.
+@pytest.fixture(scope="session")
+def rendered_looks(app, fixture_art, tmp_path_factory):
+    from looks import LOOKS, Look
+
+    from universe_ui.api import Api
+    from universe_ui.fake_core import FIXTURE, FakeCore
+    from universe_ui.screens.network import FAKE as FAKE_NET
+    from universe_ui.screens.power import FAKE
+    from universe_ui.universe_client import CoreClient
+
+    root = tmp_path_factory.mktemp("warm")
+    client = CoreClient(FakeCore(FIXTURE, root / "core"))
+    api = Api(client, memory_path=str(root / "memory.json"), power_root=FAKE, net_root=FAKE_NET)
+    for name in LOOKS:
+        Look(api, name).close()
+    api.shutdown()
+    client.shutdown()
 
 
 @pytest.fixture
@@ -84,8 +111,25 @@ def universe_session(request, monkeypatch):
     return request.param
 
 
+def pytest_generate_tests(metafunc):
+    if "look" in metafunc.fixturenames and not any("look" in m.args[0] for m in metafunc.definition.iter_markers("parametrize")):
+        from looks import LOOKS
+
+        metafunc.parametrize("look", LOOKS, indirect=True)
+
+
 @pytest.fixture
-def api(fake, tmp_path):
+def look(request, api):
+    """A window on each look in turn, or on the looks a test's own `parametrize("look", …, indirect=True)` names."""
+    from looks import Look
+
+    shown = Look(api, request.param)
+    yield shown
+    shown.close()
+
+
+@pytest.fixture
+def api(fake, rendered_looks, tmp_path):
     from universe_ui.api import Api
     from universe_ui.screens.network import FAKE as FAKE_NET
     from universe_ui.screens.power import FAKE
