@@ -409,7 +409,8 @@ fn gamescope_args(
 pub async fn host_gamescope_for(config: &Config, screen: &str) -> Option<(String, Vec<String>)> {
     let screen = crate::desktop::pick_screen(screen);
     let mode = crate::desktop::screen_mode(&screen).await;
-    let command = host_gamescope(config, mode, mangoapp_installed())?;
+    let output = (on_screen() && !screen.is_empty()).then_some(screen.as_str());
+    let command = host_gamescope(config, mode, output, mangoapp_installed())?;
     let _ = std::fs::create_dir_all(crate::paths::state_home());
     if let Err(e) = std::fs::write(mangoapp_conf_path(), mangoapp_conf_text(false)) {
         tracing::warn!("mangoapp.conf: {e}");
@@ -417,13 +418,30 @@ pub async fn host_gamescope_for(config: &Config, screen: &str) -> Option<(String
     Some(command)
 }
 
-pub fn host_gamescope(config: &Config, screen: Option<crate::gamescope::Mode>, mangoapp: bool) -> Option<(String, Vec<String>)> {
+/// The UI's host starts gamescope straight on the screen (nest::Own::Drm) when it has no display to open a window on.
+fn on_screen() -> bool {
+    ["WAYLAND_DISPLAY", "DISPLAY"].iter().all(|var| std::env::var_os(var).is_none_or(|v| v.is_empty()))
+}
+
+/// No desktop hides the cursor on gamescope's own screen: gamescope-session's delay.
+const HIDE_CURSOR_MS: &str = "3000";
+
+/// `output`: the connector `screen` was measured on, which gamescope drives when it has the screen to itself.
+pub fn host_gamescope(config: &Config, screen: Option<crate::gamescope::Mode>, output: Option<&str>, mangoapp: bool) -> Option<(String, Vec<String>)> {
     let bin = crate::runners::on_path(&config.launch.gamescope_bin)?;
     let fields = crate::library::gamescope_fields_of(&crate::game::Game::default(), config);
     let mut args = vec![format!("MANGOHUD_CONFIGFILE={}", mangoapp_conf_path().display())];
     args.extend(crate::keyboard::probe().env().iter().map(|(k, v)| format!("{k}={v}")));
     args.push(bin.to_string_lossy().to_string());
     args.extend(gamescope_args(true, &fields, [&config.launch.gamescope_args, "", ""], config.launch.hdr, screen, mangoapp));
+    if let Some(output) = output {
+        if !args.iter().any(|a| a == "-O" || a == "--prefer-output") {
+            args.extend(["--prefer-output".into(), output.into()]);
+        }
+        if !args.iter().any(|a| a == "-C" || a == "--hide-cursor-delay") {
+            args.extend(["--hide-cursor-delay".into(), HIDE_CURSOR_MS.into()]);
+        }
+    }
     prefer_vk_device(&mut args, config.launch.discrete_gpu.then(crate::gpu::offload).flatten());
     Some((env_bin(), args))
 }
@@ -805,14 +823,14 @@ mod tests {
         std::fs::write(&bin, b"#!/bin/sh\n").unwrap();
         let mut cfg = Config::default();
         cfg.launch.gamescope_bin = env.path().join("nope").to_string_lossy().into();
-        assert!(host_gamescope(&cfg, None, true).is_none());
+        assert!(host_gamescope(&cfg, None, None, true).is_none());
         cfg.launch.gamescope_bin = bin.to_string_lossy().into();
         cfg.launch.gamescope_args = "--adaptive-sync".into();
         cfg.launch.gamescope_filter = "fsr".into();
         let screen = Some(crate::gamescope::Mode { width: 3840, height: 2160, refresh: 60, vrr: false });
         std::env::set_var("XKB_DEFAULT_LAYOUT", "fr");
         std::env::set_var("XKB_DEFAULT_VARIANT", "bepo");
-        let (program, args) = host_gamescope(&cfg, screen, true).unwrap();
+        let (program, args) = host_gamescope(&cfg, screen, None, true).unwrap();
         assert!(program.ends_with("env"), "{program}");
         let conf = format!("MANGOHUD_CONFIGFILE={}", mangoapp_conf_path().display());
         assert_eq!(args[..4], [conf.clone(), "XKB_DEFAULT_LAYOUT=fr".into(), "XKB_DEFAULT_VARIANT=bepo".into(), bin.to_string_lossy().to_string()]);
@@ -822,14 +840,41 @@ mod tests {
         );
         cfg.launch.mangohud = false;
         cfg.launch.hdr = true;
-        let (_, args) = host_gamescope(&cfg, None, true).unwrap();
+        let (_, args) = host_gamescope(&cfg, None, None, true).unwrap();
         assert_eq!(
             args[4..],
             ["-f", "--force-composition", "-F", "fsr", "--adaptive-sync", "--mangoapp", "--hdr-enabled"],
             "mangoapp is there whatever the HUD's state: a game shows it"
         );
-        let (_, args) = host_gamescope(&cfg, None, false).unwrap();
+        let (_, args) = host_gamescope(&cfg, None, None, false).unwrap();
         assert!(!args.contains(&"--mangoapp".to_string()), "no mangoapp installed: gamescope would respawn it forever");
+    }
+
+    #[test]
+    fn a_gamescope_on_the_screen_drives_the_connector_it_was_measured_on_and_hides_the_cursor() {
+        let env = crate::paths::test_env();
+        let bin = env.path().join("gamescope");
+        std::fs::write(&bin, b"#!/bin/sh\n").unwrap();
+        let mut cfg = Config::default();
+        cfg.launch.gamescope_bin = bin.to_string_lossy().into();
+        let (_, args) = host_gamescope(&cfg, None, Some("DP-1"), false).unwrap();
+        let tail: Vec<&str> = args.iter().map(String::as_str).skip_while(|a| *a != "--prefer-output").collect();
+        assert_eq!(tail, ["--prefer-output", "DP-1", "--hide-cursor-delay", "3000"]);
+        let (_, args) = host_gamescope(&cfg, None, None, false).unwrap();
+        assert!(!args.iter().any(|a| a == "--prefer-output" || a == "--hide-cursor-delay"), "in a desktop's window the desktop has both");
+        cfg.launch.gamescope_args = "-O HDMI-A-1 -C 500".into();
+        let (_, args) = host_gamescope(&cfg, None, Some("DP-1"), false).unwrap();
+        assert!(!args.iter().any(|a| a == "--prefer-output" || a == "--hide-cursor-delay"), "the user's gamescope_args win: {args:?}");
+    }
+
+    #[test]
+    fn gamescope_takes_the_screen_where_there_is_no_display_to_open_a_window_on() {
+        let _env = crate::paths::test_env();
+        std::env::remove_var("WAYLAND_DISPLAY");
+        std::env::set_var("DISPLAY", "");
+        assert!(on_screen(), "a tty or a display manager's session");
+        std::env::set_var("DISPLAY", ":0");
+        assert!(!on_screen());
     }
 
     #[test]
