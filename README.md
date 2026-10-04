@@ -91,11 +91,16 @@ inputs.universe.url = "github:ilyasturki/universe";
 # NixOS configuration
 imports = [ inputs.universe.nixosModules.default ];
 programs.universe.enable = true;
+programs.universe.session.enable = true; # optional: the Universe login session
 
 # Home Manager configuration
 imports = [ inputs.universe.homeModules.default ];
 programs.universe.enable = true;
 ```
+
+## The Universe session
+
+The Arch and Fedora packages and `install.sh` add a **Universe** session to the login screen (GDM, SDDM and the others). Log in to it and the launcher has the whole screen, like SteamOS's Game Mode, with no desktop behind it; Log out, in its power menu, returns to the login screen. It has no lock screen, and no Wi-Fi or Bluetooth settings yet, so connect and pair from a desktop session first. On NixOS, set `programs.universe.session.enable`; `services.displayManager.defaultSession = "universe"` with an autologin boots straight into it.
 
 ## First run
 

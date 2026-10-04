@@ -47,6 +47,14 @@ whatever has the focus.
 	restart in place, with a game already running or inside Steam's Game Mode.
 	Settings › Themes › Startup animation, when off, wins over *--boot*.
 
+*--session*
+	Run as the Universe login session, which a display manager starts from
+	_universe.desktop_ in _wayland-sessions_: gamescope drives the screen with the
+	launcher as its only client. A gamescope that fails ends the session instead
+	of opening a window; a launcher that dies comes back without the startup
+	animation, unless it dies five times in a row within a minute. Log out, in
+	the power menu, returns to the login screen. There is no lock screen.
+
 *--fake*
 	A fixture library instead of the core, for UI work.
 

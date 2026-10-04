@@ -184,6 +184,7 @@ every 10 s, since the 30-minute timeout writes no file.
 | `set_mangohud(on)` | `set_mangohud(on=None)` | — | the running game's HUD: `None` flips it. Written as the game's `launch.mangohud` (reread from disk first: the dock and the watcher each hold a library), then applied in the game — mangoapp told over its control queue where one draws (see MangoHud), the layer over its control socket elsewhere, each also through its conf, which it rereads — and the new state returned. `NotFound` without a session; `Unavailable`, nothing written, when nothing can draw the HUD (no mangoapp where one would, no `mangohud` for the layer) |
 | `nest()` / `nest_game_shown()` / `nest_overlay(window, input, opacity)` / `nest_frame()` / `nest_filter(filter, sharpness)` | `nested()` / `nest_game_shown()` / … | — | the gamescope this process runs in (see Gamescope): whether there is one; whether it shows a window of the running game's; `STEAM_OVERLAY` on a window of this process, with its `STEAM_INPUT_FOCUS` and `_NET_WM_WINDOW_OPACITY`; the game's last painted frame into `<state>/frame.png` (`None` when no paint came within 5 s); `GAMESCOPE_SCALING_FILTER` and `GAMESCOPE_FSR_SHARPNESS` (no sharpness deletes the card: gamescope reads its default, 2, back). `Unavailable` on the desktop |
 | `under_steam()` | `under_steam()` | — | inside Steam's gamescope (Game Mode, see Gamescope): Steam owns power, sound, screenshots and the HUD there |
+| `nest::session()` | `session()` | — | inside the Universe session a display manager started (see Gamescope): the launcher is alone on the screen, and quitting it logs out |
 | `power_actions()` / `power(action)` | `power_actions()` / `power(action)` | — | logind on the system bus. `power_actions()` lists which of `suspend`, `reboot` and `power_off` its `Can*` does not answer `no` or `na` (`inhibited` and `challenge` stay: the call says why, or polkit asks); empty when logind cannot be asked. `power(action)` calls `Suspend` / `Reboot` / `PowerOff` interactive, so a desktop's polkit agent may ask for a password; logind's refusal is `Unavailable` with its message, an unknown action `Invalid` |
 | `host_gamescope(screen)` | `host_gamescope(screen)` | — | the gamescope a launcher starts itself in: `[env, MANGOHUD_CONFIGFILE=<state>/mangoapp.conf, XKB_DEFAULT_LAYOUT=…, XKB_DEFAULT_VARIANT=…, gamescope, args…]` from `launch.gamescope_bin`, the global `gamescope_*` fields at the screen's mode, `launch.gamescope_args`, `--mangoapp` whenever mangoapp is installed and `--hdr-enabled` when `launch.hdr` is, the keyboard layout (see below); writes that conf with the HUD hidden (a game shows it). `None` when the binary is not installed |
 | `keyboard_layout()` | `keyboard_layout()` | — | `{layout, variant}`, the session's xkb keyboard layout (`fr` / `bepo`, `us` / `intl`…): `XKB_DEFAULT_LAYOUT` and `XKB_DEFAULT_VARIANT` when set, else what the desktop keeps — GNOME's `org.gnome.desktop.input-sources` (the most recently used source, else the first), Cinnamon's `org.cinnamon.desktop.input-sources`, Hyprland's `input:kb_layout`, KDE's `kxkbrc`, the active layout sway (`swaymsg -t get_inputs`) and niri (`niri msg keyboard-layouts`) name, turned back into its code through xkeyboard-config's `rules/evdev.lst` (`XKB_CONFIG_ROOT`, else `X11/xkb` or `xkeyboard-config-2` under `XDG_DATA_DIRS`) — else `localectl`'s X11 layout or the console keymap up to its charset, else `us`. gamescope builds a US keymap of its own whatever the session's, so both the launcher's gamescope and a game's own get it as `XKB_DEFAULT_LAYOUT` / `XKB_DEFAULT_VARIANT` (which libxkbcommon reads), and a frontend draws its on-screen keyboard from it |
@@ -280,6 +281,35 @@ cover its dialog.
 The gamescope the launcher starts for itself carries `UNIVERSE_OWN_GAMESCOPE` to its children:
 `drm` when it drives the screen (a session of its own: no `WAYLAND_DISPLAY` or `DISPLAY` above it),
 `nested` in a desktop's window. Any other gamescope the launcher finds itself in is someone else's.
+On the screen of its own, `host_gamescope` adds `--prefer-output` with the connector the mode was
+read from, so gamescope drives the screen `-W` and `-H` describe, and `--hide-cursor-delay 3000`,
+since no desktop hides the cursor there; `launch.gamescope_args` setting either wins.
+
+#### The Universe session
+
+`packaging/system/universe.desktop` is a login session (`share/wayland-sessions`, `Exec=universe-ui
+--session`, `DesktopNames=Universe`), picked at the display manager's login screen like SteamOS's
+Game Mode. `--session` drops the `WAYLAND_DISPLAY` and `DISPLAY` it inherited, so its gamescope is
+always `drm`, and sets `XDG_CURRENT_DESKTOP=Universe` where the display manager did not, so the
+desktop profile is `none`. Its gamescope also carries `UNIVERSE_SESSION=1`, which `nest::session()`
+reads: the UI's power menus say Log out there, and doctor's `desktop` check passes on `none` and
+skips the cursor one.
+
+No desktop is left to fall back to. A gamescope that is missing, exits before the launcher comes up
+or shows nothing within 30 s ends the session with 1, and the display manager shows its greeter
+again. gamescope exits 0 whatever its child did, so the launcher inside writes its own exit code to
+the file `UNIVERSE_HOST_DONE` names when it quits on purpose; one that died instead is started
+again with `--no-boot`, and five runs in a row shorter than 60 s end the session. The startup
+animation plays once, at login. There is no lock screen, so a resume, or an autologin at boot,
+opens on the launcher. Nor is there a Wi-Fi, Bluetooth or polkit prompt yet: the session relies on
+the connections and pairings made from a desktop session.
+
+The AUR and RPM packages install it under `/usr/share/wayland-sessions`. `install.sh`, from a
+release or a checkout, puts it there through sudo with `Exec` pointing at its own `universe-ui`, under
+`/usr/local/share/wayland-sessions` where `/usr` is read-only (SDDM and GDM read both, LightDM only
+the first). On NixOS `programs.universe.session.enable` adds it to
+`services.displayManager.sessionPackages`, running the flake's `universe-ui` (`session.package`);
+`services.displayManager.defaultSession = "universe"` with an autologin boots straight into it.
 
 #### Steam's Game Mode
 
