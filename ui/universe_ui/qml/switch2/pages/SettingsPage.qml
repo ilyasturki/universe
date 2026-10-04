@@ -139,6 +139,9 @@ FocusScope {
             },
             performance: function () {
                 api.system.reload();
+            },
+            data: function () {
+                api.screens.storage.loadFree();
             }
         })
     readonly property var refreshers: ({
