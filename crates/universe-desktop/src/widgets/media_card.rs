@@ -3,9 +3,11 @@ use std::cell::RefCell;
 use adw::prelude::*;
 use adw::subclass::prelude::*;
 use gettextrs::gettext;
-use gtk::glib;
+use gtk::{gio, glib};
 
+use crate::actions;
 use crate::format;
+use crate::game::GameObject;
 use crate::media::{self, Kind, MediaItem};
 use crate::widgets::Cover;
 
@@ -73,9 +75,20 @@ mod imp {
             let overlay = gtk::Overlay::builder().child(&self.cover).margin_bottom(6).build();
             overlay.add_overlay(&self.badge);
             obj.append(&overlay);
-            obj.append(&self.title);
-            obj.append(&self.subtitle);
-            obj.append(&self.excerpt);
+            // The text wraps inside the picture's width: a long excerpt would widen the card past its siblings.
+            let text = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(4).build();
+            text.append(&self.title);
+            text.append(&self.subtitle);
+            text.append(&self.excerpt);
+            obj.append(&adw::Clamp::builder().maximum_size(WIDTH).tightening_threshold(WIDTH).child(&text).build());
+            let card = obj.downgrade();
+            let group = actions::install_game(&*obj, move || card.upgrade().and_then(|card| card.game()));
+            let (card, held) = (obj.downgrade(), group);
+            actions::context_menu(&*obj, crate::menus::game().upcast(), move || {
+                let game = card.upgrade().and_then(|card| card.game());
+                actions::sync_game(&held, game.as_ref());
+                game.is_some()
+            });
         }
     }
 
@@ -97,6 +110,12 @@ impl Default for MediaCard {
 }
 
 impl MediaCard {
+    /// The game the shot, recording or entry is of, while it is in the library.
+    fn game(&self) -> Option<GameObject> {
+        let id = self.imp().item.borrow().as_ref().map(|(item, _)| item.row().game.clone())?;
+        gio::Application::default().and_downcast::<crate::app::Application>()?.library().get(&id)
+    }
+
     /// `alone`: the grid shows one game's media, so the card names the moment rather than the game.
     pub fn bind(&self, item: &MediaItem, alone: bool) {
         self.unbind();

@@ -53,6 +53,39 @@ pub fn sync_game(group: &gio::SimpleActionGroup, game: Option<&GameObject>) {
     }
 }
 
+/// A right click or a long press on `widget` opens `menu` where it landed, its actions read from `widget` up; `ready` says
+/// whether there is a game to act on, and brings its actions up to date.
+pub fn context_menu(widget: &impl IsA<gtk::Widget>, menu: gio::MenuModel, ready: impl Fn() -> bool + 'static) {
+    let weak = widget.upcast_ref::<gtk::Widget>().downgrade();
+    let open = std::rc::Rc::new(move |x: f64, y: f64| {
+        let Some(widget) = weak.upgrade().filter(|_| ready()) else { return };
+        let popover = gtk::PopoverMenu::from_model(Some(&menu));
+        popover.set_parent(&widget);
+        popover.set_has_arrow(false);
+        popover.set_halign(gtk::Align::Start);
+        popover.set_pointing_to(Some(&gtk::gdk::Rectangle::new(x as i32, y as i32, 1, 1)));
+        // The item's action runs after the popover closes, found through its parent: it lets go once that is done.
+        popover.connect_closed(|popover| {
+            let popover = popover.clone();
+            glib::idle_add_local_once(move || popover.unparent());
+        });
+        popover.popup();
+    });
+    let click = gtk::GestureClick::builder().button(gtk::gdk::BUTTON_SECONDARY).build();
+    let on_click = open.clone();
+    click.connect_pressed(move |gesture, _, x, y| {
+        gesture.set_state(gtk::EventSequenceState::Claimed);
+        on_click(x, y);
+    });
+    widget.add_controller(click);
+    let press = gtk::GestureLongPress::builder().touch_only(true).build();
+    press.connect_pressed(move |gesture, x, y| {
+        gesture.set_state(gtk::EventSequenceState::Claimed);
+        open(x, y);
+    });
+    widget.add_controller(press);
+}
+
 /// Keeps `sync_game` current while `game` is bound; the handlers go with `unbind`.
 pub fn follow_game(group: &gio::SimpleActionGroup, game: &GameObject) -> Vec<glib::SignalHandlerId> {
     sync_game(group, Some(game));

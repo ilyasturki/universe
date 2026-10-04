@@ -171,3 +171,11 @@ cover.locked {
 .log-view {
   background: none;
 }
+
+#grid > child:focus-visible game-card overlay > button.hidden,
+#grid > child:focus-visible game-card overlay > menubutton.hidden > button,
+game-card:focus-within overlay > button.hidden,
+game-card:focus-within overlay > menubutton.hidden > button {
+  opacity: 1;
+  transform: none;
+}

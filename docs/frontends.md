@@ -1381,6 +1381,11 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
   (`--gapplication-service`, which stays up a minute between searches), whose `Exec` must name
   the wrapper by its absolute path: the bus runs it in its own environment. The desktop entry is
   `DBusActivatable`, so the app grid starts it that way too.
+- **Cards and rows**: a game card shows Play and its ⋮ on hover and on keyboard focus (`:focus-within`
+  in `style.css`), its title on two lines with the whole of it on hover. A right click, or a long press
+  on a touchscreen, opens the game's menu (`menus::game`, `actions::context_menu`) where it landed: on
+  a game card, a media card (the game it is of) and a Store row whose game is in the library. A media
+  card's text wraps inside its picture's width, so a journal excerpt leaves the grid even.
 - **Narrow windows**: under 730 px the sidebar folds away; the library's search names the view it
   searches ("Search Nintendo Switch"), so the header says where you are with the sidebar hidden.
   Under 600 px of content the cards shrink to 140×210 (`game_card::cover_size`, two columns on a

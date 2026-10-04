@@ -19,7 +19,6 @@ template $UniverseGameCard: Box {
       valign: start;
       margin-top: 8;
       margin-end: 8;
-      menu-model: game_menu;
 
       styles [
         "circular",
@@ -57,68 +56,12 @@ template $UniverseGameCard: Box {
   }
 
   Label title {
+    wrap: true;
+    wrap-mode: word_char;
+    lines: 2;
     ellipsize: end;
+    justify: center;
     max-width-chars: 20;
     halign: center;
-  }
-}
-
-menu game_menu {
-  section {
-    item (_("_Play"), "game.play")
-    item (_("_Details"), "game.details")
-  }
-
-  section {
-    item (_("Game _Settings"), "game.settings")
-    item (_("_Artwork"), "game.artwork")
-  }
-
-  section {
-    item {
-      label: _("Add to _Favourites");
-      action: "game.favorite";
-      hidden-when: "action-disabled";
-    }
-
-    item {
-      label: _("Remove From _Favourites");
-      action: "game.unfavorite";
-      hidden-when: "action-disabled";
-    }
-
-    item {
-      label: _("_Hide");
-      action: "game.hide";
-      hidden-when: "action-disabled";
-    }
-
-    item {
-      label: _("_Unhide");
-      action: "game.unhide";
-      hidden-when: "action-disabled";
-    }
-  }
-
-  section {
-    item {
-      label: _("_Update");
-      action: "game.update";
-      hidden-when: "action-disabled";
-    }
-
-    item {
-      label: _("U_ninstall…");
-      action: "game.uninstall";
-      hidden-when: "action-disabled";
-    }
-
-    item (_("_Remove From Library"), "game.remove")
-
-    item {
-      label: _("Remove With Wine _Prefix…");
-      action: "game.remove-purge";
-      hidden-when: "action-disabled";
-    }
   }
 }

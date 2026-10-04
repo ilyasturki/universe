@@ -2,12 +2,16 @@ use gettextrs::gettext;
 use gtk::gio;
 use gtk::prelude::*;
 
+/// The game menu's verbs that only show when they apply.
+const SHOWN_WHEN_ENABLED: [&str; 7] = ["game.favorite", "game.unfavorite", "game.hide", "game.unhide", "game.update", "game.uninstall", "game.remove-purge"];
+
 fn section(items: &[(String, &str)]) -> gio::Menu {
     let menu = gio::Menu::new();
     for (label, action) in items {
         let item = gio::MenuItem::new(Some(label), Some(action));
-        if *action == "app.big-screen" {
-            item.set_attribute_value("hidden-when", Some(&"action-missing".to_variant()));
+        let hidden = if *action == "app.big-screen" { Some("action-missing") } else { SHOWN_WHEN_ENABLED.contains(action).then_some("action-disabled") };
+        if let Some(hidden) = hidden {
+            item.set_attribute_value("hidden-when", Some(&hidden.to_variant()));
         }
         menu.append_item(&item);
     }
@@ -39,21 +43,51 @@ pub fn store() -> gio::Menu {
     main(Some(&section(&[(gettext("_Find Installed Games"), "store.scan")])))
 }
 
+/// A game's menu over the `game.*` actions: a card's ⋮, and a right click or a long press on whatever stands for a game.
+pub fn game() -> gio::Menu {
+    let menu = gio::Menu::new();
+    menu.append_section(None, &section(&[(gettext("_Play"), "game.play"), (gettext("_Details"), "game.details")]));
+    menu.append_section(None, &section(&[(gettext("Game _Settings"), "game.settings"), (gettext("_Artwork"), "game.artwork")]));
+    menu.append_section(
+        None,
+        &section(&[
+            (gettext("Add to _Favourites"), "game.favorite"),
+            (gettext("Remove From _Favourites"), "game.unfavorite"),
+            (gettext("_Hide"), "game.hide"),
+            (gettext("_Unhide"), "game.unhide"),
+        ]),
+    );
+    menu.append_section(
+        None,
+        &section(&[
+            (gettext("_Update"), "game.update"),
+            (gettext("U_ninstall…"), "game.uninstall"),
+            (gettext("_Remove From Library"), "game.remove"),
+            (gettext("Remove With Wine _Prefix…"), "game.remove-purge"),
+        ]),
+    );
+    menu
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn actions(menu: &impl IsA<gio::MenuModel>) -> Vec<String> {
+    fn items(menu: &impl IsA<gio::MenuModel>) -> Vec<(String, Option<String>)> {
         let mut out = Vec::new();
         for i in 0..menu.n_items() {
             if let Some(action) = menu.item_attribute_value(i, "action", None).and_then(|v| v.get::<String>()) {
-                out.push(action);
+                out.push((action, menu.item_attribute_value(i, "hidden-when", None).and_then(|v| v.get::<String>())));
             }
             if let Some(section) = menu.item_link(i, "section") {
-                out.extend(actions(&section));
+                out.extend(items(&section));
             }
         }
         out
+    }
+
+    fn actions(menu: &impl IsA<gio::MenuModel>) -> Vec<String> {
+        items(menu).into_iter().map(|(action, _)| action).collect()
     }
 
     #[test]
@@ -61,5 +95,17 @@ mod tests {
         let shared = actions(&main(None));
         assert_eq!(shared, ["win.rescan", "app.artwork", "app.big-screen", "app.system-check", "app.storage", "app.preferences", "app.shortcuts", "app.about"]);
         assert_eq!(actions(&store()), [&["store.scan".to_string()][..], &shared].concat(), "the store's refresh is its header button");
+    }
+
+    #[test]
+    fn the_game_menu_runs_the_game_actions_and_hides_what_does_not_apply() {
+        let listed = items(&game());
+        for (action, hidden) in &listed {
+            let name = action.strip_prefix("game.").expect("a game.* action");
+            assert!(crate::actions::GAME.contains(&name), "{action} is one the card installs");
+            let toggled = !matches!(name, "play" | "details" | "settings" | "artwork" | "remove");
+            assert_eq!(hidden.as_deref(), toggled.then_some("action-disabled"), "{action}");
+        }
+        assert_eq!(listed.len(), 12);
     }
 }

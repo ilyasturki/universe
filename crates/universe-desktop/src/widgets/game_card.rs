@@ -65,6 +65,9 @@ mod imp {
             self.options.connect_active_notify(move |_| {
                 card.upgrade().inspect(|card| card.reveal());
             });
+            self.options.set_menu_model(Some(&crate::menus::game()));
+            let card = obj.downgrade();
+            actions::context_menu(&*obj, crate::menus::game().upcast(), move || card.upgrade().is_some_and(|card| card.game().is_some()));
         }
     }
 
@@ -73,7 +76,8 @@ mod imp {
 }
 
 glib::wrapper! {
-    /// A grid cell: the cover with Play and a menu over it on hover, the title under it.
+    /// A grid cell: the cover with Play and a menu over it on hover or keyboard focus, the title under it on two lines; a right
+    /// click or a long press opens the menu too.
     pub struct GameCard(ObjectSubclass<imp::GameCard>)
         @extends gtk::Box, gtk::Widget,
         @implements gtk::Accessible, gtk::Buildable, gtk::ConstraintTarget, gtk::Orientable;
@@ -97,6 +101,7 @@ impl GameCard {
         let bindings = vec![
             game.bind_property("cover", &*imp.cover, "path").sync_create().build(),
             game.bind_property("title", &*imp.title, "label").sync_create().build(),
+            game.bind_property("title", &*imp.title, "tooltip-text").sync_create().build(),
             game.bind_property("playing", &*imp.playing, "visible").sync_create().build(),
         ];
         imp.bindings.replace(bindings);
@@ -130,6 +135,7 @@ impl GameCard {
     pub fn set_compact(&self, compact: bool) {
         let (width, height) = cover_size(compact);
         self.imp().cover.set_size(width, height);
+        self.imp().title.set_max_width_chars(if compact { 14 } else { 20 });
     }
 
     fn reveal(&self) {

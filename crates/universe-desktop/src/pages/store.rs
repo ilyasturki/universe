@@ -510,6 +510,16 @@ impl StorePage {
         art.set_valign(gtk::Align::Center);
         art.set_path(self.art(entry));
         row.add_prefix(&art);
+        if self.in_library(entry) {
+            let id = entry.game_id.clone();
+            let game = move || gio::Application::default().and_downcast::<Application>().and_then(|app| app.library().get(&id));
+            let group = crate::actions::install_game(&row, game.clone());
+            crate::actions::context_menu(&row, crate::menus::game().upcast(), move || {
+                let game = game();
+                crate::actions::sync_game(&group, game.as_ref());
+                game.is_some()
+            });
+        }
         row
     }
 
