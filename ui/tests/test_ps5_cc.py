@@ -141,9 +141,13 @@ def test_the_trophies_card_grows_into_the_games_list(api, fake):
     until(lambda: cc.property("zone") == "sheet" and cc.property("sheet") == "trophies")
     until(lambda: len(api.screens.dockAchievements.rows) > 0)
     rows = api.screens.dockAchievements.rows
-    earned = until(lambda: (found := items_named(cc, "trophyEarned")) and len(found) >= min(len(rows), 3) and found)
     assert any(not r["unlocked"] for r in rows) and any(r["unlocked"] for r in rows)
-    shown = [label.property("visible") for label in earned]
+
+    def dated():
+        found = items_named(cc, "trophyEarned")
+        return len(found) >= min(len(rows), 3) and [label.property("text") != "" for label in found]
+
+    shown = until(dated)
     assert any(shown) and not all(shown), "a locked trophy says nothing where an earned one has its date"
     assert not any(label.property("text").endswith("of players") for label in items_named(cc, "trophyRarity")), "the trophy page's wording"
     shot(overlay, "cc-trophies")
