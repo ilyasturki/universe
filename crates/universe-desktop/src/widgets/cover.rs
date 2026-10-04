@@ -4,7 +4,6 @@ use adw::prelude::*;
 use adw::subclass::prelude::*;
 use gtk::{glib, graphene};
 
-use crate::config;
 use crate::covers;
 
 mod imp {
@@ -34,7 +33,7 @@ mod imp {
                 art_height: Cell::new(300),
                 frame: gtk::Stack::builder().transition_type(gtk::StackTransitionType::Crossfade).build(),
                 picture: gtk::Picture::builder().content_fit(gtk::ContentFit::Cover).can_shrink(true).build(),
-                placeholder: gtk::Image::builder().icon_name(format!("{}-symbolic", config::APP_ID)).css_classes(["dimmed"]).build(),
+                placeholder: gtk::Image::builder().icon_name("input-gaming-symbolic").css_classes(["dimmed"]).build(),
                 generation: Cell::new(0),
             }
         }
@@ -133,7 +132,7 @@ mod imp {
 }
 
 glib::wrapper! {
-    /// A game's box art at a fixed 2:3 size, the app's mark while it has none.
+    /// A game's box art at a fixed 2:3 size, a pad while it has none.
     pub struct Cover(ObjectSubclass<imp::Cover>)
         @extends gtk::Widget,
         @implements gtk::Accessible, gtk::Buildable, gtk::ConstraintTarget;
@@ -144,7 +143,7 @@ impl Cover {
         glib::Object::builder().property("art-width", width).property("art-height", height).build()
     }
 
-    /// What shows while there is no picture, the app's mark unless told otherwise.
+    /// What shows while there is no picture, a pad unless told otherwise.
     pub fn set_placeholder(&self, icon: &str) {
         self.imp().placeholder.set_icon_name(Some(icon));
     }

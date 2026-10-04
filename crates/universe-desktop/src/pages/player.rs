@@ -109,6 +109,7 @@ pub fn open_recording(win: &Window, recording: Recording) {
     let mut covers = Vec::new();
     for index in 0..frames::COUNT {
         let cover = Cover::new(128, 72);
+        cover.set_placeholder("camera-video-symbolic");
         cover.set_path(app.frame(&recording.path, index, recording.duration_s).unwrap_or_default());
         let button = gtk::Button::builder()
             .child(&cover)

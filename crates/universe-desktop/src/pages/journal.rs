@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use adw::prelude::*;
-use gettextrs::gettext;
+use gettextrs::{gettext, ngettext};
 use gtk::{gio, glib};
 use universe::journal::Entry;
 use universe::sessions::SessionRow;
@@ -190,6 +190,19 @@ impl Journal {
     fn recording(&self, session: &str) -> Option<player::Recording> {
         self.session(session).and_then(player::Recording::of_session)
     }
+
+    /// The entries, then the played sessions still without one, each newest first; `gone`, what waits on its Undo, in neither.
+    fn split(&self, gone: impl Fn(&str) -> bool) -> (Vec<&Entry>, Vec<&SessionRow>) {
+        let mut entries: Vec<&Entry> = self.entries.iter().filter(|e| !gone(&e.session)).collect();
+        entries.sort_by(|a, b| b.session.cmp(&a.session));
+        let mut without: Vec<&SessionRow> = self
+            .sessions
+            .iter()
+            .filter(|r| played(&r.session.session) && !gone(&r.session.session) && !self.entries.iter().any(|e| e.session == r.session.session))
+            .collect();
+        without.sort_by(|a, b| b.session.session.cmp(&a.session.session));
+        (entries, without)
+    }
 }
 
 fn say(win: &Window, text: &str) {
@@ -307,8 +320,8 @@ pub fn open_entry(win: &Window, game: &str, session: &str) {
                     for block in blocks(&entry.paragraphs) {
                         column.append(&label(&block));
                     }
-                    if !entry.images.is_empty() {
-                        column.append(&pictures(&win, &entry, &title));
+                    if let Some(pictures) = pictures(&win, &entry, &title) {
+                        column.append(&pictures);
                     }
                     if !entry.next_up.trim().is_empty() {
                         let group = adw::PreferencesGroup::builder().title(gettext("Next Up")).build();
@@ -437,24 +450,32 @@ pub fn open_entry(win: &Window, game: &str, session: &str) {
     win.push_page(&page);
 }
 
-/// The pictures an entry was written from, in a row that opens the viewer.
-fn pictures(win: &Window, entry: &Entry, title: &str) -> gtk::Widget {
-    let flow =
-        gtk::FlowBox::builder().selection_mode(gtk::SelectionMode::None).column_spacing(12).row_spacing(12).max_children_per_line(4).homogeneous(true).build();
-    let shots: Vec<viewer::Shot> = entry
-        .images
+/// The pictures an entry was written from that are still on disk, from the text column's edge, each opening the viewer.
+fn pictures(win: &Window, entry: &Entry, title: &str) -> Option<gtk::Widget> {
+    let images: Vec<&String> = entry.images.iter().filter(|path| std::path::Path::new(path).is_file()).collect();
+    if images.is_empty() {
+        return None;
+    }
+    let flow = gtk::FlowBox::builder()
+        .selection_mode(gtk::SelectionMode::None)
+        .column_spacing(12)
+        .row_spacing(12)
+        .max_children_per_line(4)
+        .halign(gtk::Align::Start)
+        .build();
+    let shots: Vec<viewer::Shot> = images
         .iter()
         .map(|path| viewer::Shot {
-            path: path.clone(),
+            path: path.to_string(),
             game: entry.game.clone(),
             title: title.to_string(),
             date: entry.started_at.clone(),
             ..viewer::Shot::default()
         })
         .collect();
-    for path in &entry.images {
+    for path in &images {
         let cover = Cover::new(176, 99);
-        cover.set_path(path.clone());
+        cover.set_path(path.to_string());
         flow.append(&cover);
     }
     let weak = win.downgrade();
@@ -463,10 +484,55 @@ fn pictures(win: &Window, entry: &Entry, title: &str) -> gtk::Widget {
             viewer::open(&win, shots.clone(), child.index().max(0) as usize);
         }
     });
-    flow.upcast()
+    Some(flow.upcast())
 }
 
-/// A game's journal: every entry, the ones being written and put off among them, and the sessions still without one.
+/// An entry in the list: its title, when, how long and how far along, its first picture; it opens the entry.
+fn entry_row(win: &Window, game: &str, entry: &Entry) -> adw::ActionRow {
+    let when = if entry.started_at.is_empty() { &entry.written_at } else { &entry.started_at };
+    let mut line = vec![media::moment(when)];
+    if entry.duration_s > 0 {
+        line.push(format::duration(entry.duration_s as u64));
+    }
+    line.push(state_line(entry));
+    line.retain(|part| !part.is_empty());
+    let row = crate::rows::plain(adw::ActionRow::builder().title_lines(1).subtitle_lines(1).activatable(true).build(), title_of(entry), line.join(" · "));
+    let art = Cover::new(80, 45);
+    art.set_placeholder("text-x-generic-symbolic");
+    art.add_css_class("thumb");
+    art.set_valign(gtk::Align::Center);
+    art.set_path(entry.images.first().cloned().unwrap_or_default());
+    row.add_prefix(&art);
+    if entry.state == "pending" {
+        row.add_suffix(&adw::Spinner::new());
+    }
+    row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
+    let (weak, game, session) = (win.downgrade(), game.to_string(), entry.session.clone());
+    row.connect_activated(move |_| {
+        if let Some(win) = weak.upgrade() {
+            open_entry(&win, &game, &session);
+        }
+    });
+    row
+}
+
+/// A played session without an entry, in the expander: when, how long, and Write.
+fn unwritten_row(win: &Window, game: &str, row: &SessionRow) -> adw::ActionRow {
+    let length = if row.session.duration_s > 0 { format::duration(row.session.duration_s) } else { String::new() };
+    let item = crate::rows::plain(adw::ActionRow::builder().build(), media::moment(&row.session.started_at), length);
+    let button = gtk::Button::builder().label(gettext("_Write")).use_underline(true).valign(gtk::Align::Center).build();
+    let (weak, game, session) = (win.downgrade(), game.to_string(), row.session.session.clone());
+    button.connect_clicked(move |_| {
+        if let Some(win) = weak.upgrade() {
+            write(&win, &game, &session, false);
+        }
+    });
+    item.add_suffix(&button);
+    item
+}
+
+/// A game's journal: every entry, the ones being written and put off among them, then the sessions still without one,
+/// folded into one row.
 pub fn open_list(win: &Window, game: &str) {
     let (page, column, stack) = page(&gettext("Journal"), &format!("journal:{game}"), &crate::pages::game_header(win, &gettext("Journal"), game));
     let game = game.to_string();
@@ -475,79 +541,38 @@ pub fn open_list(win: &Window, game: &str) {
         Rc::new(move |journal: Journal| {
             let (Some(win), Some(column), Some(stack)) = (weak_win.upgrade(), column.upgrade(), stack.upgrade()) else { return };
             clear(&column);
-            let group = adw::PreferencesGroup::new();
-            let mut sessions: Vec<(String, Option<Entry>, u64)> =
-                journal.entries.iter().map(|e| (e.session.clone(), Some(e.clone()), e.duration_s.max(0) as u64)).collect();
-            for row in &journal.sessions {
-                if played(&row.session.session) && !sessions.iter().any(|(s, _, _)| *s == row.session.session) {
-                    sessions.push((row.session.session.clone(), None, row.session.duration_s));
-                }
-            }
-            sessions.sort_by(|a, b| b.0.cmp(&a.0));
             let app = win.app();
-            for (session, entry, duration) in sessions {
-                if app.is_deferred(&media::journal_key(&game, &session)) {
-                    continue;
+            let (entries, without) = journal.split(|session| app.is_deferred(&media::journal_key(&game, session)));
+            if entries.is_empty() {
+                let status = adw::StatusPage::builder()
+                    .icon_name("text-x-generic-symbolic")
+                    .title(gettext("No Journal Entries"))
+                    .description(gettext("An entry is written after each session"))
+                    .build();
+                if !without.is_empty() {
+                    status.add_css_class("compact");
                 }
-                let when = entry
-                    .as_ref()
-                    .map(|e| if e.started_at.is_empty() { e.written_at.clone() } else { e.started_at.clone() })
-                    .or_else(|| journal.session(&session).map(|s| s.session.started_at.clone()))
-                    .unwrap_or_default();
-                let mut line = vec![media::moment(&when)];
-                if duration > 0 {
-                    line.push(format::duration(duration));
-                }
-                let row = crate::rows::plain(adw::ActionRow::builder().title_lines(1).subtitle_lines(1).build(), "", "");
-                let art = Cover::new(80, 45);
-                art.add_css_class("thumb");
-                art.set_valign(gtk::Align::Center);
-                row.add_prefix(&art);
-                match &entry {
-                    Some(entry) => {
-                        row.set_title(&title_of(entry));
-                        let state = state_line(entry);
-                        if !state.is_empty() {
-                            line.push(state);
-                        }
-                        art.set_path(entry.images.first().cloned().unwrap_or_default());
-                        if entry.state == "pending" {
-                            row.add_suffix(&adw::Spinner::new());
-                        }
-                        row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
-                        row.set_activatable(true);
-                        let (weak, game, session) = (win.downgrade(), game.clone(), session.clone());
-                        row.connect_activated(move |_| {
-                            if let Some(win) = weak.upgrade() {
-                                open_entry(&win, &game, &session);
-                            }
-                        });
-                    }
-                    None => {
-                        row.set_title(&gettext("No Entry"));
-                        let write_button = gtk::Button::builder().label(gettext("_Write")).use_underline(true).valign(gtk::Align::Center).build();
-                        let (weak, game, session) = (win.downgrade(), game.clone(), session.clone());
-                        write_button.connect_clicked(move |_| {
-                            if let Some(win) = weak.upgrade() {
-                                write(&win, &game, &session, false);
-                            }
-                        });
-                        row.add_suffix(&write_button);
-                    }
-                }
-                row.set_subtitle(&line.join(" · "));
-                group.add(&row);
-            }
-            if group.row(0).is_some() {
-                column.append(&group);
+                column.append(&status);
             } else {
-                column.append(
-                    &adw::StatusPage::builder()
-                        .icon_name("text-x-generic-symbolic")
-                        .title(gettext("No Journal Entries"))
-                        .description(gettext("An entry is written after each session"))
-                        .build(),
+                let group = adw::PreferencesGroup::new();
+                for entry in entries {
+                    group.add(&entry_row(&win, &game, entry));
+                }
+                column.append(&group);
+            }
+            if !without.is_empty() {
+                let count = without.len();
+                let expander = crate::rows::plain_expander(
+                    adw::ExpanderRow::builder().build(),
+                    ngettext("{} session without an entry", "{} sessions without an entry", count as u32).replace("{}", &count.to_string()),
+                    gettext("Write one for any of them"),
                 );
+                for row in without {
+                    expander.add_row(&unwritten_row(&win, &game, row));
+                }
+                let group = adw::PreferencesGroup::new();
+                group.add(&expander);
+                column.append(&group);
             }
             stack.set_visible_child_name("content");
         })
@@ -594,6 +619,27 @@ pub fn open_list(win: &Window, game: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_entries_come_first_and_the_sessions_without_one_fold_apart() {
+        let entry = |session: &str| Entry { session: session.into(), ..Entry::default() };
+        let session = |session: &str| SessionRow {
+            session: universe::sessions::Session { session: session.into(), ..Default::default() },
+            title: String::new(),
+            recording: None,
+            journal: None,
+            debug_log: None,
+        };
+        let journal = Journal {
+            entries: vec![entry("20260901-200000"), entry("20260920-200000"), entry("20260915-200000")],
+            sessions: ["20260901-200000", "20260902-200000", "20260925-200000", "20260910-200000", "imported-gog", "20260930-200000"].map(session).to_vec(),
+        };
+        let (entries, without) = journal.split(|s| s == "20260915-200000" || s == "20260930-200000");
+        let entries: Vec<&str> = entries.iter().map(|e| e.session.as_str()).collect();
+        assert_eq!(entries, ["20260920-200000", "20260901-200000"], "newest first, the one waiting on its Undo gone");
+        let without: Vec<&str> = without.iter().map(|r| r.session.session.as_str()).collect();
+        assert_eq!(without, ["20260925-200000", "20260910-200000", "20260902-200000"], "an imported session has no journal to write");
+    }
 
     #[test]
     fn a_list_stays_one_block_and_prose_its_own() {

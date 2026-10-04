@@ -391,6 +391,7 @@ impl GamePage {
         }
         for path in details.screenshots.iter().take(12) {
             let shot = Cover::new(320, 180);
+            shot.set_placeholder("image-x-generic-symbolic");
             shot.set_path(path.clone());
             imp.shots.append(&shot);
         }

@@ -102,6 +102,11 @@ impl MediaCard {
         self.unbind();
         let imp = self.imp();
         let row = item.row().clone();
+        imp.cover.set_placeholder(match item.kind() {
+            Kind::Shot => "camera-photo-symbolic",
+            Kind::Recording => "camera-video-symbolic",
+            Kind::Journal => "text-x-generic-symbolic",
+        });
         imp.cover.set_path(item.picture());
         let cover = imp.cover.clone();
         let handler = item.connect_picture_notify(move |item| cover.set_path(item.picture()));

@@ -63,6 +63,7 @@ fn catalogue(sgdb_key: bool) -> &'static str {
 /// A picture of the slot's shape `height` pixels tall.
 fn sized(aspect: f64, height: i32) -> Cover {
     let cover = Cover::new((f64::from(height) * aspect).round() as i32, height);
+    cover.set_placeholder("image-x-generic-symbolic");
     cover.add_css_class("thumb");
     cover.set_valign(gtk::Align::Center);
     cover

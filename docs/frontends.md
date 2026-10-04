@@ -1385,7 +1385,11 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
   them (`sources()` may ask the stores), and the backdrop fades in on its own once decoded. The
   header names the game once its title scrolls away, and every page over it (Achievements, Journal,
   Sessions and Logs, Screenshots, Recordings) has the game under its title. A debug build decodes the
-  art optimised (`[profile.dev.package]` in the root `Cargo.toml`).
+  art optimised (`[profile.dev.package]` in the root `Cargo.toml`). The Journal lists the entries,
+  newest first, then folds the played sessions without one into a single "N sessions without an
+  entry" expander, each with Write; an entry shows only the pictures still on disk, from the text's
+  edge. A picture that is missing shows what it stands for — a pad for a game, a page for an entry, a
+  camera for a shot — not the app's mark.
 - **Game data**: the game page's "Saves and Storage" group (`pages/game_data.rs`) is loaded on a task of
   its own, not in the details' chain, since sizes walk the folders and the saves ask ludusavi: the
   saves with Back Up, the backups in an expander (Restore each, asking first; Export to the home
