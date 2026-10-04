@@ -17,6 +17,7 @@ template $UniverseWindow: Adw.ApplicationWindow {
   content: Adw.ToastOverlay toasts {
     child: Adw.ToolbarView playing_bar {
       reveal-bottom-bars: false;
+      bottom-bar-style: raised;
 
       [bottom]
       $UniverseNowPlaying bottom_playing {}
