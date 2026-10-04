@@ -145,7 +145,9 @@ def test_a_pad_press_reaches_neither_the_launcher_nor_its_power_menu_while_anoth
                 lines.append(line.rstrip("\n"))
 
         def focus_now():
-            return next((line.rpartition("focus: ")[2] for line in reversed(lines) if line.endswith(("focus: active", "focus: elsewhere", "focus: inactive"))), None)
+            return next(
+                (line.rpartition("focus: ")[2] for line in reversed(lines) if line.endswith(("focus: active", "focus: elsewhere", "focus: inactive"))), None
+            )
 
         def go_on(focus):
             sway.wait(lambda: focus_now() == focus, f"the launcher sees the focus {focus}")
