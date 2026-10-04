@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+    cat <<'USAGE'
+usage: tools/desktop-test
+
+The GTK app in a headless weston, on a throwaway profile holding two games added
+through the CLI: it shows the library, a platform, the hidden games, Media, the
+Store, a game's page and Preferences, shoots each, and quits by itself. Fails when weston or the
+app does not start, a script step fails (an action missing, a shot failed or
+blank), two surfaces come out as the same picture, or the app runs past
+DESKTOP_TEST_TIMEOUT seconds (default 60). Shots and logs land in
+DESKTOP_TEST_OUT (default target/desktop-test). Needs the debug build:
+`just test desktop` builds first.
+USAGE
+}
+
+case "${1:-}" in
+    -h | --help) usage; exit 0 ;;
+    "") ;;
+    *) usage >&2; exit 2 ;;
+esac
+
+repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+app="$repo/target/debug/universe-desktop"
+cli="${UNIVERSE_BIN:-$repo/target/debug/universe}"
+limit="${DESKTOP_TEST_TIMEOUT:-60}"
+out="${DESKTOP_TEST_OUT:-$repo/target/desktop-test}"
+
+fail() {
+    echo "desktop-test: $*" >&2
+    exit 1
+}
+
+[ -x "$app" ] && [ -x "$cli" ] || fail "no debug build at $app and $cli: cargo build"
+
+tmp="$(mktemp -d)"
+weston_pid=
+cleanup() {
+    [ -n "$weston_pid" ] && kill "$weston_pid" 2>/dev/null
+    rm -rf "$tmp"
+}
+trap cleanup EXIT
+shots=(media platform library hidden store game preferences)
+mkdir -p "$out" "$tmp"/{data,config,state,cache,games,run}
+for shot in "${shots[@]}"; do rm -f "$out/$shot.png"; done
+chmod 700 "$tmp/run"
+started=$SECONDS
+
+export UNIVERSE_DATA_HOME="$tmp/data" UNIVERSE_CONFIG_HOME="$tmp/config" UNIVERSE_STATE_HOME="$tmp/state" UNIVERSE_CACHE_HOME="$tmp/cache"
+cat >"$UNIVERSE_CONFIG_HOME/config.toml" <<EOF
+schema = 1
+[paths]
+games_root = "$tmp/games"
+recordings_root = "$tmp/recordings"
+[desktop]
+profile = "none"
+[modules]
+enabled = []
+[sources]
+enabled = []
+EOF
+
+add() {
+    "$cli" add "$@" --json | python3 -c 'import json, sys; g = json.load(sys.stdin); print(g["id"] + "\t" + g["platform"])'
+}
+touch "$tmp/games/quest.sh" "$tmp/games/pocket.gba"
+quest="$(add "$tmp/games/quest.sh" --runner linux --title "Smoke Quest")" || fail "the CLI added no game"
+pocket="$(add "$tmp/games/pocket.gba" --runner mgba --title "Pocket Smoke")" || fail "the CLI added no game"
+IFS=$'\t' read -r game _ <<<"$quest"
+IFS=$'\t' read -r _ platform <<<"$pocket"
+
+socket="$tmp/run/wayland-0"
+XDG_RUNTIME_DIR="$tmp/run" weston --backend=headless --no-config --idle-time=0 --socket=wayland-0 --width=1920 --height=1200 \
+    >"$out/weston.log" 2>&1 &
+weston_pid=$!
+for _ in $(seq 100); do
+    [ -S "$socket" ] && break
+    kill -0 "$weston_pid" 2>/dev/null || fail "weston did not start: $(tail -n 5 "$out/weston.log")"
+    sleep 0.1
+done
+[ -S "$socket" ] || fail "weston opened no socket in 10 s ($out/weston.log)"
+
+# Media first: a switch of the window's stack ends the crossfade it starts the library with.
+script="action:win.view::media shot:$out/media.png"
+script+=" action:win.view::platform:${platform// /\~} shot:$out/platform.png"
+script+=" action:win.view::all action:win.sort::a-z shot:$out/library.png"
+script+=" action:win.show-hidden shot:$out/hidden.png"
+script+=" action:win.view::store shot:$out/store.png"
+script+=" action:win.open-game::$game shot:$out/game.png"
+script+=" action:app.preferences shot:$out/preferences.png"
+
+status=0
+# A shot draws the window's render node, which an offloaded video (a subsurface) is not part of.
+timeout -k 5 "$limit" env -u DISPLAY WAYLAND_DISPLAY="$socket" GDK_BACKEND=wayland GDK_DISABLE=offload,dmabuf \
+    UNIVERSE_DESKTOP_SCRIPT="$script" "$app" >"$out/app.log" 2>&1 || status=$?
+case "$status" in
+    0) ;;
+    124 | 137) fail "the app did not quit by itself within $limit s ($out/app.log)" ;;
+    *)
+        grep '^script: ' "$out/app.log" >&2 || tail -n 20 "$out/app.log" >&2
+        fail "the app exited $status ($out/app.log)"
+        ;;
+esac
+
+for shot in "${shots[@]}"; do
+    [ -s "$out/$shot.png" ] || fail "no $shot.png: the script did not run ($out/app.log)"
+done
+same="$(cd "$out" && sha256sum "${shots[@]/%/.png}" | sort | uniq -w 64 -D | cut -c 67-)"
+[ -z "$same" ] || fail "the same picture twice, a step showed nothing new: ${same//$'\n'/ }"
+echo "desktop-test: ${#shots[@]} surfaces shot in $out ($((SECONDS - started)) s)"

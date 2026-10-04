@@ -115,7 +115,7 @@ desktop-shot dir *steps: build env
 logs:
     journalctl --user -f -u 'universe-*'
 
-# Every suite, or the ones named: rust, python, or one of python's ui, modules, sources, bindings
+# Every suite, or the ones named: rust, python, or one of python's ui, modules, sources, bindings; desktop (named only) runs the GTK app in a headless weston
 test *suites: build develop env
     #!/usr/bin/env -S nix develop --quiet --command bash
     set -euo pipefail
@@ -128,7 +128,8 @@ test *suites: build develop env
             python) "{{ python }}" -m pytest -q ;;
             bindings) "{{ python }}" -m pytest -q crates/universe-py/tests ;;
             ui|modules|extension|sources) "{{ python }}" -m pytest -q "$suite" ;;
-            *) echo "test: unknown suite '$suite' (rust, python, ui, modules, extension, sources, bindings)" >&2; exit 2 ;;
+            desktop) tools/desktop-test ;;
+            *) echo "test: unknown suite '$suite' (rust, python, ui, modules, extension, sources, bindings, desktop)" >&2; exit 2 ;;
         esac
     done
 
