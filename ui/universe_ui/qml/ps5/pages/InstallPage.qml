@@ -409,7 +409,7 @@ FocusScope {
     function actionsFor(g) {
         var main = mainOf(g);
         var out = main ? [main] : [];
-        if (moreOf(g).length > 0)
+        if (libraryGameOf(g))
             out.push({
                 act: "more",
                 label: "Options",
