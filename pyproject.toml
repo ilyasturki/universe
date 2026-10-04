@@ -2,9 +2,9 @@
 testpaths = ["ui/tests", "modules", "extension", "sources", "crates/universe-py/tests"]
 pythonpath = ["ui"]
 markers = ["slow: allowed past the 2 s a test is held to (conftest.py)"]
-# The thread method: a hang inside Qt's C++ never hands Python the signal method's alarm.
-timeout = 60
-timeout_method = "thread"
+# Its watchdog thread needs no GIL: a hang that holds it inside Qt's C++ is dumped and ended all the same.
+faulthandler_timeout = 60
+faulthandler_exit_on_timeout = true
 qt_api = "pyside6"
 qt_log_level_fail = "WARNING"
 qt_log_ignore = [
