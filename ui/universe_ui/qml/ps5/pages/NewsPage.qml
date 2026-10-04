@@ -246,9 +246,8 @@ FocusScope {
     PageTitle {
         anchors.left: parent.left
         anchors.right: parent.right
-        title: page.game ? page.game.title : "Journal"
+        title: "Journal"
         game: page.game
-        trailing: page.game ? "Journal" : ""
     }
 
     Label {

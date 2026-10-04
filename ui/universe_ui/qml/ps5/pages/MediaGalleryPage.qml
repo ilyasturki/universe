@@ -380,7 +380,7 @@ FocusScope {
     PageTitle {
         anchors.left: parent.left
         anchors.right: parent.right
-        title: page.game ? page.game.title : "Media Gallery"
+        title: "Media Gallery"
         game: page.game
     }
 

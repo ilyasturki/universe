@@ -254,8 +254,7 @@ FocusScope {
         anchors.left: parent.left
         anchors.right: parent.right
         game: page.game
-        title: page.game ? page.game.title : ""
-        trailing: "Game Settings"
+        title: "Game Settings"
     }
 
     SectionList {

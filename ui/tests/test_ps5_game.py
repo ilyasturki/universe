@@ -193,6 +193,18 @@ def test_the_artwork_opens_a_slot_and_a_pick_puts_the_default_under_it(ps5, api,
     click(window, Qt.Key.Key_Escape)
 
 
+@pytest.mark.parametrize(
+    "source", ["SoftwareInfoPage", "AchievementsPage", "GameSettingsPage", "NewsPage", "MediaGalleryPage", "PlayLogPage", "ArtworkPage", "DataPage"]
+)
+def test_a_game_s_pages_title_with_their_name_beside_the_game_s_tile(ps5, api, source):
+    _window, root = ps5
+    game = api.allGames.byId("the-technomancer")
+    page = push(root, f"pages/{source}.qml", {"gameId": game.id})
+    header = until(lambda: next((o for o in page.findChildren(QObject) if o.metaObject().className().startswith("PageTitle")), None))
+    assert header.property("game").property("id") == game.id
+    assert header.property("title") not in ("", game.title), "the page's name, the game is the tile"
+
+
 def test_the_play_log_lists_the_sessions_and_reads_one(ps5, api):
     window, root = ps5
     store = api.screens.sessions
