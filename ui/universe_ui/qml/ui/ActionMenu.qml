@@ -15,19 +15,31 @@ FocusScope {
     property var items: []
     property int index: 0
     property var done: null
+    // A value picked on a game's page: A keeps it to the game, Y (`alt` its label) gives it to all the games it reaches.
+    property string alt: ""
 
     signal dismissed
 
-    readonly property var hints: [
-        {
-            glyph: "A",
-            label: "Select"
-        },
+    readonly property var hints: (alt !== "" ? [
+            {
+                glyph: "A",
+                label: "This game"
+            },
+            {
+                glyph: "Y",
+                label: alt
+            }
+        ] : [
+            {
+                glyph: "A",
+                label: "Select"
+            }
+        ]).concat([
         {
             glyph: "B",
             label: stack.length > 0 ? "Back" : "Close"
         }
-    ]
+    ])
 
     // The row's rect in the menu's coordinates, taken once at show().
     property rect row: Qt.rect(0, 0, 0, 0)
@@ -44,12 +56,14 @@ FocusScope {
         Ease {}
     }
 
-    function show(list, anchor, rect, heading, after, start) {
+    // `after(action, all)`: `all` when Y picked it, `alternative` naming what Y does.
+    function show(list, anchor, rect, heading, after, start, alternative) {
         items = list;
         title = heading || "";
         note = "";
         done = after || null;
         index = start || 0;
+        alt = alternative || "";
         centered = !anchor;
         if (anchor) {
             var p = anchor.mapToItem(menu, rect.x, rect.y);
@@ -102,6 +116,7 @@ FocusScope {
         note = "";
         done = after || null;
         index = 0;
+        alt = "";
         shown++;
     }
 
@@ -118,6 +133,7 @@ FocusScope {
         open = false;
         focus = false;
         done = null;
+        alt = "";
         stack = [];
     }
 
@@ -139,10 +155,10 @@ FocusScope {
     // A handler may show() a follow-up (a confirmation) in place; the menu closes otherwise.
     property int shown: 0
 
-    function activate() {
+    function activate(all) {
         var was = shown, after = done;
         if (after)
-            after(items[index].action);
+            after(items[index].action, all === true);
         if (shown === was)
             hide();
     }
@@ -362,6 +378,8 @@ FocusScope {
             stack.length > 0 ? cancel() : Sound.edge();
         else if (api.keys.isAccept(event))
             activate();
+        else if (api.keys.isFilters(event) && alt !== "")
+            activate(true);
         else if (api.keys.isCancel(event))
             cancel();
         else if (api.keys.isMenu(event)) {

@@ -29,11 +29,25 @@ function grouped(groups, rows, make) {
 }
 
 // A map's add row: one sheet asks the name and the value together.
-function addEntry(shell, row, apply) {
+// `all` ({ apply, label }) on a game's map that reaches other games: the pair typed, which games it is for, A this one, Y all.
+function addEntry(shell, row, apply, all) {
     shell.promptPair({ title: row.label.replace(/…$/, ""), labels: row.fields }, function(name, value) {
-        if (name !== null)
+        if (name === null)
+            return;
+        if (!all) {
             apply(name, value);
+            return;
+        }
+        shell.pick({ title: name, choices: ["This game", all.label], index: 0, alt: all.label }, function(i, toAll) {
+            if (i >= 0)
+                (toAll || i === 1 ? all.apply : apply)(name, value);
+        });
     });
+}
+
+// A game row's way to all the games it reaches: "All Nintendo Wii games".
+function allGames(row, apply) {
+    return row && row.reach ? { label: "All " + row.reach, apply: apply } : null;
 }
 
 // The first row after `index` that is not a heading, else the first row folded under an Advanced heading above:

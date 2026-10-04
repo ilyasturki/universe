@@ -71,8 +71,30 @@ FocusScope {
         };
     }
 
-    function edit(row, apply) {
+    // `all` ({ apply, label }), on a game's row that reaches other games: △ in a picker gives the value to all of them, and a
+    // typed or browsed value asks which games it is for, ✕ this one, △ all.
+    function edit(row, apply, all) {
         var choices = row.choices || [];
+        var at = anchorFor(index);
+        var alt = all ? all.label : "";
+        var settle = function (v) {
+            if (v === null)
+                return;
+            if (!all) {
+                apply(v);
+                return;
+            }
+            shell.pick({
+                title: row.label,
+                choices: ["This Game", alt],
+                index: 0,
+                at: at,
+                alt: alt
+            }, function (i, toAll) {
+                if (i >= 0)
+                    (toAll || i === 1 ? all.apply : apply)(v);
+            });
+        };
         if (row.type === "enum" || ((row.type === "int" || row.type === "string") && choices.length > 0)) {
             var opts = choices.map(function (c) {
                 return String(c);
@@ -85,21 +107,24 @@ FocusScope {
                 choices: opts,
                 icons: row.icons || [],
                 index: current,
-                at: anchorFor(index)
-            }, function (i) {
+                at: at,
+                alt: alt
+            }, function (i, toAll) {
                 if (i < 0)
                     return;
                 if (i < choices.length) {
                     Sound.play("select");
-                    apply(choices[i]);
+                    (toAll ? all.apply : apply)(choices[i]);
                 } else {
                     shell.prompt({
                         title: row.label,
                         value: row.value,
                         numeric: row.type === "int"
                     }, function (v) {
-                        if (v !== null)
-                            apply(v);
+                        if (v !== null && toAll)
+                            all.apply(v);
+                        else
+                            settle(v);
                     });
                 }
             });
@@ -110,20 +135,14 @@ FocusScope {
                 title: row.label,
                 path: row.value,
                 files: /(_path|_file|file|exe)$/.test(String(row.key || ""))
-            }, function (path) {
-                if (path !== null)
-                    apply(path);
-            });
+            }, settle);
             return;
         }
         shell.prompt({
             title: row.label,
             value: row.value,
             numeric: row.type === "int"
-        }, function (v) {
-            if (v !== null)
-                apply(v);
-        });
+        }, settle);
     }
 
     function reset() {
@@ -395,7 +414,7 @@ FocusScope {
                         id: label
                         x: (lead.visible ? lead.width + Theme.dp(10) : 0) + (swatch.visible ? swatch.width + Theme.dp(26) : 0)
                         height: rows.rowHeight
-                        width: (row.changed ? ownTag.x : control.x) - x - Theme.dp(24)
+                        width: (row.changed ? ownTag.x : originText.visible ? originText.x : control.x) - x - Theme.dp(24)
                         verticalAlignment: Text.AlignVCenter
                         text: row.path !== "" ? "<font color=\"" + Theme.textMuted + "\">" + row.esc(row.path) + " › </font>" + row.esc(row.entry.label || "") : row.entry.label || ""
                         textFormat: row.path !== "" ? Text.StyledText : Text.PlainText
@@ -423,6 +442,18 @@ FocusScope {
                             color: Theme.accent
                             font.pixelSize: Theme.dp(Theme.fontTiny)
                         }
+                    }
+
+                    // Where an inherited value comes from: Global, Runner, Default.
+                    Label {
+                        id: originText
+                        anchors.right: control.left
+                        anchors.rightMargin: Theme.dp(22)
+                        anchors.verticalCenter: control.verticalCenter
+                        visible: !row.changed && text !== ""
+                        text: row.entry.originLabel || ""
+                        color: Theme.textMuted
+                        font.pixelSize: Theme.dp(Theme.fontTiny)
                     }
 
                     Item {

@@ -44,11 +44,30 @@ function parts(model, first) {
 }
 
 // A map's add row: one sheet asks the name and the value together.
-function addEntry(shell, row, apply) {
+// `all` ({ apply, label }) on a game's map that reaches other games: the pair typed, which games it is for, ✕ this one, △ all.
+function addEntry(shell, row, apply, all) {
     shell.promptPair({ title: row.label.replace(/…$/, ""), labels: row.fields }, function(name, value) {
-        if (name !== null)
+        if (name === null)
+            return;
+        if (!all) {
             apply(name, value);
+            return;
+        }
+        shell.pick({ title: name, choices: ["This Game", all.label], index: 0, alt: all.label }, function(i, toAll) {
+            if (i >= 0)
+                (toAll || i === 1 ? all.apply : apply)(name, value);
+        });
     });
+}
+
+// A game row's way to all the games it reaches, worded in the console's title case: "All Nintendo Wii Games".
+function allGames(row, apply) {
+    if (!row || !row.reach)
+        return null;
+    var words = ("All " + row.reach).split(" ").map(function(w) {
+        return w === "and" ? w : w.charAt(0).toUpperCase() + w.slice(1);
+    });
+    return { label: words.join(" "), apply: apply };
 }
 
 // The first row after `index` that is not a heading, else the first row folded under an Advanced heading above:

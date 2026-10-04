@@ -1128,8 +1128,9 @@ def test_the_game_settings_page_applies_a_value_to_all_games(api, fake):
     from PySide6.QtCore import Qt
     from PySide6.QtTest import QTest
 
-    def click(key):
-        QTest.keyClick(window, key)
+    def click(key, times=1):
+        for _ in range(times):
+            QTest.keyClick(window, key)
 
     _engine, window = render(api, activate=True)
     root = window.property("contentItem").childItems()[0].property("item")
@@ -1139,7 +1140,7 @@ def test_the_game_settings_page_applies_a_value_to_all_games(api, fake):
     click(Qt.Key.Key_Return)
     until(lambda: fake.game("the-technomancer")["launch"]["ntsync"] is False and page.property("canPromote") is True)
     click(Qt.Key.Key_F1)
-    click(Qt.Key.Key_Down)
+    click(Qt.Key.Key_Down, [i["action"] for i in page.property("moreItems").toVariant()].index("promote"))
     click(Qt.Key.Key_Return)
     until(lambda: fake.config()["set"]["launch"]["ntsync"] is False and "ntsync" not in fake.game("the-technomancer")["launch"])
     until(lambda: page.property("row")["origin"] == "global" and page.property("canPromote") is False)
@@ -1170,7 +1171,9 @@ def test_the_game_settings_page_lands_a_search_hit_behind_advanced(api, fake):
     assert sections[body.property("section")] == "Proton", "the hit sits in the Proton card, the cursor on it"
     assert [h["label"] for h in page.property("hints").toVariant()] == ["Toggle", "More", "Back"]
     assert page.property("canReset") is False, "nothing of the game's to drop"
-    assert [i["action"] for i in page.property("moreItems").toVariant()] == ["advanced"], "More lists what X and Y do here"
+    assert [i["action"] for i in page.property("moreItems").toVariant()] == ["flipAll", "advanced"], (
+        "More lists what Y does here, and the switch flipped for every game it reaches"
+    )
     click(Qt.Key.Key_Return)
     until(
         lambda: fake.game("the-technomancer")["launch"]["ntsync"] is False and page.property("row")["origin"] == "game",
@@ -1179,7 +1182,7 @@ def test_the_game_settings_page_lands_a_search_hit_behind_advanced(api, fake):
     assert page.property("canReset") is True
     click(Qt.Key.Key_F1)
     menu = until(lambda: next((c for c in page.findChildren(QObject) if c.property("stack") is not None and c.property("open")), None))
-    assert [i["action"] for i in menu.property("items").toVariant()] == ["reset", "promote", "advanced"]
+    assert [i["action"] for i in menu.property("items").toVariant()] == ["reset", "flipAll", "promote", "advanced"]
     click(Qt.Key.Key_Escape)
     until(lambda: menu.property("open") is False)
     click(Qt.Key.Key_I)
@@ -1258,6 +1261,8 @@ def test_the_game_settings_page_adds_a_variable_from_one_sheet(api, fake):
     click(Qt.Key.Key_Return)
     until(lambda: labels() == ["Save", "Cancel"], "then the value")
     type_text("fps")
+    click(Qt.Key.Key_Return)
+    until(lambda: [h["glyph"] for h in page.property("hints").toVariant()] == ["A", "Y", "B"], "then which games it is for: A this one, Y all")
     click(Qt.Key.Key_Return)
     until(lambda: fake.game("the-technomancer")["launch"].get("env") == {"DXVK_HUD": "fps"})
     until(lambda: page.property("row")["key"] == "launch.env.DXVK_HUD", "the new variable is a row of its own, the cursor on it")

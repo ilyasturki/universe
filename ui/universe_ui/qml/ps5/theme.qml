@@ -77,8 +77,8 @@ FocusScope {
     readonly property Item topPage: pages.count > 0 && pages.itemAt(pages.count - 1) ? pages.itemAt(pages.count - 1).item : null
     readonly property bool topOverlay: topPage !== null && topPage.overlay === true
     readonly property var hints: dialog.open ? dialog.hints : sheet.open ? sheet.hints : popup.open ? popup.hints : folder.open ? folder.hints : launching ? [] : !onHome && topPage ? topPage.hints : home.hints
-    // The console shows no button hints: the strip comes up only over what it never had.
-    readonly property bool stripShown: !launching && !dialog.open && !popup.open && (sheet.open || folder.open || (!onHome && topPage !== null && topPage.strip === true))
+    // The console shows no button hints: the strip comes up only over what it never had, a pick's △ for all games among them.
+    readonly property bool stripShown: !launching && !dialog.open && (popup.open ? popup.alt !== "" : sheet.open || folder.open || (!onHome && topPage !== null && topPage.strip === true))
 
     function push(source, args) {
         stack.append({
@@ -197,9 +197,9 @@ FocusScope {
     }
 
     function after(done) {
-        return function (v) {
+        return function (v, all) {
             if (done)
-                done(v);
+                done(v, all);
             focusTop();
         };
     }
@@ -216,7 +216,8 @@ FocusScope {
             done(v === null ? null : v[0], v === null ? "" : v[1]);
         }));
     }
-    // { title, choices, icons, index, at }: `done(i)`, -1 when cancelled; the value in force is ticked.
+    // { title, choices, icons, index, at, alt }: `done(i, all)`, -1 when cancelled; the value in force is ticked. `alt` names
+    // what △ does instead: the pick for all the games a game's setting reaches, `all` then true.
     function pick(spec, done) {
         var icons = spec.icons || [];
         var current = spec.index !== undefined ? spec.index : -1;
@@ -230,7 +231,8 @@ FocusScope {
                 };
             }),
             index: Math.max(0, current),
-            at: spec.at
+            at: spec.at,
+            alt: spec.alt || ""
         }, done);
     }
     function showMenu(spec, done) {

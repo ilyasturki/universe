@@ -31,6 +31,7 @@ FocusScope {
     property string zone: "list"
     property string landKey: ""
     property string landModule: ""
+    readonly property var currentRow: rows.currentRow
 
     readonly property var hints: {
         var row = rows.currentRow;
@@ -46,6 +47,10 @@ FocusScope {
                 glyph: "X",
                 label: row.entry ? "Remove" : "Reset",
                 dim: !form.resettable(row)
+            }, {
+                glyph: "Start",
+                label: "Options",
+                dim: optionItems().length === 0
             });
         return out.concat([
             {
@@ -124,15 +129,75 @@ FocusScope {
             Sound.play("ok");
             Forms.addEntry(shell, row, function (name, value) {
                 form.setMapEntry(row.form, name, value);
-            });
+            }, Forms.allGames(row, function (name, value) {
+                form.setMapEntryAll(row.form, name, value);
+            }));
         } else {
             rows.edit(row, function (value) {
                 form.setValue(row.form, value);
-            });
+            }, Forms.allGames(row, function (value) {
+                form.setValueAll(row.form, value);
+            }));
         }
     }
 
+    // +: what X and Y do, a switch flipped for all the games it reaches, the game's own value made every game's.
+    function optionItems() {
+        var row = zone === "rows" && rows.currentRow !== null && !rows.currentRow.heading ? rows.currentRow : null;
+        var all = Forms.allGames(row, null);
+        var items = [];
+        if (row && form.resettable(row))
+            items.push({
+                label: row.entry ? "Remove" : "Reset",
+                act: "reset"
+            });
+        if (all && row.type === "bool")
+            items.push({
+                label: (row.value ? "Turn off for " : "Turn on for ") + all.label.charAt(0).toLowerCase() + all.label.slice(1),
+                act: "flipAll"
+            });
+        if (all && form.promotable(row))
+            items.push({
+                label: "Apply to " + all.label.charAt(0).toLowerCase() + all.label.slice(1),
+                act: "promote"
+            });
+        if (form.hasAdvanced)
+            items.push({
+                label: form.showAdvanced ? "Hide advanced" : "Show advanced",
+                act: "advanced"
+            });
+        return items;
+    }
+
+    function options() {
+        var items = optionItems();
+        if (items.length === 0) {
+            Sound.play("edge");
+            return;
+        }
+        var row = rows.currentRow;
+        Sound.play("ok");
+        shell.menu(game ? game.title : "Game Settings", items, function (act) {
+            if (act === "reset")
+                page.resetRow();
+            else if (act === "flipAll")
+                Sound.play(form.toggleAll(row.form) ? "select" : "edge");
+            else if (act === "promote")
+                Sound.play(form.promote(row.form) ? "select" : "edge");
+            else if (act === "advanced")
+                form.showAdvanced = !form.showAdvanced;
+        });
+    }
+
     onSectionChanged: Qt.callLater(rows.reset)
+
+    Connections {
+        target: page.form
+        ignoreUnknownSignals: true
+        function onMessage(text) {
+            page.shell.showToast(text);
+        }
+    }
 
     Keys.onPressed: function (event) {
         if (event.isAutoRepeat)
@@ -149,6 +214,9 @@ FocusScope {
         } else if (api.keys.isDetails(event)) {
             event.accepted = true;
             page.resetRow();
+        } else if (api.keys.isMenu(event)) {
+            event.accepted = true;
+            page.options();
         }
     }
 

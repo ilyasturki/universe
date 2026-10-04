@@ -65,8 +65,29 @@ FocusScope {
 
     readonly property real contentHeight: yOf(model.length)
 
-    function edit(row, apply) {
+    // `all` ({ apply, label }), on a game's row that reaches other games: Y in a picker gives the value to all of them, and a
+    // typed or browsed value asks which games it is for, A this one, Y all.
+    function edit(row, apply, all) {
         var choices = row.choices || [];
+        var anchor = rows.mapToItem(null, 0, yOf(index) - view.contentY, width, rowHeight);
+        var alt = all ? all.label : "";
+        var settle = function (v) {
+            if (v === null)
+                return;
+            if (!all) {
+                apply(v);
+                return;
+            }
+            shell.pick({
+                title: row.label,
+                choices: ["This game", alt],
+                index: 0,
+                alt: alt
+            }, function (i, toAll) {
+                if (i >= 0)
+                    (toAll || i === 1 ? all.apply : apply)(v);
+            });
+        };
         if (row.type === "enum" || ((row.type === "int" || row.type === "string") && choices.length > 0)) {
             var opts = choices.map(function (c) {
                 return String(c);
@@ -80,22 +101,25 @@ FocusScope {
                 choices: opts,
                 icons: row.icons || [],
                 index: current >= 0 ? current : 0,
-                anchor: rows.mapToItem(null, 0, yOf(index) - view.contentY, width, rowHeight)
-            }, function (i) {
+                anchor: anchor,
+                alt: alt
+            }, function (i, toAll) {
                 rows.held = -1;
                 if (i < 0)
                     return;
                 if (i < choices.length) {
                     Sound.play("select");
-                    apply(choices[i]);
+                    (toAll ? all.apply : apply)(choices[i]);
                 } else {
                     shell.prompt({
                         title: row.label,
                         value: row.value,
                         numeric: row.type === "int"
                     }, function (v) {
-                        if (v !== null)
-                            apply(v);
+                        if (v !== null && toAll)
+                            all.apply(v);
+                        else
+                            settle(v);
                     });
                 }
             });
@@ -106,20 +130,14 @@ FocusScope {
                 title: row.label,
                 path: row.value,
                 files: /(_path|_file|file|exe)$/.test(String(row.key || ""))
-            }, function (path) {
-                if (path !== null)
-                    apply(path);
-            });
+            }, settle);
             return;
         }
         shell.prompt({
             title: row.label,
             value: row.value,
             numeric: row.type === "int"
-        }, function (v) {
-            if (v !== null)
-                apply(v);
-        });
+        }, settle);
     }
 
     function reset() {
@@ -404,7 +422,7 @@ FocusScope {
                         x: rows.inset + (lead.visible ? lead.width + Theme.dp(8) : 0) + (swatch.visible ? swatch.width + Theme.dp(30) : 0)
                         y: row.hasSecondary ? (rows.rowHeight - height - secondary.height - Theme.dp(4)) / 2 : 0
                         height: row.hasSecondary ? implicitHeight : rows.rowHeight
-                        width: (row.changed ? ownTag.x : control.x) - x - Theme.dp(24)
+                        width: (row.changed ? ownTag.x : originText.visible ? originText.x : control.x) - x - Theme.dp(24)
                         verticalAlignment: Text.AlignVCenter
                         text: row.path !== "" ? "<font color=\"" + Theme.textSecondary + "\">" + row.esc(row.path) + " › </font>" + row.esc(row.entry.label || "") : row.entry.label || ""
                         textFormat: row.path !== "" ? Text.StyledText : Text.PlainText
@@ -456,6 +474,18 @@ FocusScope {
                             font.pixelSize: Theme.dp(Theme.fontTiny)
                             font.letterSpacing: Theme.dp(2)
                         }
+                    }
+
+                    // Where an inherited value comes from: Global, Runner, Default.
+                    Label {
+                        id: originText
+                        anchors.right: control.left
+                        anchors.rightMargin: Theme.dp(22)
+                        anchors.verticalCenter: control.verticalCenter
+                        visible: !row.changed && text !== ""
+                        text: row.entry.originLabel || ""
+                        color: Theme.textSecondary
+                        font.pixelSize: Theme.dp(Theme.fontTiny)
                     }
 
                     Item {

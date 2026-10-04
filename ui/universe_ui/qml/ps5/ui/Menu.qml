@@ -13,8 +13,23 @@ Modal {
     // Where the panel's top left goes, in this item's coordinates; unset, the panel stands right of centre.
     property var at: null
     property real panelWidth: Theme.dp(560)
+    // △ picks for all the games a game's setting reaches; the strip then says which button does what.
+    property string alt: ""
 
-    readonly property var hints: []
+    readonly property var hints: alt === "" ? [] : [
+        {
+            glyph: "Y",
+            label: alt
+        },
+        {
+            glyph: "B",
+            label: "Back"
+        },
+        {
+            glyph: "A",
+            label: "This Game"
+        }
+    ]
     readonly property real rowHeight: Theme.dp(72)
     readonly property real detailRowHeight: Theme.dp(176)
     readonly property bool marks: items.some(function (i) {
@@ -32,6 +47,7 @@ Modal {
         items = spec.items || [];
         at = spec.at || null;
         panelWidth = spec.width || Theme.dp(560);
+        alt = spec.alt || "";
         index = Math.max(0, Math.min(items.length - 1, spec.index !== undefined ? spec.index : 0));
         present(done);
         list.positionViewAtIndex(index, ListView.Contain);
@@ -53,6 +69,9 @@ Modal {
         if (api.keys.isAccept(event)) {
             Sound.play(items[index] && items[index].toggle !== undefined ? "select" : "ok");
             finish(index);
+        } else if (api.keys.isFilters(event) && alt !== "") {
+            Sound.play("ok");
+            finish(index, true);
         } else if (api.keys.isCancel(event) || api.keys.isMenu(event)) {
             Sound.play("back");
             api.keys.dropHold();

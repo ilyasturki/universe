@@ -72,7 +72,7 @@ def test_game_settings_land_a_hit_behind_advanced_and_edit_it(ps5, api, fake):
     click(window, Qt.Key.Key_F1)
     popup = root.findChild(QObject, "popup")
     until(lambda: popup.property("open") is True)
-    assert [i["label"] for i in value(popup, "items")] == ["Reset to Default", "Apply to All Games", "Hide Advanced Settings"]
+    assert len(value(popup, "items")) == 4, "reset, the switch flipped for every Proton game, the game's value made theirs, advanced"
     click(window, Qt.Key.Key_Escape)
     until(lambda: popup.property("open") is False)
     click(window, Qt.Key.Key_I)

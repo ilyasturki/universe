@@ -43,6 +43,8 @@ FocusScope {
     readonly property string rowAction: row && row.entry ? "Remove" : "Reset"
     readonly property bool canReset: inRows && row !== null && form.resettable(row)
     readonly property bool canPromote: inRows && row !== null && form.promotable(row)
+    // A switch flips here on A; flipped for all the games it reaches from More.
+    readonly property bool canFlipAll: inRows && row !== null && row.type === "bool" && !!row.reach
 
     readonly property var hints: editor.open ? editor.hints : menu.open ? menu.hints : [
         {
@@ -70,10 +72,16 @@ FocusScope {
                 label: rowAction,
                 action: "reset"
             }
-        ] : []).concat(canPromote ? [
+        ] : []).concat(canFlipAll ? [
         {
             icon: "library",
-            label: "Apply to all games",
+            label: (row.value ? "Turn off for all " : "Turn on for all ") + row.reach,
+            action: "flipAll"
+        }
+    ] : []).concat(canPromote ? [
+        {
+            icon: "library",
+            label: "Apply to all " + row.reach,
             action: "promote"
         }
     ] : []).concat(form.hasAdvanced ? [
@@ -146,6 +154,8 @@ FocusScope {
                 page.resetRow();
             else if (action === "promote")
                 page.promoteRow();
+            else if (action === "flipAll")
+                form.toggleAll(body.cards.index) ? Sound.enter() : Sound.edge();
             else if (action === "advanced")
                 page.toggleAdvanced();
         });
@@ -158,7 +168,9 @@ FocusScope {
             Sound.panel();
             editor.promptPair(row.label.replace(/…$/, ""), row.fields, "", "", function (name, value) {
                 form.setMapEntry(index, name, value) ? Sound.enter() : Sound.edge();
-            });
+            }, function (name, value) {
+                form.setMapEntryAll(index, name, value) ? Sound.enter() : Sound.edge();
+            }, row);
         } else if (row.type === "bool") {
             form.toggle(index);
             Sound.favourite(!row.value);
@@ -166,6 +178,8 @@ FocusScope {
             Sound.panel();
             editor.edit(row, function (value) {
                 form.setValue(index, value);
+            }, function (value) {
+                form.setValueAll(index, value);
             });
         }
     }

@@ -24,12 +24,12 @@ FocusScope {
         forceActiveFocus();
     }
 
-    function finish(value) {
+    function finish(value, all) {
         var cb = callback;
         callback = null;
         open = false;
         if (cb)
-            cb(value);
+            cb(value, all === true);
     }
 
     Rectangle {

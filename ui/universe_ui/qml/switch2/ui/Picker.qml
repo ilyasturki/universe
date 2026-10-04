@@ -18,16 +18,24 @@ Modal {
         return i !== undefined && i !== "";
     })
 
-    readonly property var hints: [
+    // Y picks for all the games a game's setting reaches (`alt` says so); A keeps the pick to the game.
+    property string alt: ""
+
+    readonly property var hints: (alt !== "" ? [
+            {
+                glyph: "Y",
+                label: alt
+            }
+        ] : []).concat([
         {
             glyph: "B",
             label: "Back"
         },
         {
             glyph: "A",
-            label: "OK"
+            label: alt !== "" ? "This game" : "OK"
         }
-    ]
+    ])
     readonly property real rowHeight: anchored ? Theme.dp(94) : Theme.dp(100)
     readonly property real inset: anchored ? Theme.dp(18) : Theme.dp(40)
     readonly property real pad: Theme.dp(22)
@@ -40,6 +48,7 @@ Modal {
         choices = spec.choices || [];
         icons = spec.icons || [];
         current = spec.index !== undefined ? spec.index : -1;
+        alt = spec.alt || "";
         index = Math.max(0, current);
         present(done);
         list.contentY = list.originY + Math.max(0, index - shownRows + 1) * rowHeight;
@@ -61,6 +70,9 @@ Modal {
         if (api.keys.isAccept(event)) {
             Sound.play("select");
             finish(index);
+        } else if (api.keys.isFilters(event) && alt !== "") {
+            Sound.play("select");
+            finish(index, true);
         } else if (api.keys.isCancel(event)) {
             Sound.play("back");
             finish(-1);

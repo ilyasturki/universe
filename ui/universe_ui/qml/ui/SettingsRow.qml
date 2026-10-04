@@ -34,8 +34,9 @@ Item {
     // A search hit: where the row lives, muted, in front of its label; a tag (ADVANCED) next to the value.
     readonly property string path: entry.path !== undefined && entry.path !== null ? String(entry.path) : ""
     readonly property string tag: entry.tag !== undefined && entry.tag !== null ? String(entry.tag) : ""
-    // A value this game or runner sets for itself; what it inherits reads plain.
+    // A value this game or runner sets for itself; what it inherits names where it comes from (Global, Runner, Default).
     readonly property bool changed: entry.changed === true
+    readonly property string origin: entry.originLabel !== undefined && entry.originLabel !== null ? String(entry.originLabel) : ""
     readonly property var tags: [tag, changed ? "CHANGED" : ""].filter(Boolean)
 
     opacity: entry.disabled === true && !focused ? 0.45 : 1.0
@@ -212,6 +213,15 @@ Item {
         elide: Text.ElideRight
     }
 
+    component OriginText: Text {
+        anchors.verticalCenter: parent.verticalCenter
+        visible: text !== ""
+        text: row.origin
+        color: row.focused ? row.onFocus : Theme.textFaint
+        font.family: Theme.sans
+        font.pixelSize: Theme.dp(18)
+    }
+
     component TagChip: Rectangle {
         property string text: ""
         property bool accented: false
@@ -250,6 +260,8 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             spacing: Theme.dp(16)
 
+            OriginText {}
+
             Repeater {
                 model: row.tags
 
@@ -271,6 +283,8 @@ Item {
             visible: row.entry.type !== "bool" && !row.info
             anchors.verticalCenter: parent.verticalCenter
             spacing: Theme.dp(16)
+
+            OriginText {}
 
             Repeater {
                 model: row.tags

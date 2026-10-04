@@ -261,9 +261,9 @@ FocusScope {
     }
 
     function after(done) {
-        return function (v) {
+        return function (v, all) {
             if (done)
-                done(v);
+                done(v, all);
             focusTop();
         };
     }

@@ -133,13 +133,15 @@ is the key `set_field` takes (a module's game setting keeps its own `key` and it
 game's or a runner's page a row that can inherit carries `origin`: `game` (set on the game),
 `runner` (set on the runner), `global` (`config.toml` sets it), `default` (nothing does) or `found`
 (a runner's program found on PATH); `inherited` says the value comes from elsewhere and `changed`
-that the page sets it itself — the looks mark a `changed` row CHANGED and color its value. A value
+that the page sets it itself — the looks mark a `changed` row CHANGED and color its value, and name
+where an inherited one comes from beside it, dim (`originLabel`: Global, Runner, Default, Found). A value
 is overridden by changing it; X is `reset(index)` where `resettable(row)` says so (`Field.resettable`:
 the page's own value goes, the key leaves the file, so the row inherits again; a map's entry goes
 out of the map). Where `promotable(row)` says so (`Field.promotable`, `Entry.promotable`: a game's
 own value of a key with a global twin) `promote(index)` makes it the global value and clears the
-game's, which follows it from then on, other games keeping theirs: Reprise's More menu lists it as
-Apply to all games, PS5's as Apply to All Games, the GTK dialog as a button beside the reset one.
+game's, which follows it from then on, other games keeping theirs: Reprise's More menu and Switch
+2's + list it as Apply to all Dolphin games (the row's `reach`), PS5's Options as Apply to All
+Dolphin Games, the GTK dialog as a button beside the reset one.
 On a game's page a row with a global twin carries its `reach` (`Field.reach`, `Dolphin games`),
 and `setValueAll(index, value)`, `toggleAll(index)` and `setMapEntryAll(index, name, value)` write
 the value for all those games instead of this one (`Core::set_field_all`): the global default
@@ -875,6 +877,17 @@ game's own value or removes a variable (`reset` above); an inherited value is ov
 changing it. Adding a variable is one sheet with two fields (`ValueEditor.promptPair`,
 `KeyboardSheet.showPair`; Switch 2 `shell.promptPair`, `TextSheet.showPair`): Done on the name
 moves to the value, Done on the value saves.
+
+A value changed on a game's page goes to this game or to all the games its row reaches, in every
+look the same way. A picker over a row with a `reach` takes A for this game and Y (△) for all of
+them (`ValueEditor.edit(row, after, all)`; PS5 and Switch 2 `rows.edit(row, apply, all)` with
+`shell.pick`'s `alt`, which the hints name: `All Dolphin games`, PS5 `All Dolphin Games`); a value
+typed or browsed (a sheet, a folder, a new variable) is asked about once Done: a two-item picker,
+This game on A, all of them on Y. A switch flips for this game on A; Reprise's More, PS5's Options
+and Switch 2's + list it flipped for all of them (`toggleAll`), with Apply to all of them for a
+value the game already sets (`promote`), Reset and Advanced. A row without a `reach` — the runner,
+the program, a module's switch — offers this game alone. The form's `message` says what came of
+it, as a toast.
 
 Upscaling's meta names the GPU (`client.gpu()`: `label`, `AMD Radeon RX 7900 GRE · RDNA 3`) and each
 of its rows ends its `detail` with `Works on your GPU.` or `Not for your GPU.` (`fits`), nothing when

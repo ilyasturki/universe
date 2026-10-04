@@ -15,12 +15,16 @@ FocusScope {
     signal closed
 
     property var done: null
+    // The value for all the games a game's row reaches (`row.reach`): Y in the picker, or the question after a sheet.
+    property var doneAll: null
     property var pendingRow: null
+    property bool customAll: false
 
     readonly property string customLabel: "Type a value…"
 
-    function edit(row, after) {
+    function edit(row, after, all) {
         done = after;
+        doneAll = all && row.reach ? all : null;
         pendingRow = row;
         var choices = row.choices || [];
         if (row.type === "enum" || ((row.type === "int" || row.type === "string") && choices.length > 0)) {
@@ -41,7 +45,7 @@ FocusScope {
                     action: "custom",
                     gap: true
                 });
-            picker.show(opts, cards, cards.focusRect, "", editor.chosen, current >= 0 ? current : (row.type === "enum" ? 0 : opts.length - 1));
+            picker.show(opts, cards, cards.focusRect, "", editor.chosen, current >= 0 ? current : (row.type === "enum" ? 0 : opts.length - 1), allLabel());
         } else if (row.type === "path") {
             // A pad walks the folders; a keyboard or a mouse types the path, the folders one hop away.
             if (api.keys.mode === "pad")
@@ -53,16 +57,22 @@ FocusScope {
         }
     }
 
+    function allLabel() {
+        return doneAll && pendingRow ? "All " + pendingRow.reach : "";
+    }
+
     function prompt(label, value, after) {
         done = after;
+        doneAll = null;
         pendingRow = null;
         sheetsOf().sheet.show(label, value, "text");
     }
 
-    // Two texts at once (a variable and its value): `after(first, second)`.
-    function promptPair(label, names, first, second, after) {
+    // Two texts at once (a variable and its value): `after(first, second)`, `all` the same for every game `row` reaches.
+    function promptPair(label, names, first, second, after, all, row) {
         done = after;
-        pendingRow = null;
+        doneAll = all && row && row.reach ? all : null;
+        pendingRow = row || null;
         sheetsOf().sheet.showPair(label, names, first, second);
     }
 
@@ -79,24 +89,48 @@ FocusScope {
         return base.indexOf(".") > 0;
     }
 
-    function finish(value, second) {
-        var after = done;
+    // A sheet's value: on a row that reaches other games, which ones it is for comes next, A this game, Y all of them.
+    function settle(value, second) {
+        if (!doneAll || customAll) {
+            finish(value, second, customAll);
+            return;
+        }
+        picker.show([
+            {
+                label: "This game",
+                action: "game"
+            },
+            {
+                icon: "library",
+                label: allLabel(),
+                action: "all"
+            }
+        ], cards, cards.focusRect, "", function (action, all) {
+            editor.finish(value, second, all || action === "all");
+        }, 0, allLabel());
+    }
+
+    function finish(value, second, all) {
+        var after = all && doneAll ? doneAll : done;
         done = null;
+        doneAll = null;
+        customAll = false;
         closed();
         if (after)
             after(value, second);
     }
 
-    function chosen(action) {
+    function chosen(action, all) {
         var row = editor.pendingRow || ({});
         var choices = row.choices || [];
         if (action === "custom") {
             Sound.panel();
+            editor.customAll = all === true;
             editor.sheetsOf().sheet.show(row.label, row.value, row.type === "int" ? "number" : "text");
             return;
         }
         Sound.sort();
-        editor.finish(choices[Number(action)]);
+        editor.finish(choices[Number(action)], undefined, all);
     }
 
     function hide() {
@@ -136,7 +170,7 @@ FocusScope {
                 anchors.fill: parent
 
                 onAccepted: function (path) {
-                    editor.finish(path);
+                    editor.settle(path);
                 }
                 onTypeRequested: function (path) {
                     var row = editor.pendingRow || ({});
@@ -151,10 +185,10 @@ FocusScope {
                 anchors.fill: parent
 
                 onAccepted: function (value) {
-                    editor.finish(value);
+                    editor.settle(value);
                 }
                 onAcceptedPair: function (first, second) {
-                    editor.finish(first, second);
+                    editor.settle(first, second);
                 }
                 onBrowseRequested: function (path) {
                     var row = editor.pendingRow || ({});

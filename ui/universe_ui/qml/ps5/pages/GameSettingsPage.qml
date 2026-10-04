@@ -143,26 +143,38 @@ FocusScope {
             Sound.play("ok");
             Forms.addEntry(shell, row, function (name, value) {
                 form.setMapEntry(row.form, name, value);
-            });
+            }, Forms.allGames(row, function (name, value) {
+                form.setMapEntryAll(row.form, name, value);
+            }));
         } else {
             rows.edit(row, function (value) {
                 form.setValue(row.form, value);
-            });
+            }, Forms.allGames(row, function (value) {
+                form.setValueAll(row.form, value);
+            }));
         }
     }
 
-    // What X and Y do here, for a hand that does not know them.
+    // What X and Y do here, for a hand that does not know them; a switch flipped for all the games it reaches.
     function options() {
         var items = [];
+        var row = zone === "rows" && currentRow !== null && !currentRow.heading ? currentRow : null;
+        var all = Forms.allGames(row, null);
         if (canReset)
             items.push({
                 label: currentRow.entry ? "Remove This Entry" : "Reset to Default",
                 glyph: "refresh",
                 act: "reset"
             });
-        if (zone === "rows" && currentRow !== null && !currentRow.heading && form.promotable(currentRow))
+        if (all && row.type === "bool")
             items.push({
-                label: "Apply to All Games",
+                label: (row.value ? "Turn Off for " : "Turn On for ") + all.label,
+                glyph: "globe",
+                act: "flipAll"
+            });
+        if (all && form.promotable(row))
+            items.push({
+                label: "Apply to " + all.label,
                 glyph: "globe",
                 act: "promote"
             });
@@ -182,6 +194,8 @@ FocusScope {
                 page.resetRow();
             else if (act === "promote")
                 page.promoteRow();
+            else if (act === "flipAll")
+                Sound.play(form.toggleAll(row.form) ? "select" : "edge");
             else if (act === "advanced")
                 page.toggleAdvanced();
         });

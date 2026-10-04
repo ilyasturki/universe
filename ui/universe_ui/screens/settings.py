@@ -214,6 +214,7 @@ def field_row(field, section, page, module=""):
         field=field["key"],
         display=_shown(field, page),
         inherited=bool(origin) and not field["own"],
+        originLabel=ORIGIN_WORDS.get(origin, "") if origin and not field["own"] else "",
         changed=scoped and bool(field["resettable"]),
         resettable=bool(field["resettable"]),
         promotable=bool(field.get("promotable")),
@@ -255,6 +256,7 @@ def entry_rows(field, section, page, module=""):
             field=row["key"],
             entry=field["key"],
             inherited=origin == "global",
+            originLabel=ORIGIN_WORDS["global"] if origin == "global" else "",
             changed=origin == "game",
             resettable=bool(entry["resettable"]),
             promotable=bool(entry["promotable"]),
@@ -603,6 +605,7 @@ class GameSettingsForm(RowsForm):
         self._reload(row)
         shown = next((r["display"] for r in self._rows if r.get("field") == row["field"]), "")
         if ok and shown:
+            shown = shown.lower() if row.get("type") == "bool" else shown
             self.message.emit(f"{row['label']} is now {shown} for all {row['reach']} without their own")
         return ok
 
