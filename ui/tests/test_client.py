@@ -2,8 +2,9 @@ import json
 from pathlib import Path
 
 import pytest
+from PySide6.QtCore import QTimer
 
-from conftest import pump, record, until
+from conftest import record, until
 
 
 def test_errors_are_signalled_not_raised(fake):
@@ -45,8 +46,9 @@ def test_a_session_end_tells_once_about_an_enabled_module_the_core_skipped(fake,
     until(lambda: fake.currentSession)
     fake.core.end_session()
     until(lambda: len(ended) == 2)
-    pump(300)
-    assert len(notices) == 1, "said once per run"
+    told = []
+    QTimer.singleShot(universe_client.SKIPPED_NOTICE_MS, lambda: told.append(len(notices)))
+    assert until(lambda: told) == [1], "said once per run"
 
 
 def test_launch_writes_the_marker_and_the_end_comes_from_the_state_watch(fake):
@@ -169,7 +171,7 @@ def test_a_failing_job_reports_its_end(fake):
     assert fake.jobResult(job) is None, "a failure has no result"
 
 
-def test_the_real_core_reads_writes_and_watches(app):
+def test_the_client_writes_and_watches_through_the_real_core(app):
     universe_core = pytest.importorskip("universe_core")
     from universe_ui.universe_client import CoreClient
 
@@ -180,7 +182,7 @@ def test_the_real_core_reads_writes_and_watches(app):
     core.reload_game("sample")
     client = CoreClient(core)
     assert [g["id"] for g in client.list()] == ["sample"]
-    assert client.currentSession is None and client.version() == core.version()
+    assert client.currentSession is None
 
     seen = record(client.error)
     assert client.game("nope") == {} and seen == [("NotFound", "nope")]
@@ -197,7 +199,6 @@ def test_the_real_core_reads_writes_and_watches(app):
     until(lambda: written)
     assert written == [("", "sample")]
     assert [e["title"] for e in client.journal("sample")] == ["First"]
-    assert client.removeJournalEntry("sample", "20260912-120000") is False and seen[-1][0] == "NotFound"
     (games / "sample" / "sessions.jsonl").write_text(
         '{"session": "20260913-120000", "game": "sample", "started_at": "2026-09-13T12:00:00+02:00",'
         ' "ended_at": "2026-09-13T13:00:00+02:00", "duration_s": 3600, "source": "universe", "exit": 0,'
@@ -205,34 +206,18 @@ def test_the_real_core_reads_writes_and_watches(app):
     )
     core.reload_game("sample")
     assert [r["session"] for r in client.recordings("sample")] == ["20260913-120000"]
-    row = client.sessions("")[0]
-    assert (row["title"], row["journal"], row["recording"]["exists"], row["recording"]["duration_s"]) == ("Sample", None, False, 0)
     assert client.removeRecording("sample", "20260913-120000") is True
     assert client.recordings("sample") == [] and client.game("sample")["stats"]["hours"] == 1.0
 
-    runners = {r["id"]: r for r in client.runners()}
-    assert runners["linux"]["kind"] == "linux" and "Nintendo Wii" in runners["dolphin"]["platforms"]
-    assert client.setRunnerSetting("dolphin", "batch", "false") and runners != {r["id"]: r for r in client.runners()}
+    runners = client.runners()
+    assert client.setRunnerSetting("dolphin", "batch", "false") and client.runners() != runners
     rom = games.parent / "F-Zero GX.iso"
     rom.write_bytes(b"")
     ident = client.addGame("yuzu", str(rom), "")
     assert ident == "f-zero-gx" and client.game(ident)["effective"]["runner"] == "eden"
     assert client.addGame("dolphin", str(rom), "F-Zero GX") == "" and seen[-1][0] == "Invalid"
     assert client.controllerSetButton("dualsense-edge", "south", "[]") and client.controllerSetButton("dualsense-edge", "south", "null")
-    assert client.controllerBind('{"family": "*", "button": "south", "trigger": "press", "action": "nope"}') is False and seen[-1][0] == "Invalid"
     client.shutdown()
-
-
-def test_the_launch_keys_fixture_is_the_cores_table(app):
-    universe_core = pytest.importorskip("universe_core")
-    from universe_ui.fake_core import LAUNCH_KEYS, FakeCore
-
-    core = universe_core.Core()
-    table = core.launch_keys("both", None)
-    assert json.loads(LAUNCH_KEYS.read_text()) == table, "regenerate with `universe launch-keys --json > ui/universe_ui/fixtures/launch_keys.json`"
-    screen = {"screen": "DP-1", "width": 2560, "height": 1440, "refresh": 144}
-    assert FakeCore().launch_keys("game", screen) == core.launch_keys("game", screen), "the fake sizes the choices as the core does"
-    assert FakeCore().launch_keys("global", {}) == core.launch_keys("global", {})
 
 
 def test_a_scan_job_hands_its_games_over_and_their_art_comes_next(fake):

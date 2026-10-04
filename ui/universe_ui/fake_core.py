@@ -28,6 +28,33 @@ GPU = {
     "label": "AMD Radeon RX 7900 GRE · RDNA 3",
     "fits": {"dlss_upgrade": False, "fsr4_upgrade": True, "xess_upgrade": True, "optiscaler": True},
     "auto": {"dlss_upgrade": False, "fsr4_upgrade": False, "xess_upgrade": False, "optiscaler": False},
+    "vaapi": "/dev/dri/renderD128",
+}
+# The core's game with nothing set, which a fixture game fills.
+GAME = {
+    "schema": 1,
+    "sort_title": "",
+    "release_year": 0,
+    "hidden": False,
+    "favorite": False,
+    "tags": [],
+    "added_at": "",
+    "removed_at": "",
+    "source": {"kind": "", "id": "", "dir": "", "build_id": "", "dlcs": [], "lutris_slug": ""},
+    "desktop": {"hide_cursor": None},
+    "metadata": dict.fromkeys(("sgdb_id", "gamesdb_id", "steam_appid", "metacritic", "players"), 0)
+    | {"developers": [], "publishers": [], "genres": [], "summary": "", "description": ""},
+    "modules": {},
+}
+# The config sections the fixture leaves out, at the core's defaults.
+CONFIG = {
+    "components": {"auto_update": True, "catalogue": ""},
+    "controller": {"enabled": True, "hold_ms": 600, "home_summons": True, "volume_step": 2, "axes": {}, "buttons": {}, "macros": None},
+    "desktop": {"hide_cursor": True, "cursor_extension": "", "keep_awake": True, "profile": "auto", "whats_new": False},
+    "keys": {"prefer_sgdb": False, "sgdb": "", "sgdb_file": "~/.config/steamgriddb/api_key"},
+    "system": {"tdp": "", "gpu": "", "refresh": "", "fan": ""},
+    "saves": {"auto_backup": True, "keep": 5},
+    "paths": {"saves_root": "~/.local/share/universe/saves", "recordings_root": "~/Videos/universe"},
 }
 REFRESH_RATES = [240, 165, 144, 120, 100, 90, 75, 60, 50, 48, 40, 30]
 RESOLUTION_HEIGHTS = [2160, 1800, 1440, 1080, 720]
@@ -252,6 +279,14 @@ def _excerpt(paragraphs):
     return " ".join(prose.replace("*", "").replace("`", "").split())
 
 
+def _filled(value, defaults):
+    out = {**copy.deepcopy(defaults), **value}
+    for key, default in defaults.items():
+        if default and isinstance(default, dict) and isinstance(out[key], dict):
+            out[key] = _filled(out[key], default)
+    return out
+
+
 def _place(src, dest):
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     if os.path.exists(dest):
@@ -318,8 +353,8 @@ class FakeCore:
             **{k["key"]: ({} if k["type"] == "map" else k["default"]) for k in self._launch_keys if k["scope"] != "game"},
             **(self._config.get("launch") or {}),
         }
-        self._config["saves"] = {"auto_backup": True, "keep": 5, **(self._config.get("saves") or {})}
-        self._config["paths"] = {"saves_root": "~/.local/share/universe/saves", **(self._config.get("paths") or {})}
+        for section, defaults in CONFIG.items():
+            self._config[section] = {**defaults, **(self._config.get(section) or {})}
         self._tmp = tempfile.TemporaryDirectory(prefix="universe-fake-") if root is None else None
         self._root = Path(self._tmp.name if self._tmp is not None else str(root))
         self._cache = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "universe", "fake-art")
@@ -682,9 +717,18 @@ class FakeCore:
         prefixes = str(self._config.get("paths", {}).get("prefixes_root") or "~/.local/share/universe/prefixes")
         effective["prefix"] = (launch.get("prefix") or os.path.join(prefixes, game["id"])) if spec.get("kind") in ("proton", "wine") else ""
         effective["modules"] = {m["id"]: self.module_settings(m["id"], game["id"]) for m in self._data.get("modules", []) if m.get("enabled")}
+        effective["proton_path"] = ""
         items = self._data.get("achievements", {}).get(game["id"], {}).get("items") or []
         out["achievements"] = {"total": len(items), "unlocked": sum(1 for a in items if a.get("unlocked_at"))}
-        return out
+        meta = out.setdefault("metadata", {})
+        out["release_year"] = int(meta.pop("release_year", 0) or out.get("release_year") or 0)
+        out.update(
+            dir=str(self._game_dir(game["id"])),
+            installed=bool(exe),
+            journal_count=sum(1 for e in self._data.get("journal", {}).get(game["id"], []) if (e.get("state") or "written") == "written"),
+            recording_count=sum(1 for line in self._data.get("sessions", {}).get(game["id"], []) if line.get("recording")),
+        )
+        return _filled(out, GAME)
 
     def achievements(self, ident, refresh=False):
         game = self._game(ident)
@@ -696,6 +740,7 @@ class FakeCore:
             cache["fetched_at"] = _now()
         items = copy.deepcopy(cache.get("items") or [])
         return {
+            "replay": None,
             **{k: v for k, v in cache.items() if k != "items"},
             "total": len(items),
             "unlocked": sum(1 for a in items if a.get("unlocked_at")),
@@ -1048,6 +1093,11 @@ class FakeCore:
             build = used.get(runner["id"])
             if not runner.get("path") and build:
                 runner.update(path=build["program"], source="universe" if build["managed"] else "path", version=build["version"], available=True)
+            runner.pop("detected", None)
+            for option in runner.get("options") or []:
+                option.pop("advanced", None)
+                option.setdefault("choices", [])
+            runner.update({"binaries": [], "build": "", "builds": [], "gamescope": None, **runner})
         return out
 
     def set_runner_setting(self, runner, key, value):
@@ -1410,8 +1460,8 @@ class FakeCore:
 
     def _session_row(self, ident, line):
         row = copy.deepcopy(line)
-        row.pop("recording_duration_s", None)
-        row.pop("command", None)
+        for key in ("recording_duration_s", "command", "stopped"):
+            row.pop(key, None)
         row["title"] = self._game(ident)["title"]
         row["end"] = _end_of(line)
         row["debug_log"] = None
@@ -1421,7 +1471,7 @@ class FakeCore:
             exists = os.path.isfile(path)
             size = self._data.get("recordings", {}).get(ident, {}).get(line["session"]) or (os.path.getsize(path) if exists else 0)
             duration = CLIP_S if path.startswith(self._cache) and exists else line.get("recording_duration_s") or 0
-            row["recording"] = {"path": path, "size": size, "exists": exists, "duration_s": duration}
+            row["recording"] = {"path": path, "size": size, "exists": exists, "duration_s": duration, "started_at": "", "pauses": []}
         entry = next((e for e in self._data.get("journal", {}).get(ident, []) if e.get("session") == line.get("session")), None)
         row["journal"] = (
             None
@@ -1439,7 +1489,18 @@ class FakeCore:
                 progress(done, steps, f"{message} ({done}/{steps})")
 
     def sources(self):
-        return copy.deepcopy(self._data.get("sources", []))
+        out = self._manifests("sources")
+        for source in out:
+            source["library_cached"] = len(self._data.get("source_library", {}).get(source["id"], []))
+        return out
+
+    def _manifests(self, kind):
+        out = [{"dir": "", "hooks": {}, "incompatible": "", **entry} for entry in copy.deepcopy(self._data.get(kind, []))]
+        for entry in out:
+            entry["settings"] = [{"platforms": [], "required": False, "runners": [], **s} for s in entry.get("settings", [])]
+            for setting in entry["settings"]:
+                setting.pop("dynamic_choices", None)
+        return out
 
     def _source(self, ident):
         for source in self._data.get("sources", []):
@@ -1869,7 +1930,7 @@ class FakeCore:
         self._write_entry(ident, entry)
 
     def modules(self):
-        out = copy.deepcopy(self._data.get("modules", []))
+        out = self._manifests("modules")
         for module in out:
             values = self.module_settings(module["id"], "")
             module["unset"] = [s["key"] for s in module.get("settings", []) if s.get("required") and not values.get(s["key"])]
@@ -1915,7 +1976,7 @@ class FakeCore:
             self._write_game(owner)
 
     def doctor(self):
-        checks = copy.deepcopy(self._data.get("doctor", []))
+        checks = [{"module": "", "component": "", **c} for c in copy.deepcopy(self._data.get("doctor", []))]
         for c in self.components()["components"]:
             if c["proposal"] == "install" and c["kind"] in ("emulator", "wine"):
                 fix = f"universe component install {c['id']} (Settings › Runners), or install it, or set runners.{c['id']}.exe"
@@ -1962,6 +2023,7 @@ class FakeCore:
                 self._settle(c)
             out = copy.deepcopy(self._components)
         out["auto_update"] = (self._config.get("components") or {}).get("auto_update", True)
+        out.setdefault("catalogue", {"url": "", "generated_at": "", "fetched_at": "", "error": ""})
         return out
 
     def component_install(self, ident, version="", accepted=False, progress=None):
@@ -2111,7 +2173,8 @@ class FakeCore:
         return report
 
     def settings(self):
-        return {**copy.deepcopy(self._config), "set": copy.deepcopy(self._set)}
+        computed = {"config_file": str(self._root / "config" / "config.toml"), "data_home": self.data_home(), "os": "other"}
+        return {**copy.deepcopy(self._config), **computed, "set": copy.deepcopy(self._set)}
 
     # The core's own forms and writes, built from the views this fake answers: no form logic of its own.
     def _form_inputs(self, kind, ident):
@@ -2224,9 +2287,9 @@ class FakeCore:
         raise UniverseError("NotFound", f"no controller family '{ident}'")
 
     def controller_state(self):
-        state = copy.deepcopy(self._controller())
-        state["home_summons"] = (self._config.get("controller") or {}).get("home_summons", True)
-        return state
+        state = {k: v for k, v in copy.deepcopy(self._controller()).items() if k != "devices"}
+        config = self._config["controller"]
+        return {**state, **{k: config[k] for k in ("enabled", "hold_ms", "home_summons", "volume_step")}}
 
     def controller_pads(self):
         pads = []
