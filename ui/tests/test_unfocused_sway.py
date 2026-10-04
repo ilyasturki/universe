@@ -141,8 +141,7 @@ def test_a_pad_press_reaches_neither_the_launcher_nor_its_power_menu_while_anoth
         )
 
         def read():
-            for line in launcher.stdout:
-                lines.append(line.rstrip("\n"))
+            lines.extend(line.rstrip("\n") for line in launcher.stdout)
 
         def focus_now():
             return next(
