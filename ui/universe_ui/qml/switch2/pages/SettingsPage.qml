@@ -462,6 +462,7 @@ FocusScope {
                     type: "radio",
                     value: t.id === api.theme.current,
                     swatch: t.ground,
+                    swatchAccent: t.accent,
                     action: "theme",
                     theme: t.id,
                     detail: t.detail || ""

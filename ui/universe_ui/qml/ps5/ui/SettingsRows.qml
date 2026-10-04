@@ -366,6 +366,17 @@ FocusScope {
                         color: visible ? row.entry.swatch : "transparent"
                         border.width: 1
                         border.color: Qt.rgba(1, 1, 1, 0.3)
+                        clip: true
+
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.bottom: parent.bottom
+                            anchors.margins: 1
+                            height: parent.height / 3
+                            visible: row.entry.swatchAccent !== undefined && row.entry.swatchAccent !== ""
+                            color: visible ? row.entry.swatchAccent : "transparent"
+                        }
                     }
 
                     Item {

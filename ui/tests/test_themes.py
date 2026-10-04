@@ -9,6 +9,7 @@ def test_theme_ids_are_unique_and_have_entries():
     for theme in THEMES:
         assert (host.QML_DIR / theme["entry"]).is_file(), theme["entry"]
         assert theme["unlocked"], f"{theme['id']} words the overlay's unlock card"
+        assert theme["accent"] and theme["ground"], f"{theme['id']}'s swatch in Themes"
 
 
 def test_the_unlock_card_takes_the_looks_words(app, tmp_path):
