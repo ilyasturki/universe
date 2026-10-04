@@ -2,6 +2,7 @@ import QtQuick
 import "../core"
 import "../sound"
 import "../../core/Format.js" as Format
+import "../pages/Home.js" as Home
 
 // The Welcome hub under the first tile: what needs attention as pills, then one fixed layout of widgets.
 FocusScope {
@@ -53,6 +54,16 @@ FocusScope {
         return r.kind === "shot" || r.kind === "recording";
     })
     readonly property var latest: captures.length > 0 ? captures[0] : null
+    // A recording's frame exists only once ffmpeg extracted it: until then, or without ffmpeg, its game's art.
+    readonly property string latestImage: {
+        if (!latest)
+            return "";
+        if (latest.kind === "shot")
+            return latest.url;
+        if (latest.image !== "")
+            return latest.image;
+        return String(Home.art(api.allGames.byId(latest.gameId)).source);
+    }
 
     // The three most recently played games that count trophies.
     property var trophyGames: []
@@ -381,7 +392,7 @@ FocusScope {
             anchors.fill: parent
             anchors.margins: 1
             z: -1
-            source: hub.latest ? (hub.latest.kind === "shot" ? hub.latest.url : hub.latest.image) : ""
+            source: hub.latestImage
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
             sourceSize.width: 720

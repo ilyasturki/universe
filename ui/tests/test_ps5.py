@@ -130,6 +130,16 @@ def test_left_of_the_first_game_is_the_welcome_hub(ps5):
     until(lambda: home.property("zone") == "rail")
 
 
+def test_the_welcome_hub_s_latest_recording_without_a_frame_shows_its_game_s_art(ps5, api):
+    window, root = ps5
+    hub = root.findChild(QObject, "welcomeHub")
+    QTest.keyClick(window, Qt.Key.Key_Left)
+    until(lambda: hub.property("shown") is True and value(hub, "latest"))
+    latest = value(hub, "latest")
+    assert latest["kind"] == "recording" and latest["image"] == "", "the fake core has no frames to extract"
+    assert hub.property("latestImage") != ""
+
+
 def test_back_from_a_game_the_home_builds_itself_up_again(api, fake):
     api.theme.set("ps5")
     api.theme.takeLanding()

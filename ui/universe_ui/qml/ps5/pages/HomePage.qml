@@ -1274,6 +1274,7 @@ FocusScope {
 
         WelcomeHub {
             id: welcome
+            objectName: "welcomeHub"
 
             y: Theme.dp(448)
             width: parent.width
