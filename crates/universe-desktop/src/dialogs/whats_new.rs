@@ -9,6 +9,19 @@ fn date(release: &Release) -> String {
     chrono::NaiveDate::parse_from_str(&release.date, "%Y-%m-%d").map(|d| d.format("%-d %B %Y").to_string()).unwrap_or_default()
 }
 
+/// A section's heading; the changelog names them in English.
+fn section_title(title: &str) -> String {
+    match title {
+        "Breaking" => gettext("Breaking"),
+        "Added" => gettext("Added"),
+        "Changed" => gettext("Changed"),
+        "Fixed" => gettext("Fixed"),
+        "Performance" => gettext("Performance"),
+        "Removed" => gettext("Removed"),
+        other => other.to_string(),
+    }
+}
+
 fn label(text: &str, class: &str) -> gtk::Label {
     let label = gtk::Label::builder().label(text).xalign(0.0).wrap(true).build();
     if !class.is_empty() {
@@ -20,9 +33,9 @@ fn label(text: &str, class: &str) -> gtk::Label {
 fn release_box(release: &Release) -> gtk::Box {
     let column = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(6).build();
     column.append(&label(&release.version, "title-2"));
-    column.append(&label(&date(release), "dim-label"));
+    column.append(&label(&date(release), "dimmed"));
     for section in &release.sections {
-        let title = label(&section.title, "heading");
+        let title = label(&section_title(&section.title), "heading");
         title.set_margin_top(12);
         column.append(&title);
         for item in &section.items {
@@ -81,7 +94,7 @@ pub fn about_notes(releases: &[Release], version: &str) -> String {
             out.push_str(&format!("<p><em>{}</em></p>", appstream_text(&format!("{head} · {}", date(release)))));
         }
         for section in &release.sections {
-            out.push_str(&format!("<p>{}</p><ul>", appstream_text(&section.title)));
+            out.push_str(&format!("<p>{}</p><ul>", appstream_text(&section_title(&section.title))));
             for item in &section.items {
                 out.push_str(&format!("<li>{}</li>", appstream_text(item)));
             }

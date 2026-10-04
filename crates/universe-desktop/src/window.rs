@@ -389,14 +389,16 @@ impl Window {
                 self.set_onboarded();
             }
         }
-        let win = self.downgrade();
-        glib::spawn_future_local(async move {
-            let core = backend::core();
-            let releases = backend::run(async move { core.whats_new().await }).await;
-            if let Some(win) = win.upgrade().filter(|_| !onboarding && !releases.is_empty()) {
-                crate::dialogs::whats_new::present(&win, &releases);
-            }
-        });
+        if !self.app().scripted() {
+            let win = self.downgrade();
+            glib::spawn_future_local(async move {
+                let core = backend::core();
+                let releases = backend::run(async move { core.whats_new().await }).await;
+                if let Some(win) = win.upgrade().filter(|_| !onboarding && !releases.is_empty()) {
+                    crate::dialogs::whats_new::present(&win, &releases);
+                }
+            });
+        }
         if let Some(steps) = self.app().take_script() {
             glib::spawn_future_local(script::run(self.clone().upcast(), steps));
         }

@@ -1122,9 +1122,10 @@ Up and Down scroll it, B closes it, and Reprise's `isScreenUp`/`isScreenDown` an
 page and jump.
 
 Universe Desktop records and asks the same way from `core_ready`, after its first-run dialog and
-never with it, and presents `dialogs/whats_new.rs` over the window when something is new; its About
+never with it, nor in a scripted run (`UNIVERSE_DESKTOP_SCRIPT`, which leaves the version
+unrecorded), and presents `dialogs/whats_new.rs` over the window when something is new; its About
 dialog's What's New holds the changelog from this version down (`about_notes`, AppStream markup:
-each older release under a "Version X · date" line).
+each older release under a "Version X · date" line, the section headings translated).
 
 ## The artwork pages and section
 
