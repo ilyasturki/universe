@@ -8,6 +8,8 @@ import "../sound"
 FocusScope {
     id: cards
 
+    objectName: "settingsCards"
+
     property var rows: []
     property var groups: []
     property int columns: 2

@@ -6,6 +6,7 @@ import "../ui"
 FocusScope {
     id: page
 
+    objectName: "playLogPage"
     property var shell: null
     property var args: ({})
     readonly property var game: args && args.gameId ? api.allGames.byId(args.gameId) : null

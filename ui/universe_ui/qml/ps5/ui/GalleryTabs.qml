@@ -17,6 +17,7 @@ Item {
 
     Row {
         id: row
+        objectName: "tabBar"
         spacing: Theme.dp(8)
 
         Repeater {

@@ -10,6 +10,7 @@ import "../ui/Sections.js" as Sections
 FocusScope {
     id: page
 
+    objectName: "settingsPage"
     focus: true
 
     signal chromeRequested
@@ -1564,6 +1565,7 @@ FocusScope {
 
     ConfirmDialog {
         id: dialog
+        objectName: "dialog"
 
         anchors.fill: parent
         z: 4

@@ -9,6 +9,8 @@ import "Sections.js" as Sections
 FocusScope {
     id: overlay
 
+    objectName: "searchOverlay"
+
     clip: true
 
     property bool open: false

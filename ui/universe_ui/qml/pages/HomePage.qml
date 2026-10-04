@@ -8,6 +8,7 @@ import "../ui"
 FocusScope {
     id: page
 
+    objectName: "homePage"
     focus: true
 
     signal libraryRequested

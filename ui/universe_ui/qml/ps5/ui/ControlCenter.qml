@@ -12,6 +12,7 @@ import "Trophy.js" as Trophy
 // the icon bar under them, a panel over the bar for each icon, a card grown to fill for trophies and captures.
 FocusScope {
     id: cc
+    objectName: "controlCenter"
 
     // A launch the core has not made a session of yet stands in: its id and title alone.
     readonly property var session: api.universe.currentSession || api.home.pending
@@ -1263,6 +1264,7 @@ FocusScope {
 
                 ListView {
                     id: trophyList
+                    objectName: "ccTrophies"
 
                     anchors.top: sheetHead.bottom
                     anchors.topMargin: Theme.dp(24)

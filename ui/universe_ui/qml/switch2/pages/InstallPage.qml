@@ -9,6 +9,7 @@ import "../../core/Format.js" as Format
 FocusScope {
     id: page
 
+    objectName: "installPage"
     property var shell: null
     property var args: ({})
     signal closeRequested()

@@ -7,6 +7,7 @@ import "Groups.js" as Groups
 FocusScope {
     id: page
 
+    objectName: "allSoftwarePage"
     property var shell: null
 
     signal closeRequested
@@ -164,6 +165,7 @@ FocusScope {
 
         SoftwareGrid {
             id: softwareGrid
+            objectName: "grid"
             x: page.gridX
             y: page.gridY
             width: implicitWidth

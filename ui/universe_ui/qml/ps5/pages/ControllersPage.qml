@@ -9,6 +9,7 @@ import "../../ui/PadHistory.js" as History
 FocusScope {
     id: page
 
+    objectName: "controllersPage"
     property var shell: null
     // { key }: a search hit lands on that row, the Advanced row opened if it sits behind it; { walk }: the walk starts.
     property var args: ({})
@@ -779,6 +780,7 @@ FocusScope {
         }
 
         Label {
+            objectName: "unknownButton"
             anchors.horizontalCenter: parent.horizontalCenter
             width: parent.width
             horizontalAlignment: Text.AlignHCenter

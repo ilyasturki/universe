@@ -4,6 +4,7 @@ import "../core"
 // A screen's name, the console's two ways: alone and large ("Settings"), or small beside an icon or a game's tile ("Game Library").
 Item {
     id: header
+    objectName: "pageTitle"
 
     property string title: ""
     property string icon: ""

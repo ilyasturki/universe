@@ -10,6 +10,7 @@ import "../ui/Removal.js" as Removal
 FocusScope {
     id: page
 
+    objectName: "playerPage"
     property var shell: null
     property var args: ({})
     readonly property bool bare: true

@@ -174,6 +174,7 @@ FocusScope {
 
             PathSheet {
                 id: paths
+                objectName: "pathSheet"
 
                 anchors.fill: parent
 
@@ -189,6 +190,7 @@ FocusScope {
 
             KeyboardSheet {
                 id: sheet
+                objectName: "textSheet"
 
                 anchors.fill: parent
 

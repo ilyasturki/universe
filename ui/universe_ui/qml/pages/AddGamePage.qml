@@ -6,6 +6,7 @@ import "../ui"
 FocusScope {
     id: page
 
+    objectName: "addGamePage"
     focus: true
 
     property var args: ({})

@@ -610,6 +610,7 @@ FocusScope {
 
     FolderSheet {
         id: folder
+        objectName: "folder"
         shell: root
         z: 11
     }

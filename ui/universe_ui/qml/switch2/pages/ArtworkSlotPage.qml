@@ -7,6 +7,7 @@ import "Artwork.js" as Artwork
 FocusScope {
     id: page
 
+    objectName: "artworkSlotPage"
     property var shell: null
     property var args: ({})
     readonly property string slot: args && args.slot ? args.slot : ""

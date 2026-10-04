@@ -32,6 +32,7 @@ Item {
 
     Row {
         id: tabs
+        objectName: "tabBar"
         x: Theme.dp(Theme.tabX - 18)
         y: Theme.dp(Theme.barY) - height / 2
         spacing: Theme.dp(82 - 36)

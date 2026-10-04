@@ -6,6 +6,7 @@ import "../ui"
 FocusScope {
     id: page
 
+    objectName: "mediaPage"
     focus: true
 
     signal chromeRequested

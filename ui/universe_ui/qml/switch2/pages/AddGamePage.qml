@@ -7,6 +7,7 @@ import "Forms.js" as Forms
 FocusScope {
     id: page
 
+    objectName: "addGamePage"
     property var shell: null
     property var args: ({})
     focus: true

@@ -7,6 +7,7 @@ import "../ui"
 FocusScope {
     id: page
 
+    objectName: "settingsSearchPage"
     property var shell: null
     property var args: ({})
     focus: true

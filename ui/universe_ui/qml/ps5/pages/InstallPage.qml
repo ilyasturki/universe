@@ -10,6 +10,7 @@ import "Home.js" as Home
 FocusScope {
     id: page
 
+    objectName: "installPage"
     property var shell: null
     property var args: ({})
     signal closeRequested
@@ -916,6 +917,7 @@ FocusScope {
         height: Theme.dp(80)
 
         Row {
+            objectName: "tabBar"
             x: Theme.dp(Theme.edge) - Theme.dp(28)
             height: parent.height
             spacing: Theme.dp(10)

@@ -6,6 +6,7 @@ import "../../ui" as Base
 // A two-column page's right column: rows with the value, a switch or a mark at their right end, captions between them.
 FocusScope {
     id: rows
+    objectName: "settingsRows"
 
     property var model: []
     property int index: 0

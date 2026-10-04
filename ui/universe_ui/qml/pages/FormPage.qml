@@ -6,6 +6,7 @@ import "../ui"
 FocusScope {
     id: page
 
+    objectName: "formPage"
     focus: true
 
     // { runner } | { module } | { source }: one runner's, one module's or one source's settings (a game's is GameSettingsPage);

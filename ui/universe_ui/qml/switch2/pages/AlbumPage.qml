@@ -8,6 +8,7 @@ import "../ui/Removal.js" as Removal
 FocusScope {
     id: page
 
+    objectName: "albumPage"
     property var shell: null
     property var args: ({})
 

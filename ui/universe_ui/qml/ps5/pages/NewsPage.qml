@@ -9,6 +9,7 @@ import "../ui/Removal.js" as Removal
 FocusScope {
     id: page
 
+    objectName: "newsPage"
     property var shell: null
     property var args: ({})
     readonly property var hints: []

@@ -56,6 +56,7 @@ Modal {
 
     Flickable {
         id: bodyView
+        objectName: "scroll"
 
         anchors.left: parent.left
         anchors.right: parent.right

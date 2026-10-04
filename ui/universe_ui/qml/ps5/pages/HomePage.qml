@@ -11,6 +11,7 @@ import "Home.js" as Home
 FocusScope {
     id: page
 
+    objectName: "homePage"
     property var shell: null
     readonly property var hints: []
 
@@ -1374,6 +1375,7 @@ FocusScope {
 
         HomeRail {
             id: gamesRail
+            objectName: "gamesRail"
             y: Theme.dp(Theme.railY)
             width: parent.width
             entries: page.gameEntries

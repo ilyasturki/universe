@@ -38,6 +38,7 @@ Item {
 
         RailTile {
             id: tile
+            objectName: "railTile"
 
             readonly property int distance: Math.abs(index - rail.current)
 

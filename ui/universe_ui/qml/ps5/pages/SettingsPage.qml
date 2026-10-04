@@ -12,6 +12,7 @@ import "Sections.js" as Sections
 FocusScope {
     id: page
 
+    objectName: "settingsPage"
     property var shell: null
     property var args: ({})
     signal closeRequested

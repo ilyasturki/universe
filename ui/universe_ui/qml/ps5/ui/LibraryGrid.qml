@@ -7,6 +7,8 @@ import "../sound"
 FocusScope {
     id: grid
 
+    objectName: "grid"
+
     // Games, or gamelists ({ key, name, games }) when `lists`.
     property var items: []
     property bool lists: false
@@ -225,6 +227,7 @@ FocusScope {
 
             Row {
                 id: tabRow
+                objectName: "tabBar"
                 x: -Theme.dp(18)
                 y: Theme.dp(43) - height / 2
                 spacing: Theme.dp(66 - 36)

@@ -7,6 +7,7 @@ import "../ui"
 FocusScope {
     id: page
 
+    objectName: "detailPage"
     focus: true
 
     property var game: null

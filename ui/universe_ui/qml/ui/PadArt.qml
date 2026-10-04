@@ -6,6 +6,7 @@ import "PadGeometry.js" as Geometry
 
 Item {
     id: art
+    objectName: "padArt"
 
     property string family: "dualsense"
     property string focusedSlot: ""

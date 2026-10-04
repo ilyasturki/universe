@@ -10,6 +10,7 @@ import "Home.js" as Home
 FocusScope {
     id: page
 
+    objectName: "libraryPage"
     property var shell: null
     property var args: ({})
     readonly property var hints: []

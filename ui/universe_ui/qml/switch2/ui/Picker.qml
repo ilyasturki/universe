@@ -112,6 +112,7 @@ Modal {
 
     ListView {
         id: list
+        objectName: "choices"
 
         x: picker.inset - picker.room
         y: picker.anchored ? picker.pad - picker.room : heading.y + heading.height + Theme.dp(10) - picker.room

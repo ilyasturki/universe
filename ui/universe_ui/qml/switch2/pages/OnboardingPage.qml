@@ -8,6 +8,7 @@ import "Forms.js" as Forms
 FocusScope {
     id: page
 
+    objectName: "onboardingPage"
     property var shell: null
     property var args: ({})
     readonly property bool overlay: true

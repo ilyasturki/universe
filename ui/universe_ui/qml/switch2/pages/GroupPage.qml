@@ -6,6 +6,7 @@ import "Groups.js" as Groups
 FocusScope {
     id: page
 
+    objectName: "groupPage"
     property var shell: null
     property var args: ({})
 

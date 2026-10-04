@@ -53,6 +53,7 @@ FocusScope {
 
     Rectangle {
         id: card
+        objectName: "modalCard"
 
         anchors.centerIn: modal.carded ? parent : undefined
         anchors.fill: modal.carded ? undefined : parent

@@ -9,6 +9,7 @@ import "Forms.js" as Forms
 FocusScope {
     id: page
 
+    objectName: "gameSettingsPage"
     property var shell: null
     property var args: ({})
     readonly property bool strip: true

@@ -34,6 +34,8 @@ Window {
         z: 5
 
         Repeater {
+            objectName: "unlockCards"
+
             model: ListModel {
                 id: shown
             }

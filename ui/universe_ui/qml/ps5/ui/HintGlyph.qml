@@ -5,6 +5,7 @@ import "../../ui/PadNames.js" as Names
 
 Item {
     id: root
+    objectName: "hintGlyph"
 
     property string glyph: "A"
     property real unit: Theme.dp(34)

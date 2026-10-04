@@ -7,6 +7,7 @@ import "../ui"
 FocusScope {
     id: page
 
+    objectName: "homePage"
     property var shell: null
 
     readonly property int gameCount: shown.count
@@ -192,6 +193,7 @@ FocusScope {
 
     ListView {
         id: row
+        objectName: "homeRow"
 
         y: Theme.dp(Theme.tileRowY) - Theme.dp(30)
         width: parent.width

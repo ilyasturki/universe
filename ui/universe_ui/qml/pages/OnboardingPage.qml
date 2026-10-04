@@ -7,6 +7,7 @@ import "../ui"
 FocusScope {
     id: page
 
+    objectName: "onboardingPage"
     focus: true
 
     property var args: ({})

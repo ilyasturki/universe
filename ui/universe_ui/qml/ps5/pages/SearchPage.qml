@@ -9,6 +9,7 @@ import "../ui"
 FocusScope {
     id: page
 
+    objectName: "searchPage"
     property var shell: null
     property var args: ({})
     signal closeRequested

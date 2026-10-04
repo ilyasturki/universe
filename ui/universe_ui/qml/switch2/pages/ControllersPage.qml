@@ -8,6 +8,7 @@ import "../../ui/PadHistory.js" as History
 FocusScope {
     id: page
 
+    objectName: "controllersPage"
     property var shell: null
     // { key }: a search hit lands on that row, the Advanced row opened if it sits behind it.
     property var args: ({})

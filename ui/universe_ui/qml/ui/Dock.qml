@@ -6,6 +6,7 @@ import "Controls.js" as Controls
 
 FocusScope {
     id: dock
+    objectName: "dock"
 
     // A launch the core has not made a session of yet stands in: its id and title alone.
     readonly property var session: api.universe.currentSession || api.home.pending
@@ -524,6 +525,7 @@ FocusScope {
 
     Item {
         id: band
+        objectName: "dockBand"
 
         anchors.fill: parent
         opacity: dock.shown ? 1.0 : 0.0

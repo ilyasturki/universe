@@ -8,6 +8,7 @@ import "../ui"
 FocusScope {
     id: page
 
+    objectName: "libraryPage"
     focus: true
 
     signal chromeRequested

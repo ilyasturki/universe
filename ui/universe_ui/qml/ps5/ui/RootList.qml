@@ -5,6 +5,7 @@ import "../sound"
 // Settings' first screen: one row per section, an icon and a name, fading out under the title as the list scrolls.
 FocusScope {
     id: list
+    objectName: "rootList"
 
     // [{ id, label, icon, detail }]
     property var sections: []

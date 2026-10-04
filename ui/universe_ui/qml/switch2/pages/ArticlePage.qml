@@ -7,6 +7,7 @@ import "../ui/Removal.js" as Removal
 FocusScope {
     id: page
 
+    objectName: "articlePage"
     property var shell: null
     property var args: ({})
 

@@ -12,6 +12,7 @@ Window {
     title: "Universe"
 
     Loader {
+        objectName: "look"
         anchors.fill: parent
         source: api.theme.entry
         focus: true

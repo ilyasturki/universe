@@ -7,6 +7,7 @@ import "../../core/Format.js" as Format
 FocusScope {
     id: page
 
+    objectName: "softwareOptionsPage"
     property var shell: null
     property var args: ({})
     readonly property var game: args && args.gameId ? api.allGames.byId(args.gameId) : null

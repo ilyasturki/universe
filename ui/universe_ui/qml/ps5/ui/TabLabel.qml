@@ -5,6 +5,7 @@ import "../core"
 // the one shown in bright text once the focus moves on, the rest dim.
 Item {
     id: tab
+    objectName: "tabLabel"
 
     property string text: ""
     property bool current: false

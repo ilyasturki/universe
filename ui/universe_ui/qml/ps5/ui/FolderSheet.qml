@@ -166,6 +166,7 @@ Modal {
 
     ListView {
         id: chips
+        objectName: "chips"
 
         x: Theme.dp(Theme.edge) - sheet.chipRoom
         y: header.height + Theme.dp(10) - sheet.chipRoom

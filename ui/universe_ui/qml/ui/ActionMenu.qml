@@ -295,6 +295,7 @@ FocusScope {
 
         Flickable {
             id: scroller
+            objectName: "scroll"
 
             anchors.top: head.visible ? head.bottom : parent.top
             anchors.topMargin: head.visible ? Theme.dp(8) : Theme.dp(12)

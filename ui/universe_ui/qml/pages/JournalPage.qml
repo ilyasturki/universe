@@ -6,6 +6,7 @@ import "../ui"
 FocusScope {
     id: page
 
+    objectName: "journalPage"
     focus: true
 
     property var args: ({})

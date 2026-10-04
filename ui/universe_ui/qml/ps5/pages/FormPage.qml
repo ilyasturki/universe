@@ -9,6 +9,7 @@ import "Forms.js" as Forms
 FocusScope {
     id: page
 
+    objectName: "formPage"
     property var shell: null
     property var args: ({})
     signal closeRequested
