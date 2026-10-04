@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -28,10 +29,8 @@ window.resize(640, 480)
 window.show()
 app.exec()
 """
-# One gap is 100 ms: B held a second while the other window has the focus, HOME, then B held again once the launcher has it.
-SCRIPT = "PadHold:B Wait:10 PadRelease:B Press:guide Unpress:guide Wait:30 PadHold:B Wait:10 PadRelease:B Wait:5"
-KEY_DELAY_MS = 6000
-QUIT_AFTER_MS = KEY_DELAY_MS + 8000
+# One gap is 100 ms, past the 450 ms hold: B held while the other window has the focus, HOME, then B held again once the launcher has it.
+SCRIPT = "Await PadHold:B Wait:6 PadRelease:B Press:guide Unpress:guide Await PadHold:B Wait:6 PadRelease:B Quit"
 
 
 def render_node():
@@ -120,30 +119,54 @@ def profile(tmp_path):
     return env
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("nested", [False, True], ids=["desktop", "nested"])
 def test_a_pad_press_reaches_neither_the_launcher_nor_its_power_menu_while_another_app_has_the_focus(sway, tmp_path, nested):
     if nested and not (sway.gpu and shutil.which("gamescope")):
         pytest.skip("gamescope needs a GPU and its binary")
     other = subprocess.Popen([sys.executable, "-c", OTHER], env=sway.env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     launcher = None
+    lines = []
     try:
         sway.wait(lambda: any(w["name"] == "other" for w in sway.windows()), "the other window maps")
         flags = [] if nested else ["--windowed"]
-        script = ["--key-delay", str(KEY_DELAY_MS), "--key-gap", "100", "--keys", SCRIPT, "--quit-after", str(QUIT_AFTER_MS)]
+        script = ["--key-delay", "0", "--key-gap", "100", "--keys", SCRIPT]
         launcher = subprocess.Popen(
-            [str(LAUNCHER), *flags, *script], env={**sway.env, **profile(tmp_path)}, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+            [str(LAUNCHER), *flags, *script],
+            env={**sway.env, **profile(tmp_path)},
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
         )
+
+        def read():
+            for line in launcher.stdout:
+                lines.append(line.rstrip("\n"))
+
+        def focus_now():
+            return next((line.rpartition("focus: ")[2] for line in reversed(lines) if line.endswith(("focus: active", "focus: elsewhere", "focus: inactive"))), None)
+
+        def go_on(focus):
+            sway.wait(lambda: focus_now() == focus, f"the launcher sees the focus {focus}")
+            launcher.stdin.write("\n")
+            launcher.stdin.flush()
+
+        reader = threading.Thread(target=read, daemon=True)
+        reader.start()
         app_id = "gamescope" if nested else "universe-ui"
-        sway.wait(lambda: sway.focused() == app_id, "the launcher maps and takes the focus", timeout=30)
+        sway.wait(lambda: sway.focused() == app_id and focus_now() in (None, "active"), "the launcher maps and takes the focus", timeout=30)
         sway.msg('[title="^other$"] focus')
-        sway.wait(lambda: sway.focused() == "other", "the other window takes the focus back")
-        sway.wait(lambda: sway.focused() == app_id, "HOME brings the launcher up", timeout=QUIT_AFTER_MS / 1000)
-        out, _ = launcher.communicate(timeout=30)
+        go_on("elsewhere")
+        sway.wait(lambda: sway.focused() == app_id, "HOME brings the launcher up")
+        go_on("active")
+        launcher.wait(30)
+        reader.join(5)
     finally:
         for proc in (launcher, other):
             if proc is not None and proc.poll() is None:
                 proc.kill()
-    lines = out.splitlines()
+    out = "\n".join(lines)
     mode = "host" if nested else "qt"
     if nested and not any(line.endswith("focus: host") for line in lines):
         pytest.skip("gamescope did not come up here: " + " | ".join(lines[-5:]))

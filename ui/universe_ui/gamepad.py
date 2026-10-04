@@ -1,10 +1,11 @@
 import functools
 import logging
 import os
+import sys
 import threading
 import time
 
-from PySide6.QtCore import QCoreApplication, QEvent, QObject, Qt, QThread, QTimer, Signal, Slot
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, QSocketNotifier, Qt, QThread, QTimer, Signal, Slot
 from PySide6.QtGui import QGuiApplication, QKeyEvent, QMouseEvent, QWheelEvent
 
 log = logging.getLogger("universe.gamepad")
@@ -410,7 +411,7 @@ def post_wheel(window, x, y, steps, sideways=False, pixels=False):
 # pad thread, dropped as its presses are while covered; as if the watcher read them, `Press:slot`/`Unpress:slot`, `Axis:lx=0.6`;
 # the mouse, at 1080p design units (dp, so 1728 wide at 16:10): `Mouse:x,y` moves it, `Click:x,y` / `RightClick:x,y` press and release there, `MouseDown:x,y` / `MouseUp:x,y` one or the other,
 # `Wheel:x,y,N` rolls N notches (up positive), `HWheel:x,y,N` sideways (right positive), `Scroll:x,y,N` N pixels as a touchpad; `Type:text` types it from the keyboard (`_` a space);
-# a finger: `Tap:x,y`, `LongTap:x,y,ms` held that long, `Swipe:x1,y1,x2,y2` dragged across in eight moves.
+# a finger: `Tap:x,y`, `LongTap:x,y,ms` held that long, `Swipe:x1,y1,x2,y2` dragged across in eight moves; `Await` holds the script until a line comes on stdin, `Quit` quits.
 class KeyScript(QObject):
     def __init__(self, script, gap_ms, window, pad=None, watcher=None, home=None, gamepad=None, parent=None):
         super().__init__(parent)
@@ -436,6 +437,21 @@ class KeyScript(QObject):
         if phase == "Wait":
             if bare.isdigit() and int(bare) > 1:
                 self._queue[0:0] = ["Wait"] * (int(bare) - 1)
+            return
+        if phase == "Await":
+            self._timer.stop()
+            stdin = QSocketNotifier(sys.stdin.fileno(), QSocketNotifier.Type.Read, self)
+
+            def resume():
+                sys.stdin.readline()
+                stdin.setEnabled(False)
+                stdin.deleteLater()
+                self._timer.start()
+
+            stdin.activated.connect(resume)
+            return
+        if phase == "Quit":
+            QCoreApplication.quit()
             return
         if phase == "Shot":
             ok = self._window.grabWindow().save(bare)
