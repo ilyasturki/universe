@@ -722,6 +722,7 @@ class FakeCore:
         out["achievements"] = {"total": len(items), "unlocked": sum(1 for a in items if a.get("unlocked_at"))}
         meta = out.setdefault("metadata", {})
         out["release_year"] = int(meta.pop("release_year", 0) or out.get("release_year") or 0)
+        meta.update({k: int(meta[k] or 0) for k in ("sgdb_id", "gamesdb_id", "steam_appid") if k in meta})
         out.update(
             dir=str(self._game_dir(game["id"])),
             installed=bool(exe),

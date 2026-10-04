@@ -57,7 +57,7 @@ def test_search_and_pin_reload_the_candidates(api, fake):
     settle(form)
     assert form.entryDiffers
     assert [h["current"] for h in form.hits] == [False, True, False]
-    assert fake.game("dead-cells")["metadata"]["gamesdb_id"] == hits[1]["id"]
+    assert fake.game("dead-cells")["metadata"]["gamesdb_id"] == int(hits[1]["id"])
     assert form.candidatesSlot == "logo" and form.candidates
 
 
@@ -77,7 +77,7 @@ def test_a_steamgriddb_key_brings_its_art_and_its_entries(api, fake):
     assert {h["provider"] for h in form.hits} == {"sgdb"}
     form.pin(form.hits[2]["id"])
     settle(form)
-    assert fake.game("dead-cells")["metadata"]["sgdb_id"] == form.hits[2]["id"]
+    assert fake.game("dead-cells")["metadata"]["sgdb_id"] == int(form.hits[2]["id"])
 
 
 def test_overview_lays_the_library_out_as_games_by_slots(api, fake):

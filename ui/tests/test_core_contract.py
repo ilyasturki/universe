@@ -82,7 +82,6 @@ GAME_DRIFT = {
     "metadata.extra only in the fake": HLTB,
     "launch.* only in the core": "test_screens, test_game_scope, test_render, test_ps5_game and test_add read a reset as the key gone from launch;"
     " the core sends every key",
-    "metadata.sgdb_id: number | *": "test_artwork reads a pinned id back as the string it pinned; the core keeps a number",
 }
 # What the fake knowingly answers otherwise, per read, as globs of `<path> only in the fake|core` or `<path>: <core types> | <fake types>`.
 KNOWN = {"list": GAME_DRIFT, "get": GAME_DRIFT, "module_settings": {"va_encoder_opts only in the fake": STALE_CAPTURE}}
