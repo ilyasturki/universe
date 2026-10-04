@@ -153,6 +153,17 @@ fn first_clause(description: &str) -> String {
     }
 }
 
+/// The Advanced row's line: the titles of the cards its page holds, each once.
+fn advanced_line(titles: &[String]) -> String {
+    let mut seen: Vec<&str> = Vec::new();
+    for title in titles.iter().map(|t| t.trim()).filter(|t| !t.is_empty()) {
+        if !seen.contains(&title) {
+            seen.push(title);
+        }
+    }
+    seen.join(", ")
+}
+
 /// Folders are picked as folders, the rest as files.
 fn wants_folder(key: &str) -> bool {
     let last = key.rsplit('.').next().unwrap_or(key);
@@ -350,11 +361,8 @@ impl FormView {
         }
         if has_advanced {
             let group = adw::PreferencesGroup::new();
-            let row = adw::ActionRow::builder()
-                .title(gettext("Advanced"))
-                .subtitle(gettext("Sync modes, scaling, upscalers, programs and folders"))
-                .activatable(true)
-                .build();
+            let titles: Vec<String> = groups.iter().filter(|(_, advanced, _)| *advanced).map(|(_, _, g)| g.title().to_string()).collect();
+            let row = crate::rows::plain(adw::ActionRow::builder().activatable(true).build(), gettext("Advanced"), advanced_line(&titles));
             row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
             let view = self.weak();
             row.connect_activated(move |_| {
@@ -734,6 +742,13 @@ mod tests {
         assert_eq!(inherited_shown(&filter), "linear", "the row's value, bare: its caption names the origin");
         let rate = Field { fallback: Some(Origin::Global), inherited: "auto".into(), inherited_resolved: "144".into(), ..field("refresh", "60", "") };
         assert_eq!(inherit_label(&rate), "Global · Auto · 144 Hz");
+    }
+
+    #[test]
+    fn the_advanced_row_names_what_its_own_page_holds() {
+        let journal = ["Writing".to_string(), "Pictures".into(), "".into(), "Writing".into()];
+        assert_eq!(advanced_line(&journal), "Writing, Pictures", "the journal's cards, not a launch form's");
+        assert_eq!(advanced_line(&[]), "");
     }
 
     #[test]

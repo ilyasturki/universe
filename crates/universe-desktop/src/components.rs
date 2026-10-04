@@ -124,6 +124,12 @@ pub struct Action {
     pub label: String,
 }
 
+/// What a runner's row in the list does itself, `(component, action)`: the update waiting, or the install a game or a newer
+/// build waits on; the rest is in the menus on the runner's page.
+pub fn quick(own: &[Value]) -> Option<(&Value, Action)> {
+    own.iter().filter(|c| wants(c)).find_map(|c| actions(c).into_iter().next().filter(|a| a.id == "update" || a.id == "install").map(|a| (c, a)))
+}
+
 fn action(id: impl Into<String>, label: impl Into<String>) -> Action {
     Action { id: id.into(), label: label.into() }
 }
@@ -586,6 +592,19 @@ mod tests {
         tool["packages"] = json!(["gpu-screen-recorder"]);
         assert_eq!(ids(actions(&tool)), ["install"]);
         assert!(ask(&tool, "install").is_some_and(|a| a.body.starts_with("gpu-screen-recorder")));
+    }
+
+    #[test]
+    fn a_runners_row_offers_the_update_or_the_install_it_waits_on() {
+        let mut xemu = component("xemu", "emulator", vec![build("0.8.135", "universe", true)], &["0.8.136"]);
+        xemu["update"] = json!("0.8.136");
+        let mut eden = component("eden", "emulator", vec![], &["0.2.1"]);
+        eden["proposal"] = json!("install");
+        let current = component("dolphin", "emulator", vec![build("2606a", "universe", true)], &["2606a"]);
+        let pick = |own: &[Value]| quick(own).map(|(c, a)| (text(c, "id"), a.id));
+        assert_eq!(pick(std::slice::from_ref(&xemu)), Some(("xemu".into(), "update".into())));
+        assert_eq!(pick(&[current.clone(), eden]), Some(("eden".into(), "install".into())), "Needed: its install");
+        assert_eq!(pick(&[current]), None, "nothing waits: the row only opens the page");
     }
 
     #[test]

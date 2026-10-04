@@ -294,6 +294,13 @@ fn load_runners(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, win: &Wind
                 let class = if wants { "accent" } else { "dimmed" };
                 row.add_suffix(&gtk::Label::builder().label(&tag).css_classes([class, "caption-heading"]).valign(gtk::Align::Center).build());
             }
+            if let Some((component, action)) = crate::components::quick(&own) {
+                let label = if action.id == "update" { gettext("_Update") } else { gettext("_Install…") };
+                let button = gtk::Button::builder().label(label).use_underline(true).valign(gtk::Align::Center).tooltip_text(&action.label).build();
+                let (component, again) = (component.clone(), again.clone());
+                button.connect_clicked(move |button| crate::components::act(button, &component, &action.id, again.clone()));
+                row.add_suffix(&button);
+            }
             if count > 0 {
                 row.add_suffix(
                     &gtk::Label::builder()

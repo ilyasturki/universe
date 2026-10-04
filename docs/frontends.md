@@ -1130,8 +1130,10 @@ dots. The Reprise Home rail lands on its first game when it fills while the page
 importing behind the dialog, the add page), as a cold start does.
 
 The GTK app's first run (`dialogs/onboarding.rs`) has the same steps and the same flag: the found
-page's Continue, in a bar of its own under the content, waits for the look to end; each launcher has
-an Add button and Add Everything presses them all, the two importers taking turns; the stores page
+page's Continue, in a bar of its own under the content and the one suggested button of each page,
+waits for the look to end; each launcher has an Add button and Add Everything presses them all, the
+two importers taking turns; closing the dialog before any game came in and before the last page asks
+"Skip Setup?" (Keep Going, Skip), and Add Games › First-Run Setup opens it again; the stores page
 offers a source that is off but has its launcher here behind a "Use" switch; under a read-only
 config a launcher says what to write instead of failing; the done page follows the imports still
 running; its Game Data page sets the prefixes and save backups folders and the backup after each
@@ -1336,7 +1338,8 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
   notification for an install or update when the window is not focused.
 - **Runners** (Preferences › Runners, as Settings › Runners in `universe-ui`): the runners found,
   by the games on them, each with the build in use as its subtitle and what waits on it (an update,
-  a newer build than the system's, Needed) beside its game count; then "Not Installed" (Universe
+  a newer build than the system's, Needed) beside its game count, with the button that does it
+  (`components::quick`: Update, or Install… asking first); then "Not Installed" (Universe
   can download it, a runner a game waits on first), "No Download" and "Tools" (gogdl, legendary,
   comet, butler, gamescope, MangoHud, gpu-screen-recorder). A runner's page puts a Builds group
   under its Runner card (`FormView::add_head`): one row per component it installs — Proton's
@@ -1358,7 +1361,8 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
   the games it reaches (`Apply to all Dolphin games`, `promote_field`), both named on hover and to
   a screen reader; the toast says what came of it, as the looks' does. A module's and a source's
   page ends in Game Defaults: the value every game takes unless it sets its own, where the
-  all-games one lands and where its reset undoes it.
+  all-games one lands and where its reset undoes it. The Advanced row names the cards its page
+  holds.
 - **Undo, not confirmation**, for what can come back: hiding, favourites, removing a game, a
   screenshot, a recording, a journal entry. A removal is held (`Application::defer`) while its toast
   shows and done when the toast goes, or on quit; Undo, or Ctrl+Z for the newest toast, drops it.
