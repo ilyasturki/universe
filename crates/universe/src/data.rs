@@ -483,12 +483,8 @@ fn wineservers(proc: &Path, dirs: &[String]) -> Vec<i32> {
         let cwd = std::fs::read_link(pid.join("cwd")).unwrap_or_default();
         comm.starts_with("wineserver") && cwd.file_name().and_then(|n| n.to_str()).is_some_and(|n| dirs.iter().any(|d| d == n))
     };
-    let mut pids: Vec<i32> = std::fs::read_dir(proc)
-        .into_iter()
-        .flatten()
-        .flatten()
-        .filter_map(|e| e.file_name().to_str()?.parse().ok().filter(|_| serves(&e.path())))
-        .collect();
+    let mut pids: Vec<i32> =
+        std::fs::read_dir(proc).into_iter().flatten().flatten().filter_map(|e| e.file_name().to_str()?.parse().ok().filter(|_| serves(&e.path()))).collect();
     pids.sort();
     pids
 }

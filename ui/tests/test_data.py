@@ -20,7 +20,9 @@ def keys(store):
 def notices(engine):
     core = Path(__file__).resolve().parents[1] / "universe_ui" / "qml" / "core"
     component = QQmlComponent(engine, engine)
-    component.setData(f'import QtQuick\nimport "{core.as_uri()}"\nQtObject {{ function current() {{ return Notices.current; }} }}'.encode(), QUrl("file:///probe.qml"))
+    component.setData(
+        f'import QtQuick\nimport "{core.as_uri()}"\nQtObject {{ function current() {{ return Notices.current; }} }}'.encode(), QUrl("file:///probe.qml")
+    )
     probe = component.create()
     assert probe is not None, [e.toString() for e in component.errors()]
     engine.setObjectOwnership(probe, QQmlEngine.ObjectOwnership.CppOwnership)
