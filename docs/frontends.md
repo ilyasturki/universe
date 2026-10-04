@@ -30,7 +30,7 @@ One context property, `api`:
 | `api.power` | the batteries the kernel lists under `/sys/class/power_supply`: `sources` (`kind` `system` or `pad`, `percent`, `charging`, `inputs` — the pad's evdev nodes), `count`; polled every 10 s, plus what the controller watcher reads off a pad the kernel keeps no supply for (an 8BitDo's HID report, BlueZ's `Battery1` for a pad in BLE mode), reported through `report(event, name, battery)` and dropped with the pad; the kernel's reading wins where both exist. Reprise and the PS5 look draw them next to every clock (`ui/PowerBadge.qml`: one glyph and percent per source, the pad the controller page has current in green, one at 15 % or under in red); the Switch 2 look, like the console, puts the machine's own battery by its clock as a bare cell and a pad's charge on its controller page, next to the pad it belongs to; `--fake` reads `fixtures/power_supply` |
 | `api.network` | the link the machine is online through, read from `/sys/class/net` every 10 s: `kind` (`wifi`, `wired` — a cable wins — or `""` offline; links with no device, such as `lo` or a VPN, never count), `bars` (the Wi-Fi signal as 1–3 arcs from `/proc/net/wireless`, 0 otherwise). The Switch 2 look draws it between its clock and battery; `--fake` reads `fixtures/net` |
 | `api.system` | what logind will do with the machine: `actions`, the ones of `suspend`, `reboot` and `power_off` it would carry out (the core's `power_actions()`, read once at startup), `run(action)` (`power(action)` off the UI thread; `reboot` and `power_off` stop a running session first, so its `session-end` runs before the machine goes down), `failed(action, message)` when logind refuses. `--fake` records the call and does nothing. `steam`: the launcher runs in Steam's Game Mode (the core's `under_steam()`): no power actions (the menu keeps Quit Universe alone, and says Steam's menu has the rest), no Sound section, no dock over a game, no MangoHud, frame limit or Pause on HOME rows. `session`: the launcher runs as the Universe session a display manager started (the core's `nest::session()`): its way out logs out, so every look's power menu says Log out for Quit Universe (action `logout`), and the PS5 Control Center's Power panel adds a Log Out of its own. `deck`: `lcd` or `oled` on a Steam Deck. `controls`: the core's `system_controls()`, read after `apply_system()` at startup and on `reload()`; `set(id, value)` shows the value at once and writes it off the UI thread, a refusal raising `controlFailed(id, message)` and reading the machine back; `control(id)` one of them. Reprise lists them under Settings › System and in the dock's System group (a step writes once the cursor rests, 400 ms), Switch 2 under System Settings › Performance, the PS5 look under Settings › Performance and in the Control Center's System panel; `ui/Controls.js` turns one into rows any look uses. `--fake` lists an OLED Deck's under `UNIVERSE_DECK`, and plays Game Mode under `GAMESCOPE_WAYLAND_DISPLAY` with `UNIVERSE_FAKE_STEAM=1`, the Universe session with `UNIVERSE_FAKE_SESSION=1` |
-| `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written, a game's sessions and their logs, a game's data and the storage view) |
+| `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written, a game's sessions and their logs, a game's data and the storage view, the changelog) |
 | `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed` and `--size` turn it off) |
 | `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `overlay`, `frame`, `ground`, `detail`), `current`, `frame`, `set(id)`, `landing` / `takeLanding()`, `fontPath` (the current look's own font file, stored under `<id>Font`: `switch2Font`, `ps5Font`), `soundsPath` (a folder of WAVs, stored under `<id>Sounds`) and `soundFiles` (`{name: url}` of the WAVs in it, the name lowercased: each replaces the look's bundled sound of that name, `sound/SoundPool.qml`'s `overrides`; Switch 2 offers it in Settings › Themes), `bootIntro` (the startup animation's switch, every look's: on until `ui-memory.json`'s `bootIntro` is false) |
 | `api.home` | the HOME button over a running game (see "HOME and the dock"): `shown` (`game` / `launcher`), `underGame` (the game is on screen over the launcher, inside gamescope), `open`, `loading` (a session this client launched has no window up yet), `paused`, `pauseOnHome`, `flipped`, `frame`, `volumePercent`, `muted`, `outputs` (`loadOutputs()` fills it); `pressed()`, `stopping(title)`; `openDock()`, `closeDock()`, `dockClosed()`, `toGame()`, `toLauncher(landing?)` / `takeLanding()`, `covered()`, `stop()`, `setPauseOnHome(on)`, `screenshot()` (→ `screenshotTaken(path)`), `volume(change, value)`, `setOutput(id)`, `launchValue(key)`, `launchChoices(key)`, `setLaunchValue(key, value)`, `screenRefresh()` |
@@ -180,7 +180,7 @@ building its home: PS5 runs its back-from-a-game `home.rebuild()`, Reprise bring
 the page and the bars in turn (`backdropReveal`, `pageReveal`, `chromeReveal` on its root), Switch 2
 slides its row in and settles its bars (`rowReveal`, `chromeReveal`). Each root blanks those parts
 in `Component.onCompleted` while `api.boot.running`, and only then runs `start()`, its Themes
-landing or the first-run setup, which otherwise runs there at once.
+landing, the first-run setup or what's new (see "What's new"), which otherwise runs there at once.
 
 The animation starts on the window's first swapped frame (`started`), not when QML loads, so a
 compositor slow to map the window loses none of it. It plays the look's `boot.wav` (each look's
@@ -612,8 +612,8 @@ landing on a section folded into another opens that one (`Sections.aliases`: `co
 `updates` → Install, `quit` and `power` → About; Switch 2's `aliases` and PS5's `Sections.aliases`
 fold `components` the same way). Sound is one row per `api.home.outputs` entry, the device as its value and the one
 in use tagged; A on another plays through it (`setOutput`). About is its Version (`static`:
-`api.universe.version()`, the version with the short git rev behind it), First-run setup (Run again)
-and Power, which opens the power menu B held opens (see "Power"). Up and Down in the sidebar switch the section as they go, Right or A enter the cards, Left or
+`api.universe.version()`, the version with the short git rev behind it), Changelog (Open: every
+release, see "What's new"), First-run setup (Run again) and Power, which opens the power menu B held opens (see "Power"). Up and Down in the sidebar switch the section as they go, Right or A enter the cards, Left or
 B come back, L2/R2 cycle the section from anywhere. In the cards the hints are A, More and Back:
 Start lists what X and Y do there (Refresh the sections that fetch — Runners, Install, Sound, Storage, Doctor —
 Remove a Launch variable, Enable or Disable a module or a source, Show or Hide advanced), and X and
@@ -835,7 +835,8 @@ resolution, refresh rate, adaptive sync; the card's meta is the screen, `screen`
 `desktop.keep_awake` added by
 the screen), then behind Y Scaling (scaler, filter, sharpness, the raw gamescope arguments),
 folded into Display, and Environment (one row per variable, then Add a variable…, X removing one),
-Programs, Folders, API keys and Desktop as cards of their own — beginner first, expert last. Its
+Programs, Folders, API keys and Desktop as cards of their own — beginner first, expert last; Updates
+(`desktop.whats_new`, see "What's new") is a card shown without Y, after Overlay. Its
 `label` and `description` (the row's `detail`) come with it, and its `choices` are
 sized by the screen the window is on (`screen_mode`: `auto`, the screen's mode, the standard heights
 below it at its aspect ratio; the rates below its own). `screens/settings.py`'s `launch_row` is the
@@ -1099,6 +1100,32 @@ session. Under the launchers, "Runners Your Games Need" lists the components the
 Install button that goes through `components::act`, asking first; the group reads the listing again
 when a component's job starts or ends, and after an import brought games.
 
+## What's new
+
+The core embeds the `CHANGELOG.md` it was built from (`changelog::releases()`, no network), and
+`api.screens.changelog` serves it: `releases`, every release newest first, and `pending`, the ones a
+start after an update shows. Each row is `{version, dateText, sections: [{title, items}]}`, an item
+one line of `Text.RichText` (`styled()`: the Markdown's code in a monospace span at the line's size,
+which `Text.MarkdownText` would shrink; bold; a link's text). `pending` is the core's `whats_new()`,
+asked once as the screens are built: it records this version in `$XDG_STATE_HOME/universe/last-version`
+on every start, whether `desktop.whats_new` is on or not, and hands back the releases since the
+version recorded before only when it is on (Settings › Launch › Updates, off by default). No file —
+a first start, or the first after an upgrade from a version that kept none — shows nothing, and so
+does a downgrade. `dismiss()` empties it.
+
+Each look's `start()` opens the page as its third branch, after the Themes landing and the first-run
+setup, so never over the setup and never on a first run: Reprise as `pages/ChangelogPage.qml` through
+`openChangelog(true)` (`openSub` with `{ changelog: true, fresh: true }`), Switch 2 and PS5 their own
+`pages/ChangelogPage.qml` pushed with `{ fresh: true }`. A `fresh` page lists `pending` under "What's
+new" and dismisses it when it closes; Settings › About › Changelog opens the same page on `releases`.
+Up and Down scroll it, B closes it, and Reprise's `isScreenUp`/`isScreenDown` and `isFirst`/`isLast`
+page and jump.
+
+Universe Desktop records and asks the same way from `core_ready`, after its first-run dialog and
+never with it, and presents `dialogs/whats_new.rs` over the window when something is new; its About
+dialog's What's New holds the changelog from this version down (`about_notes`, AppStream markup:
+each older release under a "Version X · date" line).
+
 ## The artwork pages and section
 
 `api.screens.artwork` is one game's artwork (Reprise: `pages/ArtworkPage.qml`, the Artwork entry of a
@@ -1324,6 +1351,9 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
   sort and whether hidden games show; the first run's flag is the core's `onboarded()`, the one
   `onboarded` of earlier versions carried over to it. A recording's frames come
   from `universe::frames`, the Qt host's cache.
+- **Changelog**: About's What's New lists every release from this one down, and with Preferences ›
+  Launch › Updates on, the first start after an update opens what changed since the last (see
+  "What's new").
 
 What cost time:
 
