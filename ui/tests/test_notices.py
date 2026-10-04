@@ -2,9 +2,11 @@ from pathlib import Path
 
 import pytest
 
-from conftest import pump, until
+from conftest import until
 
 CORE = Path(__file__).resolve().parents[1] / "universe_ui" / "qml" / "core"
+INFO_MS = 50
+ERROR_MS = 4 * INFO_MS
 
 
 @pytest.fixture
@@ -18,7 +20,7 @@ def notices(app):
         f"""import QtQuick
 import "{CORE.as_uri()}"
 QtObject {{
-    Component.onCompleted: {{ Notices.infoMs = 150; Notices.errorMs = 400; }}
+    Component.onCompleted: {{ Notices.infoMs = {INFO_MS}; Notices.errorMs = {ERROR_MS}; Notices.gap.interval = 10; }}
     function show(text, key) {{ Notices.show(text, key); }}
     function fail(text, key) {{ Notices.fail(text, key); }}
     function state() {{
@@ -95,8 +97,11 @@ def test_a_repeat_is_said_once(notices):
 
 
 def test_an_error_stays_longer(notices):
+    from PySide6.QtCore import QElapsedTimer
+
     obj, _ = notices
+    shown = QElapsedTimer()
+    shown.start()
     call(obj, "fail", "Could not launch Control", "")
-    pump(150 + 60)
-    assert state(obj)["current"] == "!Could not launch Control", "past an info's time"
     until(lambda: state(obj)["current"] is None)
+    assert shown.elapsed() > 2 * INFO_MS, "past an info's time"

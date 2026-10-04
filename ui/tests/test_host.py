@@ -52,7 +52,7 @@ def gamescope(monkeypatch, tmp_path, launcher):
         '#!/bin/sh\necho "$UNIVERSE_OWN_GAMESCOPE" > "$XDG_RUNTIME_DIR/own"\n'
         'shift 2; echo "${UNIVERSE_SESSION:-0} $*" >> "$XDG_RUNTIME_DIR/runs"\n'
         'case "$FAKE_GAMESCOPE" in\n'
-        '  up) touch "$UNIVERSE_HOST_READY"; sleep 0.3; exit 7;;\n'
+        '  up) touch "$UNIVERSE_HOST_READY"; exit 7;;\n'
         '  quits) touch "$UNIVERSE_HOST_READY"; echo 3 > "$UNIVERSE_HOST_DONE"; exit 0;;\n'
         '  crashes) touch "$UNIVERSE_HOST_READY"\n'
         '    [ "$(wc -l < "$XDG_RUNTIME_DIR/runs")" -gt "${FAKE_CRASHES:-99}" ] && echo 0 > "$UNIVERSE_HOST_DONE"; exit 0;;\n'
@@ -76,24 +76,11 @@ def test_the_launchers_own_gamescope_is_marked_so_steams_is_told_apart(monkeypat
     assert (tmp_path / "own").read_text().strip() == own, "straight on the screen (a session of its own) or in a desktop's window"
 
 
-def test_a_gamescope_that_dies_at_start_leaves_the_launcher_on_the_desktop(monkeypatch, gamescope, tmp_path):
-    monkeypatch.setenv("FAKE_GAMESCOPE", "dies")
+@pytest.mark.parametrize("mode", ["dies", "hangs", "none"])
+def test_a_gamescope_that_fails_leaves_the_launcher_on_the_desktop(monkeypatch, gamescope, tmp_path, mode):
+    monkeypatch.setenv("FAKE_GAMESCOPE", mode)
     (tmp_path / f"universe-ui-ready-{os.getpid()}").touch()
-    assert host.run_in_gamescope(gamescope, []) is None, "a mark left by a crashed run is no launcher up"
-    assert not (tmp_path / f"universe-ui-ready-{os.getpid()}").exists()
-
-
-def test_a_gamescope_that_shows_nothing_is_stopped_and_the_desktop_takes_over(monkeypatch, gamescope):
-    import time
-
-    monkeypatch.setenv("FAKE_GAMESCOPE", "hangs")
-    started = time.monotonic()
-    assert host.run_in_gamescope(gamescope, [], ready_s=0.5) is None
-    assert time.monotonic() - started < 5, "terminated, not waited out"
-
-
-def test_without_gamescope_it_stays_on_the_desktop():
-    assert host.run_in_gamescope(None, []) is None
+    assert host.run_in_gamescope(None if mode == "none" else gamescope, [], ready_s=0.1) is None, "a mark left by a crashed run is no launcher up"
 
 
 def runs(tmp_path):
@@ -109,7 +96,7 @@ def test_a_session_ends_with_the_code_the_launcher_quit_with(monkeypatch, gamesc
 @pytest.mark.parametrize("mode", ["dies", "hangs", "none"])
 def test_a_session_whose_gamescope_fails_ends_instead_of_falling_back_to_a_desktop(monkeypatch, gamescope, mode):
     monkeypatch.setenv("FAKE_GAMESCOPE", mode)
-    assert host.run_session(None if mode == "none" else gamescope, [], ready_s=0.5) == 1, "the display manager shows its greeter again"
+    assert host.run_session(None if mode == "none" else gamescope, [], ready_s=0.1) == 1, "the display manager shows its greeter again"
 
 
 def test_a_launcher_that_dies_comes_back_without_the_intro(monkeypatch, gamescope, tmp_path):

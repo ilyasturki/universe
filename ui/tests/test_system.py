@@ -1,6 +1,6 @@
 import pytest
 
-from conftest import pump, record, until
+from conftest import record, until
 from universe_ui.api import Api
 from universe_ui.screens.network import FAKE as FAKE_NET
 from universe_ui.screens.power import FAKE
@@ -36,7 +36,9 @@ def test_a_refused_control_says_why_and_reads_the_machine_back(deck_api, fake):
 
 
 def test_a_desktop_has_no_system_controls(api):
-    pump(200)
+    read = record(api.system.controlsChanged)
+    api.system.reload()
+    until(lambda: read)
     assert api.system.controls == [] and api.system.deck == ""
 
 
