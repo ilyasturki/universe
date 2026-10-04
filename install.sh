@@ -82,7 +82,7 @@ install_system_files() {
     say "  then reboot"
 }
 
-ours() { [ -f "$1" ] && grep -qxF "TryExec=$prefix/bin/universe-ui" "$1"; }
+ours() { [ -f "$1" ] && grep -qxF "Exec=$prefix/bin/universe-ui --session" "$1"; }
 
 register_session() {
     src="$lib/system/${session##*/}"
@@ -197,8 +197,7 @@ if [ -d "$dist/lib/udev" ]; then
 fi
 if [ -f "$dist/share/wayland-sessions/${session##*/}" ]; then
     mkdir -p "$lib/system"
-    sed -e "s|^Exec=universe-ui|Exec=$prefix/bin/universe-ui|" -e "s|^TryExec=universe-ui|TryExec=$prefix/bin/universe-ui|" \
-        "$dist/share/wayland-sessions/${session##*/}" > "$lib/system/${session##*/}"
+    sed "s|^Exec=universe-ui|Exec=$prefix/bin/universe-ui|" "$dist/share/wayland-sessions/${session##*/}" > "$lib/system/${session##*/}"
 fi
 
 mkdir -p "$prefix/bin"

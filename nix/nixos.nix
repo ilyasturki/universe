@@ -15,7 +15,7 @@ let
   # providedSessions names the file less .desktop: NixOS checks it, and defaultSession picks by it.
   session =
     (pkgs.writeTextDir "share/wayland-sessions/universe.desktop" (
-      lib.replaceStrings [ "Exec=universe-ui" "TryExec=universe-ui" ] [ "Exec=${ui}" "TryExec=${ui}" ] (
+      lib.replaceStrings [ "Exec=universe-ui" ] [ "Exec=${ui}" ] (
         builtins.readFile ../packaging/system/universe.desktop
       )
     )).overrideAttrs
