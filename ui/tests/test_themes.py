@@ -68,6 +68,30 @@ def test_each_look_keeps_its_own_font(app, tmp_path):
     assert selector.fontPath == "/fonts/udsg.ttf"
 
 
+def test_a_pool_started_on_a_folder_goes_back_to_its_bundled_sounds(app):
+    from PySide6.QtCore import QUrl
+    from PySide6.QtQml import QQmlComponent, QQmlEngine
+
+    sounds = host.QML_DIR / "assets" / "sounds"
+    engine = QQmlEngine()
+    component = QQmlComponent(engine)
+    qml = (
+        f'import QtQuick\nimport "{(host.QML_DIR / "sound").as_uri()}"\n'
+        f'SoundPool {{ dir: "{sounds.as_uri()}/"; poolSizes: ({{tick: 1}}); overrides: ({{tick: "{(sounds / "edge.wav").as_uri()}"}}) }}\n'
+    )
+    component.setData(qml.encode(), QUrl("file:///pool.qml"))
+    pool = component.create()
+    assert pool is not None, [e.toString() for e in component.errors()]
+    pool.preload()
+
+    def tick():
+        return pool.property("voices").toVariant()["tick"][0]["fx"].property("source").toString()
+
+    assert tick().endswith("/edge.wav")
+    pool.setProperty("overrides", {})
+    assert tick().endswith("/tick.wav"), "an emptied folder hands the bundled sound back"
+
+
 def test_a_sound_folder_replaces_the_wavs_it_holds(app, tmp_path):
     memory = Memory(str(tmp_path / "memory.json"))
     selector = ThemeSelector(memory, "switch2")
