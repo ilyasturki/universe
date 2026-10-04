@@ -14,8 +14,14 @@ QtObject {
 
     // {name: url} played in place of dir's name.wav
     property var overrides: ({})
+    // Each theme switch hands a fresh but equal {}: only another folder rebuilds the voices.
+    property string applied: "{}"
 
     onOverridesChanged: {
+        var now = JSON.stringify(overrides || {});
+        if (now === applied)
+            return;
+        applied = now;
         if (Object.keys(voices).length === 0)
             return;
         for (var name in voices) {
