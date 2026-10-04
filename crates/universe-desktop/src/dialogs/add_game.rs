@@ -84,6 +84,24 @@ fn page(title: &str, content: &impl IsA<gtk::Widget>) -> (adw::NavigationPage, a
 
 fn home(this: &Rc<AddGame>) -> adw::NavigationPage {
     let prefs = adw::PreferencesPage::new();
+    let setup = adw::PreferencesGroup::new();
+    let again = adw::ActionRow::builder()
+        .title(gettext("First-Run Setup…"))
+        .subtitle(gettext("Other launchers’ games, the stores, where games install, step by step"))
+        .activatable(true)
+        .build();
+    again.add_prefix(&gtk::Image::from_icon_name("emblem-system-symbolic"));
+    again.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
+    let weak = Rc::downgrade(this);
+    again.connect_activated(move |_| {
+        let Some(this) = weak.upgrade() else { return };
+        this.dialog.close();
+        if let Some(win) = this.win.upgrade() {
+            crate::dialogs::onboarding::present(&win);
+        }
+    });
+    setup.add(&again);
+    prefs.add(&setup);
     let pick = adw::PreferencesGroup::new();
     let file = adw::ActionRow::builder()
         .title(gettext("Game File…"))

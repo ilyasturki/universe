@@ -229,7 +229,8 @@ impl Window {
         self.imp().library_page.set_show_hidden(state.show_hidden);
     }
 
-    /// The first-run flow is behind the player, in every frontend: it opens again only from the empty library's button.
+    /// The first-run flow is behind the player, in every frontend: it opens again only from the empty library's button and
+    /// Add Games' First-Run Setup.
     pub fn set_onboarded(&self) {
         if self.app().scripted() {
             return;

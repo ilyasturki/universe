@@ -139,6 +139,11 @@ struct Onboarding {
 }
 
 impl Onboarding {
+    /// Games came in, or are on their way.
+    fn added(&self) -> bool {
+        !self.summary.borrow().is_empty() || !self.adding.borrow().is_empty()
+    }
+
     fn say(&self, text: &str) {
         self.toasts.add_toast(crate::dialogs::toast(text));
     }
@@ -246,6 +251,12 @@ pub fn present(win: &Window) {
         runners: RefCell::default(),
     });
     nav.add(&found_page(&this));
+    dialog.set_can_close(false);
+    let weak = Rc::downgrade(&this);
+    dialog.connect_close_attempt(move |dialog| match weak.upgrade() {
+        Some(this) if asks_to_skip(this.added(), this.done.borrow().is_some()) => confirm_skip(dialog),
+        _ => dialog.force_close(),
+    });
     let (weak, held) = (win.downgrade(), RefCell::new(Some(this)));
     dialog.connect_closed(move |_| {
         held.take();
@@ -254,6 +265,26 @@ pub fn present(win: &Window) {
         }
     });
     dialog.present(Some(win));
+}
+
+/// Closing before anything came in and before the last page asks first: the setup does not come back by itself.
+fn asks_to_skip(added: bool, done: bool) -> bool {
+    !added && !done
+}
+
+fn confirm_skip(dialog: &adw::Dialog) {
+    let ask =
+        adw::AlertDialog::new(Some(&gettext("Skip Setup?")), Some(&gettext("It won’t open again by itself. First-Run Setup in Add Games brings it back.")));
+    ask.add_responses(&[("keep", &gettext("_Keep Going")), ("skip", &gettext("_Skip"))]);
+    ask.set_default_response(Some("keep"));
+    ask.set_close_response("keep");
+    let weak = dialog.downgrade();
+    ask.connect_response(Some("skip"), move |_, _| {
+        weak.upgrade().inspect(|dialog| {
+            dialog.force_close();
+        });
+    });
+    ask.present(Some(dialog));
 }
 
 struct Step {
@@ -396,7 +427,7 @@ fn launcher_row(this: &Rc<Onboarding>, launcher: &Launcher, gog_scan: &str) -> a
     if !importable {
         return row;
     }
-    let button = gtk::Button::builder().label(gettext("Add")).valign(gtk::Align::Center).css_classes(["suggested-action"]).build();
+    let button = gtk::Button::builder().label(gettext("Add")).valign(gtk::Align::Center).build();
     row.add_suffix(&button);
     this.adds.borrow_mut().push(button.clone());
     let (weak, via, name, row_ref) = (Rc::downgrade(this), launcher.via.clone(), launcher.name.clone(), row.clone());
@@ -487,7 +518,7 @@ fn runners_group(this: &Rc<Onboarding>) -> adw::PreferencesGroup {
                     row.set_subtitle(&gettext("Installing…"));
                     row.add_suffix(&adw::Spinner::new());
                 } else {
-                    let button = gtk::Button::builder().label(gettext("Install")).valign(gtk::Align::Center).css_classes(["suggested-action"]).build();
+                    let button = gtk::Button::builder().label(gettext("Install")).valign(gtk::Align::Center).build();
                     let changed = changed.clone();
                     button.connect_clicked(move |button| components::act(button, &c, "install", changed.clone()));
                     row.add_suffix(&button);
@@ -872,7 +903,7 @@ fn done_page(this: &Rc<Onboarding>) -> adw::NavigationPage {
     let weak = Rc::downgrade(this);
     let step = step(&gettext("Done"), None, "", "", content.upcast_ref(), &gettext("_Start Playing"), move || {
         if let Some(this) = weak.upgrade() {
-            this.dialog.close();
+            this.dialog.force_close();
         }
     });
     this.done_rows.take();
@@ -908,6 +939,13 @@ mod tests {
         assert!(blocked("epic", &sources, "", &heroic, "home-manager").is_some_and(|b| b.contains("sources.enabled") && b.contains("home-manager")));
         assert!(blocked("gog", &sources, "", &heroic, "config.toml").is_some_and(|b| b.contains("/mnt/games/PC") && b.contains("config.toml")));
         assert_eq!(blocked("gog", &sources, "/mnt/games/PC", &heroic, "config.toml"), None, "the folder is there already");
+    }
+
+    #[test]
+    fn closing_asks_only_while_nothing_came_in_and_the_end_is_not_reached() {
+        assert!(asks_to_skip(false, false));
+        assert!(!asks_to_skip(true, false), "games came in: closing keeps them");
+        assert!(!asks_to_skip(false, true), "the last page's button closes it");
     }
 
     #[test]
