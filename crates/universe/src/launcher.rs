@@ -210,6 +210,73 @@ fn wine_env(g: &crate::game::Game, r: &Resolved, config: &Config, env: &mut BTre
     dll_overrides_env(g, env);
 }
 
+/// Wine tools in the game's prefix, set up as its launch sets it: `winecfg`, `winetricks <verbs>`, `run <exe> [args]`, `kill` (its wineserver stopped).
+pub fn prefix_command(r: &Resolved, config: &Config, tool: &str, args: &[String]) -> crate::Result<(String, Vec<String>, BTreeMap<String, String>)> {
+    use crate::runners::{self, Kind};
+    let g = &r.game;
+    let spec = runners::spec(&r.effective.runner)
+        .ok_or_else(|| crate::Error::Invalid(format!("{}: runner '{}' is not one Universe ships", g.id, r.effective.runner)))?;
+    if tool == "run" && args.first().is_none_or(|exe| !crate::paths::expand(exe).is_file()) {
+        return Err(crate::Error::NotFound(format!("{}: no program to run in the prefix", g.id)));
+    }
+    let tool_args = |head: &[&str]| head.iter().map(|a| a.to_string()).chain(args.iter().cloned()).collect::<Vec<_>>();
+    let unknown = || crate::Error::Invalid(format!("unknown prefix tool '{tool}': winecfg, winetricks, run or kill"));
+    let mut env = config.launch.env.clone();
+    let (program, argv) = match spec.kind {
+        Kind::Proton => {
+            proton_env(g, r, config, &mut env)?;
+            let umu = if g.launch.runner_exe.is_empty() { config.launch.umu_run.clone() } else { r.effective.runner_path.clone() };
+            match tool {
+                "winecfg" => (umu, vec!["winecfg".to_string()]),
+                "winetricks" => (umu, tool_args(&["winetricks"])),
+                "run" => (umu, tool_args(&[])),
+                "kill" => {
+                    let proton = Path::new(&r.effective.proton_path);
+                    let server = ["files/bin/wineserver", "dist/bin/wineserver"]
+                        .iter()
+                        .map(|p| proton.join(p))
+                        .find(|p| !r.effective.proton_path.is_empty() && p.is_file())
+                        .ok_or_else(|| {
+                            crate::Error::Unavailable(format!(
+                                "{}: Proton '{}' is not installed here, so its wineserver can't be stopped",
+                                g.id, r.effective.proton
+                            ))
+                        })?;
+                    env.insert("WINEPREFIX".into(), crate::saves::wine_prefix(&prefix_of(g, config)).to_string_lossy().into());
+                    (server.to_string_lossy().into_owned(), vec!["-k".to_string()])
+                }
+                _ => return Err(unknown()),
+            }
+        }
+        Kind::Wine => {
+            wine_env(g, r, config, &mut env);
+            std::fs::create_dir_all(prefix_of(g, config))?;
+            let wine = if r.effective.runner_path.is_empty() { "wine".to_string() } else { r.effective.runner_path.clone() };
+            let beside = |name: &str| {
+                Path::new(&wine)
+                    .parent()
+                    .map(|d| d.join(name))
+                    .filter(|p| p.is_file())
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| name.to_string())
+            };
+            match tool {
+                "winecfg" => (wine, vec!["winecfg".to_string()]),
+                "winetricks" => {
+                    env.insert("WINE".into(), wine);
+                    ("winetricks".to_string(), tool_args(&[]))
+                }
+                "run" => (wine, tool_args(&[])),
+                "kill" => (beside("wineserver"), vec!["-k".to_string()]),
+                _ => return Err(unknown()),
+            }
+        }
+        _ => return Err(crate::Error::Invalid(format!("{}: {} keeps no Wine prefix", g.id, spec.name))),
+    };
+    env.extend(g.launch.env.clone());
+    Ok((program, argv, env))
+}
+
 /// `launch.wrapper` in front of the program: the innermost layer, inside gamescope and setpriv.
 fn wrap(wrapper: &str, program: String, args: Vec<String>) -> (String, Vec<String>) {
     let mut words = shell_words::split(wrapper).unwrap_or_else(|_| vec![wrapper.to_string()]);

@@ -235,8 +235,12 @@ fn title_for(spec: &RunnerSpec, path: &Path) -> String {
     named.unwrap_or_else(|| crate::core::title_of(path))
 }
 
-/// `TITLE` of a PARAM.SFO (PS3 and PS4 alike): a key table, a data table and an index of `(key, format, len, max, data)` entries.
 fn sfo_title(path: &Path) -> Option<String> {
+    sfo_value(path, "TITLE").map(|s| s.split_whitespace().collect::<Vec<_>>().join(" ")).filter(|s| !s.is_empty())
+}
+
+/// A text entry of a PARAM.SFO (PS3 and PS4 alike), `TITLE` or `TITLE_ID`: a key table, a data table and an index of `(key, format, len, max, data)` entries.
+pub(crate) fn sfo_value(path: &Path, wanted: &str) -> Option<String> {
     let b = std::fs::read(path).ok()?;
     let u32_at = |o: usize| b.get(o..o + 4).map(|x| u32::from_le_bytes([x[0], x[1], x[2], x[3]]) as usize);
     let u16_at = |o: usize| b.get(o..o + 2).map(|x| u16::from_le_bytes([x[0], x[1]]) as usize);
@@ -248,17 +252,16 @@ fn sfo_title(path: &Path) -> Option<String> {
         let e = 20 + i * 16;
         let (key_off, len, data_off) = (u16_at(e)?, u32_at(e + 4)?, u32_at(e + 12)?);
         let key = b.get(keys + key_off..)?.split(|c| *c == 0).next()?;
-        if key == b"TITLE" {
+        if key == wanted.as_bytes() {
             let raw = b.get(data + data_off..data + data_off + len)?;
-            let s = String::from_utf8_lossy(raw.split(|c| *c == 0).next()?);
-            let s = s.split_whitespace().collect::<Vec<_>>().join(" ");
+            let s = String::from_utf8_lossy(raw.split(|c| *c == 0).next()?).trim().to_string();
             return if s.is_empty() { None } else { Some(s) };
         }
     }
     None
 }
 
-fn read(path: &Path) -> String {
+pub(crate) fn read(path: &Path) -> String {
     std::fs::read_to_string(path).unwrap_or_default()
 }
 
@@ -344,7 +347,7 @@ fn toml_dirs(path: &Path, table: &str, key: &str) -> Vec<PathBuf> {
         .collect()
 }
 
-fn xml_text(text: &str, tag: &str) -> Option<String> {
+pub(crate) fn xml_text(text: &str, tag: &str) -> Option<String> {
     let open = format!("<{tag}");
     let start = text.find(&open)?;
     let body = &text[start + open.len()..];
@@ -381,7 +384,7 @@ fn rpcs3_dirs(rpcs3: &Path) -> Vec<(PathBuf, bool)> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     fn touch(p: &Path) {
@@ -390,21 +393,33 @@ mod tests {
     }
 
     fn sfo(title: &str) -> Vec<u8> {
-        let key = b"TITLE\0";
-        let data = format!("{title}\0").into_bytes();
-        let (keys_at, data_at) = (20 + 16, 20 + 16 + key.len());
+        sfo_of(&[("TITLE", title)])
+    }
+
+    /// A PARAM.SFO holding `entries`, text values each.
+    pub(crate) fn sfo_of(entries: &[(&str, &str)]) -> Vec<u8> {
+        let (mut keys, mut data, mut index) = (Vec::new(), Vec::new(), Vec::new());
+        for (key, value) in entries {
+            let value = format!("{value}\0").into_bytes();
+            index.extend_from_slice(&(keys.len() as u16).to_le_bytes());
+            index.extend_from_slice(&0x0204u16.to_le_bytes());
+            index.extend_from_slice(&(value.len() as u32).to_le_bytes());
+            index.extend_from_slice(&(value.len() as u32).to_le_bytes());
+            index.extend_from_slice(&(data.len() as u32).to_le_bytes());
+            keys.extend_from_slice(key.as_bytes());
+            keys.push(0);
+            data.extend_from_slice(&value);
+        }
+        let keys_at = 20 + index.len();
+        let data_at = keys_at + keys.len();
         let mut b = Vec::new();
         b.extend_from_slice(b"\0PSF");
         b.extend_from_slice(&0x0101u32.to_le_bytes());
         b.extend_from_slice(&(keys_at as u32).to_le_bytes());
         b.extend_from_slice(&(data_at as u32).to_le_bytes());
-        b.extend_from_slice(&1u32.to_le_bytes());
-        b.extend_from_slice(&0u16.to_le_bytes());
-        b.extend_from_slice(&0x0204u16.to_le_bytes());
-        b.extend_from_slice(&(data.len() as u32).to_le_bytes());
-        b.extend_from_slice(&(data.len() as u32).to_le_bytes());
-        b.extend_from_slice(&0u32.to_le_bytes());
-        b.extend_from_slice(key);
+        b.extend_from_slice(&(entries.len() as u32).to_le_bytes());
+        b.extend_from_slice(&index);
+        b.extend_from_slice(&keys);
         b.extend_from_slice(&data);
         b
     }

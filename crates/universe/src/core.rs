@@ -402,6 +402,9 @@ impl Core {
                 return Err(Error::Invalid(format!("refusing to trash {}: {} uses it too", prefix.display(), other.id)));
             }
         }
+        if purge && prefix.starts_with(config.prefixes_root()) && prefix.is_dir() {
+            self.backup_before(&r.game).await?;
+        }
         let root = config.recordings_root();
         let from = root.join(id);
         if from.is_dir() {

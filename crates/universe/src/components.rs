@@ -128,6 +128,9 @@ fn builtin() -> Catalogue {
         "umu-run": tool("umu-launcher", "umu-run", "1.4.4", serde_json::json!({"arch": "any", "format": "tar", "member": "umu/umu-run",
             "url": "https://github.com/Open-Wine-Components/umu-launcher/releases/download/1.4.4/umu-launcher-1.4.4-zipapp.tar",
             "sha256": "eb590691841f7fad3fc3ad8fd5db4ccb87849fe7948e62b28ece7a4ee48cc851"})),
+        "ludusavi": tool("ludusavi", "ludusavi", "0.31.0", serde_json::json!({"format": "tar.gz", "member": "ludusavi",
+            "url": "https://github.com/mtkennerly/ludusavi/releases/download/v0.31.0/ludusavi-v0.31.0-linux.tar.gz",
+            "sha256": "7322ff45d41eae7ae064a80d8c9ecccc5b8fb6fc090a603a66369cd4b054068d"})),
     }}))
     .expect("the built-in catalogue")
 }
@@ -548,22 +551,6 @@ fn unpack(asset: &Asset, kind: Kind, bin: &str, file: &Path, staging: &Path) -> 
     Ok((root, program))
 }
 
-fn disk_usage(dir: &Path) -> u64 {
-    let mut total = 0;
-    let mut stack = vec![dir.to_path_buf()];
-    while let Some(d) = stack.pop() {
-        for e in std::fs::read_dir(&d).into_iter().flatten().flatten() {
-            let Ok(m) = e.path().symlink_metadata() else { continue };
-            if m.is_dir() {
-                stack.push(e.path());
-            } else if m.is_file() {
-                total += m.len();
-            }
-        }
-    }
-    total
-}
-
 fn megabytes(bytes: u64) -> String {
     format!("{:.0} MB", bytes as f64 / 1_000_000.0)
 }
@@ -699,7 +686,7 @@ pub async fn install(id: &str, entry: &Entry, build: &Build, auto: bool, mut pro
         url: asset.url.clone(),
         sha256: asset.sha256.clone(),
         size: asset.size,
-        disk: disk_usage(&dest),
+        disk: crate::data::disk_usage(&dest),
         installed_at: now(),
         auto,
         dir: dest,
@@ -1746,9 +1733,9 @@ mod tests {
     }
 
     #[test]
-    fn the_shipped_sources_pin_their_tools_and_the_core_only_umu_run() {
+    fn the_shipped_sources_pin_their_tools_and_the_core_umu_run_and_ludusavi() {
         let _env = crate::paths::test_env();
-        assert_eq!(pinned().components.values().filter(|e| e.kind == Kind::Tool).map(|e| e.bin.as_str()).collect::<Vec<_>>(), ["umu-run"]);
+        assert_eq!(pinned().components.values().filter(|e| e.kind == Kind::Tool).map(|e| e.bin.as_str()).collect::<Vec<_>>(), ["ludusavi", "umu-run"]);
         std::env::set_var("UNIVERSE_SOURCES_PATH", concat!(env!("CARGO_MANIFEST_DIR"), "/../../sources"));
         let catalogue = pinned();
         for (bin, source) in [("gogdl", "gog"), ("legendary", "epic"), ("butler", "itch")] {

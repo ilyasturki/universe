@@ -51,6 +51,7 @@ Recommends:     gamescope
 Suggests:       mangohud
 Suggests:       mangohud(x86-32)
 Suggests:       umu-launcher
+Suggests:       ludusavi
 Suggests:       steam
 Suggests:       gpu-screen-recorder
 Suggests:       /usr/bin/ffmpeg

@@ -87,6 +87,7 @@ package_universe-git() {
     'umu-launcher: Proton launches; fetched on first use when missing'
     'heroic-gogdl: the GOG source; fetched on first use when missing'
     'legendary: the Epic Games source; fetched on first use when missing'
+    'ludusavi: save backups; fetched on first use when missing'
     'butler: the itch.io source; fetched on first use when missing'
     'steam: the Steam source'
     "gpu-screen-recorder: the capture module's recordings"

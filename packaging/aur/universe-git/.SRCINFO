@@ -47,6 +47,7 @@ pkgname = universe-git
 	optdepends = umu-launcher: Proton launches; fetched on first use when missing
 	optdepends = heroic-gogdl: the GOG source; fetched on first use when missing
 	optdepends = legendary: the Epic Games source; fetched on first use when missing
+	optdepends = ludusavi: save backups; fetched on first use when missing
 	optdepends = butler: the itch.io source; fetched on first use when missing
 	optdepends = steam: the Steam source
 	optdepends = gpu-screen-recorder: the capture module's recordings

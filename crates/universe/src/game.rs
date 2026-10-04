@@ -23,6 +23,8 @@ pub struct Game {
     pub launch: Launch,
     pub desktop: Desktop,
     pub metadata: Metadata,
+    #[serde(skip_serializing_if = "Saves::is_empty")]
+    pub saves: Saves,
     pub modules: BTreeMap<String, toml::Table>,
     /// The game-scope settings of the source it came from, by source id.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
@@ -112,6 +114,19 @@ pub struct Metadata {
     pub players: u32,
 }
 
+#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct Saves {
+    /// ludusavi's title for the game: found once from its store ids and title, or set by hand.
+    pub name: String,
+}
+
+impl Saves {
+    fn is_empty(&self) -> bool {
+        self.name.is_empty()
+    }
+}
+
 impl Default for Game {
     fn default() -> Self {
         Game {
@@ -130,6 +145,7 @@ impl Default for Game {
             launch: Launch::default(),
             desktop: Desktop::default(),
             metadata: Metadata::default(),
+            saves: Saves::default(),
             modules: BTreeMap::new(),
             sources: BTreeMap::new(),
             extra: BTreeMap::new(),
@@ -331,7 +347,7 @@ pub fn set_dotted(doc: &mut toml_edit::DocumentMut, key: &str, value: &str) -> c
     let is_system = parts[0] == "system";
     // A build is a version, which `2606` or `2.8` would otherwise turn into a number.
     let is_build = key == "launch.runner_build" || (parts.len() == 3 && parts[0] == "runners" && last == "build");
-    let is_store_id = matches!(key, "source.id" | "source.build_id");
+    let is_store_id = matches!(key, "source.id" | "source.build_id" | "saves.name");
     let v = if is_list && !value.starts_with('[') {
         parse_value(&format!("[{value}]"))
     } else if is_rate || is_text_map || is_system || is_build || is_store_id {
@@ -347,8 +363,22 @@ pub fn set_key(game_toml: &Path, key: &str, value: &str) -> crate::Result<Game> 
     let text = std::fs::read_to_string(game_toml)?;
     let mut doc: toml_edit::DocumentMut = text.parse().map_err(|e: toml_edit::TomlError| crate::Error::Invalid(e.to_string()))?;
     let top = key.split('.').next().unwrap_or("");
-    let allowed =
-        ["title", "sort_title", "platform", "release_year", "hidden", "favorite", "tags", "source", "launch", "desktop", "metadata", "modules", "sources"];
+    let allowed = [
+        "title",
+        "sort_title",
+        "platform",
+        "release_year",
+        "hidden",
+        "favorite",
+        "tags",
+        "source",
+        "launch",
+        "desktop",
+        "metadata",
+        "saves",
+        "modules",
+        "sources",
+    ];
     if !allowed.contains(&top) {
         return Err(crate::Error::Invalid(format!("unknown key {key}")));
     }

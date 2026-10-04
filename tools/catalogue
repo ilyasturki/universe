@@ -162,6 +162,14 @@ UPSTREAMS = (
         (Pick(r"-zipapp\.tar$", arch="any", member="umu/umu-run"),),
         bin="umu-run",
     ),
+    Upstream(
+        "ludusavi",
+        "ludusavi",
+        "tool",
+        "github:mtkennerly/ludusavi",
+        (Pick(r"^ludusavi-v[\d.]+-linux\.tar\.gz$", member="ludusavi"),),
+        bin="ludusavi",
+    ),
     Upstream("gogdl", "heroic-gogdl", "tool", "github:Heroic-Games-Launcher/heroic-gogdl", (Pick(r"^gogdl_linux_x86_64$"),), bin="gogdl"),
     Upstream("legendary", "legendary-gl", "tool", "github:legendary-gl/legendary", (Pick(r"^legendary_linux_x64$"),), bin="legendary"),
     Upstream(

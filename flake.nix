@@ -108,7 +108,7 @@
         # chrono ignores TZDIR, so the zone is given as a file
         preCheck = "export TZ=${pkgs.tzdata}/share/zoneinfo/Europe/Paris";
         # reqwest's platform verifier refuses to build a client on an empty CA store
-        nativeCheckInputs = [ pkgs.cacert ];
+        nativeCheckInputs = [ pkgs.cacert ] ++ coreRuntime;
         nativeBuildInputs = [
           pkgs.pkg-config
           pkgs.installShellFiles
@@ -186,6 +186,8 @@
         trash-cli
         util-linux
       ];
+      # The saves engine: on PATH it wins over the build Universe fetches, which NixOS would run in universe-fhs.
+      coreRuntime = [ pkgs.ludusavi ];
       sourceRuntime = with pkgs; [
         gogdl
         comet-gog
@@ -211,6 +213,7 @@
       runtimePath = lib.makeBinPath (
         moduleRuntime
         ++ sourceRuntime
+        ++ coreRuntime
         ++ [
           pkgs.umu-launcher
           pkgs.systemd
@@ -547,6 +550,7 @@
           ++ qtRuntime
           ++ moduleRuntime
           ++ sourceRuntime
+          ++ coreRuntime
           ++ desktopTools
           # a headless compositor for `just desktop-shot`
           ++ [ weston ];

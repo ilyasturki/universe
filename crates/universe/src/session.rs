@@ -370,8 +370,26 @@ impl Core {
             }
         }
         self.reload_game(id).await?;
+        if cfg.saves.auto_backup && crate::saves::backs_up(&r.game, &cfg) {
+            self.start_saves_backup(&r.game.id, session_id).await;
+        }
         self.post_process(id, session_id).await;
         Ok(())
+    }
+
+    /// A unit of its own: ludusavi's first run fetches it and its manifest, too long for `ExecStopPost`.
+    async fn start_saves_backup(&self, id: &str, session_id: &str) {
+        let spec = crate::host::UnitSpec {
+            name: format!("universe-saves-backup-{session_id}"),
+            description: format!("Universe saves backup of {id}"),
+            program: paths::self_exe().to_string_lossy().into(),
+            args: vec!["saves".into(), "backup".into(), id.into(), "--auto".into()],
+            env: passthrough_env(),
+            ..Default::default()
+        };
+        if let Err(e) = self.host.units.start(&spec).await {
+            tracing::warn!("saves backup of {id}: {e}");
+        }
     }
 
     async fn file_session(
@@ -557,6 +575,31 @@ pub(crate) mod tests {
 
         core.session_end("sample", &sid, None, None).await.unwrap();
         assert_eq!(sessions::read(&core.get("sample").await.unwrap().game.sessions_path()).unwrap().len(), 1, "idempotent");
+    }
+
+    #[tokio::test]
+    async fn a_session_ending_backs_the_games_saves_up_in_a_unit_of_its_own() {
+        let _sb = sandbox();
+        let (core, memory) = open().await;
+        let mut head = vec![0u8; 0x20];
+        head[..6].copy_from_slice(b"GFZE8P");
+        head[0x1C..0x20].copy_from_slice(&0xC233_9F3Du32.to_be_bytes());
+        std::fs::write(core.get("sample").await.unwrap().game.exe_path(), head).unwrap();
+        let sid = core.launch("sample", "", "").await.unwrap();
+        memory.finish(&format!("universe-game-sample-{sid}.service"), 0);
+        core.session_end("sample", &sid, None, None).await.unwrap();
+        let spec = memory.spec(&format!("universe-saves-backup-{sid}")).expect("a backup after the session");
+        assert_eq!(spec.args, ["saves", "backup", "sample", "--auto"]);
+        assert!(spec.bind_to.is_none(), "it outlives the game's unit");
+
+        let file = crate::paths::config_file();
+        let text = std::fs::read_to_string(&file).unwrap();
+        std::fs::write(&file, format!("{text}[saves]\nauto_backup = false\n")).unwrap();
+        let (core, memory) = open().await;
+        let sid = core.launch("sample", "", "").await.unwrap();
+        memory.finish(&format!("universe-game-sample-{sid}.service"), 0);
+        core.session_end("sample", &sid, None, None).await.unwrap();
+        assert!(memory.spec(&format!("universe-saves-backup-{sid}")).is_none(), "auto_backup off: none");
     }
 
     #[tokio::test]

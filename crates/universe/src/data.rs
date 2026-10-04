@@ -1,0 +1,669 @@
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+
+use serde_json::{json, Value};
+
+use crate::config::Config;
+use crate::core::{blocking, Core};
+use crate::game::Game;
+use crate::launcher::prefix_of;
+use crate::library::Resolved;
+use crate::paths;
+use crate::runners::{self, Kind};
+use crate::saves;
+use crate::{Error, Result};
+
+/// Bytes of the files under `path` (or of the file itself); a symlink counts for nothing and is never followed.
+pub fn disk_usage(path: &Path) -> u64 {
+    let Ok(meta) = path.symlink_metadata() else { return 0 };
+    if meta.is_file() {
+        return meta.len();
+    }
+    let mut total = 0;
+    let mut stack = vec![path.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        for e in std::fs::read_dir(&d).into_iter().flatten().flatten() {
+            let Ok(m) = e.path().symlink_metadata() else { continue };
+            if m.is_dir() {
+                stack.push(e.path());
+            } else if m.is_file() {
+                total += m.len();
+            }
+        }
+    }
+    total
+}
+
+/// Free and total bytes of the filesystem `path` is on, or would be on: its nearest folder that exists.
+pub fn free_space(path: &Path) -> Option<(u64, u64)> {
+    let dir = path.ancestors().find(|p| p.is_dir())?;
+    let st = rustix::fs::statvfs(dir).ok()?;
+    Some((st.f_bavail.saturating_mul(st.f_frsize), st.f_blocks.saturating_mul(st.f_frsize)))
+}
+
+/// `universe` under prefixes_root, `steam` in Steam's compatdata (never moved), `lutris` for an import, else `elsewhere`.
+pub fn prefix_owner(prefix: &Path, game: &Game, config: &Config) -> &'static str {
+    let names: Vec<_> = prefix.components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect();
+    if prefix.starts_with(config.prefixes_root()) {
+        "universe"
+    } else if names.windows(2).any(|w| w[0] == "steamapps" && w[1] == "compatdata") {
+        "steam"
+    } else if game.source.kind == "lutris" || !game.source.lutris_slug.is_empty() {
+        "lutris"
+    } else {
+        "elsewhere"
+    }
+}
+
+fn has_prefix(game: &Game) -> bool {
+    runners::spec(&game.runner_id()).is_some_and(|s| matches!(s.kind, Kind::Proton | Kind::Wine) || s.via_proton)
+}
+
+fn sharers(game: &Game, games: &[Resolved], config: &Config) -> Vec<String> {
+    let prefix = prefix_of(game, config);
+    games
+        .iter()
+        .map(|r| &r.game)
+        .filter(|x| x.id != game.id && x.removed_at.is_empty() && has_prefix(x) && prefix_of(x, config) == prefix)
+        .map(|x| x.id.clone())
+        .collect()
+}
+
+fn place(path: &Path) -> Value {
+    json!({"path": path, "bytes": disk_usage(path), "exists": path.exists()})
+}
+
+/// What a leftover is: `prefix` (no game's), `recordings` (archived at a remove), `game` (a removed game's folder), `logs` (a removed game's).
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct Leftover {
+    pub kind: &'static str,
+    pub path: String,
+    pub id: String,
+    pub title: String,
+    pub bytes: u64,
+}
+
+fn subdirs(dir: &Path) -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = std::fs::read_dir(dir).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect();
+    out.sort();
+    out
+}
+
+fn leftovers(games: &[Resolved], config: &Config, sized: bool) -> Vec<Leftover> {
+    let live: Vec<&Game> = games.iter().map(|r| &r.game).filter(|g| g.removed_at.is_empty()).collect();
+    let title = |id: &str| games.iter().find(|r| r.game.id == id).map(|r| r.game.title.clone()).unwrap_or_default();
+    let held: Vec<PathBuf> = live.iter().filter(|g| has_prefix(g)).map(|g| prefix_of(g, config)).collect();
+    let mut out = Vec::new();
+    let mut push = |kind: &'static str, path: PathBuf| {
+        let id = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        out.push(Leftover { kind, title: title(&id), id, bytes: if sized { disk_usage(&path) } else { 0 }, path: path.to_string_lossy().into() });
+    };
+    for dir in subdirs(&config.prefixes_root()) {
+        if !held.iter().any(|h| h.starts_with(&dir) || dir.starts_with(h)) {
+            push("prefix", dir);
+        }
+    }
+    for dir in subdirs(&config.recordings_root().join(".archive")) {
+        push("recordings", dir);
+    }
+    let removed = |id: &str| !live.iter().any(|g| g.id == id);
+    for dir in subdirs(&paths::games_dir()) {
+        let id = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        if removed(&id) && games.iter().any(|r| r.game.id == id) {
+            push("game", dir);
+        }
+    }
+    for dir in subdirs(&paths::state_home().join("logs")) {
+        let id = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        if removed(&id) {
+            push("logs", dir);
+        }
+    }
+    out
+}
+
+/// Moves `from` to `to`: a rename, or a copy then the original to the trash across filesystems. `Ok(Some(from))` names an original the trash refused, left where it was.
+fn move_dir(from: &Path, to: &Path) -> Result<(bool, Option<PathBuf>)> {
+    if let Some(parent) = to.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    match std::fs::rename(from, to) {
+        Ok(()) => return Ok((false, None)),
+        Err(e) if e.raw_os_error() == Some(libc::EXDEV) => {}
+        Err(e) => return Err(Error::Io(format!("move {} to {}: {e}", from.display(), to.display()))),
+    }
+    if let Err(e) = copy_tree(from, to) {
+        let _ = std::fs::remove_dir_all(to);
+        return Err(e);
+    }
+    let count = |p: &Path| (disk_usage(p), walk_count(p));
+    if count(from) != count(to) {
+        let _ = std::fs::remove_dir_all(to);
+        return Err(Error::Io(format!("the copy of {} into {} came out different; the original is untouched", from.display(), to.display())));
+    }
+    match trash::delete(from) {
+        Ok(()) => Ok((true, None)),
+        Err(e) => {
+            tracing::warn!("trash {}: {e}; left in place", from.display());
+            Ok((true, Some(from.to_path_buf())))
+        }
+    }
+}
+
+fn walk_count(dir: &Path) -> usize {
+    let mut n = 0;
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        for e in std::fs::read_dir(&d).into_iter().flatten().flatten() {
+            n += 1;
+            if e.path().symlink_metadata().is_ok_and(|m| m.is_dir()) {
+                stack.push(e.path());
+            }
+        }
+    }
+    n
+}
+
+/// A copy that keeps symlinks as symlinks: a prefix's `dosdevices/z:` points at `/`.
+pub(crate) fn copy_tree(from: &Path, to: &Path) -> Result<()> {
+    let failed = |p: &Path, e: std::io::Error| Error::Io(format!("copy {}: {e}", p.display()));
+    std::fs::create_dir(to).map_err(|e| failed(to, e))?;
+    std::fs::set_permissions(to, std::fs::metadata(from)?.permissions())?;
+    for e in std::fs::read_dir(from)?.flatten() {
+        let (src, dest) = (e.path(), to.join(e.file_name()));
+        let meta = src.symlink_metadata().map_err(|e| failed(&src, e))?;
+        if meta.file_type().is_symlink() {
+            std::os::unix::fs::symlink(std::fs::read_link(&src)?, &dest).map_err(|e| failed(&dest, e))?;
+        } else if meta.is_dir() {
+            copy_tree(&src, &dest)?;
+        } else if meta.is_file() {
+            std::fs::copy(&src, &dest).map_err(|e| failed(&src, e))?;
+            if let Ok(t) = meta.modified() {
+                let _ = std::fs::File::options().write(true).open(&dest).and_then(|f| f.set_modified(t));
+            }
+        }
+    }
+    Ok(())
+}
+
+impl Core {
+    /// The library takes in the title ludusavi found, which the ask wrote to game.toml.
+    async fn saves_ask(&self, game: &Game, config: &Config, fetch: bool) -> Result<saves::Ask> {
+        let ask = saves::ask(game, config, fetch).await?;
+        if ask.files.is_empty() && game.saves.name != ask.name {
+            self.reload_game(&game.id).await?;
+        }
+        Ok(ask)
+    }
+
+    async fn running(&self, ids: &[String]) -> Result<()> {
+        match self.current().await {
+            Some(c) if ids.contains(&c.id) => Err(Error::Busy(format!("{} is running", c.id))),
+            _ => Ok(()),
+        }
+    }
+
+    /// Where a game's data lives, each part with its size: install, prefix, saves, Universe's own files, recordings, logs.
+    pub async fn game_data(&self, id: &str) -> Result<Value> {
+        let r = self.get(id).await?;
+        let config = self.config.read().await.clone();
+        let games = self.games.read().await.clone();
+        let uninstaller = self.uninstall_via(id).await.ok().flatten();
+        let game = r.game.clone();
+        let mut data = {
+            let config = config.clone();
+            blocking(move || Ok(index(&game, &games, &config, uninstaller))).await?
+        };
+        data["saves"] = self.saves_status(&r.game, &config).await;
+        let total: u64 = ["install", "prefix", "universe", "recordings", "logs"].iter().map(|k| data[k]["bytes"].as_u64().unwrap_or(0)).sum::<u64>()
+            + data["saves"]["backups_bytes"].as_u64().unwrap_or(0);
+        data["total"] = total.into();
+        Ok(data)
+    }
+
+    async fn saves_status(&self, game: &Game, config: &Config) -> Value {
+        let dir = saves::dir(config, &game.id);
+        let backups = {
+            let dir = dir.clone();
+            blocking(move || Ok(saves::backups(&dir))).await.unwrap_or_default()
+        };
+        let emu = saves::emulator(game, config);
+        let mut out = json!({
+            "engine": if emu.as_ref().is_some_and(|e| e.files.is_empty()) { "" } else if emu.is_some() { "emulator" } else { "ludusavi" },
+            "name": game.saves.name, "files": [], "bytes": 0, "error": "",
+            "folder": emu.as_ref().map(|e| e.folder.clone()).unwrap_or_default(),
+            "title_id": emu.as_ref().map(|e| e.title_id.clone()).unwrap_or_default(),
+            "dir": dir, "backups_bytes": backups.iter().map(|b| b.bytes).sum::<u64>(), "backups": backups,
+            "auto": config.saves.auto_backup, "keep": config.saves.keep,
+        });
+        if out["engine"] == "" {
+            return out;
+        }
+        match self.saves_ask(game, config, false).await {
+            Ok(ask) => {
+                out["name"] = ask.name.clone().into();
+                match saves::locate(&ask, config, &game.id).await {
+                    Ok(files) => {
+                        out["bytes"] = files.iter().map(|f| f.bytes).sum::<u64>().into();
+                        out["files"] = serde_json::to_value(files).unwrap_or_default();
+                    }
+                    Err(e) => out["error"] = e.to_string().into(),
+                }
+            }
+            Err(e) => out["error"] = e.to_string().into(),
+        }
+        out
+    }
+
+    /// Every root Universe writes under with its size and free space, the games by size, and what no game holds any more.
+    pub async fn storage(&self) -> Result<Value> {
+        let config = self.config.read().await.clone();
+        let games = self.games.read().await.clone();
+        blocking(move || Ok(storage(&games, &config))).await
+    }
+
+    /// One of `storage()`'s leftovers to the trash, named by its path: nothing else is taken.
+    pub async fn trash_leftover(&self, path: &str) -> Result<()> {
+        let config = self.config.read().await.clone();
+        let games = self.games.read().await.clone();
+        let listed = leftovers(&games, &config, false);
+        let Some(item) = listed.iter().find(|l| l.path == path) else {
+            return Err(Error::Invalid(format!("{path} is no leftover: only what the Storage view lists goes to the trash")));
+        };
+        trash::delete(&item.path).map_err(|e| Error::Io(format!("trash {}: {e}", item.path)))?;
+        if item.kind == "game" {
+            self.reload_all().await;
+        }
+        Ok(())
+    }
+
+    /// The prefix moved to `prefixes_root/<id>`, every game using it pointed there; Steam's compatdata and Universe's own stay.
+    pub async fn move_prefix(&self, id: &str) -> Result<Value> {
+        let r = self.get(id).await?;
+        let config = self.config.read().await.clone();
+        if !has_prefix(&r.game) {
+            return Err(Error::Invalid(format!("{id} has no Wine prefix")));
+        }
+        let from = prefix_of(&r.game, &config);
+        match prefix_owner(&from, &r.game, &config) {
+            "universe" => return Err(Error::Invalid(format!("{} is already under {}", from.display(), config.prefixes_root().display()))),
+            "steam" => return Err(Error::Invalid(format!("{} is Steam's: it stays where Steam keeps it", from.display()))),
+            _ => {}
+        }
+        if !from.is_dir() {
+            return Err(Error::NotFound(format!("{} does not exist", from.display())));
+        }
+        let mut moved: Vec<String> = vec![id.to_string()];
+        moved.extend(sharers(&r.game, &self.games.read().await, &config));
+        self.running(&moved).await?;
+        let to = config.prefixes_root().join(id);
+        if to.exists() {
+            return Err(Error::Invalid(format!("{} already exists", to.display())));
+        }
+        let (copied, left) = {
+            let (from, to) = (from.clone(), to.clone());
+            blocking(move || move_dir(&from, &to)).await?
+        };
+        for g in &moved {
+            let toml = paths::game_dir(g).join("game.toml");
+            crate::game::set_key(&toml, "launch.prefix", &to.to_string_lossy())?;
+            self.reload_game(g).await?;
+        }
+        Ok(json!({"from": from, "to": to, "copied": copied, "left": left, "games": moved}))
+    }
+
+    /// The game's saves backed up before its prefix goes: `Ok(None)` when there is nothing to back up, an error when the backup failed.
+    pub(crate) async fn backup_before(&self, game: &Game) -> Result<Option<saves::Outcome>> {
+        let config = self.config.read().await.clone();
+        let empty = has_prefix(game) && !saves::wine_prefix(&prefix_of(game, &config)).join("drive_c").is_dir();
+        if !saves::backs_up(game, &config) || empty {
+            return Ok(None);
+        }
+        let refused = |e: Error| Error::Invalid(format!("refusing to touch {}'s prefix: its saves could not be backed up: {e}", game.id));
+        let ask = match self.saves_ask(game, &config, true).await {
+            Ok(ask) => ask,
+            Err(Error::NotFound(_)) => return Ok(None),
+            Err(e) => return Err(refused(e)),
+        };
+        saves::backup(&ask, &config, &game.id).await.map(Some).map_err(refused)
+    }
+
+    /// Universe's prefix of the game to the trash, its saves backed up first: the next launch makes a fresh one.
+    pub async fn reset_prefix(&self, id: &str) -> Result<Value> {
+        let r = self.get(id).await?;
+        let config = self.config.read().await.clone();
+        if !has_prefix(&r.game) {
+            return Err(Error::Invalid(format!("{id} has no Wine prefix")));
+        }
+        let prefix = prefix_of(&r.game, &config);
+        if prefix_owner(&prefix, &r.game, &config) != "universe" {
+            return Err(Error::Invalid(format!("{} is not Universe's: move it into {} first", prefix.display(), config.prefixes_root().display())));
+        }
+        if let Some(other) = sharers(&r.game, &self.games.read().await, &config).first() {
+            return Err(Error::Invalid(format!("refusing to trash {}: {other} uses it too", prefix.display())));
+        }
+        if !prefix.is_dir() {
+            return Err(Error::NotFound(format!("{} does not exist", prefix.display())));
+        }
+        self.running(&[id.to_string()]).await?;
+        let backup = self.backup_before(&r.game).await?;
+        trash::delete(&prefix).map_err(|e| Error::Io(format!("trash {}: {e}", prefix.display())))?;
+        Ok(json!({"trashed": prefix, "backup": backup}))
+    }
+
+    pub async fn saves_backup(&self, id: &str) -> Result<saves::Outcome> {
+        let r = self.get(id).await?;
+        let config = self.config.read().await.clone();
+        let ask = self.saves_ask(&r.game, &config, true).await?;
+        saves::backup(&ask, &config, id).await
+    }
+
+    /// An empty `backup` is the latest.
+    pub async fn saves_restore(&self, id: &str, backup: &str) -> Result<saves::Outcome> {
+        let r = self.get(id).await?;
+        self.running(&[id.to_string()]).await?;
+        let config = self.config.read().await.clone();
+        let ask = self.saves_ask(&r.game, &config, true).await?;
+        saves::restore(&ask, &config, id, backup).await
+    }
+
+    /// Every backup of the game zipped into the folder `to`; returns the zip.
+    pub async fn saves_export(&self, id: &str, to: &str) -> Result<PathBuf> {
+        self.get(id).await?;
+        let config = self.config.read().await.clone();
+        let (id, to) = (id.to_string(), paths::expand(to));
+        blocking(move || saves::export(&config, &id, &to)).await
+    }
+
+    /// winecfg, winetricks, an .exe or a wineserver stop in the game's prefix, as a unit of its own; returns the unit.
+    pub async fn prefix_tool(&self, id: &str, tool: &str, args: &[String]) -> Result<String> {
+        let r = self.get(id).await?;
+        let config = self.config.read().await.clone();
+        let (program, argv, env) = crate::launcher::prefix_command(&r, &config, tool, args)?;
+        let mut unit_env = crate::core::passthrough_env();
+        unit_env.extend(env);
+        let spec = crate::host::UnitSpec {
+            name: format!("universe-prefix-{id}-{tool}-{}", chrono::Local::now().format("%Y%m%d-%H%M%S")),
+            description: format!("Universe {tool} in {}'s prefix", r.game.title),
+            program,
+            args: argv,
+            env: unit_env,
+            cwd: Some(r.game.working_dir()).filter(|d| d.is_dir()),
+            ..Default::default()
+        };
+        self.host.units.start(&spec).await?;
+        Ok(spec.name)
+    }
+}
+
+fn index(game: &Game, games: &[Resolved], config: &Config, uninstaller: Option<String>) -> Value {
+    let install = (!game.source.dir.is_empty()).then(|| paths::expand(&game.source.dir));
+    let install = install.map(|dir| {
+        let mut v = place(&dir);
+        v["owner"] = uninstaller.unwrap_or_else(|| "universe".into()).into();
+        v
+    });
+    let prefix = has_prefix(game).then(|| {
+        let path = prefix_of(game, config);
+        let owner = prefix_owner(&path, game, config);
+        let target = config.prefixes_root().join(&game.id);
+        let mut v = place(&path);
+        v["owner"] = owner.into();
+        v["shared_with"] = sharers(game, games, config).into();
+        v["movable"] = (matches!(owner, "lutris" | "elsewhere") && path.is_dir() && !target.exists()).into();
+        v["target"] = target.to_string_lossy().into_owned().into();
+        v
+    });
+    let dir = game.dir();
+    let parts: BTreeMap<&str, u64> =
+        [("media", game.media_dir()), ("screenshots", game.screenshots_dir()), ("journal", game.journal_dir()), ("sessions", game.sessions_path())]
+            .into_iter()
+            .map(|(k, p)| (k, disk_usage(&p)))
+            .collect();
+    let root = config.recordings_root();
+    let archived = root.join(".archive").join(&game.id);
+    let recordings = if archived.is_dir() && !root.join(&game.id).is_dir() { archived.clone() } else { root.join(&game.id) };
+    let mut recordings = place(&recordings);
+    recordings["archived"] = (recordings["path"].as_str() == Some(&*archived.to_string_lossy())).into();
+    json!({
+        "id": game.id, "title": game.title,
+        "runner_kind": runners::spec(&game.runner_id()).map(|s| s.kind.as_str()).unwrap_or(""),
+        "install": install, "prefix": prefix,
+        "universe": {"path": dir, "bytes": disk_usage(&dir), "parts": parts},
+        "recordings": recordings,
+        "logs": place(&paths::game_logs_dir(&game.id)),
+    })
+}
+
+fn storage(games: &[Resolved], config: &Config) -> Value {
+    let roots: Vec<Value> = [
+        ("games", config.games_root()),
+        ("prefixes", config.prefixes_root()),
+        ("saves", config.saves_root()),
+        ("recordings", config.recordings_root()),
+        ("library", paths::games_dir()),
+        ("components", crate::components::root()),
+        ("logs", paths::state_home().join("logs")),
+    ]
+    .into_iter()
+    .map(|(id, path)| {
+        let (free, total) = free_space(&path).unwrap_or((0, 0));
+        json!({"id": id, "path": path, "bytes": disk_usage(&path), "free": free, "size": total, "exists": path.is_dir()})
+    })
+    .collect();
+    let mut sized: Vec<Value> = games
+        .iter()
+        .filter(|r| r.game.removed_at.is_empty())
+        .map(|r| {
+            let g = &r.game;
+            let part = |p: Option<PathBuf>| p.map(|p| disk_usage(&p)).unwrap_or(0);
+            let install = part((!g.source.dir.is_empty()).then(|| paths::expand(&g.source.dir)));
+            let prefix = part(has_prefix(g).then(|| prefix_of(g, config)));
+            let universe = disk_usage(&g.dir());
+            let recordings = disk_usage(&config.recordings_root().join(&g.id));
+            let saves = disk_usage(&saves::dir(config, &g.id));
+            let logs = disk_usage(&paths::game_logs_dir(&g.id));
+            json!({
+                "id": g.id, "title": g.title, "bytes": install + prefix + universe + recordings + saves + logs,
+                "install": install, "prefix": prefix, "universe": universe, "recordings": recordings, "saves": saves, "logs": logs,
+            })
+        })
+        .collect();
+    sized.sort_by_key(|g| std::cmp::Reverse(g["bytes"].as_u64().unwrap_or(0)));
+    let leftovers = leftovers(games, config, true);
+    let leftover_bytes: u64 = leftovers.iter().map(|l| l.bytes).sum();
+    json!({"roots": roots, "games": sized, "leftovers": leftovers, "leftover_bytes": leftover_bytes})
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::host::Host;
+
+    fn library(env: &paths::TestEnv) -> PathBuf {
+        let prefixes = env.path().join("prefixes");
+        std::fs::write(
+            env.path().join("config/config.toml"),
+            format!(
+                "[paths]\nprefixes_root = \"{}\"\nrecordings_root = \"{}\"\n[launch]\ngamescope = false\nmangohud = false\nfps_limit = \"none\"\n[modules]\nenabled = []\n[sources]\nenabled = []\n",
+                prefixes.display(),
+                env.path().join("recordings").display()
+            ),
+        )
+        .unwrap();
+        prefixes
+    }
+
+    fn proton_game(env: &paths::TestEnv, title: &str, prefix: &Path) -> Game {
+        let dir = env.path().join("games").join(title);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("Game.exe"), b"MZ").unwrap();
+        let mut g = Game::new(title);
+        g.launch.runner = "proton".into();
+        g.launch.exe = dir.join("Game.exe").to_string_lossy().into();
+        g.launch.prefix = prefix.to_string_lossy().into();
+        g.source.dir = dir.to_string_lossy().into();
+        g.save().unwrap();
+        g
+    }
+
+    async fn open() -> (Core, std::sync::Arc<crate::host::Memory>) {
+        let (host, memory) = Host::memory();
+        (Core::open_with(Config::load().unwrap(), host).await.unwrap(), memory)
+    }
+
+    #[tokio::test]
+    async fn a_prefix_moved_into_prefixes_root_keeps_its_games_launchable() {
+        let env = paths::test_env();
+        let prefixes = library(&env);
+        saves::tests::offline_manifest("{}\n");
+        let elsewhere = env.path().join("lutris/prefixes/sample");
+        std::fs::create_dir_all(elsewhere.join("drive_c/users/steamuser")).unwrap();
+        std::fs::write(elsewhere.join("drive_c/users/steamuser/save.dat"), b"slot one").unwrap();
+        proton_game(&env, "Sample", &elsewhere);
+        proton_game(&env, "Sample Twin", &elsewhere);
+        let (core, _) = open().await;
+        let data = core.game_data("sample").await.unwrap();
+        assert_eq!((data["prefix"]["owner"].as_str(), data["prefix"]["movable"].as_bool()), (Some("elsewhere"), Some(true)));
+        assert_eq!(data["prefix"]["shared_with"], json!(["sample-twin"]));
+
+        let moved = core.move_prefix("sample").await.unwrap();
+        let to = prefixes.join("sample");
+        assert_eq!(moved["games"], json!(["sample", "sample-twin"]), "every game on the prefix follows it");
+        assert_eq!(std::fs::read(to.join("drive_c/users/steamuser/save.dat")).unwrap(), b"slot one");
+        assert!(!elsewhere.exists());
+        for id in ["sample", "sample-twin"] {
+            let r = core.get(id).await.unwrap();
+            assert_eq!(Path::new(&r.game.launch.prefix), to);
+            let config = core.config.read().await.clone();
+            let plan = crate::launcher::plan(&r, &config, &BTreeMap::new(), None, None, false, false).unwrap();
+            assert_eq!(Path::new(&plan.env["WINEPREFIX"]), to, "{id} launches on the moved prefix");
+        }
+        assert!(matches!(core.move_prefix("sample").await, Err(Error::Invalid(_))), "Universe's own stays");
+        let steam = env.path().join("SteamLibrary/steamapps/compatdata/620");
+        std::fs::create_dir_all(&steam).unwrap();
+        proton_game(&env, "Portal 2", &steam);
+        core.reload_all().await;
+        assert!(matches!(core.move_prefix("portal-2").await, Err(Error::Invalid(_))), "Steam's compatdata never moves");
+        assert!(steam.is_dir());
+    }
+
+    #[tokio::test]
+    async fn the_storage_view_sizes_every_root_and_lists_only_what_no_game_holds() {
+        let env = paths::test_env();
+        let prefixes = library(&env);
+        saves::tests::offline_manifest("{}\n");
+        let held = prefixes.join("one");
+        std::fs::create_dir_all(&held).unwrap();
+        std::fs::write(held.join("system.reg"), vec![0u8; 3000]).unwrap();
+        let one = proton_game(&env, "One", &held);
+        std::fs::write(env.path().join("games/One/data.pak"), vec![0u8; 50_000]).unwrap();
+        std::fs::create_dir_all(one.media_dir()).unwrap();
+        std::fs::write(one.media_dir().join("box_front.jpg"), vec![0u8; 700]).unwrap();
+        std::fs::create_dir_all(env.path().join("recordings/one")).unwrap();
+        std::fs::write(env.path().join("recordings/one/a.mkv"), vec![0u8; 9000]).unwrap();
+        let stale = prefixes.join("one-bak");
+        std::fs::create_dir_all(&stale).unwrap();
+        std::fs::write(stale.join("user.reg"), vec![0u8; 100]).unwrap();
+        std::fs::create_dir_all(env.path().join("recordings/.archive/gone")).unwrap();
+        let mut gone = Game::new("Gone");
+        gone.removed_at = "2026-01-01T00:00:00+01:00".into();
+        gone.save().unwrap();
+        let (core, memory) = open().await;
+
+        let data = core.game_data("one").await.unwrap();
+        assert_eq!(data["install"]["bytes"], 50_002);
+        assert_eq!((data["prefix"]["owner"].as_str(), data["prefix"]["bytes"].as_u64()), (Some("universe"), Some(3000)));
+        assert_eq!(data["universe"]["parts"]["media"], 700);
+        assert_eq!(data["recordings"]["bytes"], 9000);
+        assert!(data["total"].as_u64().unwrap() >= 50_002 + 3000 + 9000);
+
+        let storage = core.storage().await.unwrap();
+        let kinds: Vec<(String, String)> =
+            storage["leftovers"].as_array().unwrap().iter().map(|l| (l["kind"].as_str().unwrap().to_string(), l["id"].as_str().unwrap().to_string())).collect();
+        assert_eq!(kinds, [("prefix".to_string(), "one-bak".to_string()), ("recordings".into(), "gone".into()), ("game".into(), "gone".into())]);
+        assert_eq!(storage["games"][0]["id"], "one");
+        let root = storage["roots"].as_array().unwrap().iter().find(|r| r["id"] == "prefixes").unwrap().clone();
+        assert_eq!(root["bytes"], 3100);
+        assert!(root["free"].as_u64().unwrap() > 0);
+
+        assert!(matches!(core.trash_leftover(&held.to_string_lossy()).await, Err(Error::Invalid(_))), "a held prefix is no leftover");
+        assert!(matches!(core.trash_leftover("/etc").await, Err(Error::Invalid(_))));
+        core.trash_leftover(&stale.to_string_lossy()).await.unwrap();
+        assert!(!stale.exists() && held.is_dir());
+
+        let unit = core.prefix_tool("one", "winecfg", &[]).await.unwrap();
+        let spec = memory.spec(&unit).unwrap();
+        assert_eq!((spec.program.as_str(), spec.args.as_slice()), ("umu-run", ["winecfg".to_string()].as_slice()));
+        assert_eq!(Path::new(&spec.env["WINEPREFIX"]), held);
+        assert!(matches!(core.prefix_tool("one", "run", &["/nowhere.exe".into()]).await, Err(Error::NotFound(_))));
+    }
+
+    #[tokio::test]
+    async fn saves_are_backed_up_and_restored_through_ludusavi_into_the_prefix_the_game_has_now() {
+        let env = paths::test_env();
+        if saves::installed().is_none() {
+            eprintln!("ludusavi is not on PATH: the dev shell and the Nix check have it");
+            return;
+        }
+        let prefixes = library(&env);
+        saves::tests::offline_manifest("Fixture Game:\n  files:\n    \"<winAppData>/Fixture\":\n      when:\n        - os: windows\n");
+        let elsewhere = env.path().join("elsewhere/fixture");
+        let save = |prefix: &Path| prefix.join("drive_c/users/steamuser/AppData/Roaming/Fixture/slot1.sav");
+        std::fs::create_dir_all(save(&elsewhere).parent().unwrap()).unwrap();
+        std::fs::write(save(&elsewhere), b"first").unwrap();
+        proton_game(&env, "Fixture Game", &elsewhere);
+        let (core, _) = open().await;
+
+        let done = core.saves_backup("fixture-game").await.unwrap();
+        assert_eq!((done.change.as_str(), done.files.len()), ("new", 1));
+        assert_eq!(core.get("fixture-game").await.unwrap().game.saves.name, "Fixture Game", "the title ludusavi found is kept");
+        let data = core.game_data("fixture-game").await.unwrap();
+        assert_eq!(data["saves"]["engine"], "ludusavi");
+        assert_eq!(data["saves"]["files"][0]["bytes"], 5);
+        assert_eq!(data["saves"]["backups"].as_array().unwrap().len(), 1);
+
+        std::fs::write(save(&elsewhere), b"second").unwrap();
+        core.move_prefix("fixture-game").await.unwrap();
+        let moved = prefixes.join("fixture-game");
+        core.saves_restore("fixture-game", "").await.unwrap();
+        assert_eq!(std::fs::read(save(&moved)).unwrap(), b"first", "the backup lands in the moved prefix");
+        assert!(!save(&elsewhere).exists());
+
+        let zip = core.saves_export("fixture-game", &env.path().join("exports").to_string_lossy()).await.unwrap();
+        assert!(zip.is_file() && zip.starts_with(env.path().join("exports")));
+
+        let reset = core.reset_prefix("fixture-game").await.unwrap();
+        assert_eq!(reset["backup"]["change"], "same", "the saves are backed up before the prefix goes");
+        assert!(!moved.exists());
+    }
+
+    #[test]
+    fn a_copy_keeps_symlinks_as_symlinks_and_never_follows_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let from = dir.path().join("pfx");
+        std::fs::create_dir_all(from.join("drive_c/users/steamuser")).unwrap();
+        std::fs::create_dir_all(from.join("dosdevices")).unwrap();
+        std::fs::write(from.join("drive_c/users/steamuser/save.dat"), b"slot one").unwrap();
+        std::os::unix::fs::symlink("/", from.join("dosdevices/z:")).unwrap();
+        std::os::unix::fs::symlink("../drive_c", from.join("dosdevices/c:")).unwrap();
+        let to = dir.path().join("moved");
+        copy_tree(&from, &to).unwrap();
+        assert_eq!(std::fs::read(to.join("drive_c/users/steamuser/save.dat")).unwrap(), b"slot one");
+        assert_eq!(std::fs::read_link(to.join("dosdevices/z:")).unwrap(), Path::new("/"), "z: still points at / and the root was not copied");
+        assert_eq!(std::fs::read_link(to.join("dosdevices/c:")).unwrap(), Path::new("../drive_c"));
+        assert_eq!((disk_usage(&from), walk_count(&from)), (disk_usage(&to), walk_count(&to)));
+    }
+
+    #[test]
+    fn a_prefix_is_owned_by_where_it_sits() {
+        let mut config = Config::default();
+        config.paths.prefixes_root = "/data/prefixes".into();
+        let mut g = Game::new("x");
+        assert_eq!(prefix_owner(Path::new("/data/prefixes/x"), &g, &config), "universe");
+        assert_eq!(prefix_owner(Path::new("/games/SteamLibrary/steamapps/compatdata/620"), &g, &config), "steam");
+        assert_eq!(prefix_owner(Path::new("/home/me/Games/x"), &g, &config), "elsewhere");
+        g.source.kind = "lutris".into();
+        assert_eq!(prefix_owner(Path::new("/home/me/Games/x"), &g, &config), "lutris");
+    }
+}
