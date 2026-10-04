@@ -28,6 +28,10 @@ FocusScope {
             });
         else if (api.screens.onboarding.needed)
             push("pages/OnboardingPage.qml", {});
+        else if (api.screens.changelog.pending.length > 0)
+            push("pages/ChangelogPage.qml", {
+                fresh: true
+            });
     }
 
     // The startup animation done: the home builds itself up from black, as back from a game, or comes in at once after a skip.

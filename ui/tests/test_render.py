@@ -1050,11 +1050,13 @@ def test_reprise_about_shows_the_build(api, fake):
     QMetaObject.invokeMethod(page, "land", Q_ARG("QVariant", "quit"))
     until(lambda: page.property("sectionId") == "about", "Quit lives in About now")
     content = page.property("content").toVariant()
-    assert [r["label"] for r in content["rows"]] == ["Version", "First-run setup", "Power"]
+    keys = [r["key"] for r in content["rows"]]
+    assert keys == ["version", "changelog", "setup", "power"]
     assert content["rows"][0]["display"] == fake.version()
     assert page.property("acceptLabel") == "", "nothing to select on the version"
     assert [s["id"] for s in page.property("sections").toVariant()][-4:] == ["sound", "storage", "doctor", "about"], "no Search, Updates or Quit section"
-    QMetaObject.invokeMethod(page, "activate", Q_ARG("QVariant", 2), Q_ARG("QVariant", content["rows"][2]))
+    power = keys.index("power")
+    QMetaObject.invokeMethod(page, "activate", Q_ARG("QVariant", power), Q_ARG("QVariant", content["rows"][power]))
     confirm = window.findChild(QObject, "confirm")
     until(lambda: confirm.property("open") is True and confirm.property("message") == "Power", "the row opens the menu B held opens")
     settle(window)

@@ -42,6 +42,21 @@ CLIP_S = 20
 
 SLOTS = ("box_front", "square", "banner", "background", "logo")
 FAKE_ORIGINS = {"box_front": "steam", "square": "generated", "banner": "steam", "background": "gamesdb", "logo": "libretro"}
+CHANGELOG = [
+    {
+        "version": "0.0.3",
+        "date": "2026-09-20",
+        "sections": [
+            {
+                "title": "Added",
+                "items": ["A changelog under Settings › About, and what's new after an update.", "`universe doctor` names the module behind each check."],
+            },
+            {"title": "Fixed", "items": ["The dock reads the pad again over a game."]},
+        ],
+    },
+    {"version": "0.0.2", "date": "2026-09-16", "sections": [{"title": "Changed", "items": ["Settings mark the values you changed."]}]},
+    {"version": "0.0.1", "date": "2026-09-13", "sections": [{"title": "Added", "items": ["The first release."]}]},
+]
 
 
 class X11Cards:
@@ -210,6 +225,11 @@ def _now():
 
 def _slug(title):
     return re.sub(r"[^a-z0-9]+", "-", title.casefold()).strip("-")
+
+
+def _semver(version):
+    parts = version.split(".")
+    return tuple(int(p) for p in parts) if len(parts) == 3 and all(p.isdigit() for p in parts) else None
 
 
 def _epoch(value):
@@ -427,6 +447,20 @@ class FakeCore:
 
     def version(self):
         return "0.0.0-fake"
+
+    def changelog(self):
+        return copy.deepcopy(CHANGELOG)
+
+    def whats_new(self):
+        state = self._root / "state"
+        state.mkdir(parents=True, exist_ok=True)
+        recorded = state / "last-version"
+        last = recorded.read_text().strip() if recorded.exists() else None
+        recorded.write_text(CHANGELOG[0]["version"])
+        if last is None or not (self._config.get("desktop") or {}).get("whats_new"):
+            return []
+        seen = _semver(last)
+        return [r for r in self.changelog() if seen is not None and (_semver(r["version"]) or seen) > seen]
 
     def _game_dir(self, ident):
         return self._root / "data" / "games" / ident

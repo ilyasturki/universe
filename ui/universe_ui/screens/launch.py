@@ -42,6 +42,7 @@ CONFIG_ROWS = [
 ]
 
 CONFIG_DEFAULTS = {"desktop.profile": "auto", "desktop.cursor_extension": ""}
+WHATS_NEW = "The first start after an update opens the changes since the version you last ran."
 
 
 def config_row(config, section, key, label, kind, choices, detail):
@@ -58,7 +59,7 @@ def config_row(config, section, key, label, kind, choices, detail):
 
 
 def build_launch(client, screen_mode):
-    """The global Launch page: Display and Overlay, then behind the gate the scaling, environment, programs, folders, keys and desktop cards."""
+    """The global Launch page: Display and Overlay, then behind the gate the scaling, environment, programs, folders, keys and desktop cards, then Updates."""
     config = client.config()
     mode = screen_mode()
     screen = " ".join(p for p in (str(mode.get("screen") or ""), screen_label(mode)) if p)
@@ -81,6 +82,10 @@ def build_launch(client, screen_mode):
     )
     for section, key, label, kind, choices, detail in CONFIG_ROWS:
         _add(rows, groups, section, config_row(config, section, key, label, kind, choices, detail), caps=True)
+    whats_new = _row(
+        "Updates", "desktop.whats_new", "Show what's new after an update", "bool", bool(_dig(config, "desktop.whats_new", False)), detail=WHATS_NEW
+    )
+    _add(rows, groups, "Updates", whats_new, caps=True)
     return rows, groups, screen
 
 

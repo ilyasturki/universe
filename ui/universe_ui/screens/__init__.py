@@ -6,6 +6,7 @@ from ..qt import Property
 from .achievements import AchievementsList
 from .add import AddGameForm
 from .artwork import ArtworkForm, ArtworkOverview
+from .changelog import Changelog
 from .components import ComponentsForm
 from .controller import ControllerScreen
 from .data import GameData, Storage
@@ -54,6 +55,7 @@ class Screens(QObject):
         self._gameData = GameData(client, self)
         self._storage = Storage(client, self)
         self._onboarding = Onboarding(client, memory, games, self._login, self._controller, self._components, self)
+        self._changelog = Changelog(client, self)
 
     def shutdown(self):
         self._thumbs.shutdown()
@@ -93,3 +95,4 @@ class Screens(QObject):
     onboarding = Property(QObject, lambda self: self._onboarding, constant=True)
     gameData = Property(QObject, lambda self: self._gameData, constant=True)
     storage = Property(QObject, lambda self: self._storage, constant=True)
+    changelog = Property(QObject, lambda self: self._changelog, constant=True)

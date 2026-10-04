@@ -106,6 +106,12 @@ impl Core {
     fn mark_onboarded(&self) -> PyResult<()> {
         self.core.mark_onboarded().map_err(err)
     }
+    fn changelog(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        py_of(py, &universe::changelog::releases())
+    }
+    fn whats_new(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.value_infallible(py, |c| c.whats_new())
+    }
 
     fn list(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.value_infallible(py, |c| c.list())

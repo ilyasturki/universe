@@ -539,6 +539,14 @@ FocusScope {
                     detail: ""
                 },
                 {
+                    label: "Changelog",
+                    key: "changelog",
+                    type: "action",
+                    action: "Open",
+                    display: "",
+                    detail: "What changed in each version, newest first."
+                },
+                {
                     label: "First-run setup",
                     key: "setup",
                     type: "action",
@@ -553,6 +561,9 @@ FocusScope {
     function activate(index, row) {
         if (sectionId === "search") {
             openSearch();
+        } else if (sectionId === "about" && row.key === "changelog") {
+            Sound.play("ok");
+            shell.push("pages/ChangelogPage.qml", {});
         } else if (sectionId === "about" && row.key === "setup") {
             Sound.play("ok");
             shell.push("pages/OnboardingPage.qml", {});

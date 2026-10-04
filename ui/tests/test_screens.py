@@ -355,13 +355,15 @@ def test_launch_form(api, fake):
         for section in ("Display", "Overlay", "Scaling", "Environment", "Programs")
     ]
     expected[1][1].extend(["desktop.hide_cursor", "desktop.keep_awake"])
-    assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups] == expected[:2], (
+    updates = ("Updates", ["desktop.whats_new"])
+    assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups] == [*expected[:2], updates], (
         "beginner first, no Advanced row; a runner's keys sit on its page"
     )
     form.showAdvanced = True
     assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups] == [
         ("Display", [*expected[0][1], *expected[2][1]]),
         expected[1],
+        updates,
         *expected[3:],
         ("Folders", ["paths.games_root", "paths.prefixes_root", "paths.saves_root", "paths.recordings_root"]),
         ("Saves", ["saves.auto_backup", "saves.keep"]),

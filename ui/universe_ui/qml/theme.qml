@@ -21,6 +21,8 @@ FocusScope {
             tabIndex = settingsTab;
         else if (api.screens.onboarding.needed)
             openSetup();
+        else if (api.screens.changelog.pending.length > 0)
+            openChangelog(true);
     }
 
     // Under the startup animation: the ground alone, then the backdrop, the page and the bars come in as it fades, all at once after a skip.
@@ -205,6 +207,13 @@ FocusScope {
         });
     }
 
+    function openChangelog(fresh) {
+        openSub("pages/ChangelogPage.qml", {
+            changelog: true,
+            fresh: fresh
+        });
+    }
+
     function restoreFocus() {
         if (subOpen && subLoader.item)
             subLoader.item.forceActiveFocus();
@@ -378,7 +387,7 @@ FocusScope {
     }
 
     function openSub(source, args) {
-        if (!args.game && !args.runner && !args.module && !args.source && !args.add && !args.setup)
+        if (!args.game && !args.runner && !args.module && !args.source && !args.add && !args.setup && !args.changelog)
             return;
         Sound.enter();
         showSub(source, args);
@@ -970,6 +979,9 @@ FocusScope {
                         }
                         function onSetupRequested() {
                             root.openSetup();
+                        }
+                        function onChangelogRequested() {
+                            root.openChangelog(false);
                         }
                         function onPowerRequested() {
                             root.askPower();

@@ -20,6 +20,7 @@ FocusScope {
     signal moduleRequested(string module)
     signal sourceRequested(string source)
     signal setupRequested
+    signal changelogRequested
     signal powerRequested
     signal artworkRequested(var game, string slot)
     signal dataRequested(var game)
@@ -503,6 +504,15 @@ FocusScope {
             });
             rows.push({
                 section: "About",
+                key: "changelog",
+                label: "Changelog",
+                type: "action",
+                display: "",
+                detail: "What changed in each version, newest first.",
+                action: "Open"
+            });
+            rows.push({
+                section: "About",
                 key: "setup",
                 label: "First-run setup",
                 type: "action",
@@ -522,7 +532,7 @@ FocusScope {
             });
             groups.push({
                 title: "Universe",
-                rows: [0, 1, 2]
+                rows: [0, 1, 2, 3]
             });
             return {
                 rows: rows,
@@ -767,6 +777,8 @@ FocusScope {
                     api.screens.storage.act(row.key);
                 cards.forceActiveFocus();
             });
+        } else if (sectionId === "about" && row.key === "changelog") {
+            page.changelogRequested();
         } else if (sectionId === "about" && row.key === "setup") {
             Sound.enter();
             page.setupRequested();

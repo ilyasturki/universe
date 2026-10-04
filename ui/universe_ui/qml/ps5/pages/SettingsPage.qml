@@ -535,6 +535,14 @@ FocusScope {
                     detail: ""
                 },
                 {
+                    label: "Changelog",
+                    key: "changelog",
+                    type: "action",
+                    action: "Open",
+                    display: "",
+                    detail: "What changed in each version, newest first."
+                },
+                {
                     heading: true,
                     part: true,
                     label: "Setup and Power",
@@ -564,7 +572,10 @@ FocusScope {
     readonly property var partRows: parts[Math.max(0, Math.min(part, parts.length - 1))].rows
 
     function activate(index, row) {
-        if (sectionId === "about" && row.key === "setup") {
+        if (sectionId === "about" && row.key === "changelog") {
+            Sound.play("ok");
+            shell.push("pages/ChangelogPage.qml", {});
+        } else if (sectionId === "about" && row.key === "setup") {
             Sound.play("ok");
             shell.push("pages/OnboardingPage.qml", {});
         } else if (sectionId === "about" && row.key === "power") {

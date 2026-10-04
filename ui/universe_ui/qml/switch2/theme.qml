@@ -25,6 +25,10 @@ FocusScope {
             });
         else if (api.screens.onboarding.needed)
             push("pages/OnboardingPage.qml", {});
+        else if (api.screens.changelog.pending.length > 0)
+            push("pages/ChangelogPage.qml", {
+                fresh: true
+            });
     }
 
     // Under the startup animation: the ground alone, then the row slides in and the bars settle as it fades, all at once after a skip.

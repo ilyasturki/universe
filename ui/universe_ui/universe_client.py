@@ -773,6 +773,12 @@ class CoreClient(QObject):
     def markOnboarded(self):
         self._done(self._core.mark_onboarded)
 
+    def changelog(self):
+        return self._guarded([], self._core.changelog)
+
+    def whatsNew(self):
+        return self._guarded([], self._core.whats_new)
+
     @Slot(result="QVariant")
     def controllerState(self):
         return self._guarded({}, self._core.controller_state)
