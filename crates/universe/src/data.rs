@@ -398,6 +398,7 @@ impl Core {
         let r = self.get(id).await?;
         let config = self.config.read().await.clone();
         let (program, argv, env) = crate::launcher::prefix_command(&r, &config, tool, args)?;
+        let program = tool_program(&program).await?;
         let mut unit_env = crate::core::passthrough_env();
         unit_env.extend(env);
         let spec = crate::host::UnitSpec {
@@ -412,6 +413,17 @@ impl Core {
         self.host.units.start(&spec).await?;
         Ok(spec.name)
     }
+}
+
+/// A unit started on a missing program fails where nobody looks: the program is found, or fetched (umu-run), first.
+async fn tool_program(program: &str) -> Result<String> {
+    if runners::on_path(program).is_none() && !program.contains('/') {
+        let name = program.to_string();
+        blocking(move || tokio::runtime::Builder::new_current_thread().enable_all().build()?.block_on(crate::tools::ensure(&name))).await?;
+    }
+    runners::on_path(program)
+        .map(|p| p.to_string_lossy().into_owned())
+        .ok_or_else(|| Error::Unavailable(format!("{program} is not installed: install it to use it in a game's prefix")))
 }
 
 fn index(game: &Game, games: &[Resolved], config: &Config, uninstaller: Option<String>) -> Value {
@@ -507,12 +519,17 @@ mod tests {
 
     fn library(env: &paths::TestEnv) -> PathBuf {
         let prefixes = env.path().join("prefixes");
+        let umu = env.path().join("bin/umu-run");
+        std::fs::create_dir_all(umu.parent().unwrap()).unwrap();
+        std::fs::write(&umu, b"#!/bin/sh\n").unwrap();
+        std::fs::set_permissions(&umu, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
         std::fs::write(
             env.path().join("config/config.toml"),
             format!(
-                "[paths]\nprefixes_root = \"{}\"\nrecordings_root = \"{}\"\n[launch]\ngamescope = false\nmangohud = false\nfps_limit = \"none\"\n[modules]\nenabled = []\n[sources]\nenabled = []\n",
+                "[paths]\nprefixes_root = \"{}\"\nrecordings_root = \"{}\"\n[launch]\ngamescope = false\nmangohud = false\nfps_limit = \"none\"\numu_run = \"{}\"\n[modules]\nenabled = []\n[sources]\nenabled = []\n",
                 prefixes.display(),
-                env.path().join("recordings").display()
+                env.path().join("recordings").display(),
+                umu.display()
             ),
         )
         .unwrap();
@@ -644,9 +661,17 @@ mod tests {
 
         let unit = core.prefix_tool("one", "winecfg", &[]).await.unwrap();
         let spec = memory.spec(&unit).unwrap();
-        assert_eq!((spec.program.as_str(), spec.args.as_slice()), ("umu-run", ["winecfg".to_string()].as_slice()));
+        assert_eq!((Path::new(&spec.program), spec.args.as_slice()), (env.path().join("bin/umu-run").as_path(), ["winecfg".to_string()].as_slice()));
         assert_eq!(Path::new(&spec.env["WINEPREFIX"]), held);
         assert!(matches!(core.prefix_tool("one", "run", &["/nowhere.exe".into()]).await, Err(Error::NotFound(_))));
+        let mut wine = proton_game(&env, "Wine Game", &held);
+        wine.launch.runner = "wine".into();
+        wine.launch.runner_exe = env.path().join("no-wine/wine").to_string_lossy().into();
+        wine.save().unwrap();
+        core.reload_all().await;
+        let missing = core.prefix_tool("wine-game", "winecfg", &[]).await;
+        assert!(matches!(&missing, Err(Error::Unavailable(m)) if m.contains("no-wine/wine")), "{missing:?}: a missing program is named, nothing started");
+        assert!(matches!(tool_program("universe-no-such-tool").await, Err(Error::Unavailable(m)) if m.contains("universe-no-such-tool")));
     }
 
     #[tokio::test]
