@@ -232,6 +232,22 @@ def test_the_power_menu_s_way_out_asks_first_while_a_game_runs(ps5, api):
     QTest.keyClick(window, Qt.Key.Key_Escape)
     until(lambda: dialog.property("open") is False)
     assert api.universe.currentSession, "Cancel leaves the game running"
+    assert acts[-1] == "quit", "outside the Universe session"
+    from PySide6.QtQml import qmlEngine
+
+    engine = qmlEngine(root)
+    engine.quit.disconnect()
+    quits = record(engine.quit)
+    QMetaObject.invokeMethod(root, "askPower")
+    until(lambda: popup.property("open") is True)
+    for _ in range(len(acts) - 1):
+        QTest.keyClick(window, Qt.Key.Key_Down)
+    QTest.keyClick(window, Qt.Key.Key_Return)
+    until(lambda: dialog.property("open") is True)
+    QTest.keyClick(window, Qt.Key.Key_Right)
+    QTest.keyClick(window, Qt.Key.Key_Return)
+    until(lambda: api.universe.currentSession is None, "Quit closes the game it said it would")
+    until(lambda: quits, "then Universe quits")
 
 
 def test_a_trophy_s_unlock_date_is_relative_and_an_unknown_one_is_blank(app):
