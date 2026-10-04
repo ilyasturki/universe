@@ -300,8 +300,12 @@ fn prefix_row(list: &gtk::ListBox, id: &str, prefix: &Value, reload: Reload) -> 
     tool.connect_activate(move |_, which| {
         let (Some(anchor), Some(which)) = (a.upgrade(), which.and_then(|v| v.get::<String>())) else { return };
         let gid = gid.clone();
-        let said = if which == "kill" { gettext("The prefix's programs are stopping") } else { gettext("Started") };
-        act(&anchor, move |core| async move { core.prefix_tool(&gid, &which, &[]).await }, move |_| said.clone(), again.clone());
+        let said = |done: Value| match done["stopped"].as_u64() {
+            Some(0) => gettext("Nothing was running in the prefix"),
+            Some(_) => gettext("The prefix's programs stopped"),
+            None => gettext("Started"),
+        };
+        act(&anchor, move |core| async move { core.prefix_tool(&gid, &which, &[]).await }, said, again.clone());
     });
     group.add_action(&tool);
 

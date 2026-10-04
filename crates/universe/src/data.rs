@@ -407,10 +407,17 @@ impl Core {
         blocking(move || saves::export(&config, &id, &to)).await
     }
 
-    /// winecfg, winetricks, an .exe or a wineserver stop in the game's prefix, as a unit of its own; returns the unit.
-    pub async fn prefix_tool(&self, id: &str, tool: &str, args: &[String]) -> Result<String> {
+    /// winecfg, winetricks or an .exe in the game's prefix as a unit of its own (`{"tool", "unit"}`), or `kill`: the prefix's Wine stopped (`{"tool", "stopped"}`, its wineservers).
+    pub async fn prefix_tool(&self, id: &str, tool: &str, args: &[String]) -> Result<Value> {
         let r = self.get(id).await?;
         let config = self.config.read().await.clone();
+        if tool == "kill" {
+            if !has_prefix(&r.game) {
+                return Err(Error::Invalid(format!("{id}: {} keeps no Wine prefix", r.game.runner_id())));
+            }
+            let stopped = stop_wine(&prefix_of(&r.game, &config)).await?;
+            return Ok(json!({"tool": tool, "stopped": stopped}));
+        }
         let (program, argv, env) = crate::launcher::prefix_command(&r, &config, tool, args)?;
         let program = tool_program(&program).await?;
         let mut unit_env = crate::core::passthrough_env();
@@ -425,8 +432,66 @@ impl Core {
             ..Default::default()
         };
         self.host.units.start(&spec).await?;
-        Ok(spec.name)
+        Ok(json!({"tool": tool, "unit": spec.name}))
     }
+}
+
+/// Wine names a prefix's server dir `server-<dev>-<ino>` after the prefix, in whichever `/tmp` the server sees (umu's sandbox keeps its own).
+fn server_dir_name(prefix: &Path) -> Option<String> {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::metadata(prefix).ok().map(|m| format!("server-{:x}-{:x}", m.dev(), m.ino()))
+}
+
+fn wineservers(proc: &Path, dirs: &[String]) -> Vec<i32> {
+    let serves = |pid: &Path| {
+        let comm = std::fs::read_to_string(pid.join("comm")).unwrap_or_default();
+        let cwd = std::fs::read_link(pid.join("cwd")).unwrap_or_default();
+        comm.starts_with("wineserver") && cwd.file_name().and_then(|n| n.to_str()).is_some_and(|n| dirs.iter().any(|d| d == n))
+    };
+    let mut pids: Vec<i32> = std::fs::read_dir(proc)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| e.file_name().to_str()?.parse().ok().filter(|_| serves(&e.path())))
+        .collect();
+    pids.sort();
+    pids
+}
+
+fn alive(pid: i32) -> bool {
+    std::fs::read_to_string(format!("/proc/{pid}/stat")).is_ok_and(|s| s.rsplit(')').next().and_then(|r| r.split_whitespace().next()) != Some("Z"))
+}
+
+/// What `wineserver -k` does, from outside any sandbox: SIGINT has the server kill its programs, save the registry and exit; SIGKILL if it hangs on.
+async fn stop_wine(prefix: &Path) -> Result<usize> {
+    use rustix::process::{kill_process, Pid, Signal};
+    let mut dirs: Vec<String> = [prefix.to_path_buf(), prefix.join("pfx")].iter().filter_map(|p| server_dir_name(p)).collect();
+    dirs.dedup();
+    let servers = wineservers(Path::new("/proc"), &dirs);
+    let signal = |sig: Signal| {
+        for pid in servers.iter().filter_map(|p| Pid::from_raw(*p)) {
+            let _ = kill_process(pid, sig);
+        }
+    };
+    let gone = || async {
+        for _ in 0..40 {
+            if !servers.iter().any(|p| alive(*p)) {
+                return true;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(125)).await;
+        }
+        false
+    };
+    signal(Signal::INT);
+    signal(Signal::CONT);
+    if !gone().await {
+        tracing::warn!("{}: the wineserver outlived SIGINT, killed", prefix.display());
+        signal(Signal::KILL);
+        if !gone().await {
+            return Err(Error::Busy(format!("{}: its wineserver is still running", prefix.display())));
+        }
+    }
+    Ok(servers.len())
 }
 
 /// A unit started on a missing program fails where nobody looks: the program is found, or fetched (umu-run), first.
@@ -673,11 +738,14 @@ mod tests {
         core.trash_leftover(&stale.to_string_lossy()).await.unwrap();
         assert!(!stale.exists() && held.is_dir());
 
-        let unit = core.prefix_tool("one", "winecfg", &[]).await.unwrap();
-        let spec = memory.spec(&unit).unwrap();
+        let started = core.prefix_tool("one", "winecfg", &[]).await.unwrap();
+        let spec = memory.spec(started["unit"].as_str().unwrap()).unwrap();
         assert_eq!((Path::new(&spec.program), spec.args.as_slice()), (env.path().join("bin/umu-run").as_path(), ["winecfg".to_string()].as_slice()));
         assert_eq!(Path::new(&spec.env["WINEPREFIX"]), held);
         assert!(matches!(core.prefix_tool("one", "run", &["/nowhere.exe".into()]).await, Err(Error::NotFound(_))));
+        let units = memory.calls().len();
+        assert_eq!(core.prefix_tool("one", "kill", &[]).await.unwrap()["stopped"], 0, "no Wine runs in the prefix");
+        assert_eq!(memory.calls().len(), units, "kill starts no unit");
         let mut wine = proton_game(&env, "Wine Game", &held);
         wine.launch.runner = "wine".into();
         wine.launch.runner_exe = env.path().join("no-wine/wine").to_string_lossy().into();
@@ -766,6 +834,30 @@ mod tests {
         assert_eq!(content.unwrap(), b"kept");
         assert!(same, "the copy-equals-original check holds");
         assert!(removed, "a copy holding a read-only folder can still be removed");
+    }
+
+    #[test]
+    fn kill_picks_only_the_wineserver_of_the_target_prefix() {
+        let dir = tempfile::tempdir().unwrap();
+        let (target, other) = (dir.path().join("target"), dir.path().join("other"));
+        std::fs::create_dir_all(&target).unwrap();
+        std::fs::create_dir_all(&other).unwrap();
+        let (mine, theirs) = (server_dir_name(&target).unwrap(), server_dir_name(&other).unwrap());
+        let proc = dir.path().join("proc");
+        let fake = |pid: u32, comm: &str, cwd: &str| {
+            let at = proc.join(pid.to_string());
+            std::fs::create_dir_all(&at).unwrap();
+            std::fs::write(at.join("comm"), format!("{comm}\n")).unwrap();
+            std::os::unix::fs::symlink(cwd, at.join("cwd")).unwrap();
+        };
+        fake(410, "wineserver", &format!("/tmp/.wine-1000/{mine}"));
+        fake(420, "wineserver", &format!("/tmp/.wine-1000/{theirs}"));
+        fake(430, "bash", &format!("/tmp/.wine-1000/{mine}"));
+        fake(440, "winecfg.exe", "/mnt/games/Dead Cells");
+        fake(450, "wineserver", &format!("/run/user/1000/sandbox/tmp/.wine-1000/{mine}"));
+        std::fs::create_dir_all(proc.join("self")).unwrap();
+        assert_eq!(wineservers(&proc, &[mine]), [410, 450], "the target's servers, in any sandbox's /tmp, and no shell sitting in their dir");
+        assert_eq!(wineservers(&proc, &[theirs]), [420]);
     }
 
     #[test]

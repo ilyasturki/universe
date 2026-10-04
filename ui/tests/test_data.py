@@ -45,6 +45,9 @@ def test_a_games_data_lists_its_saves_its_prefix_and_its_files_and_runs_their_ac
     assert store.runProgram("/mnt/games/setup.exe") is True
     until(lambda: len(done) == 4)
     assert fake.core.prefix_tools[-1] == ("the-technomancer", "run", ["/mnt/games/setup.exe"])
+    assert store.act("kill") is True
+    until(lambda: len(done) == 5)
+    assert done[-1][:2] == ("kill", True)
 
 
 def test_an_emulator_without_a_title_id_shows_its_save_folder_and_no_backup(api, fake):

@@ -258,8 +258,7 @@ class GameData(QObject):
         if key == "reset":
             return self._run(key, c.resetPrefixAsync, lambda r: "Prefix reset, saves backed up" if r.get("backup") else "Prefix reset")
         if key in TOOLS:
-            label = {"winecfg": "Wine Configuration", "winetricks": "Winetricks", "kill": "Stopping the prefix's programs"}[key]
-            return self._run(key, lambda i, d, f: c.prefixToolAsync(i, key, [], d, f), lambda _: f"{label} started" if key != "kill" else label)
+            return self._run(key, lambda i, d, f: c.prefixToolAsync(i, key, [], d, f), _tool_done)
         return False
 
     @Slot(str, result=bool)
@@ -281,6 +280,12 @@ class GameData(QObject):
     error = Property(str, lambda self: self._error, notify=changed)
     busy = Property(str, lambda self: self._busy, notify=busyChanged)
     hasPrefix = Property(bool, lambda self: bool(self._data.get("prefix")), notify=changed)
+
+
+def _tool_done(reply):
+    if "stopped" in reply:
+        return "The prefix's programs stopped" if reply["stopped"] else "Nothing was running in the prefix"
+    return {"winecfg": "Wine Configuration", "winetricks": "Winetricks"}[reply["tool"]] + " started"
 
 
 def _backed_up(reply):

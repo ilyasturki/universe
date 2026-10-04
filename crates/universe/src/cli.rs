@@ -1212,7 +1212,12 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                         DataCmd::Run { exe, args } => ("run", std::iter::once(exe.to_string_lossy().into_owned()).chain(args).collect()),
                         _ => ("kill", vec![]),
                     };
-                    finish(json, core.prefix_tool(&id, tool, &args).await.map(|unit| format!("{tool} started as {unit}")));
+                    let said = |done: Value| match done["stopped"].as_u64() {
+                        Some(0) => format!("nothing was running in {id}'s prefix"),
+                        Some(_) => format!("{id}'s prefix stopped"),
+                        None => format!("{tool} started as {}", s(&done, "unit")),
+                    };
+                    finish(json, core.prefix_tool(&id, tool, &args).await.map(said));
                 }
             }
         }

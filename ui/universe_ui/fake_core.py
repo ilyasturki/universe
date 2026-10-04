@@ -937,7 +937,9 @@ class FakeCore:
         if not self.game_data(ident)["prefix"]:
             raise UniverseError("Invalid", f"{ident} keeps no Wine prefix")
         self.prefix_tools.append((ident, tool, list(args)))
-        return f"universe-prefix-{ident}-{tool}-20260911-120000"
+        if tool == "kill":
+            return {"tool": tool, "stopped": 0}
+        return {"tool": tool, "unit": f"universe-prefix-{ident}-{tool}-20260911-120000"}
 
     def saves_backup(self, ident):
         data = self.game_data(ident)

@@ -154,8 +154,8 @@ impl Core {
         self.value(py, |c| async move { c.reset_prefix(&id).await })
     }
     #[pyo3(signature = (id, tool, args = Vec::new()))]
-    fn prefix_tool(&self, py: Python<'_>, id: String, tool: String, args: Vec<String>) -> PyResult<String> {
-        self.run(py, |c| async move { c.prefix_tool(&id, &tool, &args).await })
+    fn prefix_tool(&self, py: Python<'_>, id: String, tool: String, args: Vec<String>) -> PyResult<Py<PyAny>> {
+        self.value(py, |c| async move { c.prefix_tool(&id, &tool, &args).await })
     }
     fn saves_backup(&self, py: Python<'_>, id: String) -> PyResult<Py<PyAny>> {
         self.value(py, |c| async move { c.saves_backup(&id).await })
