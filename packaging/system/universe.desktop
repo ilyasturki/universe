@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Universe
+Comment=The game launcher on the whole screen, like a console
+Exec=universe-ui --session
+TryExec=universe-ui
+# Becomes XDG_CURRENT_DESKTOP: a name the core matches to no desktop of its own
+DesktopNames=Universe

@@ -114,6 +114,7 @@ install -Dm644 gen/universe.bash %{buildroot}%{_datadir}/bash-completion/complet
 install -Dm644 gen/_universe %{buildroot}%{_datadir}/zsh/site-functions/_universe
 install -Dm644 packaging/system/70-universe.rules -t %{buildroot}%{_udevrulesdir}
 install -Dm644 packaging/system/universe.conf -t %{buildroot}%{_modulesloaddir}
+install -Dm644 packaging/system/universe.desktop -t %{buildroot}%{_datadir}/wayland-sessions
 install -Dm644 ui/universe-ui.desktop -t %{buildroot}%{_datadir}/applications
 install -Dm644 ui/icons/hicolor/scalable/apps/universe-ui.svg -t %{buildroot}%{_datadir}/icons/hicolor/scalable/apps
 install -Dm644 ui/icons/hicolor/symbolic/apps/universe-ui-symbolic.svg -t %{buildroot}%{_datadir}/icons/hicolor/symbolic/apps
@@ -151,6 +152,7 @@ TZ=Europe/Paris cargo test --frozen -p universe -p universe-desktop
 %{_datadir}/zsh/site-functions/_universe
 %{_udevrulesdir}/70-universe.rules
 %{_modulesloaddir}/universe.conf
+%{_datadir}/wayland-sessions/universe.desktop
 %{_datadir}/applications/universe-ui.desktop
 %{_datadir}/icons/hicolor/scalable/apps/universe-ui.svg
 %{_datadir}/icons/hicolor/symbolic/apps/universe-ui-symbolic.svg

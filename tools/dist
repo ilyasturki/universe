@@ -13,6 +13,7 @@ Builds the release tree that install.sh installs from, outside Nix:
   OUT/share/universe/{modules,sources}
   OUT/share/{applications,icons,man,fish,bash-completion,zsh}
   OUT/share/{dbus-1,gnome-shell,metainfo}   the GTK app's
+  OUT/share/wayland-sessions/universe.desktop  the Universe login session
   OUT/lib/udev/rules.d/70-universe.rules    /dev/uhid, the virtual pads' hidraw
                                       and /dev/uinput opened to the session
   OUT/lib/modules-load.d/universe.conf      uhid loaded at boot
@@ -94,6 +95,7 @@ fi
 install -Dm644 "$repo/ui/universe-ui.desktop" -t "$out/share/applications"
 install -Dm644 "$repo/ui/icons/hicolor/scalable/apps/universe-ui.svg" -t "$out/share/icons/hicolor/scalable/apps"
 install -Dm644 "$repo/ui/icons/hicolor/symbolic/apps/universe-ui-symbolic.svg" -t "$out/share/icons/hicolor/symbolic/apps"
+install -Dm644 "$repo/packaging/system/universe.desktop" -t "$out/share/wayland-sessions"
 install -Dm644 "$repo/packaging/system/70-universe.rules" -t "$out/lib/udev/rules.d"
 install -Dm644 "$repo/packaging/system/universe.conf" -t "$out/lib/modules-load.d"
 install -Dm755 "$repo/install.sh" "$out/install.sh"

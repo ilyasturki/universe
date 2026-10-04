@@ -1,5 +1,5 @@
 #!/bin/sh
-# Universe for one user: PREFIX/lib/universe holds the CLI, the modules and the UI's Python venv; PREFIX/bin gets universe, universe-ui and, where GTK is new enough, universe-desktop. Root is only asked for (sudo) to put the udev rule and the uhid load under /etc, since /usr is read-only on SteamOS and Bazzite.
+# Universe for one user: PREFIX/lib/universe holds the CLI, the modules and the UI's Python venv; PREFIX/bin gets universe, universe-ui and, where GTK is new enough, universe-desktop. Root is only asked for (sudo) to put the udev rule and the uhid load under /etc, since /usr is read-only on SteamOS and Bazzite, and the login session where display managers read it.
 set -eu
 
 usage() {
@@ -15,8 +15,10 @@ Run from a release tarball it installs that tarball; from a git checkout it
 builds the checkout (cargo needed); piped from curl it downloads the release.
 
 The virtual pads and the key macros need /dev/uhid and /dev/uinput opened to
-your session: a udev rule and a module load under /etc, which it installs as
-root through sudo (asking for your password) or prints the commands for.
+your session: a udev rule and a module load under /etc. The login screen lists
+the Universe session from /usr/share/wayland-sessions (/usr/local/share where
+/usr is read-only). It installs these as root through sudo (asking for your
+password) or prints the commands for them.
 USAGE
 }
 
@@ -37,6 +39,9 @@ lib="$prefix/lib/universe"
 manifest="$lib/installed-files"
 rules=/etc/udev/rules.d/70-universe.rules
 load=/etc/modules-load.d/universe.conf
+session=/usr/share/wayland-sessions/universe.desktop
+# SDDM and GDM read it too, LightDM does not: only where /usr is read-only
+local_session=/usr/local/share/wayland-sessions/universe.desktop
 
 say() { printf '%s\n' "$*"; }
 die() { printf 'install.sh: %s\n' "$*" >&2; exit 1; }
@@ -77,6 +82,26 @@ install_system_files() {
     say "  then reboot"
 }
 
+ours() { [ -f "$1" ] && grep -qxF "TryExec=$prefix/bin/universe-ui" "$1"; }
+
+register_session() {
+    src="$lib/system/${session##*/}"
+    if [ ! -f "$src" ] || cmp -s "$src" "$session" || cmp -s "$src" "$local_session"; then
+        return 0
+    fi
+    # a distro package's
+    if [ -f "$session" ] && ! ours "$session"; then
+        return 0
+    fi
+    say "root (sudo) registers the Universe login session in $session (in $local_session where /usr is read-only)"
+    # shellcheck disable=SC2016
+    if as_root sh -c 'install -Dm644 "$1" "$2" 2>/dev/null || install -Dm644 "$1" "$3"' sh "$src" "$session" "$local_session"; then
+        return 0
+    fi
+    say "note: without it the login screen lists no Universe session; as root, run"
+    say "  install -Dm644 $src $session"
+}
+
 if [ "$uninstall" = 1 ]; then
     [ -d "$lib" ] || die "nothing installed under $prefix"
     remove_installed
@@ -84,6 +109,11 @@ if [ "$uninstall" = 1 ]; then
     if [ -f "$rules" ] || [ -f "$load" ]; then
         as_root rm -f "$rules" "$load" || say "note: $rules and $load stay; remove them as root"
     fi
+    for f in "$session" "$local_session"; do
+        if ours "$f"; then
+            as_root rm -f "$f" || say "note: $f stays; remove it as root"
+        fi
+    done
     say "removed Universe from $prefix; your config, library and recordings stay under ~/.config/universe and ~/.local/share/universe"
     exit 0
 fi
@@ -165,6 +195,11 @@ cp -r "$dist/share/universe/sources" "$lib/sources"
 if [ -d "$dist/lib/udev" ]; then
     install -Dm644 "$dist/lib/udev/rules.d/${rules##*/}" "$dist/lib/modules-load.d/${load##*/}" -t "$lib/system"
 fi
+if [ -f "$dist/share/wayland-sessions/${session##*/}" ]; then
+    mkdir -p "$lib/system"
+    sed -e "s|^Exec=universe-ui|Exec=$prefix/bin/universe-ui|" -e "s|^TryExec=universe-ui|TryExec=$prefix/bin/universe-ui|" \
+        "$dist/share/wayland-sessions/${session##*/}" > "$lib/system/${session##*/}"
+fi
 
 mkdir -p "$prefix/bin"
 cat > "$prefix/bin/universe" <<EOF
@@ -188,7 +223,7 @@ EOF
 fi
 
 : > "$manifest"
-(cd "$dist" && find share -type f ! -path 'share/universe/*') | while IFS= read -r f; do
+(cd "$dist" && find share -type f ! -path 'share/universe/*' ! -path 'share/wayland-sessions/*') | while IFS= read -r f; do
     case "$f" in
         *io.github.ilyasturki.UniverseDesktop* | */universe-desktop.1) [ "$desktop" = 1 ] || continue ;;
     esac
@@ -206,6 +241,7 @@ fi
 
 say "installed Universe under $prefix"
 install_system_files
+register_session
 if [ "$desktop" = 1 ]; then
     say "note: GNOME Shell reads search providers from XDG_DATA_DIRS only, which $prefix/share is not on by default: its search does not list Universe Desktop's games"
 fi
