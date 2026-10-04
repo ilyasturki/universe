@@ -73,6 +73,19 @@ def test_the_focused_row_wraps_its_whole_description(ps5):
     assert warnings == []
 
 
+def test_a_section_that_is_one_page_opens_it_straight_away(ps5):
+    window, root, warnings = ps5
+    page = push(root, "pages/SettingsPage.qml", {})
+    roots = until(lambda: next((i for i in page.findChildren(QQuickItem) if i.metaObject().className().startswith("RootList")), None))
+    roots.setProperty("index", [s["id"] for s in value(page, "sections")].index("controllers"))
+    click(window, Qt.Key.Key_Return)
+    top = until(lambda: (t := root.property("topPage")) is not page and t)
+    assert top.property("activeFocus") is True and "ControllersPage" in top.metaObject().className()
+    click(window, Qt.Key.Key_Escape)
+    until(lambda: root.property("topPage") == page and page.property("level") == "root", "B lands back on the sections")
+    assert warnings == []
+
+
 def test_a_runner_form_keeps_its_cards_when_y_shows_the_advanced_rows(ps5, api):
     window, root, warnings = ps5
     form = api.screens.runner

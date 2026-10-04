@@ -157,6 +157,10 @@ FocusScope {
             openSearch();
             return;
         }
+        if (sections[i].page) {
+            shell.push(sections[i].page, {});
+            return;
+        }
         part = 0;
         partList.index = 0;
         zone = "parts";
@@ -197,6 +201,8 @@ FocusScope {
             return;
         }
         openSection(sectionIndex(id));
+        if (sections[sectionIndex(id)].page)
+            return;
         zone = "rows";
         rows.forceActiveFocus();
         if (target.page === "launch" && target.key) {
@@ -410,21 +416,6 @@ FocusScope {
                 };
             }));
         }
-        if (sectionId === "controllers")
-            return [
-                {
-                    label: "Controllers",
-                    type: "action",
-                    action: "controllers",
-                    icon: "gamepad",
-                    display: (api.screens.controller.devices.filter(function (d) {
-                            return d.id === api.screens.controller.current;
-                        })[0] || {
-                            name: "None connected"
-                        }).name,
-                    detail: "Buttons, the walk through them, macros and the pads Universe has seen."
-                }
-            ];
         if (sectionId === "performance")
             return api.system.controls.map(function (c) {
                 var toggle = c.kind === "toggle";
@@ -656,9 +647,6 @@ FocusScope {
             shell.push("pages/ArtworkPage.qml", {
                 gameId: row.gameId
             });
-        } else if (sectionId === "controllers") {
-            Sound.play("ok");
-            shell.push("pages/ControllersPage.qml", {});
         } else if (row.action === "system") {
             if (row.type === "bool") {
                 Sound.play("select");

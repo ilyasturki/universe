@@ -1,11 +1,12 @@
 .pragma library
 
-// Settings' sections in order; the searches index the same entries. `first` names a section's first part.
+// Settings' sections in order; the searches index the same entries. `first` names a section's first part; `page`, a
+// section that is one page, opens it straight away.
 var list = [
     { id: "search", label: "Search Settings", icon: "search", first: "Search" },
     { id: "launch", label: "Launch", icon: "rocket" },
     { id: "runners", label: "Runners", icon: "chip" },
-    { id: "controllers", label: "Controllers", icon: "gamepad" },
+    { id: "controllers", label: "Controllers", icon: "gamepad", page: "pages/ControllersPage.qml" },
     { id: "sources", label: "Sources", icon: "cloud" },
     { id: "updates", label: "Updates", icon: "download" },
     { id: "modules", label: "Modules", icon: "puzzle" },
