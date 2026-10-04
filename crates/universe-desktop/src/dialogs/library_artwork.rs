@@ -109,7 +109,7 @@ fn job_row(job: &Job) -> adw::ActionRow {
         }
         let mut line = vec![job.message()];
         if job.total() > 0 {
-            line.push(gettext("{} of {}").replacen("{}", &(job.done() + 1).to_string(), 1).replacen("{}", &job.total().to_string(), 1));
+            line.push(gettext("{} of {}").replacen("{}", &(job.done() + 1).min(job.total()).to_string(), 1).replacen("{}", &job.total().to_string(), 1));
         }
         line.retain(|part| !part.is_empty());
         line.join(" · ")
