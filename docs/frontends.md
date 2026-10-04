@@ -30,7 +30,7 @@ One context property, `api`:
 | `api.power` | the batteries the kernel lists under `/sys/class/power_supply`: `sources` (`kind` `system` or `pad`, `percent`, `charging`, `inputs` — the pad's evdev nodes), `count`; polled every 10 s, plus what the controller watcher reads off a pad the kernel keeps no supply for (an 8BitDo's HID report, BlueZ's `Battery1` for a pad in BLE mode), reported through `report(event, name, battery)` and dropped with the pad; the kernel's reading wins where both exist. Reprise and the PS5 look draw them next to every clock (`ui/PowerBadge.qml`: one glyph and percent per source, the pad the controller page has current in green, one at 15 % or under in red); the Switch 2 look, like the console, puts the machine's own battery by its clock as a bare cell and a pad's charge on its controller page, next to the pad it belongs to; `--fake` reads `fixtures/power_supply` |
 | `api.network` | the link the machine is online through, read from `/sys/class/net` every 10 s: `kind` (`wifi`, `wired` — a cable wins — or `""` offline; links with no device, such as `lo` or a VPN, never count), `bars` (the Wi-Fi signal as 1–3 arcs from `/proc/net/wireless`, 0 otherwise). The Switch 2 look draws it between its clock and battery; `--fake` reads `fixtures/net` |
 | `api.system` | what logind will do with the machine: `actions`, the ones of `suspend`, `reboot` and `power_off` it would carry out (the core's `power_actions()`, read once at startup), `run(action)` (`power(action)` off the UI thread; `reboot` and `power_off` stop a running session first, so its `session-end` runs before the machine goes down), `failed(action, message)` when logind refuses. `--fake` records the call and does nothing. `steam`: the launcher runs in Steam's Game Mode (the core's `under_steam()`): no power actions (the menu keeps Quit Universe alone, and says Steam's menu has the rest), no Sound section, no dock over a game, no MangoHud, frame limit or Pause on HOME rows. `session`: the launcher runs as the Universe session a display manager started (the core's `nest::session()`): its way out logs out, so every look's power menu says Log out for Quit Universe (action `logout`), and the PS5 Control Center's Power panel adds a Log Out of its own. `deck`: `lcd` or `oled` on a Steam Deck. `controls`: the core's `system_controls()`, read after `apply_system()` at startup and on `reload()`; `set(id, value)` shows the value at once and writes it off the UI thread, a refusal raising `controlFailed(id, message)` and reading the machine back; `control(id)` one of them. Reprise lists them under Settings › System and in the dock's System group (a step writes once the cursor rests, 400 ms), Switch 2 under System Settings › Performance, the PS5 look under Settings › Performance and in the Control Center's System panel; `ui/Controls.js` turns one into rows any look uses. `--fake` lists an OLED Deck's under `UNIVERSE_DECK`, and plays Game Mode under `GAMESCOPE_WAYLAND_DISPLAY` with `UNIVERSE_FAKE_STEAM=1`, the Universe session with `UNIVERSE_FAKE_SESSION=1` |
-| `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written, a game's sessions and their logs) |
+| `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written, a game's sessions and their logs, a game's data and the storage view) |
 | `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed` and `--size` turn it off) |
 | `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `overlay`, `frame`, `ground`, `detail`), `current`, `frame`, `set(id)`, `landing` / `takeLanding()`, `fontPath` (the current look's own font file, stored under `<id>Font`: `switch2Font`, `ps5Font`), `soundsPath` (a folder of WAVs, stored under `<id>Sounds`) and `soundFiles` (`{name: url}` of the WAVs in it, the name lowercased: each replaces the look's bundled sound of that name, `sound/SoundPool.qml`'s `overrides`; Switch 2 offers it in Settings › Themes), `bootIntro` (the startup animation's switch, every look's: on until `ui-memory.json`'s `bootIntro` is false) |
 | `api.home` | the HOME button over a running game (see "HOME and the dock"): `shown` (`game` / `launcher`), `underGame` (the game is on screen over the launcher, inside gamescope), `open`, `loading` (a session this client launched has no window up yet), `paused`, `pauseOnHome`, `flipped`, `frame`, `volumePercent`, `muted`, `outputs` (`loadOutputs()` fills it); `pressed()`, `stopping(title)`; `openDock()`, `closeDock()`, `dockClosed()`, `toGame()`, `toLauncher(landing?)` / `takeLanding()`, `covered()`, `stop()`, `setPauseOnHome(on)`, `screenshot()` (→ `screenshotTaken(path)`), `volume(change, value)`, `setOutput(id)`, `launchValue(key)`, `launchChoices(key)`, `setLaunchValue(key, value)`, `screenRefresh()` |
@@ -517,8 +517,8 @@ list away. Play / Continue (Resume and Quit *title* for the running game), a hai
 (dropped when the detail page is already open on it), the favourite toggle, Achievements (only
 when the game's `achievementsTotal` is not 0), Media › (only when the
 game has a screenshot, a recording or a journal entry) and Manage ›. Media › pushes the non-empty
-pages, Manage › Game settings, Artwork, Sessions and logs and, past a
-hairline, Remove from library…; either opens on A or Right, and B or Left comes back to the first.
+pages, Manage › Game settings, Artwork, Sessions and logs, Data and saves (see "Game data and
+storage") and, past a hairline, Remove from library…; either opens on A or Right, and B or Left comes back to the first.
 Remove asks in place (Keep it / Remove from the library) and goes through
 `api.universe.remove(id, false)`: the watcher drops the game, the detail page closes if it was on it. An item's `gap` draws the hairline above it, `detail` a
 secondary text at the right, `more` a chevron that Right opens; `push(list, heading, after)` stacks a list over the
@@ -606,7 +606,7 @@ builds its list in `powerItems()`, which `askPower()` shows.
 ## The Settings tab
 
 `pages/SettingsPage.qml` is a sidebar (`ui/SectionList.qml` over `ui/Sections.js`: Launch, Runners,
-Controller, Sources, Install, Modules, Artwork, Themes, Sound, Doctor, About; no title, the tab
+Controller, Sources, Install, Modules, Artwork, Themes, Sound, System, Storage, Doctor, About; no title, the tab
 says it, and no group captions) beside one column of `ui/SettingsCards.qml` (`columns: 1`). A
 landing on a section folded into another opens that one (`Sections.aliases`: `components` → Runners,
 `updates` → Install, `quit` and `power` → About; Switch 2's `aliases` and PS5's `Sections.aliases`
@@ -615,7 +615,7 @@ in use tagged; A on another plays through it (`setOutput`). About is its Version
 `api.universe.version()`, the version with the short git rev behind it), First-run setup (Run again)
 and Power, which opens the power menu B held opens (see "Power"). Up and Down in the sidebar switch the section as they go, Right or A enter the cards, Left or
 B come back, L2/R2 cycle the section from anywhere. In the cards the hints are A, More and Back:
-Start lists what X and Y do there (Refresh the sections that fetch — Runners, Install, Sound, Doctor —
+Start lists what X and Y do there (Refresh the sections that fetch — Runners, Install, Sound, Storage, Doctor —
 Remove a Launch variable, Enable or Disable a module or a source, Show or Hide advanced), and X and
 Y still do it straight away. Game settings and a runner's, module's or source's page do the same
 with Reset to default and the advanced rows. The tab bar's search glass is on every tab and finds
@@ -702,6 +702,44 @@ journal entry covering the shot (`jumpRequested` to the journal page on that ses
 `shots.remove`). An `args.name` lands the cursor on that file. While this game is the one playing
 a hairline parts the session's shots from the rest, as in the dock's panel. The detail strip keeps
 the store's promotional shots only (`assets.screenshotList`).
+
+## Game data and storage
+
+`api.screens.gameData` is one game's data as the core's `game_data(id)` (`api.md` › Game data)
+lists it, read off the UI thread: `load(gameId)` (`loading`, `error`), `unload()`, `gameId`,
+`title`, `total` (the size of it all) and `rows`, a flat list every look's settings rows draw: a
+heading row (`heading: true`, `label`, `display` the section's size) per section — Saves, Backups
+(one row per backup kept, `restore:<id>`), Wine Prefix, Storage — and under each `static` rows
+(`saves_status`, `saves_folder`, `prefix`, `install`, `universe`, `recordings`, `logs`: `display` a
+size, `detail` the path) and `action` rows: `backup`, `restore`, `export` (a zip in the home
+folder), `move` (only for a prefix `move_prefix` takes), `winecfg`, `winetricks`, `run`, `kill`,
+and `reset` (Universe's own prefix, used by no other game, `danger`). `question(key)` is the
+confirmation a look asks before `act(key)` (`{title, detail, confirm, danger}`, none for the rest);
+`act(key)` runs it on the worker, `runProgram(path)` is `run` with the file the look's folder sheet
+picked (`files: true`). While one runs, `busy` names it and its row reads "Working…", disabled; it
+ends in `finished(key, ok, message)`, the looks' toast, and the rows are read again.
+
+`api.screens.storage` is `storage()` the same way: `load()`, `rows` — Folders (`root:<id>`, the
+size and the free space), Games (`game:<id>`, biggest first, `gameId` set: A opens that game's
+data), Leftovers (`trash:<path>`, the path in `target`, `danger`) — `used`, `leftovers` (their
+size), `question(key)`, `act(key)` (the leftover to the trash, then a reload) and `finished`.
+`loadFree()` reads `disk_free()` alone, no folder walked, and `free` is the games root's free space
+from whichever came last.
+
+Where each look has them:
+
+- Reprise: the game menu's Manage › "Data and saves" opens `pages/DataPage.qml` (`openSub`, `{game}`):
+  the headings become the sidebar's sections and the rows a card each (`CardSections`), A runs a row,
+  a `question` asks first (`ConfirmDialog`), `run` opens the value editor's folder sheet on a file.
+  Settings › Storage lists `api.screens.storage` in the settings cards, loaded when the section opens;
+  a game's row raises `dataRequested(game)`, a leftover's asks then trashes.
+- Switch 2: Software Options › "Data Management" pushes `switch2/pages/DataPage.qml`; System Settings ›
+  Data Management (System group) has one row that pushes `switch2/pages/StoragePage.qml`, as the
+  console's own. Both are `SettingsRows` over the rows, the questions through `shell.dialogAsk`.
+- PS5: the game options (Home, Library and Software Information) list "Saved Data and Storage", and the
+  game's Manage cards a card of it, both pushing `ps5/pages/DataPage.qml`, each row with its glyph; the
+  Welcome hub's Console Storage tile pushes `ps5/pages/StoragePage.qml`, and shows the free space from
+  `loadFree()`, read each time the hub shows (it no longer waits on the sources).
 
 ## Achievements
 
@@ -995,8 +1033,8 @@ whatever the flag says. `load()` asks the core everything in one call off the UI
 its sign-in holds), `settings()`, `gpu()`, the global launch keys and the gog source's settings —
 `loading` true meanwhile, and builds `steps` (`{id, title, subtitle}`): `found`, `stores` (when an
 enabled, available source is signed out, or — where `config_writable` — one that is off has its
-launcher on this machine), `install` and `preferences` (both only where `config_writable`), and
-`done`; `step`, `stepId`, `title`, `subtitle` (the step's, the `done` step's following what came
+launcher on this machine), `install`, `data` and `preferences` (all three only where
+`config_writable`), and `done`; `step`, `stepId`, `title`, `subtitle` (the step's, the `done` step's following what came
 in: "Still adding games" while an import runs, "Nothing added yet", or the read-only config's owner,
 `config_owner`), `next()`, `back()`, `finish()` (sets the flag, emits `finished`; `next()` on the
 last step finishes). Every step is one `rows`/`groups` list in the settings forms' shape, so each
@@ -1033,6 +1071,8 @@ the setup keeps that store's rows alone in the list, and shrinks the code (`qrSi
 are cut. `install` lists the folder in use (`install_dir`, `static`, "In use"), the other launchers'
 (`install_dirs`, an action row with `via: "folder"` whose `runImport` writes `paths.games_root`),
 then "Another folder…" (`paths.games_root`, a `path` row): it moves nothing already installed.
+`data` holds `paths.prefixes_root` and `paths.saves_root` (`path` rows: a prefix already elsewhere
+stays, a game's data page moves it) and `saves.auto_backup` (a `bool` row).
 `preferences` holds the controller family (`controller.family`, an `enum` over
 `api.screens.controller.families`, written with `setFamily`) and `launch.hdr` when it fits this GPU
 (the upscaler upgrades are left to Settings). `done` holds a row per launcher still on its way or
@@ -1052,7 +1092,8 @@ page's Continue, in a bar of its own under the content, waits for the look to en
 an Add button and Add Everything presses them all, the two importers taking turns; the stores page
 offers a source that is off but has its launcher here behind a "Use" switch; under a read-only
 config a launcher says what to write instead of failing; the done page follows the imports still
-running. Under the launchers, "Runners Your Games Need" lists the components the big screen's
+running; its Game Data page sets the prefixes and save backups folders and the backup after each
+session. Under the launchers, "Runners Your Games Need" lists the components the big screen's
 `needed()` would (a proton, wine or emulator build whose `proposal` is `install`), each with an
 Install button that goes through `components::act`, asking first; the group reads the listing again
 when a component's job starts or ends, and after an import brought games.
@@ -1260,6 +1301,15 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
   (`--gapplication-service`, which stays up a minute between searches), whose `Exec` must name
   the wrapper by its absolute path: the bus runs it in its own environment. The desktop entry is
   `DBusActivatable`, so the app grid starts it that way too.
+- **Game data**: the game page's "Saves and Storage" group (`pages/game_data.rs`) is loaded on a task of
+  its own, not in the details' chain, since sizes walk the folders and the saves ask ludusavi: the
+  saves with Back Up, the backups in an expander (Restore each, asking first; Export to the home
+  folder), the prefix with its size and a menu (Open Folder, Move Into Universe's Prefixes, Wine
+  Configuration, Winetricks, Run a Program, Stop the Prefix's Programs, Reset), then the install
+  folder, Universe's files and the recordings, each with Open Folder. Preferences › Storage
+  (`pages/storage.rs`, a `StorageView` whose page could sit in a dialog of its own) lists the roots
+  with their free space, the games by size (a row opens the game's page) and the leftovers, each with
+  Move to Trash behind a question.
 - **Big Screen**: *Open Big Screen*, in the main menus when `universe-ui` is on PATH, runs it and
   leaves the window open; not while a game runs, nor twice.
 - **Steam Deck**: on a Deck (`deck::model()`), Preferences › System sets what `system_controls()`
@@ -1288,7 +1338,8 @@ What cost time:
 
 `just desktop` runs it against `.dev/`. `just desktop-shot DIR [steps…]` runs it in a headless
 weston and saves shots: `size:WxH`, `wait:MS`, `action:NAME[::TARGET]` (`~` for a space, looked up
-on the widgets on screen, so a page's own group answers) and `shot:NAME.png`, with
+on the widgets on screen, so a page's own group answers: `win.open-game::<id>` opens a game's page,
+`app.preferences-page::storage` a Preferences page) and `shot:NAME.png`, with
 `GDK_DISABLE=offload,dmabuf` so a playing video is part of the window's render node. A scripted run
 is `NON_UNIQUE`, adopts no scope, sweeps no journal, checks no updates and saves no state; it cannot
 open a popover or answer a dialog. `man universe-desktop` has the options and keys.

@@ -72,7 +72,7 @@ operation; a dash means the surface doesn't expose it.
 | `get(id)` | `get(id)` | `universe info <name> --json` | resolved `Game`: global defaults merged in, session stats, media, active modules |
 | `resolve(query)` | `resolve(query)` | — | candidate ids: exact › whole word › substring › path › every word a prefix of a title word or genre. Empty means unknown, more than one means ambiguous |
 | `set(id, key, value)` | `set(id, key, value)` | `universe set <name> k=v …` | writes one `game.toml` key |
-| `remove(id, purge)` | `remove(id, purge)` | `universe rm <name> [--purge]` | parks recordings under `.archive/` (the journal stays in `games/<id>/journal/`), marks `removed_at`; `purge` also trashes the game's logs and its Wine prefix (`launch.prefix`, else its folder under `paths.prefixes_root`) when it lies under `paths.prefixes_root`: a store's (Steam's `compatdata`) or one imported from Lutris stays |
+| `remove(id, purge)` | `remove(id, purge)` | `universe rm <name> [--purge]` | parks recordings under `.archive/` (the journal stays in `games/<id>/journal/`), marks `removed_at`; `purge` also trashes the game's logs and its Wine prefix (`launch.prefix`, else its folder under `paths.prefixes_root`) when it lies under `paths.prefixes_root`: a store's (Steam's `compatdata`) or one imported from Lutris stays. It refuses a prefix another library game uses, and backs the saves up first (see Game data) |
 | `uninstall(id)` | `uninstall(id)` | `universe uninstall <name>` | through the game's source when it is active and declares `uninstall` (the store removes the files and forgets the install: Steam, Epic, itch.io), else trashes `source.dir`; then clears `source.dir`, `source.build_id` and `launch.exe`: the game stays in the library, not installed. The trash refuses a root, a home or the games root |
 | `uninstall_via(id)` | `uninstall_via(id)` | — | the name of the store that removes the game's files itself (the source `uninstall` goes through), `None` when the folder goes to the trash: the confirmation says which |
 | `reload_all()` | `reload()` | — | rereads config and `games/*/game.toml` |
@@ -89,7 +89,7 @@ operation; a dash means the surface doesn't expose it.
 a game key left empty takes `[launch]`'s, a value is validated as the key's type says, an unknown
 or global-only key is refused — with the maps `launch.dll_overrides.d3d11`, `launch.env.FOO` and
 `launch.options.<key>` (validated against the runner's options); then `desktop.hide_cursor`, `hidden`,
-`favorite`, `tags`, `sort_title`, `platform`, the pins `metadata.steam_appid`, `metadata.gamesdb_id` and `metadata.sgdb_id`, and `capture.cursor` as a
+`favorite`, `tags`, `sort_title`, `platform`, the pins `metadata.steam_appid`, `metadata.gamesdb_id` and `metadata.sgdb_id`, `saves.name` (ludusavi's title, see Game data), and `capture.cursor` as a
 validated shorthand for `modules.capture.cursor`. Values are strings: `true`/`false` for booleans, `auto`/`on`/`off` for a toggle (`true`/`false` read as on/off),
 comma-separated for lists, `""` deletes the key. A runner is written under its shipped id (`yuzu` →
 `eden`).
@@ -129,6 +129,112 @@ given one.
 
 No method notifies a change: the files are the truth, and what the CLI, `session-end` and the hooks
 write shows up only there. See Changes.
+
+## Game data
+
+One game's data sits in up to seven places: its install folder (`source.dir`), its Wine prefix,
+its saves, the backups of those, Universe's own folder (`games/<id>/`: `game.toml`, media,
+screenshots, journal, sessions), its recordings (`<recordings_root>/<id>`, `.archive/<id>` once
+removed) and its logs (`<state>/logs/<id>`). The core indexes them where they are and moves nothing
+by itself: a new Proton or Wine game gets `<prefixes_root>/<id>` (Steam's `shared_prefix` hands
+out its own compatdata instead, which stays Steam's), and each game's backups go under
+`<saves_root>/<id>`.
+
+| Rust | Python | CLI | Role |
+|---|---|---|---|
+| `game_data(id)` | `game_data(id)` | `universe data <name>` | where the game's data is and how big, below |
+| `storage()` | `storage()` | `universe storage` | every root with its size and free space, the games by size, the leftovers, below |
+| `disk_free()` | `disk_free()` | — | `storage()`'s roots with `free` and `size` and no `bytes`: statvfs alone, no folder walked, for a home screen |
+| `trash_leftover(path)` | `trash_leftover(path)` | `universe storage trash <path>` | one of `storage()`'s leftovers to the trash; any other path is `Invalid`. A removed game's folder takes the game out of the library for good |
+| `move_prefix(id)` | `move_prefix(id)` | `universe data <name> move-prefix` | the prefix to `<prefixes_root>/<id>`: a rename, or across filesystems a copy (symlinks kept as symlinks: `dosdevices/z:` points at `/`), checked file for file and byte for byte, then the original to the trash (`left` names it when the trash refuses). Every library game on the prefix gets the new `launch.prefix`. Refused for Universe's own, for Steam's compatdata, while the game or a sharer runs, and when the target exists. `{from, to, copied, left, games}` |
+| `reset_prefix(id)` | `reset_prefix(id)` | `universe data <name> reset-prefix` | the game's saves backed up, then its prefix to the trash: the next launch makes a fresh one. Only Universe's own prefix, used by no other game. `{trashed, backup}` |
+| `prefix_tool(id, tool, args)` | `prefix_tool(id, tool, args=[])` | `universe data <name> winecfg\|winetricks [verbs]\|run <exe> [args]\|kill` | a transient unit `universe-prefix-<id>-<tool>-<stamp>` running the tool in the game's prefix with the launch's environment, no gamescope: `umu-run winecfg`, `umu-run winetricks …`, `umu-run <exe>`, and the build's `files/bin/wineserver -k` for Proton; `wine winecfg`, `winetricks` with `WINE` set, `wine <exe>` and the `wineserver` beside `wine` for Wine. Returns the unit |
+| `saves_backup(id)` | `saves_backup(id)` | `universe saves backup <name>` | a backup now, below; `Outcome {change, files: [{path, bytes}], bytes}`, `change` ludusavi's `new`, `different` or `same` (unchanged saves make no backup), `none` when it found nothing |
+| `saves_restore(id, backup)` | `saves_restore(id, backup="")` | `universe saves restore <name> [backup]` | a backup's saves put back, the latest when `backup` is empty; refused while the game runs |
+| `saves_export(id, to)` | `saves_export(id, to)` | `universe saves export <name> [dir]` | every backup of the game zipped into `<to>/<id>-saves-<stamp>.zip`, laid out as ludusavi lays them out: unpacked, any ludusavi restores from it |
+| — | — | `universe saves list <name>` | the saves found and the backups kept: `game_data`'s `saves` |
+
+`game_data(id)`:
+
+```json
+{"id": "hollow-knight", "title": "Hollow Knight", "runner_kind": "proton", "total": 9300000000,
+ "install": {"path": "/mnt/games/gog/Hollow Knight", "bytes": 8300000000, "exists": true, "owner": "universe"},
+ "prefix": {"path": "/mnt/games/prefixes/hollow-knight", "bytes": 574000000, "exists": true,
+            "owner": "universe", "shared_with": [], "movable": false, "target": "/mnt/games/prefixes/hollow-knight"},
+ "saves": {"engine": "ludusavi", "name": "Hollow Knight", "files": [{"path": "…/user1.dat", "bytes": 120000}],
+           "bytes": 5100000, "error": "", "folder": "", "title_id": "", "dir": "~/.local/share/universe/saves/hollow-knight",
+           "backups": [{"id": "backup-20261004T100051Z", "name": "Hollow Knight", "when": "RFC3339", "bytes": 5100000, "path": "…"}],
+           "backups_bytes": 5100000, "auto": true, "keep": 5},
+ "universe": {"path": "…/games/hollow-knight", "bytes": 3100000, "parts": {"media": 3000000, "screenshots": 0, "journal": 0, "sessions": 2048}},
+ "recordings": {"path": "~/Videos/universe/hollow-knight", "bytes": 0, "exists": false, "archived": false},
+ "logs": {"path": "…/logs/hollow-knight", "bytes": 0, "exists": false}}
+```
+
+`install` is `null` without a `source.dir`; its `owner` is the store that uninstalls it (see
+`uninstall_via`), else `universe`. `prefix` is `null` for a Linux or emulated game; its `owner` is
+`universe` under `prefixes_root`, `steam` inside `steamapps/compatdata` (never moved), `lutris` for
+an import, else `elsewhere`; `shared_with` names the other library games on it, `movable` whether
+`move_prefix` would take it. `saves.engine` is `ludusavi` for a PC game, `emulator` for an emulated
+title whose saves are known one by one, and empty where only the emulator's `folder` is known;
+`error` says why the saves could not be listed (ludusavi not installed yet, a title it does not
+know). Sizes walk the folders, and the saves ask ludusavi (about a second): a frontend calls it off
+its UI thread. `total` adds the parts and the backups.
+
+`storage()`:
+
+```json
+{"roots": [{"id": "games", "path": "~/Games", "bytes": 412000000000, "free": 1200000000000, "size": 2000000000000, "exists": true}],
+ "games": [{"id": "…", "title": "…", "bytes": 0, "install": 0, "prefix": 0, "universe": 0, "recordings": 0, "saves": 0, "logs": 0}],
+ "leftovers": [{"kind": "prefix", "path": "/mnt/games/prefixes/cyberpunk-2077-bak", "id": "cyberpunk-2077-bak", "title": "", "bytes": 9100000000}],
+ "leftover_bytes": 9100000000}
+```
+
+`roots` are `games`, `prefixes`, `saves`, `recordings`, `library` (`<data>/games`), `components`
+and `logs`, each with the free space of the filesystem it is on (its nearest existing folder). The
+games come biggest first, a shared prefix counted for each of its games. A leftover is a folder no
+library game holds: `prefix` (under `prefixes_root`, no live game's prefix), `recordings` (under
+`.archive/`), `game` (the `games/<id>/` of a removed game) and `logs` (a removed game's). Nothing goes
+to the trash unless asked. Walking every install takes seconds: off the UI thread, and `disk_free()`
+for a home screen.
+
+### Saves
+
+PC saves are ludusavi's (MIT; its manifest is compiled from PCGamingWiki): a fetched tool (see
+Fetched tools), with its own config, manifest and cache in `<data>/ludusavi/`, apart from a ludusavi
+the player runs. Each call writes `config.yaml` there whole (JSON, which is YAML) under a lock every
+process takes: no detected roots, the install folder's parent as an `other` root (saves a game keeps
+beside its files), the backup path, `full` retention `saves.keep` and no differential backups.
+A prefix is passed as `--wine-prefix` (its `pfx/` when it has one, Steam's layout) and redirected
+both ways to `/universe/prefix`: a backup records the prefix's files at that path and a restore puts
+them in the prefix the game has now, so a backup outlives a `move_prefix` or a reset. The title is
+ludusavi's: found once with `ludusavi find` by the Steam id (`metadata.steam_appid`, a Steam game's
+`source.id`), the GOG id, then the title give or take an edition, and kept in `game.toml` as
+`saves.name`, which `set <name> saves.name="…"` changes for a title it does not find. ludusavi
+updates its manifest at most once a day; a failed update is no error.
+
+Emulated titles are a custom game of ludusavi's, named after the title, its files the title's own
+saves, where the title's id is cheap to read:
+
+| Runner | Title id | Saves |
+|---|---|---|
+| RPCS3 | `TITLE_ID` of `PS3_GAME/PARAM.SFO` | `~/.config/rpcs3/dev_hdd0/home/*/savedata/<id>*` |
+| shadPS4 | `TITLE_ID` of `sce_sys/param.sfo` | `~/.local/share/shadPS4/home/*/savedata/<id>`, `…/user/savedata/*/<id>` |
+| Vita3K | the game's exe, a title id | `<pref-path>/ux0/user/00/savedata/<id>` (`config.yml`'s `pref-path`, else `~/.local/share/Vita3K/Vita3K`) |
+| Cemu | `title_id` of `meta/meta.xml` (an `.rpx`'s) | `<mlc>/usr/save/<high>/<low>` (the `mlc` option, `settings.xml`'s `mlc_path`, else `~/.local/share/Cemu/mlc01`) |
+| Dolphin | the disc header's game code and maker (`.iso`, `.gcm`, `.ciso`, `.wia`, `.rvz`) | GameCube: `<user>/GC/*/Card */<maker>-<code>-*.gci`; Wii: `<user>/Wii/title/00010000/<code in hex>/data` |
+| melonDS, mGBA | — | the `.sav` beside the ROM |
+
+The others show the emulator's save folder and back nothing up: Eden's `nand/user/save`, Ryujinx's
+`bis/user/save`, PCSX2's and DuckStation's memory cards, PPSSPP's `PSP/SAVEDATA`, Azahar's `sdmc`,
+Mupen64Plus's, ScummVM's and xemu's. A backup or an export never holds a key, firmware, BIOS or a
+system title: they are only ever the title's own files.
+
+With `saves.auto_backup` (on by default), `session_end` starts `universe saves backup <id> --auto` as
+the unit `universe-saves-backup-<session>` once the session-end hooks ran, for a game whose saves
+can be backed up; `--auto` passes over a game ludusavi does not know without an error. A first
+backup fetches ludusavi and its manifest, too long for `ExecStopPost`. `remove(id, purge)` and
+`reset_prefix` back the saves up before the prefix goes, and refuse when that backup fails; a
+prefix with no `drive_c`, or a game with nothing to back up, goes on.
 
 ## Changes
 
@@ -505,11 +611,12 @@ none of those variables).
 
 Programs most distributions do not package are fetched by Universe itself when they are not on
 PATH: `umu-run` (umu-launcher's zipapp, which needs python3 3.10 or later) before a Proton
-launch that uses `launch.umu_run`, and before any command of a source that requires one of them
+launch that uses `launch.umu_run`, `ludusavi` (its Linux build, which needs the system's GTK 3; on
+NixOS the package's runs, the fetched one would go through `universe-fhs`) before a save backup, and before any command of a source that requires one of them
 `gogdl` (heroic-gogdl's x86_64 build), `legendary` (legendary-gl's Linux build, a python3 zipapp)
 and `butler` (itch.io's archive from broth.itch.zone, a zip kept whole: the program loads the 7-Zip
 libraries beside it). They are components (see Components): the catalogue's newest build, else the
-pinned one when the catalogue cannot be reached or lacks the tool: umu-launcher 1.4.4 the core's, the
+pinned one when the catalogue cannot be reached or lacks the tool: umu-launcher 1.4.4 and ludusavi 0.31.0 the core's, the
 others in the `[[tools]]` of the source that requires them (heroic-gogdl 1.3.0 in GOG's, legendary-gl
 0.21.1 in Epic's, butler 15.31.0 in itch.io's). `<data>/bin` holds a link to each tool's newest build; every lookup
 of a program searches it after PATH (an installed one wins), and it is appended to the `PATH` of the
@@ -718,7 +825,9 @@ version, and the first launch after one may quit ("Prefix has an invalid version
 before a change of Steam's pick keeps the Proton it came with, which its settings change. umu-run
 keeps the real `pfx` folder of a prefix Steam made, and makes `pfx` a link to the prefix itself in
 one it makes, which Steam's Proton runs as it is. With `shared_prefix` off, a game added from then
-on gets a prefix of Universe's own and Universe's Proton.
+on gets a prefix of Universe's own and Universe's Proton. Either way Universe backs the saves up
+(see Game data): under `shared_prefix` they live in Steam's compatdata, which stays where Steam keeps
+it.
 
 The client has to run for a game to reach it. `pre-launch` starts it when `~/.steam/steam.pid`
 names no live Steam: `systemd-run --user --unit=universe-steam … steam -silent` with the launcher's
