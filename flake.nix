@@ -437,7 +437,13 @@
         };
       pytestUi = pytestOf {
         name = "universe-pytest-ui";
-        dirs = [ "ui" ];
+        # the core contract test lists the modules and sources the real core reads
+        dirs = [
+          "ui"
+          "modules"
+          "sources"
+        ];
+        tests = [ "ui" ];
         py =
           ps:
           uiPy ps
