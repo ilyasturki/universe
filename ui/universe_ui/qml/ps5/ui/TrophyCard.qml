@@ -1,6 +1,7 @@
 import QtQuick
 import "../core"
 import "../../ui" as Base
+import "Trophy.js" as Trophy
 
 // One trophy of the list: its icon, its name over what it asks, and at the right when it was earned and how rare it is.
 Item {
@@ -14,11 +15,6 @@ Item {
 
     readonly property bool unlocked: trophy.unlocked === true
     readonly property int hidden: trophy.hidden || 0
-
-    // The console's grades of rarity, by the share of players who earned it.
-    function grade(r) {
-        return r < 5 ? "Ultra rare" : r < 15 ? "Very rare" : r < 50 ? "Rare" : "Common";
-    }
 
     Rectangle {
         anchors.fill: parent
@@ -75,16 +71,17 @@ Item {
         spacing: Theme.dp(4)
 
         Label {
+            objectName: "trophyEarned"
             anchors.right: parent.right
             visible: card.unlocked
-            text: card.trophy.dateText || ""
+            text: Trophy.earned(card.trophy.unlockedAt)
             font.pixelSize: Theme.dp(Theme.fontTiny)
         }
 
         Label {
             anchors.right: parent.right
             visible: text !== ""
-            text: card.trophy.rarity !== undefined && card.trophy.rarity >= 0 ? card.grade(card.trophy.rarity) + "  ·  " + (card.trophy.rarity < 10 ? card.trophy.rarity.toFixed(1) : Math.round(card.trophy.rarity)) + "%" : ""
+            text: Trophy.rarity(card.trophy.rarity)
             color: Theme.textMuted
             font.pixelSize: Theme.dp(Theme.fontTiny)
         }

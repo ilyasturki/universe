@@ -6,6 +6,7 @@ import "../../core/Format.js" as Format
 import "../../ui" as Reprise
 import "../../ui/Controls.js" as Controls
 import "../pages/Home.js" as Home
+import "Trophy.js" as Trophy
 
 // The Control Center over the running game (the overlay window's look): the game's cards in a row,
 // the icon bar under them, a panel over the bar for each icon, a card grown to fill for trophies and captures.
@@ -1336,17 +1337,19 @@ FocusScope {
                             anchors.verticalCenter: parent.verticalCenter
 
                             Label {
+                                objectName: "trophyEarned"
                                 anchors.right: parent.right
-                                visible: !modelData.hidden
-                                text: modelData.unlocked ? modelData.dateText : "Locked"
+                                visible: modelData.unlocked
+                                text: Trophy.earned(modelData.unlockedAt)
                                 color: Theme.textSecondary
                                 font.pixelSize: Theme.dp(Theme.fontSmall)
                             }
 
                             Label {
+                                objectName: "trophyRarity"
                                 anchors.right: parent.right
-                                visible: modelData.rarityText !== ""
-                                text: modelData.rarityText
+                                visible: text !== ""
+                                text: Trophy.rarity(modelData.rarity)
                                 color: Theme.textMuted
                                 font.pixelSize: Theme.dp(Theme.fontTiny)
                             }

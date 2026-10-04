@@ -234,6 +234,27 @@ def test_the_power_menu_s_way_out_asks_first_while_a_game_runs(ps5, api):
     assert api.universe.currentSession, "Cancel leaves the game running"
 
 
+def test_a_trophy_s_unlock_date_is_relative_and_an_unknown_one_is_blank(app):
+    from pathlib import Path
+
+    from PySide6.QtCore import QUrl
+    from PySide6.QtQml import QQmlComponent, QQmlEngine
+
+    qml_dir = Path(__file__).resolve().parents[1] / "universe_ui" / "qml"
+    engine = QQmlEngine()
+    component = QQmlComponent(engine)
+    qml = (
+        f'import QtQuick\nimport "{(qml_dir / "ps5/ui/Trophy.js").as_uri()}" as Trophy\nimport "{(qml_dir / "core/Format.js").as_uri()}" as Format\n'
+        "QtObject { property var out: [Trophy.earned(new Date(Date.now() - 3 * 86400000).toISOString()), "
+        "Format.lastPlayed(new Date(Date.now() - 3 * 86400000)), Trophy.earned(''), Trophy.rarity(-1)] }\n"
+    )
+    component.setData(qml.encode(), QUrl("file:///trophy.qml"))
+    obj = component.create()
+    assert obj is not None, [e.toString() for e in component.errors()]
+    earned, played, unknown, rarity = obj.property("out").toVariant()
+    assert earned == played and unknown == "" and rarity == ""
+
+
 def test_a_dialog_taller_than_the_screen_scrolls_its_text(ps5):
     window, root = ps5
     dialog = root.findChild(QObject, "dialog")
