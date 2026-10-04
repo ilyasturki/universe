@@ -204,6 +204,7 @@ FocusScope {
         view.scrollToCurrent();
     }
     onIndexChanged: view.scrollToCurrent()
+    onFixHeightsChanged: view.scrollToCurrent()
     onHeightChanged: view.scrollToCurrent()
 
     Keys.onUpPressed: step(-1)
