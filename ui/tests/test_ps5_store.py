@@ -90,6 +90,19 @@ def test_the_card_s_more_button_opens_the_game_s_shared_menu(ps5):
     assert store.property("zone") == "card"
 
 
+def test_an_installed_game_s_options_offer_play_once(ps5):
+    window, root = ps5
+    store = open_store(root)
+    QTest.keyClick(window, Qt.Key.Key_Down)
+    QTest.keyClick(window, Qt.Key.Key_Down)
+    until(lambda: store.property("row") == 2 and value(store, "current")["installed"] and not value(store, "current")["pending"])
+    QTest.keyClick(window, Qt.Key.Key_F1)
+    popup = root.findChild(QObject, "popup")
+    until(lambda: popup.property("open") is True)
+    acts = [i["act"] for i in value(popup, "items")]
+    assert acts[0] == "play" and acts.count("play") == 1
+
+
 def test_the_card_menu_s_resume_goes_back_to_the_running_game(ps5, api):
     window, root = ps5
     QMetaObject.invokeMethod(root, "launch", Q_ARG("QVariant", api.allGames.byId("mini-metro")))

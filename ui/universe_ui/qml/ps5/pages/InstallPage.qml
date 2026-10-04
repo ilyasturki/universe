@@ -389,7 +389,11 @@ FocusScope {
         if (!game)
             return [];
         var session = api.universe.currentSession;
-        var items = Home.options(game, !!session && session.id === game.id);
+        var main = mainOf(g);
+        // Play once: the card's own button when that is Play, nowhere before the files are there.
+        var items = Home.options(game, !!session && session.id === game.id).filter(function (i) {
+            return i.act !== "play" || (g.installed && (!main || main.act !== "play"));
+        });
         if (g.installed) {
             items[items.length - 1].gap = false;
             items.splice(items.length - 1, 0, {
