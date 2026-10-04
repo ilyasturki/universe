@@ -495,7 +495,7 @@ FocusScope {
                 label: "Power",
                 type: "action",
                 display: "",
-                detail: "Quit Universe, suspend, reboot or power off.",
+                detail: (api.system.session ? "Log out" : "Quit Universe") + ", suspend, reboot or power off.",
                 icon: "power",
                 action: "Open"
             });

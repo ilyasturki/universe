@@ -195,13 +195,12 @@ FocusScope {
             push(item.source, {});
     }
 
-    function askPower() {
-        var session = api.universe.currentSession;
+    function powerItems() {
         var can = api.system.actions;
-        var items = [
+        return [
             {
-                label: "Quit Universe",
-                act: "quit"
+                label: api.system.session ? "Log Out" : "Quit Universe",
+                act: api.system.session ? "logout" : "quit"
             },
             {
                 label: "Sleep Mode",
@@ -216,8 +215,13 @@ FocusScope {
                 act: "power_off"
             }
         ].filter(function (i) {
-            return i.act === "quit" || can.indexOf(i.act) >= 0;
+            return i.act === "quit" || i.act === "logout" || can.indexOf(i.act) >= 0;
         });
+    }
+
+    function askPower() {
+        var session = api.universe.currentSession;
+        var items = powerItems();
         pick({
             title: "Power Options",
             choices: items.map(function (i) {
@@ -225,7 +229,7 @@ FocusScope {
             })
         }, function (i) {
             var act = i >= 0 ? items[i].act : "";
-            if (act === "quit")
+            if (act === "quit" || act === "logout")
                 Qt.quit();
             else if (act === "suspend")
                 api.system.run("suspend");

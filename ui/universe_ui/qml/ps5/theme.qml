@@ -119,12 +119,12 @@ FocusScope {
             target.forceActiveFocus();
     }
 
-    // B held and Settings › About › Power: the console's Power panel, with Universe's own way out first.
-    function askPower() {
+    // The console's Power panel, with Universe's own way out (in the Universe session, logging out) last.
+    function powerItems() {
         var session = api.universe.currentSession;
         var can = api.system.actions;
         var playing = session && session.title ? session.title : "";
-        var items = [
+        return [
             {
                 label: "Enter Rest Mode",
                 glyph: "power",
@@ -145,20 +145,26 @@ FocusScope {
             return can.indexOf(i.act) >= 0;
         }).concat([
             {
-                label: "Quit Universe",
+                label: api.system.session ? "Log Out" : "Quit Universe",
                 glyph: "exit",
-                act: "quit",
+                act: api.system.session ? "logout" : "quit",
                 detail: api.system.steam ? "Back to Steam, whose menu has the power options." : "",
                 gap: can.length > 0
             }
         ]);
+    }
+
+    // B held and Settings › About › Power.
+    function askPower() {
+        var session = api.universe.currentSession;
+        var items = powerItems();
         showMenu({
             title: "Power",
             items: items,
             width: Theme.dp(650)
         }, function (i) {
             var act = i >= 0 ? items[i].act : "";
-            if (act === "quit")
+            if (act === "quit" || act === "logout")
                 Qt.quit();
             else if (act === "suspend") {
                 Base.Notices.show("Entering rest mode…", "power");

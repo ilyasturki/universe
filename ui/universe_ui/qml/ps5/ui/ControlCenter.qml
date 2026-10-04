@@ -266,6 +266,13 @@ FocusScope {
                     label: "Restart",
                     kind: "action"
                 });
+            if (api.system.session)
+                out.push({
+                    id: "logout",
+                    glyph: "exit",
+                    label: "Log Out",
+                    kind: "action"
+                });
             return out;
         }
         return [];
@@ -480,6 +487,19 @@ FocusScope {
                     return;
                 Base.Notices.show(restart ? "Restarting…" : "Turning off…", "power");
                 api.system.run(id);
+            });
+            break;
+        case "logout":
+            confirm.show({
+                message: "Log out?",
+                detail: (cc.session ? cc.session.title + " will be closed. " : "") + "Unsaved progress will be lost.",
+                buttons: ["Cancel", "Log Out"],
+                danger: 1,
+                index: 0
+            }, function (i) {
+                cc.forceActiveFocus();
+                if (i === 1)
+                    Qt.quit();
             });
             break;
         }

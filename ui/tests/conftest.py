@@ -54,6 +54,13 @@ def fake(app, xdg, tmp_path):
     client.shutdown()
 
 
+@pytest.fixture(params=[False, True], ids=["desktop", "session"])
+def universe_session(request, monkeypatch):
+    """Outside, then inside the Universe session a display manager started; asked for before `api`, which reads it once."""
+    monkeypatch.setenv("UNIVERSE_FAKE_SESSION", "1" if request.param else "0")
+    return request.param
+
+
 @pytest.fixture
 def api(fake, tmp_path):
     from universe_ui.api import Api

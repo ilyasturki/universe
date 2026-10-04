@@ -1515,6 +1515,23 @@ def test_the_sound_section_plays_through_the_output_picked_in_both_looks(api, fa
 
 
 @pytest.mark.parametrize("look", ["reprise", "switch2", "ps5"])
+def test_in_the_universe_session_the_way_out_logs_out(universe_session, api, look):
+    until(lambda: api.system.actions)
+    if look != "reprise":
+        api.theme.set(look)
+        api.theme.takeLanding()
+    _engine, window = render(api)
+    root = window.property("contentItem").childItems()[0].property("item")
+    items = QMetaObject.invokeMethod(root, "powerItems", Qt.DirectConnection, Q_RETURN_ARG("QVariant"))
+    keys = [i.get("action", i.get("act")) for i in (items.toVariant() if hasattr(items, "toVariant") else items)]
+    way_out = "logout" if universe_session else "quit"
+    assert way_out in keys and "power_off" in keys, keys
+    assert ("quit" if universe_session else "logout") not in keys, "one way out of the launcher"
+    settle(window)
+    window.close()
+
+
+@pytest.mark.parametrize("look", ["reprise", "switch2", "ps5"])
 def test_each_looks_themes_page_says_it_is_not_affiliated(api, look):
     _engine, window = render(api)
     for step in ["ps5", "reprise"] if look == "reprise" else [look]:

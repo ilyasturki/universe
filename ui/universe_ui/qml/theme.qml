@@ -1382,15 +1382,14 @@ FocusScope {
             });
     }
 
-    // B held and Settings › About › Power: quit the launcher, or what logind will do with the machine.
-    function askPower() {
-        var session = api.universe.currentSession;
+    // Quit the launcher (in the Universe session, log out), or what logind will do with the machine.
+    function powerItems() {
         var can = api.system.actions;
         var items = [
             {
                 icon: "exit",
-                label: "Quit Universe",
-                action: "quit"
+                label: api.system.session ? "Log out" : "Quit Universe",
+                action: api.system.session ? "logout" : "quit"
             }
         ];
         if (can.indexOf("suspend") >= 0)
@@ -1417,9 +1416,17 @@ FocusScope {
             action: "",
             gap: true
         });
+        return items;
+    }
+
+    // B held and Settings › About › Power.
+    function askPower() {
+        var session = api.universe.currentSession;
+        var can = api.system.actions;
+        var items = powerItems();
         var detail = api.system.steam ? "Back to Steam, whose menu has the power options." : session && can.length > 0 ? "Suspend keeps " + session.title + " running. The others close it." : "";
         confirm.choose("Power", detail, items, function (action) {
-            if (action === "quit")
+            if (action === "quit" || action === "logout")
                 Qt.quit();
             else if (action === "suspend")
                 api.system.run("suspend");

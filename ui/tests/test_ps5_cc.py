@@ -72,6 +72,16 @@ def test_the_control_center_lays_its_cards_over_the_bottom_of_the_game(api, fake
     stop(api, window, overlay)
 
 
+def test_the_power_panel_logs_out_in_the_universe_session(universe_session, api, fake):
+    _engine, window, overlay = start(api, fake, "mirrors-edge")
+    cc = open_cc(api, overlay)
+    icons = [i["id"] for i in cc.property("icons").toVariant()]
+    cc.setProperty("icon", icons.index("power"))
+    rows = [r["id"] for r in cc.property("panelRows").toVariant()]
+    assert ("logout" in rows) is universe_session and rows[0] == "quit", rows
+    stop(api, window, overlay)
+
+
 def test_the_bar_opens_a_panel_over_its_icon_and_b_steps_back_out(api, fake):
     _engine, window, overlay = start(api, fake, "mirrors-edge")
     cc = open_cc(api, overlay)

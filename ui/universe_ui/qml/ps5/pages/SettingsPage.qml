@@ -554,7 +554,7 @@ FocusScope {
                     type: "action",
                     icon: "power",
                     display: "",
-                    detail: api.system.steam ? "Back to Steam, whose menu has the power options." : "Quit Universe, or rest, restart or turn off the machine."
+                    detail: api.system.steam ? "Back to Steam, whose menu has the power options." : (api.system.session ? "Log out" : "Quit Universe") + ", or rest, restart or turn off the machine."
                 }
             ];
         return [];
