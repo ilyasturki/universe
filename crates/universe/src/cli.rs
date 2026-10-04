@@ -20,6 +20,8 @@ Files:
   ~/.local/share/universe/games/<id>/ — game.toml, sessions.jsonl, journal/, media/
   ~/.config/universe/modules/<id>/, ~/.config/universe/sources/<id>/ — user modules and sources, overriding the shipped ones
   ~/.local/share/universe/modules/<id>/, ~/.local/share/universe/sources/<id>/ — their data: caches, logins
+  ~/.local/share/universe/saves/<id>/ — a game's save backups, as ludusavi lays them out (paths.saves_root)
+  ~/.local/share/universe/ludusavi/ — the config and manifest of Universe's ludusavi, apart from your own
   ~/.local/state/universe/current-session.json — the running session
   ~/.local/state/universe/logs/<id>/<session>/ — Proton's and DXVK's logs of a launch with debug_log on; the game's own output is the journal's (`universe logs`)
   $XDG_RUNTIME_DIR/universe/controller.lock — held by the one controller watcher (the launcher's, or a session's)
@@ -111,6 +113,23 @@ pub enum Cmd {
         /// Do not ask for confirmation
         #[arg(long, short)]
         yes: bool,
+    },
+    /// Where a game's data lives, each part's size: install, prefix, saves, Universe's files, recordings, logs; or act on its prefix
+    Data {
+        /// Game: exact id, then whole word, substring or path
+        name: String,
+        #[command(subcommand)]
+        action: Option<DataCmd>,
+    },
+    /// Universe's folders with their size and free space, the games by size, and what no game holds any more
+    Storage {
+        #[command(subcommand)]
+        action: Option<StorageCmd>,
+    },
+    /// A game's saves through ludusavi: where they are, the backups kept, backing up, restoring, exporting
+    Saves {
+        #[command(subcommand)]
+        action: SavesCmd,
     },
     /// Add a game by its file: a program, or a ROM, image or folder for an emulator
     Add {
@@ -423,6 +442,81 @@ pub enum MediaCmd {
         provider: String,
         /// The game's id at the provider
         id: String,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum DataCmd {
+    /// Move the prefix into prefixes_root (a rename, or a copy across filesystems); every game on it follows. Steam's compatdata stays
+    MovePrefix {
+        /// Do not ask for confirmation
+        #[arg(long, short)]
+        yes: bool,
+    },
+    /// Trash Universe's prefix once its saves are backed up: the next launch makes a fresh one
+    ResetPrefix {
+        /// Do not ask for confirmation
+        #[arg(long, short)]
+        yes: bool,
+    },
+    /// winecfg in the game's prefix
+    Winecfg,
+    /// winetricks in the game's prefix, with its verbs; none opens its window
+    Winetricks { verbs: Vec<String> },
+    /// Run a Windows program in the game's prefix
+    Run {
+        exe: std::path::PathBuf,
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    /// Stop the prefix's wineserver, and every program in the prefix with it
+    Kill,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum StorageCmd {
+    /// Trash a leftover the storage view lists, named by its path
+    Trash {
+        path: String,
+        /// Do not ask for confirmation
+        #[arg(long, short)]
+        yes: bool,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum SavesCmd {
+    /// Where ludusavi finds the saves, and the backups kept
+    #[command(alias = "ls")]
+    List {
+        /// Game: exact id, then whole word, substring or path
+        name: String,
+    },
+    /// Back the saves up now; unchanged saves make no new backup
+    Backup {
+        /// Game: exact id, then whole word, substring or path
+        name: String,
+        /// The unit a session's end starts: a game with nothing to back up is passed over without an error
+        #[arg(long, hide = true)]
+        auto: bool,
+    },
+    /// Put a backup's saves back where the game reads them
+    Restore {
+        /// Game: exact id, then whole word, substring or path
+        name: String,
+        /// The backup's id (`universe saves list`); the latest when omitted
+        backup: Option<String>,
+        /// Do not ask for confirmation
+        #[arg(long, short)]
+        yes: bool,
+    },
+    /// Every backup of the game in one zip, which any ludusavi restores from once unpacked
+    Export {
+        /// Game: exact id, then whole word, substring or path
+        name: String,
+        /// The folder the zip lands in
+        #[arg(default_value = ".")]
+        to: String,
     },
 }
 
@@ -1073,6 +1167,98 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 println!("uninstalled {id}");
             }
         }
+        Cmd::Data { name, action } => {
+            let id = pick(&core, &name).await?;
+            match action {
+                None => {
+                    let data = core.game_data(&id).await?;
+                    if json {
+                        return print_json(&data);
+                    }
+                    print_data(&data);
+                }
+                Some(DataCmd::MovePrefix { yes }) => {
+                    if yes || confirm(&format!("move {id}'s prefix into prefixes_root?")) {
+                        let moved = core.move_prefix(&id).await?;
+                        if json {
+                            return print_json(&moved);
+                        }
+                        println!("{} {} → {}", "moved".green(), s(&moved, "from"), s(&moved, "to"));
+                        if !moved["left"].is_null() {
+                            println!("{}", format!("{} could not go to the trash: it is still there", s(&moved, "left")).yellow());
+                        }
+                    }
+                }
+                Some(DataCmd::ResetPrefix { yes }) => {
+                    if yes || confirm(&format!("back {id}'s saves up and trash its prefix?")) {
+                        let reset = core.reset_prefix(&id).await?;
+                        if json {
+                            return print_json(&reset);
+                        }
+                        println!("{} {}", "trashed".green(), s(&reset, "trashed"));
+                    }
+                }
+                Some(tool) => {
+                    let (tool, args) = match tool {
+                        DataCmd::Winecfg => ("winecfg", vec![]),
+                        DataCmd::Winetricks { verbs } => ("winetricks", verbs),
+                        DataCmd::Run { exe, args } => ("run", std::iter::once(exe.to_string_lossy().into_owned()).chain(args).collect()),
+                        _ => ("kill", vec![]),
+                    };
+                    finish(json, core.prefix_tool(&id, tool, &args).await.map(|unit| format!("{tool} started as {unit}")));
+                }
+            }
+        }
+        Cmd::Storage { action } => match action {
+            None => {
+                let storage = core.storage().await?;
+                if json {
+                    return print_json(&storage);
+                }
+                print_storage(&storage);
+            }
+            Some(StorageCmd::Trash { path, yes }) => {
+                if yes || confirm(&format!("trash {path}?")) {
+                    core.trash_leftover(&path).await?;
+                    println!("trashed {path}");
+                }
+            }
+        },
+        Cmd::Saves { action } => match action {
+            SavesCmd::List { name } => {
+                let id = pick(&core, &name).await?;
+                let data = core.game_data(&id).await?;
+                if json {
+                    return print_json(&data["saves"]);
+                }
+                print_saves(&data["saves"], &loc);
+            }
+            SavesCmd::Backup { name, auto } => {
+                let id = pick(&core, &name).await?;
+                match core.saves_backup(&id).await {
+                    Ok(done) if json => print_json(&done)?,
+                    Ok(done) => println!("{id}: {}", backup_text(&done)),
+                    Err(e @ (crate::Error::NotFound(_) | crate::Error::Unavailable(_))) if auto => tracing::info!("{id}: no backup: {e}"),
+                    Err(e) => return Err(e.into()),
+                }
+            }
+            SavesCmd::Restore { name, backup, yes } => {
+                let id = pick(&core, &name).await?;
+                let which = backup.clone().unwrap_or_default();
+                let what = if which.is_empty() { "the latest backup".to_string() } else { which.clone() };
+                if yes || confirm(&format!("put {id}'s saves back from {what}? the saves there now are replaced")) {
+                    let done = core.saves_restore(&id, &which).await?;
+                    if json {
+                        return print_json(&done);
+                    }
+                    println!("{id}: {} restored ({})", files_text(done.files.len()), human_size(done.bytes));
+                }
+            }
+            SavesCmd::Export { name, to } => {
+                let id = pick(&core, &name).await?;
+                finish(json, core.saves_export(&id, &to).await.map(|zip| zip.to_string_lossy().into_owned()));
+            }
+        },
         Cmd::Add { file, runner, title, platform, media } => {
             let payload = serde_json::json!({"title": title, "runner": runner, "exe": file.to_string_lossy(), "platform": platform});
             let id = core.add_game(&payload).await?;
@@ -2071,6 +2257,14 @@ const POSITIONALS: &[(&str, usize, &str)] = &[
     ("set", 1, "games"),
     ("rm", 1, "games"),
     ("uninstall", 1, "games"),
+    ("data", 1, "games"),
+    ("data run", 1, "FILES"),
+    ("storage trash", 1, "FILES"),
+    ("saves list", 1, "games"),
+    ("saves backup", 1, "games"),
+    ("saves restore", 1, "games"),
+    ("saves export", 1, "games"),
+    ("saves export", 2, "FILES"),
     ("sessions", 1, "games"),
     ("screenshots", 1, "games"),
     ("achievements", 1, "games"),
@@ -2197,6 +2391,114 @@ fn generate(dir: &std::path::Path) -> anyhow::Result<()> {
     std::fs::create_dir_all(&man)?;
     clap_mangen::generate_to(cmd, &man)?;
     Ok(())
+}
+
+fn files_text(n: usize) -> String {
+    if n == 1 {
+        "1 file".into()
+    } else {
+        format!("{n} files")
+    }
+}
+
+fn backup_text(done: &crate::saves::Outcome) -> String {
+    match done.change.as_str() {
+        "same" => "unchanged since the last backup".into(),
+        "none" => "no saves found".into(),
+        _ => format!("backed up, {} ({})", files_text(done.files.len()), human_size(done.bytes)),
+    }
+}
+
+fn size_of(v: &Value) -> String {
+    human_size(v["bytes"].as_u64().unwrap_or(0))
+}
+
+fn print_data(d: &Value) {
+    println!("{}  {}  {}", s(d, "title").bold(), s(d, "id").dimmed(), format!("total {}", human_size(d["total"].as_u64().unwrap_or(0))).dimmed());
+    let line = |label: &str, v: &Value, extra: String| {
+        if v.is_null() {
+            return;
+        }
+        let missing = if v["exists"] == false { " (missing)".dimmed().to_string() } else { String::new() };
+        println!("  {label:<11} {:>8}  {}{missing}{extra}", size_of(v), s(v, "path"));
+    };
+    line("install", &d["install"], format!("  {}", s(&d["install"], "owner").dimmed()));
+    let p = &d["prefix"];
+    let shared = joined(&p["shared_with"], ", ");
+    let shared = if shared.is_empty() { String::new() } else { format!(" · shared with {shared}") };
+    line("prefix", p, format!("  {}", format!("{}{shared}", s(p, "owner")).dimmed()));
+    let saves = &d["saves"];
+    let backups = saves["backups"].as_array().map(Vec::len).unwrap_or(0);
+    let engine = match s(saves, "engine").as_str() {
+        "" => format!("every game's saves: {}", s(saves, "folder")),
+        _ if !s(saves, "error").is_empty() => s(saves, "error"),
+        _ => format!("{} · {}", files_text(saves["files"].as_array().map(Vec::len).unwrap_or(0)), size_of(saves)),
+    };
+    println!(
+        "  {:<11} {:>8}  {}  {}",
+        "saves",
+        human_size(saves["backups_bytes"].as_u64().unwrap_or(0)),
+        s(saves, "dir"),
+        format!("{backups} backups · {engine}").dimmed()
+    );
+    let parts = &d["universe"]["parts"];
+    let parts: Vec<String> =
+        ["media", "screenshots", "journal", "sessions"].iter().map(|k| format!("{k} {}", human_size(parts[k].as_u64().unwrap_or(0)))).collect();
+    line("universe", &d["universe"], format!("  {}", parts.join(" · ").dimmed()));
+    line("recordings", &d["recordings"], if d["recordings"]["archived"] == true { format!("  {}", "archived".dimmed()) } else { String::new() });
+    line("logs", &d["logs"], String::new());
+}
+
+fn print_saves(saves: &Value, loc: &Locale) {
+    if !s(saves, "error").is_empty() {
+        println!("{}", s(saves, "error").yellow());
+    }
+    if s(saves, "engine").is_empty() {
+        println!("every game's saves are in {}: no backup of this one alone", s(saves, "folder"));
+    }
+    if !s(saves, "name").is_empty() {
+        println!("ludusavi knows it as {}", s(saves, "name").bold());
+    }
+    let mut t = table(&["Save", "Size"]);
+    for f in saves["files"].as_array().into_iter().flatten() {
+        t.add_row(vec![s(f, "path"), size_of(f)]);
+    }
+    println!("{t}");
+    let mut t = table(&["Backup", "When", "Size"]);
+    for b in saves["backups"].as_array().into_iter().flatten() {
+        t.add_row(vec![s(b, "id"), when(&s(b, "when"), loc), size_of(b)]);
+    }
+    println!("{t}");
+    println!("{}", format!("kept in {} · the last {} · after each session: {}", s(saves, "dir"), saves["keep"], flag(&saves["auto"])).dimmed());
+}
+
+fn print_storage(st: &Value) {
+    let mut t = table(&["Folder", "Path", "Used", "Free"]);
+    for r in st["roots"].as_array().into_iter().flatten() {
+        let free = r["free"].as_u64().unwrap_or(0);
+        t.add_row(vec![s(r, "id"), s(r, "path"), size_of(r), if free > 0 { human_size(free) } else { String::new() }]);
+    }
+    println!("{t}");
+    let mut t = table(&["Game", "Total", "Install", "Prefix", "Saves", "Universe", "Recordings"]);
+    for g in st["games"].as_array().into_iter().flatten() {
+        let part = |k: &str| human_size(g[k].as_u64().unwrap_or(0));
+        t.add_row(vec![s(g, "id"), size_of(g), part("install"), part("prefix"), part("saves"), part("universe"), part("recordings")]);
+    }
+    println!("{t}");
+    let leftovers = st["leftovers"].as_array().cloned().unwrap_or_default();
+    if leftovers.is_empty() {
+        println!("no leftovers");
+        return;
+    }
+    let mut t = table(&["Leftover", "Path", "Size", "Game"]);
+    for l in &leftovers {
+        t.add_row(vec![s(l, "kind"), s(l, "path"), size_of(l), s(l, "title")]);
+    }
+    println!("{t}");
+    println!(
+        "{}",
+        format!("{} in leftovers: `universe storage trash <path>` puts one in the trash", human_size(st["leftover_bytes"].as_u64().unwrap_or(0))).dimmed()
+    );
 }
 
 fn human_size(bytes: u64) -> String {

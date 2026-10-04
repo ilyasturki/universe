@@ -128,6 +128,35 @@ impl Core {
     fn uninstall_via(&self, py: Python<'_>, id: String) -> PyResult<Option<String>> {
         self.run(py, |c| async move { c.uninstall_via(&id).await })
     }
+    fn game_data(&self, py: Python<'_>, id: String) -> PyResult<Py<PyAny>> {
+        self.value(py, |c| async move { c.game_data(&id).await })
+    }
+    fn storage(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.value(py, |c| c.storage())
+    }
+    fn trash_leftover(&self, py: Python<'_>, path: String) -> PyResult<()> {
+        self.run(py, |c| async move { c.trash_leftover(&path).await })
+    }
+    fn move_prefix(&self, py: Python<'_>, id: String) -> PyResult<Py<PyAny>> {
+        self.value(py, |c| async move { c.move_prefix(&id).await })
+    }
+    fn reset_prefix(&self, py: Python<'_>, id: String) -> PyResult<Py<PyAny>> {
+        self.value(py, |c| async move { c.reset_prefix(&id).await })
+    }
+    #[pyo3(signature = (id, tool, args = Vec::new()))]
+    fn prefix_tool(&self, py: Python<'_>, id: String, tool: String, args: Vec<String>) -> PyResult<String> {
+        self.run(py, |c| async move { c.prefix_tool(&id, &tool, &args).await })
+    }
+    fn saves_backup(&self, py: Python<'_>, id: String) -> PyResult<Py<PyAny>> {
+        self.value(py, |c| async move { c.saves_backup(&id).await })
+    }
+    #[pyo3(signature = (id, backup = String::new()))]
+    fn saves_restore(&self, py: Python<'_>, id: String, backup: String) -> PyResult<Py<PyAny>> {
+        self.value(py, |c| async move { c.saves_restore(&id, &backup).await })
+    }
+    fn saves_export(&self, py: Python<'_>, id: String, to: String) -> PyResult<String> {
+        self.run(py, |c| async move { c.saves_export(&id, &to).await.map(|p| p.to_string_lossy().into_owned()) })
+    }
     fn reload(&self, py: Python<'_>) -> PyResult<()> {
         self.run(py, |c| c.reload_config())
     }
