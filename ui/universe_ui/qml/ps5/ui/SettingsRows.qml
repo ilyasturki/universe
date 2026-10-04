@@ -39,7 +39,7 @@ FocusScope {
             return 0;
         if (r.heading)
             return headingHeight;
-        if (r.fix || r.wraps)
+        if (r.fix || r.wraps || (r.detail && i === index && cursorShown))
             return rowHeight + (fixHeights[i] !== undefined ? fixHeights[i] : detailLine);
         return rowHeight + (r.detail ? detailLine : 0);
     }
@@ -280,7 +280,8 @@ FocusScope {
                 readonly property bool info: entry.type === "info"
                 readonly property bool hasDetail: entry.detail !== undefined && entry.detail !== ""
                 readonly property bool hasFix: entry.fix !== undefined && entry.fix !== ""
-                readonly property bool explains: hasFix || entry.wraps === true
+                // The row under the cursor reads its whole description; the others keep one line.
+                readonly property bool explains: hasFix || entry.wraps === true || (focused && hasDetail)
                 readonly property bool hasGlyph: entry.slot !== undefined && String(entry.slot) !== "" && entry.family !== undefined
                 // An icon naming a file (a runner's logo) is drawn whole; a bare name is a Glyph kind.
                 readonly property bool iconIsFile: entry.icon !== undefined && entry.icon !== null && String(entry.icon).indexOf("/") >= 0
@@ -568,6 +569,8 @@ FocusScope {
                     }
 
                     Column {
+                        id: explanation
+                        objectName: "rowExplanation"
                         visible: row.explains
                         x: label.x
                         y: rows.rowHeight - Theme.dp(12)
@@ -580,6 +583,7 @@ FocusScope {
                         }
 
                         onHeightChanged: report()
+                        onVisibleChanged: report()
                         Component.onCompleted: report()
 
                         Label {

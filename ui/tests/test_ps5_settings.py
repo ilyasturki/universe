@@ -52,6 +52,27 @@ def focused_row(page):
     return None
 
 
+def test_the_focused_row_wraps_its_whole_description(ps5):
+    from PySide6.QtCore import Q_RETURN_ARG
+
+    window, root, warnings = ps5
+    page = push(root, "pages/SettingsPage.qml", {"section": "launch"})
+    click(window, Qt.Key.Key_Right)
+    rows = until(lambda: next((i for i in page.findChildren(QQuickItem) if i.property("cursorShown") is True and i.property("currentRow") is not None), None))
+
+    def height(i):
+        return QMetaObject.invokeMethod(rows, "heightOf", Q_RETURN_ARG("QVariant"), Q_ARG("QVariant", i))
+
+    one_line = rows.property("rowHeight") + rows.property("detailLine")
+    at = rows.property("index")
+    assert value(rows, "currentRow")["key"] == "launch.gamescope"
+    until(lambda: height(at) > one_line, "the focused row's description runs on")
+    click(window, Qt.Key.Key_Down)
+    until(lambda: rows.property("index") != at)
+    until(lambda: height(at) == one_line, "left behind, it keeps one line")
+    assert warnings == []
+
+
 def test_a_runner_form_keeps_its_cards_when_y_shows_the_advanced_rows(ps5, api):
     window, root, warnings = ps5
     form = api.screens.runner
