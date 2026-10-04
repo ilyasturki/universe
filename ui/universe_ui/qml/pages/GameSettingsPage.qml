@@ -129,14 +129,9 @@ FocusScope {
         form.reset(body.cards.index) ? Sound.enter() : Sound.edge();
     }
 
+    // The form says what came of it: its `message`.
     function promoteRow() {
-        var label = row.label;
-        if (form.promote(body.cards.index)) {
-            Sound.enter();
-            page.message(label + " now applies to every game");
-        } else {
-            Sound.edge();
-        }
+        form.promote(body.cards.index) ? Sound.enter() : Sound.edge();
     }
 
     function openMenu() {

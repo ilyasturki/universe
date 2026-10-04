@@ -71,7 +71,7 @@ def test_a_runner_form_keeps_its_cards_when_y_shows_the_advanced_rows(ps5, api):
     until(lambda: form.rows[row["form"]]["origin"] == "default", "X clears it back")
     click(window, Qt.Key.Key_Escape, 2)
     page = push(root, "pages/FormPage.qml", {"source": "gog"})
-    until(lambda: sections(page) == ["Settings", "Sign-in"] and labels(page) == ["Show advanced", "Back", "OK"])
+    until(lambda: sections(page) == ["Settings", "Game defaults", "Sign-in"] and labels(page) == ["Show advanced", "Back", "OK"])
     assert warnings == []
 
 

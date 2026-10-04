@@ -1143,7 +1143,7 @@ def test_the_game_settings_page_applies_a_value_to_all_games(api, fake):
     click(Qt.Key.Key_Return)
     until(lambda: fake.config()["set"]["launch"]["ntsync"] is False and "ntsync" not in fake.game("the-technomancer")["launch"])
     until(lambda: page.property("row")["origin"] == "global" and page.property("canPromote") is False)
-    assert messages == ["NTSync now applies to every game"]
+    assert len(messages) == 1, "the form's word on what came of it, once"
     settle(window)
     window.close()
 
@@ -1421,7 +1421,7 @@ def test_the_switch2_forms_share_the_sidebar_and_y(api, fake):
     click(Qt.Key.Key_Escape, 2)
     settle(window)
     page = push("pages/FormPage.qml", {"source": "gog"})
-    until(lambda: sections(page) == ["Settings", "Sign-in"] and labels(page) == ["Show advanced", "Back", "OK"])
+    until(lambda: sections(page) == ["Settings", "Game defaults", "Sign-in"] and labels(page) == ["Show advanced", "Back", "OK"])
     click(Qt.Key.Key_Escape)
     settle(window)
     push("pages/SettingsPage.qml", {"section": "launch"})

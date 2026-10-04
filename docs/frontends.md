@@ -128,7 +128,7 @@ the fields out and words them (`field_row`, `entry_rows`), and writes through `s
 `promoteField` (`Core::set_field`, `Core::promote_field`) — what a value is, where it comes from,
 what a reset or a promotion does and which games' rows show a module's setting are the core's
 alone. The fake core (`fake_core.py`) builds the same forms from its fixture through
-`universe_core`'s internal `_form_fields`, `_set_writes` and `_promote_writes`. A row's `field`
+`universe_core`'s internal `_form_fields`, `_set_writes` and `_all_games_writes`. A row's `field`
 is the key `set_field` takes (a module's game setting keeps its own `key` and its `module`). On a
 game's or a runner's page a row that can inherit carries `origin`: `game` (set on the game),
 `runner` (set on the runner), `global` (`config.toml` sets it), `default` (nothing does) or `found`
@@ -140,6 +140,12 @@ out of the map). Where `promotable(row)` says so (`Field.promotable`, `Entry.pro
 own value of a key with a global twin) `promote(index)` makes it the global value and clears the
 game's, which follows it from then on, other games keeping theirs: Reprise's More menu lists it as
 Apply to all games, PS5's as Apply to All Games, the GTK dialog as a button beside the reset one.
+On a game's page a row with a global twin carries its `reach` (`Field.reach`, `Dolphin games`),
+and `setValueAll(index, value)`, `toggleAll(index)` and `setMapEntryAll(index, name, value)` write
+the value for all those games instead of this one (`Core::set_field_all`): the global default
+changes, the game's own goes, games with their own keep theirs. After either, the form's `message`
+says what came of it (`Wii controller is now Remote sideways for all Nintendo Wii games without
+their own`), which the page shows as a toast.
 A picker over an inheriting `enum`, `int` or `toggle` opens on a first choice that clears the
 page's own value (`choiceValues[0]` is empty), worded by where the value then comes from and what
 it reads: `Default · auto`, `Global · 60`. A runner picker's `valueIcon` is the picked runner's logo, drawn by the value;
@@ -890,7 +896,8 @@ sidebar of its cards beside the picked one, Y for the advanced rows) is on `api.
 from the manifest, warning, `enabled`, `source`, and a source's `logged_in` and `user`) and a
 Settings card headed by the switch (`enabled`, `disabled` while the entry's programs are missing)
 and, once on, the settings of its core form (`client.form("module" | "source", id)`), a
-`dynamic` setting's choices fetched off the UI thread. A source's page adds a Sign-in card: `Signed
+`dynamic` setting's choices fetched off the UI thread, then a Game defaults card: the global
+values of its game settings, where a value for all games shows and X undoes it. A source's page adds a Sign-in card: `Signed
 in` (an `info` row, the user as its detail), `Get a sign-in link` (`link`: `api.screens.login.begin`,
 the QR code and the URL then show under the cards) and `Enter the code` (`code`: a prompt into
 `login.submit`); `login.finished` reloads both source screens. Listing the sources probes their

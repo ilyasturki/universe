@@ -217,6 +217,7 @@ def field_row(field, section, page, module=""):
         changed=scoped and bool(field["resettable"]),
         resettable=bool(field["resettable"]),
         promotable=bool(field.get("promotable")),
+        reach=str(field.get("reach") or ""),
         keywords=list(field.get("keywords") or []),
     )
     if field["type"] == "secret":
@@ -257,6 +258,7 @@ def entry_rows(field, section, page, module=""):
             changed=origin == "game",
             resettable=bool(entry["resettable"]),
             promotable=bool(entry["promotable"]),
+            reach=str(field.get("reach") or ""),
         )
         rows.append(row)
     add = _row(
@@ -269,7 +271,15 @@ def entry_rows(field, section, page, module=""):
         detail=field["description"],
         advanced=field["advanced"],
     )
-    add.update(field=field["key"], display="", action="Add", icon="plus", map=True, fields=MAP_FIELDS.get(short, ["Name", "Value"]))
+    add.update(
+        field=field["key"],
+        display="",
+        action="Add",
+        icon="plus",
+        map=True,
+        fields=MAP_FIELDS.get(short, ["Name", "Value"]),
+        reach=str(field.get("reach") or ""),
+    )
     rows.append(add)
     return rows
 
@@ -526,6 +536,7 @@ def build_game(client, game_id, screen_mode):
 class GameSettingsForm(RowsForm):
     gameIdChanged = Signal()
     titleChanged = Signal()
+    message = Signal(str)
 
     def __init__(self, client, screen_mode: Callable[[], dict] = dict, parent=None):
         super().__init__(client, parent)
@@ -562,9 +573,38 @@ class GameSettingsForm(RowsForm):
         row = self.row(index)
         if not self.promotable(row):
             return False
-        ok = self._client.promoteField("game", self._game_id, row["field"])
+        return self._for_all(row, lambda: self._client.promoteField("game", self._game_id, row["field"]))
+
+    # The value for every game the row's key reaches (its `reach`), this one included; games that set their own keep theirs.
+    @Slot(int, "QVariant", result=bool)
+    def setValueAll(self, index, value):
+        row = self.row(index)
+        if not row.get("reach"):
+            return False
+        return self._for_all(row, lambda: self._client.setFieldAll("game", self._game_id, row["field"], _to_bus(row, value)))
+
+    @Slot(int, result=bool)
+    def toggleAll(self, index):
+        row = self.row(index)
+        return row.get("type") == "bool" and self.setValueAll(index, not row.get("value"))
+
+    @Slot(int, str, str, result=bool)
+    def setMapEntryAll(self, index, name, value):
+        row = self.row(index)
+        name = re.sub(r"[^A-Za-z0-9_\-]", "", str(name or ""))
+        key = row.get("entry") or (row.get("field") if row.get("map") else "")
+        if not key or not name or not row.get("reach"):
+            return False
+        entry = {**row, "label": name, "field": f"{key}.{name}"}
+        return self._for_all(entry, lambda: self._client.setFieldAll("game", self._game_id, entry["field"], str(value or "")))
+
+    def _for_all(self, row, write):
+        ok = bool(write())
         self._reload(row)
-        return bool(ok)
+        shown = next((r["display"] for r in self._rows if r.get("field") == row["field"]), "")
+        if ok and shown:
+            self.message.emit(f"{row['label']} is now {shown} for all {row['reach']} without their own")
+        return ok
 
     gameId = Property(str, lambda self: self._game_id, notify=gameIdChanged)
     title = Property(str, lambda self: self._title, notify=titleChanged)
@@ -806,7 +846,7 @@ def build_page(api, ident, entries, choices_of=lambda ident, key, values: None, 
         if known is not None:
             labels = {c["value"]: c["label"] for c in field["choices"]}
             known = [{"value": c, "label": labels.get(c, c)} for c in known]
-        _add(rows, groups, "Settings", field_row({**field, "choices": known or field["choices"]}, name, api.form, ident), caps=True)
+        _add(rows, groups, field["section"], field_row({**field, "choices": known or field["choices"]}, name, api.form, ident), caps=True)
     if api.source:
         signin_rows(entry, name, rows, groups)
     return info, rows, groups

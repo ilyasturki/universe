@@ -248,7 +248,7 @@ def test_source_form(api, fake):
     assert form.info["name"] == "GOG" and form.info["source"] is True and form.info["logged_in"] is True and form.info["user"] == "yasso"
     rows = form.rows
     assert rows[0]["key"] == "enabled" and rows[0]["value"] is True and rows[0]["disabled"] is False
-    assert [g["title"] for g in form.groups] == ["Settings", "Sign-in"]
+    assert [g["title"] for g in form.groups] == ["Settings", "Game defaults", "Sign-in"], "the game settings every game takes, between"
     groups = {g["title"]: g for g in form.groups}
     assert [rows[i]["key"] for i in groups["Sign-in"]["rows"]] == ["logged_in", "link", "code"]
     assert rows[groups["Sign-in"]["rows"][0]]["type"] == "info" and rows[groups["Sign-in"]["rows"][0]]["detail"] == "yasso"
@@ -511,6 +511,47 @@ def test_game_settings_promote(api, fake):
     assert form.promote(fullscreen) is True and "fullscreen" not in fake.game("mini-metro")["launch"].get("options", {})
     eden = next(r for r in fake.runners() if r["id"] == "eden")
     assert next(o for o in eden["options"] if o["key"] == "fullscreen")["value"] is False, "a runner option goes to the runner"
+
+
+def test_a_choice_labelled_value_promoted_reaches_config_as_its_stored_value(api, fake):
+    form = api.screens.gameSettings
+    form.load("the-technomancer")
+    told = record(form.message)
+    setting = next(s for m in fake.modules() if m["id"] == "capture" for s in m["settings"] if s["key"] == "source")
+    picked = next(c for c in setting["choices"] if c != setting["default"])
+    source = next(i for i, r in enumerate(form.rows) if r["module"] == "capture" and r["key"] == "source")
+    assert form.setValue(source, setting["choice_labels"][picked]) is True and form.promote(source) is True
+    assert fake.config()["set"]["modules"]["capture"]["source"] == picked, "config.toml holds the stored value, not its label"
+    row = form.rows[source]
+    assert (row["origin"], row["display"], row["changed"]) == ("global", setting["choice_labels"][picked], False), "the game follows it"
+    assert len(told) == 1
+
+
+@pytest.mark.parametrize(
+    ("game", "reach"),
+    [("lego-batman", "Nintendo Wii games"), ("mini-metro", None), ("the-technomancer", None)],
+    ids=["wii", "switch", "proton"],
+)
+def test_a_value_for_all_games_reaches_the_games_the_setting_applies_to(api, fake, game, reach):
+    form = api.screens.gameSettings
+    form.load(game)
+    wiimote = next((r for r in form.rows if r["module"] == "controls" and r["key"] == "wiimote"), None)
+    assert (wiimote and wiimote["reach"]) == reach, "a platform's setting names the platform it reaches"
+    if wiimote is None:
+        return
+    told = record(form.message)
+    index = form.rows.index(wiimote)
+    assert form.setValueAll(index, wiimote["choices"][2]) is True
+    assert fake.config()["set"]["modules"]["controls"]["wiimote"] == "sideways"
+    assert "wiimote" not in (fake.game(game).get("modules") or {}).get("controls", {}), "the game follows it"
+    assert form.rows[index]["origin"] == "global" and told
+    assert form.setValueAll(index_of(form, "launch.exe"), "/x") is False, "a game's program is its alone"
+    assert form.toggleAll(index_of(form, "launch.mangohud")) is True and fake.config()["set"]["launch"]["mangohud"] is True
+    module = api.screens.module
+    module.load("controls")
+    defaults = rows_by_key(module, "controls")
+    assert defaults["wiimote"]["field"] == "wiimote" and defaults["wiimote"]["resettable"] is True, "the module's page shows the value every game takes"
+    assert module.reset(index_of(module, "wiimote")) is True and "wiimote" not in fake.config()["set"]["modules"].get("controls", {}), "and undoes it"
 
 
 def test_game_settings_marks_changed_cards(api, fake):

@@ -93,6 +93,9 @@ pub struct Field {
     pub resettable: bool,
     /// A game's own value with a global twin: `promote_field` makes it every game's.
     pub promotable: bool,
+    /// On a game's form, a key with a global twin: the games `set_field_all` reaches, read after "All" (`games`,
+    /// `Dolphin games`, `Nintendo Wii games`); empty for a key that is the game's alone.
+    pub reach: String,
     pub choices: Vec<Choice>,
     /// A value outside `choices` may be typed.
     pub free: bool,
@@ -316,6 +319,8 @@ const CONFIG_KEYS: &[ConfigKey] = &[
 ];
 
 const PROTON_BUILDS: &str = "A Proton build by name, for the Proton choices: the folder holding its `proton` script.";
+/// The section of a module's or a source's form holding its game settings' global values.
+pub const GAME_DEFAULTS: &str = "Game defaults";
 
 struct Machine<'a> {
     mode: Option<Mode>,
@@ -367,6 +372,33 @@ fn setting_field(s: &Setting, key: String, section: &str) -> Field {
 
 fn owners(list: &[Value]) -> Result<Vec<Owner>> {
     list.iter().map(lenient).collect()
+}
+
+fn kind_word(kind: &str) -> String {
+    match kind {
+        "emulator" => "emulated".into(),
+        "linux" => "native".into(),
+        "proton" => "Proton".into(),
+        "wine" => "Wine".into(),
+        other => other.into(),
+    }
+}
+
+/// The games a global value reaches, read after "All": its narrowest filter, by name when one or two name it.
+fn reach(kinds: &[&str], runners: &[String], platforms: &[String]) -> String {
+    let names: Vec<String> = if !platforms.is_empty() {
+        platforms.to_vec()
+    } else if !runners.is_empty() {
+        runners.iter().map(|r| runners::spec(r).map_or_else(|| r.clone(), |s| s.name.to_string())).collect()
+    } else {
+        kinds.iter().map(|k| kind_word(k)).collect()
+    };
+    match names.as_slice() {
+        [] => "games".into(),
+        [one] => format!("{one} games"),
+        [a, b] => format!("{a} and {b} games"),
+        _ => "games it applies to".into(),
+    }
 }
 
 /// Where a game's key is set for every game.
@@ -459,18 +491,21 @@ pub fn set_writes(form: &Form, key: &str, value: &str) -> Vec<Write> {
     }]
 }
 
-/// A game's own value of `key` becomes the global one, then leaves the game, which follows it; other games keep theirs.
-/// Global first: a failed clear leaves the game a redundant value, never a lost one.
-pub fn promote_writes(form: &Form, key: &str, inputs: &Inputs) -> Result<Vec<Write>> {
+/// `value` for every game a game's `key` reaches: its global twin takes it, then the game's own goes, so the game follows
+/// it; games that set their own keep theirs. `None` hands on the game's own value. Global first: a failed clear leaves the
+/// game a redundant value, never a lost one.
+pub fn all_games_writes(form: &Form, key: &str, value: Option<&str>, inputs: &Inputs) -> Result<Vec<Write>> {
     let Form::Game(id) = form else { return Err(Error::Invalid(format!("{key} is not a game's"))) };
     let twin = twin(key).ok_or_else(|| Error::Invalid(format!("{key} has no global setting")))?;
     if inputs.game["id"].as_str() != Some(id) {
         return Err(Error::NotFound(id.clone()));
     }
-    let value = render(dig(&inputs.game, key));
-    if value.is_empty() {
-        return Err(Error::Invalid(format!("{id} sets no {key} of its own")));
-    }
+    let own = render(dig(&inputs.game, key));
+    let value = match value {
+        Some(v) => v.to_string(),
+        None if own.is_empty() => return Err(Error::Invalid(format!("{id} sets no {key} of its own"))),
+        None => own,
+    };
     let global = match twin {
         Twin::Config => Write::Config { key: key.into(), value },
         Twin::Runner(option) => Write::Runner { runner: render(&inputs.game["effective"]["runner"]), key: option.into(), value },
@@ -626,7 +661,8 @@ impl Build<'_> {
             let key = format!("launch.options.{}", o.key);
             let from_runner = table_value(runner_own, o.key);
             let (inherited, fallback) = if from_runner.is_empty() { (o.default.to_string(), Origin::Default) } else { (from_runner, Origin::Runner) };
-            out.push(Field::new(&key, o.label, o.kind, "Launch").inherits(render(dig(game, &key)), Origin::Game, inherited, fallback));
+            let f = Field::new(&key, o.label, o.kind, "Launch").inherits(render(dig(game, &key)), Origin::Game, inherited, fallback);
+            out.push(Field { reach: reach(&[], &[spec.id.into()], &[]), ..f });
         }
 
         let kind = spec.kind.as_str();
@@ -634,6 +670,9 @@ impl Build<'_> {
             let key = format!("launch.{}", row.key);
             let own_value = dig(game, &key);
             let mut f = self.launch_field(row);
+            if row.scope == "both" {
+                f.reach = reach(row.runners, &[], &[]);
+            }
             if row.kind == "map" {
                 let own = own_value.as_object().cloned().unwrap_or_default();
                 let mut merged = if row.scope == "both" { dig(set, &key).as_object().cloned().unwrap_or_default() } else { Default::default() };
@@ -661,27 +700,28 @@ impl Build<'_> {
 
         let section = "Desktop and library";
         let fallback = if dig(set, "desktop.hide_cursor").is_null() { Origin::Default } else { Origin::Global };
-        out.push(
-            Field::new("desktop.hide_cursor", "Hide the cursor while playing", "bool", section)
-                .about("Hide the desktop cursor while the game runs.", false)
-                .inherits(render(dig(game, "desktop.hide_cursor")), Origin::Game, config.desktop.hide_cursor.to_string(), fallback),
-        );
+        let hide_cursor = Field::new("desktop.hide_cursor", "Hide the cursor while playing", "bool", section)
+            .about("Hide the desktop cursor while the game runs.", false)
+            .inherits(render(dig(game, "desktop.hide_cursor")), Origin::Game, config.desktop.hide_cursor.to_string(), fallback);
+        out.push(Field { reach: reach(&[], &[], &[]), ..hide_cursor });
         let flag = |key: &str| game[key].as_bool().unwrap_or_default().to_string();
         out.push(Field::new("favorite", "Favourite", "bool", section).plain(flag("favorite")));
         out.push(Field::new("hidden", "Hidden", "bool", section).plain(flag("hidden")));
         out.push(Field::new("tags", "Tags", "list", section).plain(render(&game["tags"])));
         for (key, label) in [("metadata.steam_appid", "Steam app id"), ("metadata.gamesdb_id", "GOG GamesDB id"), ("metadata.sgdb_id", "SteamGridDB id")] {
-            let n = dig(game, key).as_u64().unwrap_or_default();
-            out.push(Field::new(key, label, "int", "Artwork").about("", true).plain(if n == 0 { String::new() } else { n.to_string() }));
+            let n = render(dig(game, key));
+            out.push(Field::new(key, label, "int", "Artwork").about("", true).plain(if n == "0" { String::new() } else { n }));
         }
 
         for m in owners(&self.inputs.modules)?.iter().filter(|m| m.enabled && m.applies.takes(kind)) {
             let global = config.modules.settings.get(&m.id);
+            let kinds: Vec<&str> = m.applies.runner_kinds.iter().map(String::as_str).collect();
             for s in m.settings.iter().filter(|s| s.scope == "game" && s.applies_to(spec.id, &platform)) {
                 let key = format!("modules.{}.{}", m.id, s.key);
                 let from_config = table_value(global, &s.key);
                 let (inherited, fallback) = if from_config.is_empty() { (render(&s.default), Origin::Default) } else { (from_config, Origin::Global) };
-                out.push(setting_field(s, key.clone(), m.name()).inherits(render(dig(game, &key)), Origin::Game, inherited, fallback));
+                let f = setting_field(s, key.clone(), m.name()).inherits(render(dig(game, &key)), Origin::Game, inherited, fallback);
+                out.push(if twin(&key).is_some() { Field { reach: reach(&kinds, &s.runners, &s.platforms), ..f } } else { f });
             }
         }
         let source_kind = render(dig(game, "source.kind"));
@@ -692,7 +732,10 @@ impl Build<'_> {
                 let from_config = table_value(global, &s.key);
                 let (inherited, fallback) =
                     if from_config.is_empty() { (render(&self.source_default(s)), Origin::Default) } else { (from_config, Origin::Global) };
-                out.push(setting_field(s, key.clone(), source.name()).inherits(render(dig(game, &key)), Origin::Game, inherited, fallback));
+                let f = setting_field(s, key.clone(), source.name()).inherits(render(dig(game, &key)), Origin::Game, inherited, fallback);
+                let filtered = !s.runners.is_empty() || !s.platforms.is_empty();
+                let reach = if filtered { "games it applies to".into() } else { format!("{} games", source.name()) };
+                out.push(Field { reach, ..f });
             }
         }
         for f in &mut out {
@@ -712,6 +755,7 @@ impl Build<'_> {
             let f = setting_field(s, s.key.clone(), "Settings");
             out.push(f.inherits(table_value(own, &s.key), Origin::Global, render(&s.default), Origin::Default));
         }
+        out.extend(game_defaults(&m.settings, own, |s| s.default.clone()));
         Ok(out)
     }
 
@@ -723,8 +767,18 @@ impl Build<'_> {
             let f = setting_field(s, s.key.clone(), "Settings");
             out.push(f.inherits(table_value(own, &s.key), Origin::Global, render(&self.source_default(s)), Origin::Default));
         }
+        out.extend(game_defaults(&source.settings, own, |s| self.source_default(s)));
         Ok(out)
     }
+}
+
+/// A module's or a source's game settings as every game takes them unless it sets its own: where "All games" writes, and
+/// where a reset undoes it. A game's `enabled` is no such setting: the module's own switch heads its form.
+fn game_defaults<'a>(settings: &'a [Setting], own: Option<&'a toml::Table>, default: impl Fn(&Setting) -> Value + 'a) -> impl Iterator<Item = Field> + 'a {
+    settings
+        .iter()
+        .filter(|s| s.scope == "game" && s.key != "enabled")
+        .map(move |s| setting_field(s, s.key.clone(), GAME_DEFAULTS).inherits(table_value(own, &s.key), Origin::Global, render(&default(s)), Origin::Default))
 }
 
 impl Core {
@@ -765,7 +819,13 @@ impl Core {
 
     /// A game's own value of `key` becomes the global one and leaves the game; other games keep theirs.
     pub async fn promote_field(&self, form: &Form, key: &str) -> Result<()> {
-        let writes = promote_writes(form, key, &self.form_inputs(form).await?)?;
+        let writes = all_games_writes(form, key, None, &self.form_inputs(form).await?)?;
+        self.apply_writes(writes).await
+    }
+
+    /// `value` for every game a game's `key` reaches (`Field::reach`), this one included; games that set their own keep theirs.
+    pub async fn set_field_all(&self, form: &Form, key: &str, value: &str) -> Result<()> {
+        let writes = all_games_writes(form, key, Some(value), &self.form_inputs(form).await?)?;
         self.apply_writes(writes).await
     }
 
@@ -1014,13 +1074,95 @@ runners = ["dolphin"]
         let game = Form::Game("sample".into());
         let views = core.form_inputs(&game).await.unwrap();
         assert_eq!(
-            promote_writes(&game, "modules.controls.layout", &views).unwrap(),
+            all_games_writes(&game, "modules.controls.layout", None, &views).unwrap(),
             [
                 Write::Module { module: "controls".into(), key: "layout".into(), value: "xbox".into() },
                 Write::Game { game: "sample".into(), key: "modules.controls.layout".into(), value: String::new() }
             ]
         );
-        assert!(promote_writes(&Form::Game("other".into()), "modules.controls.layout", &views).is_err(), "views of another game");
+        assert!(all_games_writes(&Form::Game("other".into()), "modules.controls.layout", None, &views).is_err(), "views of another game");
+    }
+
+    const CONTROLS: &str = r#"
+[applies]
+runner_kinds = ["emulator"]
+
+[[settings]]
+key = "layout"
+type = "enum"
+default = "positional"
+scope = "game"
+choices = ["positional", "xbox"]
+choice_labels = { positional = "Switch (A on the right)", xbox = "Xbox (A at the bottom)" }
+runners = ["dolphin"]
+
+[[settings]]
+key = "wiimote"
+type = "enum"
+default = "nunchuk"
+scope = "game"
+choices = ["nunchuk", "sideways"]
+platforms = ["Nintendo Wii"]
+"#;
+
+    #[tokio::test]
+    async fn a_choice_labelled_value_for_all_games_is_its_stored_value_and_the_modules_form_shows_and_resets_it() {
+        let _sb = sandbox();
+        controls_module(CONTROLS);
+        let (core, _) = open().await;
+        let (game, module) = (Form::Game("sample".into()), Form::Module("controls".into()));
+        core.set_field(&game, "modules.controls.layout", "xbox").await.unwrap();
+        core.promote_field(&game, "modules.controls.layout").await.unwrap();
+        assert_eq!(Config::file_set()["modules"]["controls"]["layout"], "xbox", "the stored value, not its label");
+        let layout = field(&core.form(&game, None).await.unwrap(), "modules.controls.layout").clone();
+        assert_eq!((layout.own.as_str(), layout.value.as_str(), layout.origin), ("", "xbox", Some(Origin::Global)), "the game follows it");
+
+        let defaults = core.form(&module, None).await.unwrap();
+        let promoted = field(&defaults, "layout");
+        assert_eq!((promoted.section.as_str(), promoted.own.as_str(), promoted.resettable), (GAME_DEFAULTS, "xbox", true), "seen on the module's form");
+        assert_eq!(promoted.choices[1].label, "Xbox (A at the bottom)");
+        assert!(defaults.iter().all(|f| f.key != "enabled" || f.section.is_empty()), "a game's switch is not the module's");
+
+        core.set_field_all(&game, "modules.controls.layout", "positional").await.unwrap();
+        assert_eq!(Config::file_set()["modules"]["controls"]["layout"], "positional", "a value picked for all games");
+        core.set_field(&module, "layout", "").await.unwrap();
+        let layout = field(&core.form(&game, None).await.unwrap(), "modules.controls.layout").clone();
+        assert_eq!(
+            (layout.value.as_str(), layout.origin),
+            ("positional", Some(Origin::Default)),
+            "undone on the module's form: every game is back on the default"
+        );
+        assert!(core.set_field_all(&game, "launch.exe", "/x").await.is_err(), "no global program");
+    }
+
+    #[tokio::test]
+    async fn a_value_for_all_games_reaches_only_the_games_its_setting_applies_to() {
+        let _sb = sandbox();
+        controls_module(CONTROLS);
+        let mut hades = Game::new("Hades");
+        hades.launch.runner = "proton".into();
+        hades.save().unwrap();
+        let (core, _) = open().await;
+        let reach = |fields: &[Field], key: &str| fields.iter().find(|f| f.key == key).map(|f| f.reach.clone());
+
+        let gamecube = core.form(&Form::Game("sample".into()), None).await.unwrap();
+        assert_eq!(reach(&gamecube, "modules.controls.layout").as_deref(), Some("Dolphin games"));
+        assert_eq!(reach(&gamecube, "modules.controls.wiimote"), None, "no Wii row on a GameCube game");
+        assert_eq!(reach(&gamecube, "launch.options.batch").as_deref(), Some("Dolphin games"), "a runner option is the runner's");
+        assert_eq!(reach(&gamecube, "launch.mangohud").as_deref(), Some("games"));
+        assert_eq!(reach(&gamecube, "launch.exe").as_deref(), Some(""), "the game's alone");
+        assert_eq!(reach(&gamecube, "modules.controls.enabled").as_deref(), Some(""), "the module's own switch is another thing");
+        let proton = core.form(&Form::Game("hades".into()), None).await.unwrap();
+        assert_eq!(reach(&proton, "launch.esync").as_deref(), Some("Proton and Wine games"));
+        assert_eq!(reach(&proton, "launch.proton").as_deref(), Some("Proton games"));
+
+        core.set("sample", "platform", "Nintendo Wii").await.unwrap();
+        let wii = Form::Game("sample".into());
+        assert_eq!(reach(&core.form(&wii, None).await.unwrap(), "modules.controls.wiimote").as_deref(), Some("Nintendo Wii games"));
+        core.set_field_all(&wii, "modules.controls.wiimote", "sideways").await.unwrap();
+        assert_eq!(Config::file_set()["modules"]["controls"]["wiimote"], "sideways");
+        let proton = core.form(&Form::Game("hades".into()), None).await.unwrap();
+        assert!(proton.iter().all(|f| !f.key.starts_with("modules.controls.")), "a Proton game shows none of it");
     }
 
     #[test]

@@ -2101,7 +2101,12 @@ class FakeCore:
     def promote_field(self, kind, ident, key):
         import universe_core
 
-        self._apply(universe_core._promote_writes(kind, ident, key, self._form_inputs(kind, ident)))
+        self._apply(universe_core._all_games_writes(kind, ident, key, None, self._form_inputs(kind, ident)))
+
+    def set_field_all(self, kind, ident, key, value):
+        import universe_core
+
+        self._apply(universe_core._all_games_writes(kind, ident, key, value, self._form_inputs(kind, ident)))
 
     def _apply(self, writes):
         setters = {

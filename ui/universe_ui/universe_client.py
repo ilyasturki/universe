@@ -776,6 +776,9 @@ class CoreClient(QObject):
     def promoteField(self, kind, ident, key):
         return self._done(self._core.promote_field, kind, ident, key)
 
+    def setFieldAll(self, kind, ident, key, value):
+        return self._done(self._core.set_field_all, kind, ident, key, str(value))
+
     @Slot(result=str)
     def version(self):
         return self._guarded("", self._core.version)

@@ -534,6 +534,10 @@ impl Core {
         let form = Form::parse(&kind, &id).map_err(err)?;
         self.run(py, |c| async move { c.promote_field(&form, &key).await })
     }
+    fn set_field_all(&self, py: Python<'_>, kind: String, id: String, key: String, value: String) -> PyResult<()> {
+        let form = Form::parse(&kind, &id).map_err(err)?;
+        self.run(py, |c| async move { c.set_field_all(&form, &key, &value).await })
+    }
     fn doctor(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.value_infallible(py, |c| c.doctor())
     }
@@ -586,13 +590,13 @@ fn set_writes(py: Python<'_>, kind: String, id: String, key: String, value: Stri
     py_of(py, &universe::forms::set_writes(&form, &key, &value))
 }
 
-/// The writes `Core.promote_field` makes.
+/// The writes `Core.set_field_all` makes, or with `value=None` `Core.promote_field`.
 #[pyfunction]
-#[pyo3(name = "_promote_writes")]
-fn promote_writes(py: Python<'_>, kind: String, id: String, key: String, inputs: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+#[pyo3(name = "_all_games_writes")]
+fn all_games_writes(py: Python<'_>, kind: String, id: String, key: String, value: Option<String>, inputs: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
     let form = Form::parse(&kind, &id).map_err(err)?;
     let inputs: universe::forms::Inputs = typed(inputs)?;
-    py_of(py, &universe::forms::promote_writes(&form, &key, &inputs).map_err(err)?)
+    py_of(py, &universe::forms::all_games_writes(&form, &key, value.as_deref(), &inputs).map_err(err)?)
 }
 
 #[pymodule]
@@ -602,7 +606,7 @@ fn universe_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(host_gamescope, m)?)?;
     m.add_function(wrap_pyfunction!(form_fields, m)?)?;
     m.add_function(wrap_pyfunction!(set_writes, m)?)?;
-    m.add_function(wrap_pyfunction!(promote_writes, m)?)?;
+    m.add_function(wrap_pyfunction!(all_games_writes, m)?)?;
     m.add("UniverseError", m.py().get_type::<UniverseError>())?;
     Ok(())
 }

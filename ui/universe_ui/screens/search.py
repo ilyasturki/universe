@@ -499,18 +499,13 @@ class SettingsSearch(QObject):
                             "title": title,
                             "image": art,
                             "display": str(row.get("display") or ""),
-                            "own": not row.get("inherited", False),
+                            # A game overrides a key only where a global value exists to override.
+                            "own": not row.get("inherited", False) if row.get("reach") else None,
                             "origin": str(row.get("origin") or ""),
                             "changed": bool(row.get("changed")),
                             "value": normal(row.get("display")),
                         }
                     )
-        # A game overrides a key only where a global value exists to override: the launch page's and the runners' keys.
-        global_keys = {(e.module, e.key) for e in entries if e.kind == "setting" and e.key}
-        for (module, key), entry in keyed.items():
-            if (module, key) not in global_keys:
-                for game in entry.games:
-                    game["own"] = None
         entries.extend(keyed.values())
         return games
 
