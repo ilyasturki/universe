@@ -33,7 +33,7 @@ One context property, `api`:
 | `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written, a game's sessions and their logs, a game's data and the storage view, the changelog) |
 | `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed` and `--size` turn it off) |
 | `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `overlay`, `frame`, `ground`, `detail`), `current`, `frame`, `set(id)`, `landing` / `takeLanding()`, `fontPath` (the current look's own font file, stored under `<id>Font`: `switch2Font`, `ps5Font`), `soundsPath` (a folder of WAVs, stored under `<id>Sounds`) and `soundFiles` (`{name: url}` of the WAVs in it, the name lowercased: each replaces the look's bundled sound of that name, `sound/SoundPool.qml`'s `overrides`; Switch 2 offers it in Settings › Themes), `bootIntro` (the startup animation's switch, every look's: on until `ui-memory.json`'s `bootIntro` is false) |
-| `api.home` | the HOME button over a running game (see "HOME and the dock"): `shown` (`game` / `launcher`), `underGame` (the game is on screen over the launcher, inside gamescope), `open`, `loading` (a session this client launched has no window up yet), `paused`, `pauseOnHome`, `flipped`, `frame`, `volumePercent`, `muted`, `outputs` (`loadOutputs()` fills it); `pressed()`, `stopping(title)`; `openDock()`, `closeDock()`, `dockClosed()`, `toGame()`, `toLauncher(landing?)` / `takeLanding()`, `covered()`, `stop()`, `setPauseOnHome(on)`, `screenshot()` (→ `screenshotTaken(path)`), `volume(change, value)`, `setOutput(id)`, `launchValue(key)`, `launchChoices(key)`, `setLaunchValue(key, value)`, `screenRefresh()` |
+| `api.home` | the HOME button over a running game (see "HOME and the dock"): `shown` (`game` / `launcher`), `underGame` (the game is on screen over the launcher, inside gamescope), `open`, `loading` (a session this client launched has no window up yet), `paused`, `pauseOnHome`, `flipped`, `frame`, `volumePercent`, `muted`, `outputs` (`loadOutputs()` fills it); `pressed()`, `stopping(title)`; `openDock()`, `closeDock()`, `dockClosed()`, `toGame()`, `toLauncher(landing?)` / `takeLanding()`, `covered()`, `stop()`, `setPauseOnHome(on)`, `screenshot()` (→ `screenshotTaken(path)`), `volume(change, value)`, `setOutput(id)`, `launchValue(key)`, `launchChoices(key)`, `setLaunchValue(key, value)` (the playing game's), `setLaunchValueAll(key, value)` (every game's default, the game following it), `screenRefresh()` |
 | `api.boot` | the startup animation (see "Startup animation"): `running`, `started()` (its first frame is on screen), `skipped()`, `landed(skipped)` (the mark is done: each look builds its home), `land()`, `finish()` |
 
 A `Game` exposes `id`, `title`, `sortTitle`, `favorite` (writable), `hidden`, `playTime`,
@@ -402,6 +402,13 @@ game and hand both to the launcher's gamescope (`nest_filter`); Default on Sharp
 card, so gamescope's own default (2) is back. Those are the keys that reach a running game: the
 rest of the launch form — the runner, Proton, the resolution, the Launch section — is baked into
 the process or the gamescope it started in, so the dock does not offer them.
+
+Every one of those rows (and Pause on HOME) is the playing game's own: under them the card says so,
+`For Mirror's Edge only`, beside a Y for All games. Y gives the row's value to every game
+(`setLaunchValueAll(key, value)` → `Core::set_field_all`): it becomes the global default, the game's
+own value goes so it follows it, games with their own keep theirs, and a notice says so. The game's
+value is the same either way, so nothing is applied again. The PS5 Control Center's Performance
+panel and its Pause on HOME do the same on △.
 
 ## Focus
 

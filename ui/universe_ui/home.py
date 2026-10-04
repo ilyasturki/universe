@@ -553,6 +553,15 @@ class Home(QObject):
             self._client.nestFilter(filter, None if sharpness in (None, "") else int(sharpness))
         self.changed.emit()
 
+    # The running game's value of a launch key made every game's default: the game follows it, games with their own keep
+    # theirs. The game's value does not change, so nothing is applied live.
+    @Slot(str, str, result=bool)
+    def setLaunchValueAll(self, key, value):
+        session = self._session()
+        if not session:
+            return False
+        return bool(self._client.setFieldAll("game", str(session.get("id") or ""), "launch." + key, value))
+
     @Slot(result=int)
     def screenRefresh(self):
         return int(self._screen_mode().get("refresh") or 0)

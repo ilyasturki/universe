@@ -285,6 +285,27 @@ FocusScope {
         return item.sys ? vals[item.id] === "on" : vals[item.id] === true;
     }
 
+    // A setting of the game's own: what changes here is this game's, Y gives its value to every game.
+    function scoped(item) {
+        return !!item && (!!item.key || item.id === "pause");
+    }
+
+    function allGames(item) {
+        if (!scoped(item)) {
+            Sound.edge();
+            return;
+        }
+        var toggle = item.kind === "toggle";
+        var value = toggle ? (isOn(item) ? "true" : "false") : String(vals[item.id] || "");
+        if (!api.home.setLaunchValueAll(item.key || "pause_on_home", value)) {
+            Sound.edge();
+            return;
+        }
+        Sound.enter();
+        var shown = shows(item);
+        Notices.show(item.label + " is now " + (toggle ? shown.toLowerCase() : shown) + " for all games without their own");
+    }
+
     function step(item, dir) {
         if (item.kind === "range") {
             api.home.volume(dir > 0 ? "up" : "down", 0);
@@ -839,7 +860,7 @@ FocusScope {
             visible: opacity > 0.01
             opacity: dock.opened && dock.current.kind === "group" ? 1.0 : 0.0
             width: Theme.dp(440)
-            height: rows.height + Theme.dp(34)
+            height: rows.height + Theme.dp(34) + (scope.visible ? scope.height + Theme.dp(12) : 0)
             radius: Theme.dp(24)
             color: "#1b1d24"
             border.width: 1
@@ -978,6 +999,45 @@ FocusScope {
                     }
                 }
             }
+
+            Row {
+                id: scope
+
+                objectName: "dockScope"
+                anchors.top: rows.bottom
+                anchors.topMargin: Theme.dp(12)
+                anchors.left: parent.left
+                anchors.leftMargin: Theme.dp(33)
+                anchors.right: parent.right
+                anchors.rightMargin: Theme.dp(33)
+                spacing: Theme.dp(12)
+                visible: dock.opened && dock.scoped(dock.target)
+
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Math.min(implicitWidth, scope.width - allGlyph.width - allLabel.width - scope.spacing * 2)
+                    text: "For " + (dock.session && dock.session.title ? dock.session.title : "this game") + " only"
+                    color: Theme.textSecondary
+                    font.family: Theme.sans
+                    font.pixelSize: Theme.dp(18)
+                    elide: Text.ElideRight
+                }
+
+                ButtonGlyph {
+                    id: allGlyph
+                    anchors.verticalCenter: parent.verticalCenter
+                    glyph: "Y"
+                }
+
+                Text {
+                    id: allLabel
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "All games"
+                    color: Theme.text
+                    font.family: Theme.sans
+                    font.pixelSize: Theme.dp(18)
+                }
+            }
         }
     }
 
@@ -1028,6 +1088,8 @@ FocusScope {
             select();
         } else if (api.keys.isCancel(event)) {
             back();
+        } else if (api.keys.isFilters(event) && opened) {
+            allGames(target);
         } else if (api.keys.isDetails(event)) {
             var shot = buttons.filter(function (b) {
                 return b.id === "shot";

@@ -372,6 +372,27 @@ FocusScope {
         return item.sys ? vals[item.id] === "on" : vals[item.id] === true;
     }
 
+    // A setting of the game's own: what changes here is this game's, △ gives its value to every game.
+    function scoped(item) {
+        return !!item && (!!item.key || item.id === "pause");
+    }
+
+    function allGames(item) {
+        if (!scoped(item)) {
+            Sound.play("edge");
+            return;
+        }
+        var toggle = item.kind === "toggle";
+        var value = toggle ? (isOn(item) ? "true" : "false") : String(vals[item.id] || "");
+        if (!api.home.setLaunchValueAll(item.key || "pause_on_home", value)) {
+            Sound.play("edge");
+            return;
+        }
+        Sound.play("ok");
+        var shown = shows(item);
+        Base.Notices.show(item.label + " is now " + (toggle ? shown.toLowerCase() : shown) + " for all games without their own");
+    }
+
     function step(item, dir) {
         if (item.kind === "range") {
             api.home.volume(dir > 0 ? "up" : "down", 0);
@@ -972,7 +993,7 @@ FocusScope {
             visible: opacity > 0.01
             opacity: cc.zone === "panel" ? 1.0 : 0.0
             width: Theme.dp(600)
-            height: rowsColumn.height + Theme.dp(32)
+            height: rowsColumn.height + Theme.dp(32) + (scope.visible ? scope.height + Theme.dp(12) : 0)
             radius: Theme.dp(Theme.radiusCard + 2)
             color: Qt.rgba(0.09, 0.1, 0.13, 0.97)
             border.width: 1
@@ -1107,6 +1128,43 @@ FocusScope {
                             onPicked: cc.row = index
                         }
                     }
+                }
+            }
+
+            Row {
+                id: scope
+
+                objectName: "ccScope"
+                anchors.top: rowsColumn.bottom
+                anchors.topMargin: Theme.dp(12)
+                anchors.left: parent.left
+                anchors.leftMargin: Theme.dp(28)
+                anchors.right: parent.right
+                anchors.rightMargin: Theme.dp(28)
+                spacing: Theme.dp(12)
+                visible: cc.zone === "panel" && cc.scoped(cc.target)
+
+                Label {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Math.min(implicitWidth, scope.width - allGlyph.width - allLabel.width - scope.spacing * 2)
+                    text: "For " + (cc.session && cc.session.title ? cc.session.title : "this game") + " only"
+                    color: Theme.textSecondary
+                    font.pixelSize: Theme.dp(Theme.fontTiny)
+                    elide: Text.ElideRight
+                }
+
+                HintGlyph {
+                    id: allGlyph
+                    anchors.verticalCenter: parent.verticalCenter
+                    glyph: "Y"
+                    unit: Theme.dp(28)
+                }
+
+                Label {
+                    id: allLabel
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "All Games"
+                    font.pixelSize: Theme.dp(Theme.fontTiny)
                 }
             }
         }
@@ -1458,6 +1516,10 @@ FocusScope {
                 cc.zone = "bar";
             } else
                 cc.close();
+            return;
+        }
+        if (api.keys.isFilters(event) && cc.zone === "panel") {
+            cc.allGames(cc.target);
             return;
         }
         if (api.keys.isAccept(event)) {
