@@ -44,6 +44,57 @@
     <color type="primary" scheme_preference="dark">#c64600</color>
   </branding>
   <releases>
+    <release version="0.0.10" date="2026-10-04">
+      <description>
+        <p>Breaking</p>
+        <ul>
+          <li>RAWG is no longer used: <code>keys.rawg</code>, <code>keys.rawg_file</code> and a game's <code>metadata.rawg_id</code> are ignored.</li>
+        </ul>
+        <p>Added</p>
+        <ul>
+          <li>A Universe session on the login screen: the launcher alone on the screen, like SteamOS's Game Mode, and Log out returns to the login screen. The AUR and Fedora packages and <code>install.sh</code> install it; on NixOS, <code>programs.universe.session.enable</code>.</li>
+          <li>Save backups through ludusavi: after each session (<code>[saves] auto_backup</code>, <code>keep</code>), before a purge or a prefix reset, and on demand, with restore and export to a zip.</li>
+          <li>A game's data on its page: install, Wine prefix, saves, recordings and logs with their sizes, a prefix moved under <code>prefixes_root</code> or reset, winecfg and winetricks in it.</li>
+          <li>A storage page: free space per folder, games by size, and leftovers of removed games to trash. <code>universe data</code>, <code>universe storage</code> and <code>universe saves</code> do the same from the CLI.</li>
+          <li>Settings › About shows the changelog in every look and in Universe Desktop; with <code>desktop.whats_new</code> on, the first start after an update opens what changed.</li>
+          <li>A startup animation of the Universe mark with a quiet chime, then the look's home; Settings › Themes turns it off.</li>
+          <li>HOME pressed while another app has the focus brings Universe up; <code>controller.home_summons = false</code> drops the press instead.</li>
+          <li>A game's setting can go to every game it reaches (all games, all Dolphin games, all Proton and Wine games) from its page.</li>
+          <li>Settings › Runners offers the system tools an enabled module needs, such as gpu-screen-recorder for recordings.</li>
+          <li>Fedora 44 and newer: <code>universe</code> and <code>universe-desktop</code> from the <code>ilyasturki/universe</code> COPR.</li>
+          <li>Installing Eden shows a notice and asks first; <code>universe component install</code> takes <code>--yes</code> to accept it.</li>
+          <li>Settings › Themes says the looks are not affiliated with Nintendo or Sony.</li>
+        </ul>
+        <p>Changed</p>
+        <ul>
+          <li>Art and details need no API key: they come from the game's store, Steam, GOG GamesDB and libretro, and a scan, install or Lutris import fetches them. A SteamGridDB key adds its art to the picker, and <code>keys.prefer_sgdb</code> puts it first.</li>
+          <li>First run happens once per machine, in either app: one row adds every game other launchers hold, then it asks where games, prefixes and save backups go, offering other launchers' folders. Universe Desktop's installs the runners your games need.</li>
+          <li>Quick settings changed during a game (brightness, refresh rate, power limit, GPU clock, fan) are that game's and come back at its next launch; Y gives them to every game.</li>
+          <li>While another app has the focus, the pad, held B and HOME leave it alone, and the looks pause their animations and videos.</li>
+          <li>Settings › Runners installs, updates and switches each runner's builds, in every look and in Universe Desktop, in place of a separate components list.</li>
+          <li>Module settings say what they do under their name, a game's page shows only the ones that apply to it, and the settings search finds them by their own keywords.</li>
+          <li>A module or source made for another Universe version is unavailable, and <code>universe doctor</code> says which version it needs.</li>
+          <li>The achievements pages are one compact list in every look, hidden locked achievements folded into a last row.</li>
+          <li>The AUR and Fedora packages and <code>install.sh</code> install the controller udev rule and load uhid at boot; <code>install.sh</code> asks for sudo once.</li>
+          <li>The GNOME Shell extension supports GNOME 45 to 51.</li>
+        </ul>
+        <p>Fixed</p>
+        <ul>
+          <li><code>universe rm --purge</code> keeps a Wine prefix another library game shares.</li>
+          <li>On a screen of its own, gamescope drives the display it read the mode from, and hides the idle cursor.</li>
+          <li>A store scan counts only the games it added, not the ones it already had.</li>
+          <li>The Proton builds card offers every Proton found as the default.</li>
+          <li>Universe Desktop's runners page keeps its scroll and focus while builds install.</li>
+          <li>A read-only <code>config.toml</code> is put down to Home Manager only when it links into the Nix store.</li>
+          <li>A system where the HTTPS client cannot start gets an error instead of a crash.</li>
+          <li>A recording frame cut off by leaving its page or quitting is extracted again, no longer left blank.</li>
+        </ul>
+        <p>Performance</p>
+        <ul>
+          <li>Emulator games are added first on a rescan, and their art fetched after.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.0.9" date="2026-09-30">
       <description>
         <p>Added</p>

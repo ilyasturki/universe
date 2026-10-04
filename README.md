@@ -22,7 +22,7 @@ GOG, Steam, Epic and itch.io installs and updates, your Lutris games with their 
 
 ## A page for every game
 
-Art, screenshots, play time, achievements.
+Art, screenshots, play time, achievements, saves and what it takes on disk.
 
 ![A game page](docs/images/game.jpg)
 
@@ -40,6 +40,7 @@ Not affiliated with Nintendo or Sony. Nintendo Switch is a trademark of Nintendo
 - Opt-in session recording; recordings and screenshots land in the Media tab.
 - Pad, keyboard, mouse or touch, with a guided button setup; each emulator gets its own pad per player.
 - Achievements, with unlock banners in game.
+- Save backups after every session, restored or exported from the game's page, and a storage page of what each game takes.
 - Runner builds and tools installed, updated and rolled back from the settings.
 - Steam Deck controls, and it runs inside Steam's Game Mode.
 - Hold B for the power menu: suspend, reboot, power off.

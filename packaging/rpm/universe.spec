@@ -6,7 +6,7 @@
 %global app_id io.github.ilyasturki.UniverseDesktop
 
 Name:           universe
-Version:        0.0.9
+Version:        0.0.10
 Release:        1%{?dist}
 Summary:        Gamepad-first game launcher: a Rust core, a PySide6 UI, games inside gamescope
 License:        MIT

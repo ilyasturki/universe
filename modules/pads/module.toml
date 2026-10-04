@@ -1,7 +1,7 @@
 api = 2
 id = "pads"
 name = "Virtual pads"
-version = "0.0.9"
+version = "0.0.10"
 description = "An emulator sees one virtual PlayStation-class pad per player, with gyro, touchpad and rumble, whatever pads you hold; the real ones stay hidden from it and change without the emulator noticing."
 
 [requires]

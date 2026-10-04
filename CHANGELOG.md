@@ -1,5 +1,54 @@
 # Changelog
 
+## [0.0.10] - 2026-10-04
+
+### Breaking
+
+- RAWG is no longer used: `keys.rawg`, `keys.rawg_file` and a game's `metadata.rawg_id` are ignored.
+
+### Added
+
+- A Universe session on the login screen: the launcher alone on the screen, like SteamOS's Game Mode, and Log out returns to the login screen. The AUR and Fedora packages and `install.sh` install it; on NixOS, `programs.universe.session.enable`.
+- Save backups through ludusavi: after each session (`[saves] auto_backup`, `keep`), before a purge or a prefix reset, and on demand, with restore and export to a zip.
+- A game's data on its page: install, Wine prefix, saves, recordings and logs with their sizes, a prefix moved under `prefixes_root` or reset, winecfg and winetricks in it.
+- A storage page: free space per folder, games by size, and leftovers of removed games to trash. `universe data`, `universe storage` and `universe saves` do the same from the CLI.
+- Settings › About shows the changelog in every look and in Universe Desktop; with `desktop.whats_new` on, the first start after an update opens what changed.
+- A startup animation of the Universe mark with a quiet chime, then the look's home; Settings › Themes turns it off.
+- HOME pressed while another app has the focus brings Universe up; `controller.home_summons = false` drops the press instead.
+- A game's setting can go to every game it reaches (all games, all Dolphin games, all Proton and Wine games) from its page.
+- Settings › Runners offers the system tools an enabled module needs, such as gpu-screen-recorder for recordings.
+- Fedora 44 and newer: `universe` and `universe-desktop` from the `ilyasturki/universe` COPR.
+- Installing Eden shows a notice and asks first; `universe component install` takes `--yes` to accept it.
+- Settings › Themes says the looks are not affiliated with Nintendo or Sony.
+
+### Changed
+
+- Art and details need no API key: they come from the game's store, Steam, GOG GamesDB and libretro, and a scan, install or Lutris import fetches them. A SteamGridDB key adds its art to the picker, and `keys.prefer_sgdb` puts it first.
+- First run happens once per machine, in either app: one row adds every game other launchers hold, then it asks where games, prefixes and save backups go, offering other launchers' folders. Universe Desktop's installs the runners your games need.
+- Quick settings changed during a game (brightness, refresh rate, power limit, GPU clock, fan) are that game's and come back at its next launch; Y gives them to every game.
+- While another app has the focus, the pad, held B and HOME leave it alone, and the looks pause their animations and videos.
+- Settings › Runners installs, updates and switches each runner's builds, in every look and in Universe Desktop, in place of a separate components list.
+- Module settings say what they do under their name, a game's page shows only the ones that apply to it, and the settings search finds them by their own keywords.
+- A module or source made for another Universe version is unavailable, and `universe doctor` says which version it needs.
+- The achievements pages are one compact list in every look, hidden locked achievements folded into a last row.
+- The AUR and Fedora packages and `install.sh` install the controller udev rule and load uhid at boot; `install.sh` asks for sudo once.
+- The GNOME Shell extension supports GNOME 45 to 51.
+
+### Fixed
+
+- `universe rm --purge` keeps a Wine prefix another library game shares.
+- On a screen of its own, gamescope drives the display it read the mode from, and hides the idle cursor.
+- A store scan counts only the games it added, not the ones it already had.
+- The Proton builds card offers every Proton found as the default.
+- Universe Desktop's runners page keeps its scroll and focus while builds install.
+- A read-only `config.toml` is put down to Home Manager only when it links into the Nix store.
+- A system where the HTTPS client cannot start gets an error instead of a crash.
+- A recording frame cut off by leaving its page or quitting is extracted again, no longer left blank.
+
+### Performance
+
+- Emulator games are added first on a rescan, and their art fetched after.
+
 ## [0.0.9] - 2026-09-30
 
 ### Added
@@ -202,6 +251,7 @@
 
 - The search row on the Reprise look's store page.
 
+[0.0.10]: https://github.com/ilyasturki/universe/compare/v0.0.9...v0.0.10
 [0.0.9]: https://github.com/ilyasturki/universe/compare/v0.0.8...v0.0.9
 [0.0.8]: https://github.com/ilyasturki/universe/compare/v0.0.7...v0.0.8
 [0.0.7]: https://github.com/ilyasturki/universe/compare/v0.0.6...v0.0.7
