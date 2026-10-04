@@ -107,6 +107,10 @@ mod imp {
         pub sessions_row: TemplateChild<adw::ActionRow>,
         #[template_child]
         pub sessions_count: TemplateChild<gtk::Label>,
+        #[template_child]
+        pub data_group: TemplateChild<adw::PreferencesGroup>,
+        #[template_child]
+        pub data_list: TemplateChild<gtk::ListBox>,
         pub game: RefCell<Option<GameObject>>,
         pub details: RefCell<Details>,
         pub handlers: RefCell<Vec<glib::SignalHandlerId>>,
@@ -194,6 +198,7 @@ impl GamePage {
         imp.handlers.replace(handlers);
         self.refresh();
         self.load_details();
+        self.load_data();
     }
 
     fn release(&self) {
@@ -209,6 +214,35 @@ impl GamePage {
     pub fn reload(&self) {
         self.refresh();
         self.load_details();
+        self.load_data();
+    }
+
+    // A task of its own: sizes walk the folders and the saves ask ludusavi, which the details must not wait on.
+    fn load_data(&self) {
+        let Some(game) = self.game() else { return };
+        let id = game.id();
+        let page = self.downgrade();
+        glib::spawn_future_local(async move {
+            let data = backend::call(move |core| async move { core.game_data(&id).await }).await;
+            let Some(page) = page.upgrade() else { return };
+            let imp = page.imp();
+            let Ok(data) = data else {
+                imp.data_group.set_visible(false);
+                return;
+            };
+            let again = page.downgrade();
+            crate::pages::game_data::fill(
+                &imp.data_list,
+                &data,
+                std::rc::Rc::new(move || {
+                    if let Some(page) = again.upgrade() {
+                        page.load_data();
+                    }
+                }),
+            );
+            imp.data_group.set_description(Some(&crate::pages::game_data::size(&data["total"])));
+            imp.data_group.set_visible(true);
+        });
     }
 
     fn refresh(&self) {

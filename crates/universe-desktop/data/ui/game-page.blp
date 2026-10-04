@@ -312,6 +312,19 @@ template $UniverseGamePage: Adw.NavigationPage {
                 }
               }
 
+              Adw.PreferencesGroup data_group {
+                title: _("Saves and Storage");
+                visible: false;
+
+                ListBox data_list {
+                  selection-mode: none;
+
+                  styles [
+                    "boxed-list",
+                  ]
+                }
+              }
+
               Adw.PreferencesGroup about {
                 title: _("About");
                 visible: false;

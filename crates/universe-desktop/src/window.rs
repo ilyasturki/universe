@@ -203,8 +203,17 @@ impl Window {
                 }
             })
             .build();
+        let game = gio::ActionEntry::builder("open-game")
+            .parameter_type(Some(glib::VariantTy::STRING))
+            .activate(|win: &Self, _, param| {
+                let id = param.and_then(|p| p.get::<String>()).unwrap_or_default();
+                if let Some(game) = win.app().library().get(&id) {
+                    win.open_game(&game);
+                }
+            })
+            .build();
         let undo = gio::ActionEntry::builder("undo").activate(|win: &Self, _, _| win.undo()).build();
-        self.add_action_entries([show_sidebar, search, sort, show_hidden, view, add_game, onboarding, rescan, entry, undo]);
+        self.add_action_entries([show_sidebar, search, sort, show_hidden, view, add_game, onboarding, rescan, entry, game, undo]);
         self.imp().library_page.set_show_hidden(state.show_hidden);
     }
 
@@ -629,7 +638,7 @@ impl Window {
         let (id, title) = (game.id(), game.title());
         let dialog = adw::AlertDialog::new(
             Some(&gettext("Remove {} and Its Wine Prefix?").replace("{}", &title)),
-            Some(&gettext("The prefix goes to the trash with the saves and settings the game keeps there. Its hours, journal and recordings are kept.")),
+            Some(&gettext("Its saves are backed up first, then the prefix goes to the trash with the settings the game keeps there. Its hours, journal and recordings are kept.")),
         );
         dialog.add_responses(&[("cancel", &gettext("_Cancel")), ("remove", &gettext("_Remove"))]);
         dialog.set_response_appearance("remove", adw::ResponseAppearance::Destructive);

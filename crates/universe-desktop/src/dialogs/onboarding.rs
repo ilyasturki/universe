@@ -72,7 +72,7 @@ fn steps(stores: bool, writable: bool) -> Vec<&'static str> {
         steps.push("stores");
     }
     if writable {
-        steps.extend(["install", "preferences"]);
+        steps.extend(["install", "data", "preferences"]);
     }
     steps.push("done");
     steps
@@ -180,6 +180,7 @@ impl Onboarding {
         let page = match all.get(at).copied().unwrap_or("done") {
             "stores" => stores_page(self),
             "install" => install_page(self),
+            "data" => data_page(self),
             "preferences" => preferences_page(self),
             _ => done_page(self),
         };
@@ -729,6 +730,77 @@ fn set_games_root(this: &Rc<Onboarding>, dir: String, group: &adw::PreferencesGr
     });
 }
 
+fn data_page(this: &Rc<Onboarding>) -> adw::NavigationPage {
+    let content = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(18).build();
+    let config = this.look.borrow().config.clone();
+    let home = universe::paths::home().to_string_lossy().to_string();
+    let folders = adw::PreferencesGroup::builder().title(gettext("Folders")).build();
+    for (key, title, why) in [
+        ("prefixes_root", gettext("Wine Prefixes"), gettext("Prefixes already elsewhere stay put; each game's page can move one here")),
+        ("saves_root", gettext("Save Backups"), gettext("ludusavi keeps the last backups of each game here")),
+    ] {
+        let dir = config["paths"][key].as_str().unwrap_or_default().to_string();
+        let row = crate::rows::plain(adw::ActionRow::builder().build(), &title, dir.strip_prefix(&home).map_or_else(|| dir.clone(), |rest| format!("~{rest}")));
+        row.set_tooltip_text(Some(&why));
+        let button = gtk::Button::builder().label(gettext("Change…")).valign(gtk::Align::Center).build();
+        let (weak, setting) = (Rc::downgrade(this), format!("paths.{key}"));
+        let shown = row.clone();
+        button.connect_clicked(move |button| {
+            let dialog = gtk::FileDialog::builder().title(title.clone()).modal(true).build();
+            let (weak, setting, shown) = (weak.clone(), setting.clone(), shown.clone());
+            dialog.select_folder(button.root().and_downcast::<gtk::Window>().as_ref(), gio::Cancellable::NONE, move |result| {
+                let (Some(this), Some(path)) = (weak.upgrade(), result.ok().and_then(|f| f.path())) else { return };
+                let (dir, setting, shown, weak) = (path.to_string_lossy().into_owned(), setting.clone(), shown.clone(), Rc::downgrade(&this));
+                glib::spawn_future_local(async move {
+                    let value = dir.clone();
+                    let result = backend::pinned(move |core| async move { core.set_setting(&setting, &value).await }).await;
+                    match (weak.upgrade(), result) {
+                        (_, Ok(())) => shown.set_subtitle(&dir),
+                        (Some(this), Err(e)) => this.say(&e.to_string()),
+                        _ => {}
+                    }
+                });
+            });
+        });
+        row.add_suffix(&button);
+        folders.add(&row);
+    }
+    content.append(&folders);
+    let saves = adw::PreferencesGroup::builder().title(gettext("Saves")).build();
+    let auto = adw::SwitchRow::builder()
+        .title(gettext("Back Up Saves After Playing"))
+        .subtitle(gettext("A backup of the game's saves each time a session ends"))
+        .active(config["saves"]["auto_backup"].as_bool() != Some(false))
+        .build();
+    let weak = Rc::downgrade(this);
+    auto.connect_active_notify(move |row| {
+        let (weak, on) = (weak.clone(), row.is_active());
+        glib::spawn_future_local(async move {
+            let result = backend::pinned(move |core| async move { core.set_setting("saves.auto_backup", if on { "true" } else { "false" }).await }).await;
+            if let (Some(this), Err(e)) = (weak.upgrade(), result) {
+                this.say(&e.to_string());
+            }
+        });
+    });
+    saves.add(&auto);
+    content.append(&saves);
+    let weak = Rc::downgrade(this);
+    step(
+        &gettext("Game Data"),
+        None,
+        &gettext("Where Game Data Goes"),
+        &gettext("New Windows games get their prefix here, and every game's saves are backed up here."),
+        content.upcast_ref(),
+        &gettext("_Continue"),
+        move || {
+            if let Some(this) = weak.upgrade() {
+                this.next("data");
+            }
+        },
+    )
+    .page
+}
+
 fn preferences_page(this: &Rc<Onboarding>) -> adw::NavigationPage {
     let content = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(18).build();
     let (families, hdr, fits) = {
@@ -840,7 +912,7 @@ mod tests {
 
     #[test]
     fn the_install_folder_and_preferences_need_a_config_that_takes_writes() {
-        assert_eq!(steps(true, true), ["stores", "install", "preferences", "done"]);
+        assert_eq!(steps(true, true), ["stores", "install", "data", "preferences", "done"]);
         assert_eq!(steps(false, false), ["done"]);
     }
 

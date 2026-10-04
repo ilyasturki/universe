@@ -87,7 +87,7 @@ fn chevron() -> gtk::Image {
     gtk::Image::from_icon_name("go-next-symbolic")
 }
 
-/// `page`: `launch`, `runners`, `stores`, `modules`, `controller`, `system` (a Steam Deck's), `artwork` or `doctor`; empty
+/// `page`: `launch`, `runners`, `stores`, `modules`, `controller`, `system` (a Steam Deck's), `storage`, `artwork` or `doctor`; empty
 /// for the first.
 pub fn present(win: &Window, page: &str) {
     let dialog = adw::PreferencesDialog::builder().search_enabled(true).content_height(720).build();
@@ -122,6 +122,9 @@ pub fn present(win: &Window, page: &str) {
         page
     });
 
+    let storage = crate::pages::storage::StorageView::new(win);
+    dialog.add(&storage.page);
+
     let artwork = ListPage::new("artwork", &gettext("Artwork"), "image-x-generic-symbolic");
     dialog.add(&artwork.page);
     load_artwork(&artwork, win);
@@ -145,7 +148,7 @@ pub fn present(win: &Window, page: &str) {
 
     let (app, jobs) = (win.app().downgrade(), RefCell::new(vec![job, component_job]));
     dialog.connect_closed(move |_| {
-        let _ = (&launch, &runners, &stores, &modules, &controller, &system, &artwork, &doctor);
+        let _ = (&launch, &runners, &stores, &modules, &controller, &system, &storage, &artwork, &doctor);
         if let Some(app) = app.upgrade() {
             for handler in jobs.take() {
                 app.disconnect(handler);
