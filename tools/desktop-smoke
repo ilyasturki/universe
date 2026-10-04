@@ -11,7 +11,8 @@ read back, and the cursor hidden then
 put back (the ignored test desktop::live), `universe osd`, and
 `universe desktop-shot` of the screen and of the focused window.
 Profiles: sway x11 kde niri (default: all). Logs and shots land in
-OUT/<profile> (SMOKE_OUT, default target/desktop-smoke). A step a bare
+OUT/<profile> (SMOKE_OUT, default target/desktop-smoke); a failed step prints
+its log and the compositor's. A step a bare
 compositor cannot answer reads `skip` with the reason.
 
 For a container (tools/container, CI): it refuses to run where /dev/dri
@@ -139,7 +140,12 @@ for p in "${profiles[@]}"; do
     [ "$(wc -l < "$dir/result" 2> /dev/null || echo 0)" -eq 4 ] || echo "FAIL desktop: the checks did not all run (compositor.log)" >> "$dir/result"
     echo "── $p"
     cat "$dir/result"
-    grep -q '^FAIL' "$dir/result" && failed+=("$p")
+    if grep -q '^FAIL' "$dir/result"; then
+        failed+=("$p")
+        for name in $(awk '$1 == "FAIL" { sub(":", "", $2); print $2 }' "$dir/result") compositor; do
+            if [ -f "$dir/$name.log" ]; then sed "s/^/  $name| /" "$dir/$name.log"; fi
+        done
+    fi
 done
 if [ ${#failed[@]} -gt 0 ]; then
     echo "desktop-smoke: failed: ${failed[*]} (logs under $out)" >&2
