@@ -1379,6 +1379,13 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
   (`--gapplication-service`, which stays up a minute between searches), whose `Exec` must name
   the wrapper by its absolute path: the bus runs it in its own environment. The desktop entry is
   `DBusActivatable`, so the app grid starts it that way too.
+- **Game page** (`pages/game.rs`): the library's row draws the hero at once, the runner in its facts
+  line included; the details (`get` and the screenshots' count: Your Play, About, the Gallery of the
+  store's pictures, the achievement count) land next, whether the source lists achievements after
+  them (`sources()` may ask the stores), and the backdrop fades in on its own once decoded. The
+  header names the game once its title scrolls away, and every page over it (Achievements, Journal,
+  Sessions and Logs, Screenshots, Recordings) has the game under its title. A debug build decodes the
+  art optimised (`[profile.dev.package]` in the root `Cargo.toml`).
 - **Game data**: the game page's "Saves and Storage" group (`pages/game_data.rs`) is loaded on a task of
   its own, not in the details' chain, since sizes walk the folders and the saves ask ludusavi: the
   saves with Back Up, the backups in an expander (Restore each, asking first; Export to the home

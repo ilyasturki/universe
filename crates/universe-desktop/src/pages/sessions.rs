@@ -44,7 +44,7 @@ pub fn open(win: &Window, game: &str) {
         .build();
     column.append(&empty);
     let toolbar = adw::ToolbarView::builder().content(&scrolled(&adw::Clamp::builder().maximum_size(760).child(&column).build())).build();
-    toolbar.add_top_bar(&adw::HeaderBar::new());
+    toolbar.add_top_bar(&crate::pages::game_header(win, &gettext("Sessions and Logs"), game));
     let page = adw::NavigationPage::builder().child(&toolbar).title(gettext("Sessions and Logs")).tag(format!("sessions:{game}")).build();
 
     let rows: Rc<RefCell<Vec<adw::ActionRow>>> = Rc::default();

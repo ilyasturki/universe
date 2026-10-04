@@ -9,6 +9,16 @@ version = "0.0.10"
 edition = "2021"
 license = "MIT"
 
+# Art decodes in a debug build too: unoptimised, a backdrop takes seconds.
+[profile.dev.package]
+image = { opt-level = 3 }
+png = { opt-level = 3 }
+fdeflate = { opt-level = 3 }
+miniz_oxide = { opt-level = 3 }
+zune-jpeg = { opt-level = 3 }
+zune-core = { opt-level = 3 }
+image-webp = { opt-level = 3 }
+
 [profile.release]
 strip = true
 lto = "thin"

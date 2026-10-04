@@ -80,13 +80,13 @@ pub fn open_game(win: &crate::window::Window, game: &str, kind: Kind) {
     let grid = MediaGrid::default();
     grid.follow(&win.app(), game);
     grid.set_kinds(&[kind]);
-    let toolbar = adw::ToolbarView::builder().content(&grid).build();
-    toolbar.add_top_bar(&adw::HeaderBar::new());
     let title = match kind {
         Kind::Shot => gettextrs::gettext("Screenshots"),
         Kind::Recording => gettextrs::gettext("Recordings"),
         Kind::Journal => gettextrs::gettext("Journal"),
     };
+    let toolbar = adw::ToolbarView::builder().content(&grid).build();
+    toolbar.add_top_bar(&crate::pages::game_header(win, &title, game));
     let page = adw::NavigationPage::builder().child(&toolbar).title(title).tag(format!("media:{game}:{kind:?}")).build();
     win.push_page(&page);
 }

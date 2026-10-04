@@ -92,8 +92,7 @@ pub fn open(win: &Window, game: &str) {
     let clamp = adw::Clamp::builder().maximum_size(760).child(&column).build();
     stack.add_named(&gtk::ScrolledWindow::builder().hscrollbar_policy(gtk::PolicyType::Never).child(&clamp).build(), Some("list"));
     let refresh = gtk::Button::builder().icon_name("view-refresh-symbolic").tooltip_text(gettext("Ask the Store Again")).build();
-    let title = win.app().library().get(game).map(|g| g.title()).unwrap_or_default();
-    let header = adw::HeaderBar::builder().title_widget(&adw::WindowTitle::new(&gettext("Achievements"), &title)).build();
+    let header = crate::pages::game_header(win, &gettext("Achievements"), game);
     header.pack_end(&refresh);
     let toolbar = adw::ToolbarView::builder().content(&stack).build();
     toolbar.add_top_bar(&header);

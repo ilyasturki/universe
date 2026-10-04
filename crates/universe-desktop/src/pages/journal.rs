@@ -468,7 +468,7 @@ fn pictures(win: &Window, entry: &Entry, title: &str) -> gtk::Widget {
 
 /// A game's journal: every entry, the ones being written and put off among them, and the sessions still without one.
 pub fn open_list(win: &Window, game: &str) {
-    let (page, column, stack) = page(&gettext("Journal"), &format!("journal:{game}"), &adw::HeaderBar::new());
+    let (page, column, stack) = page(&gettext("Journal"), &format!("journal:{game}"), &crate::pages::game_header(win, &gettext("Journal"), game));
     let game = game.to_string();
     let fill: Rc<dyn Fn(Journal)> = {
         let (weak_win, column, stack, game) = (win.downgrade(), column.downgrade(), stack.downgrade(), game.clone());
