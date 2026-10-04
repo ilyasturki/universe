@@ -903,8 +903,12 @@ impl Application {
         let facts = debug_facts();
         about.set_debug_info(&system_check::debug_info(&facts, None));
         about.set_debug_info_filename("universe-desktop-debug.txt");
-        let weak = about.downgrade();
+        let (weak, app) = (about.downgrade(), self.clone());
         glib::spawn_future_local(async move {
+            app.opened().await;
+            if !app.is_ready() {
+                return;
+            }
             let checks = backend::pinned(|core| async move { core.doctor().await }).await;
             if let Some(about) = weak.upgrade() {
                 about.set_debug_info(&system_check::debug_info(&facts, Some(&checks)));

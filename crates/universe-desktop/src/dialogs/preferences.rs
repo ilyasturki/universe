@@ -98,6 +98,9 @@ fn chevron() -> gtk::Image {
 
 /// `page`: `launch`, `runners`, `stores`, `modules`, `controller` or `system` (a Steam Deck's); empty for the first.
 pub fn present(win: &Window, page: &str) {
+    if !win.app().is_ready() {
+        return;
+    }
     match page {
         "storage" => return crate::pages::storage::present(win),
         "artwork" => return crate::dialogs::library_artwork::present(win),
