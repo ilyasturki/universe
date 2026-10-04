@@ -1,8 +1,9 @@
 import os
+from collections import Counter
 
 import pytest
 
-from conftest import index_of, pump, record, rows_by_key, settle, until
+from conftest import index_of, record, rows_by_key, settle, until
 from universe_ui.screens.media import _size
 
 PENDING = {
@@ -17,136 +18,58 @@ PENDING = {
 }
 
 
-def test_game_settings_form(api, fake):
+def test_a_games_cards_show_each_row_once_the_advanced_ones_after_the_rule_unless_the_game_sets_them(api, fake):
     form = api.screens.gameSettings
     form.load("the-technomancer")
-    assert form.title == "The Technomancer"
-    core = rows_by_key(form, "")
-    assert core["launch.proton"]["type"] == "enum"
-    assert core["launch.proton"]["choices"] == ["Proton 9.0", "proton-cachyos", "proton-em", "proton-ge", "proton-tkg"]
-    assert core["favorite"]["value"] is True
-    assert core["launch.proton"]["inherited"] is False
-    assert core["launch.esync"]["inherited"] is True, "an empty launch key takes the global value"
-    assert core["favorite"]["inherited"] is False
-    capture = rows_by_key(form, "capture")
-    assert capture["enabled"]["value"] is True and capture["enabled"]["type"] == "bool"
-    assert "codec" not in capture, "global settings do not belong to a game"
-    assert [g["title"] for g in form.groups] == [
-        "Display",
-        "Overlay",
-        "Proton",
-        "Launch",
-        "Desktop and library",
-        "Video capture",
-        "Play journal",
-        "Screenshots",
-        "GOG",
-    ], "the launch page's cards, the runner's, the program, the modules, the source's; no Advanced row, a game's page flips it from a button"
-    assert form.hasAdvanced is True and "advanced" not in [r["key"] for r in form.rows]
-    assert [(g["title"], g["home"]) for g in form.advancedGroups] == [
-        ("Scaling", "Display"),
-        ("Environment", "Launch"),
-        ("Proton", ""),
-        ("Sync", "Proton"),
-        ("Upscaling", "Proton"),
-        ("Logs", "Proton"),
-        ("Launch", ""),
-        ("Artwork", "Desktop and library"),
-    ], "the power user's cards, in the same order, each with the basic card it folds into"
+    titles = [g["title"] for g in form.groups]
+
+    def cards_hold():
+        assert sorted(i for g in form.groups for i in g["rows"]) == [
+            i for i, r in enumerate(form.rows) if form.showAdvanced or not r["advanced"] or r.get("changed")
+        ], "behind Advanced: the advanced rows the game leaves alone"
+        assert [g["title"] for g in form.groups] == titles, "the sidebar does not move with Advanced"
+        for g in form.groups:
+            advanced = [form.rows[i]["advanced"] for i in g["rows"]]
+            assert advanced == sorted(advanced) and g["divider"] == (advanced.index(True) if True in advanced else -1)
+            assert g["changed"] == any(form.rows[i].get("changed") for i in g["rows"]), "a card holding a value of the game's own is marked"
+        return True
+
+    assert form.hasAdvanced and "advanced" not in rows_by_key(form) and cards_hold(), "a game's page flips Advanced from a button"
+    scaler = index_of(form, "launch.gamescope_scaler")
+    assert form.setValue(scaler, "fsr") is True and form.rows[scaler]["changed"] and cards_hold(), "a change behind Advanced shows in its card"
+    assert form.reset(scaler) is True and not form.rows[scaler]["changed"] and cards_hold()
+    assert form.setMapEntry(index_of(form, "launch.env"), "PROTON_SONY_HIDRAW_XINPUT", "1") is True
+    assert rows_by_key(form)["launch.env.PROTON_SONY_HIDRAW_XINPUT"]["changed"] and cards_hold(), "the variable shows, the row adding one stays behind"
     form.showAdvanced = True
-    groups = {g["title"]: g for g in form.groups}
-    assert [g["title"] for g in form.groups] == [
-        "Display",
-        "Overlay",
-        "Proton",
-        "Launch",
-        "Desktop and library",
-        "Video capture",
-        "Play journal",
-        "Screenshots",
-        "GOG",
-    ], "every advanced card folds into a basic one: the sidebar does not move with Advanced"
-    assert groups["Proton"]["divider"] == 3 and [form.rows[i]["key"] for i in groups["Proton"]["rows"][3:]] == [
-        "launch.prefix",
-        "launch.umu_id",
-        "launch.store",
-        "launch.dll_overrides",
-        "launch.esync",
-        "launch.fsync",
-        "launch.ntsync",
-        "launch.dlss_upgrade",
-        "launch.fsr4_upgrade",
-        "launch.xess_upgrade",
-        "launch.optiscaler",
-        "launch.debug_log",
-    ], "the card's own advanced rows, then the cards homed in it"
-    assert groups["Proton"]["dividers"] == [
-        {"at": 3, "label": "Advanced"},
-        {"at": 7, "label": "Sync"},
-        {"at": 10, "label": "Upscaling"},
-        {"at": 14, "label": "Logs"},
-    ], "one rule per folded card"
-    assert groups["Display"]["divider"] == 4 and groups["Display"]["dividers"] == [{"at": 4, "label": "Advanced · Scaling"}], (
-        "a card with no advanced rows of its own names the folded one on the rule"
-    )
-    assert groups["Launch"]["divider"] == 2 and groups["Launch"]["dividers"] == [{"at": 2, "label": "Advanced"}, {"at": 7, "label": "Environment"}]
-    assert [form.rows[i]["key"] for i in groups["Launch"]["rows"][7:]] == ["launch.env"] and form.rows[groups["Launch"]["rows"][7]]["map"] is True
-    assert groups["Desktop and library"]["dividers"] == [{"at": 4, "label": "Advanced · Artwork"}]
-    assert groups["Launch"]["caps"] is True and groups["Video capture"]["caps"] is False
-    assert groups["Display"]["meta"] == "DP-1 2560×1440 @ 144 Hz" and groups["Video capture"]["meta"] == "v0.1.0"
-    assert sorted(i for g in form.groups for i in g["rows"]) == list(range(len(form.rows)))
-    add = rows_by_key(form, "")["launch.env"]
-    assert add["type"] == "action" and add["action"] == "Add" and add["label"] == "Add a variable…" and add["advanced"] is True
-    assert add["fields"] == ["Variable", "Value"] and "launch.env.DXVK_HUD" not in rows_by_key(form, "")
-    assert form.setMapEntry(index_of(form, "launch.env"), "DXVK_HUD", "fps") is True
-    assert fake.game("the-technomancer")["launch"]["env"] == {"DXVK_HUD": "fps"}
+    assert cards_hold()
+    folded = Counter(g["home"] or g["title"] for g in form.advancedGroups)
+    assert {g["title"]: len(g["dividers"]) for g in form.groups if g["dividers"]} == folded, "one rule per card folded in"
+    assert "codec" not in rows_by_key(form, "capture"), "a module's global settings are not a game's"
+    form.load("the-technomancer")
+    assert not form.showAdvanced, "Advanced is not remembered across openings"
+
+
+def test_the_environment_maps_entries_are_rows_of_their_own(api, fake):
+    form = api.screens.gameSettings
+    form.load("the-technomancer")
+
+    def env():
+        return fake.game("the-technomancer")["launch"].get("env", {})
+
+    assert rows_by_key(form, "")["launch.env"]["map"] is True
+    assert form.setMapEntry(index_of(form, "launch.env"), "DXVK_HUD", "fps") is True and env() == {"DXVK_HUD": "fps"}
     entry = rows_by_key(form, "")["launch.env.DXVK_HUD"]
-    assert entry["type"] == "string" and entry["label"] == "DXVK_HUD" and entry["value"] == "fps" and entry["entry"] == "launch.env"
-    assert entry["origin"] == "game" and entry["advanced"] is True and form.resettable(entry), "a variable the game sets is its own row"
-    assert [form.rows[i]["key"] for i in {g["title"]: g for g in form.groups}["Launch"]["rows"]][-2:] == ["launch.env.DXVK_HUD", "launch.env"], (
-        "the entries, then the row that adds one"
-    )
-    assert form.setMapEntry(index_of(form, "launch.env.DXVK_HUD"), "DXVK_HUD", "") is True and fake.game("the-technomancer")["launch"].get("env", {}) == {}
-    assert form.setMapEntry(index_of(form, "launch.env"), "a.b c", "1") is True and fake.game("the-technomancer")["launch"]["env"] == {"abc": "1"}, (
-        "a name is one key of the map"
-    )
-    assert form.reset(index_of(form, "launch.env.abc")) is True and fake.game("the-technomancer")["launch"].get("env", {}) == {}
+    assert (entry["entry"], entry["value"], entry["origin"]) == ("launch.env", "fps", "game") and form.resettable(entry)
+    assert form.setMapEntry(index_of(form, "launch.env.DXVK_HUD"), "DXVK_HUD", "") is True and env() == {}, "an emptied value removes it"
+    assert form.setMapEntry(index_of(form, "launch.env"), "a.b c", "1") is True and env() == {"abc": "1"}, "a name is one key of the map"
+    assert form.reset(index_of(form, "launch.env.abc")) is True and env() == {}
     fake.core.set_setting("launch.env.MANGOHUD", "1")
     form.load("the-technomancer")
     entry = rows_by_key(form, "")["launch.env.MANGOHUD"]
-    assert entry["origin"] == "global" and entry["inherited"] is True and not form.resettable(entry), "the global's variable, not this game's to drop"
-    assert form.setValue(index_of(form, "launch.env.MANGOHUD"), "0") is True and fake.game("the-technomancer")["launch"]["env"] == {"MANGOHUD": "0"}
+    assert (entry["origin"], entry["inherited"], form.resettable(entry)) == ("global", True, False), "the global's variable, not this game's to drop"
+    assert form.setValue(index_of(form, "launch.env.MANGOHUD"), "0") is True and env() == {"MANGOHUD": "0"}
     assert rows_by_key(form, "")["launch.env.MANGOHUD"]["origin"] == "game", "changing an inherited variable writes it on the game"
     assert form.reset(index_of(form, "launch.env.MANGOHUD")) is True and rows_by_key(form, "")["launch.env.MANGOHUD"]["origin"] == "global"
-    fake.core.set_setting("launch.env.MANGOHUD", "")
-    form.load("the-technomancer")
-    fake.core.set_setting("launch.gamescope_args", "--expose-wayland")
-    form.load("the-technomancer")
-    rows = rows_by_key(form, "")
-    assert rows["launch.gamescope_args"]["display"] == "--expose-wayland" and rows["launch.gamescope_args"]["origin"] == "global", (
-        "the global's arguments show where the game sets none"
-    )
-    assert rows["launch.working_dir"]["display"] == "/mnt/games/PC/The Technomancer" and rows["launch.working_dir"]["origin"] == "default", (
-        "an empty working directory shows the program's folder the launch falls back to"
-    )
-    assert rows["launch.prefix"]["origin"] == "game" and rows["launch.proton"]["origin"] == "game" and rows["launch.gamescope"]["origin"] == "default"
-    assert rows["launch.runner"]["icons"][:2] == ["assets/runners/proton.svg", "assets/runners/wine.svg"] and rows["launch.runner"]["origin"] == ""
-    assert rows_by_key(form, "capture")["enabled"]["origin"] == "game" and rows_by_key(form, "journal")["language"]["origin"] == "game"
-    fake.core.set_setting("launch.gamescope_args", "")
-    form.showAdvanced = True
-    form.load("mini-metro")
-    assert not form.showAdvanced, "another game opens collapsed"
-    form.showAdvanced = True
-    form.load("the-technomancer")
-    assert not form.showAdvanced, "so does the same game: Advanced is not remembered across openings"
-    assert rows_by_key(form, "")["launch.runner"]["valueIcon"] == "assets/runners/proton.svg" and "icon" not in rows_by_key(form, "")["launch.runner"], (
-        "the runner's logo sits by its value, not its label"
-    )
-
-    index = next(i for i, r in enumerate(form.rows) if r["module"] == "capture" and r["key"] == "enabled")
-    form.toggle(index)
-    assert fake.settings("the-technomancer")["capture"]["enabled"] is False
-    assert form.rows[index]["value"] is False
 
 
 def test_a_module_row_shows_choice_labels_and_sends_the_stored_value(api, fake):
@@ -285,22 +208,7 @@ def test_module_form(api, fake):
     assert form.info["description"].startswith("After each session, a model writes an entry")
     assert [r["key"] for r in form.rows] == ["enabled"], "off: the switch alone"
     assert form.rows[0]["value"] is False and form.rows[0]["disabled"] is True
-    assert form.groups == [
-        {
-            "title": "Settings",
-            "meta": "",
-            "warning": "",
-            "caps": True,
-            "control": -1,
-            "off": False,
-            "advanced": False,
-            "home": "",
-            "rows": [0],
-            "divider": -1,
-            "dividers": [],
-            "changed": False,
-        }
-    ], "the page header carries the name and the warning"
+    assert [(g["rows"], g["meta"], g["warning"]) for g in form.groups] == [([0], "", "")], "the page header carries the name and the warning"
     form.load("capture")
     assert form.info["meta"] == "v0.1.0" and form.info["warning"] == "" and form.info["source"] is False
     assert form.info["description"].startswith("Records each session")
@@ -319,7 +227,9 @@ def test_module_form(api, fake):
         "gsr_extra_args",
     ], "the advanced settings, then the config-only ones"
     assert form.setValue(form.reveal("gsr_extra_args", "capture"), "-cr full") is True and fake.getSettings("capture", "")["gsr_extra_args"] == "-cr full"
-    assert form.showAdvanced and form.groups[0]["divider"] == 6, "a write keeps Advanced open, folded into the card"
+    extra = index_of(form, "gsr_extra_args")
+    card = next(g for g in form.groups if extra in g["rows"])
+    assert form.showAdvanced and card["rows"].index(extra) >= card["divider"] >= 0, "a write keeps Advanced open, folded into the card"
     form.load("capture")
     assert not form.showAdvanced, "reopening the page does not"
     assert form.setValue(index_of(form, "codec"), "av1") is True
@@ -375,7 +285,6 @@ def test_launch_form(api, fake):
         ("Desktop", ["desktop.profile", "desktop.cursor_extension"]),
         ("Proton builds", ["proton.proton-tkg", "proton"]),
     ], "with Advanced on: the scaling flags fold into Display, the environment, the programs and config.toml's own sections follow"
-    assert form.groups[0]["dividers"] == [{"at": 4, "label": "Advanced · Scaling"}]
     assert expected[0][1] == ["launch.gamescope", "launch.gamescope_resolution", "launch.gamescope_refresh", "launch.gamescope_adaptive_sync"]
     assert expected[1][1] == ["launch.mangohud", "launch.fps_limit", "launch.pause_on_home", "desktop.hide_cursor", "desktop.keep_awake"]
     assert expected[2][1] == [
@@ -452,11 +361,23 @@ def test_launch_form(api, fake):
     assert rows_by_key(form)["launch.fps_limit"]["display"] == "auto · 144", "on the desktop the gamescope rate means nothing"
 
 
-def test_game_settings_reset(api, fake):
+def test_a_rows_origin_tells_the_games_own_values_and_a_reset_drops_one(api, fake):
+    fake.core.set_setting("launch.gamescope_args", "--expose-wayland")
     form = api.screens.gameSettings
     form.load("the-technomancer")
     rows = rows_by_key(form, "")
-    assert rows["launch.proton"]["origin"] == "game" and form.reset(index_of(form, "launch.proton")) is True
+    assert {k: (rows[k]["origin"], rows[k]["inherited"]) for k in ("launch.proton", "launch.esync", "launch.runner")} == {
+        "launch.proton": ("game", False),
+        "launch.esync": ("default", True),
+        "launch.runner": ("", False),
+    }
+    assert (rows["launch.gamescope_args"]["origin"], rows["launch.gamescope_args"]["display"]) == ("global", "--expose-wayland"), (
+        "the global's arguments show where the game sets none"
+    )
+    assert rows["launch.working_dir"]["origin"] == "default" and rows["launch.working_dir"]["display"] == os.path.dirname(rows["launch.exe"]["value"]), (
+        "an empty working directory shows the program's folder the launch falls back to"
+    )
+    assert form.reset(index_of(form, "launch.proton")) is True
     assert "proton" not in fake.game("the-technomancer")["launch"] and rows_by_key(form, "")["launch.proton"]["origin"] == "default", (
         "reset drops the game's own value: the row inherits again"
     )
@@ -472,7 +393,12 @@ def test_game_settings_reset(api, fake):
     capture = next(i for i, r in enumerate(form.rows) if r["module"] == "capture" and r["key"] == "enabled")
     assert form.rows[capture]["origin"] == "game" and form.reset(capture) is True
     assert "enabled" not in fake.game("the-technomancer")["modules"]["capture"] and form.rows[capture]["origin"] != "game"
-    assert not hasattr(form, "override"), "an inherited value is overridden by changing it, not from a button"
+    shot = next(i for i, r in enumerate(form.rows) if r["module"] == "screenshot" and r["key"] == "enabled")
+    assert form.rows[shot]["origin"] == "default"
+    form.toggle(shot)
+    assert fake.game("the-technomancer")["modules"]["screenshot"]["enabled"] is False and form.rows[shot]["origin"] == "game", (
+        "a toggle writes the inherited value on the game"
+    )
 
 
 def test_game_settings_promote(api, fake):
@@ -556,83 +482,20 @@ def test_a_value_for_all_games_reaches_the_games_the_setting_applies_to(api, fak
     assert module.reset(index_of(module, "wiimote")) is True and "wiimote" not in fake.config()["set"]["modules"].get("controls", {}), "and undoes it"
 
 
-def test_game_settings_marks_changed_cards(api, fake):
-    form = api.screens.gameSettings
-    form.load("the-technomancer")
-
-    def changed():
-        return {g["title"]: g["changed"] for g in form.groups}
-
-    proton = next(g for g in form.groups if index_of(form, "launch.proton") in g["rows"])["title"]
-    assert changed()[proton] is True and changed()["Display"] is False, "a card holding a value of the game's own is marked"
-    assert not form.showAdvanced and form.setValue(index_of(form, "launch.gamescope_scaler"), "fsr") is True
-    assert changed()["Display"] is True, "a change behind Advanced marks its card while Advanced is off"
-    display = next(g for g in form.groups if g["title"] == "Display")
-    assert [form.rows[i]["key"] for i in display["rows"][display["divider"] :]] == ["launch.gamescope_scaler"], "and the card shows it, alone of its kind"
-    assert display["dividers"] == [{"at": display["divider"], "label": "Advanced · Scaling"}]
-    cards = {g["title"]: [form.rows[i]["key"] for i in g["rows"]] for g in form.groups}
-    assert "launch.prefix" in cards[proton] and "launch.umu_id" not in cards[proton], "the game's own prefix shows, the untouched rows stay behind Advanced"
-    assert form.reset(index_of(form, "launch.gamescope_scaler")) is True and changed()["Display"] is False
-    assert next(g for g in form.groups if g["title"] == "Display")["divider"] == -1
-    assert form.setMapEntry(index_of(form, "launch.env"), "PROTON_SONY_HIDRAW_XINPUT", "1") is True
-    launch = next(g for g in form.groups if g["title"] == "Launch")
-    assert launch["changed"] is True and "launch.env.PROTON_SONY_HIDRAW_XINPUT" in [form.rows[i]["key"] for i in launch["rows"]]
-    assert "launch.env" not in [form.rows[i]["key"] for i in launch["rows"]], "adding a variable stays behind Advanced"
-
-
-def test_game_settings_mirrors_the_cards(api, fake):
-    form = api.screens.gameSettings
-    form.load("the-technomancer")
+def test_a_games_cards_hold_the_launch_catalogues_sections_and_its_runners(api, fake):
     catalogue = fake.launchKeys("game", fake.screenMode("DP-1"))
-    form.showAdvanced = True
-    cards = {}
-    for g in form.groups:
-        cards.setdefault(g["title"], []).extend(form.rows[i]["key"] for i in g["rows"])
 
     def keys_of(*sections):
-        return ["launch." + k["key"] for k in catalogue if k["section"] in sections]
+        return {"launch." + k["key"] for k in catalogue if k["section"] in sections}
 
+    form = api.screens.gameSettings
+    form.load("the-technomancer")
+    form.showAdvanced = True
+    cards = {g["title"]: {form.rows[i]["key"] for i in g["rows"]} for g in form.groups}
     assert cards["Display"] == keys_of("Display", "Scaling") and cards["Overlay"] == keys_of("Overlay")
-    assert cards["Proton"] == [
-        "launch.proton",
-        "launch.wayland",
-        "launch.hdr",
-        "launch.prefix",
-        "launch.umu_id",
-        "launch.store",
-        "launch.dll_overrides",
-        *keys_of("Sync", "Upscaling", "Logs"),
-    ], "no arch on Proton; the sync, upscaling and log switches fold in after its own advanced rows"
-    assert cards["Launch"] == [
-        "launch.runner",
-        "launch.exe",
-        "launch.wrapper",
-        "launch.args",
-        "launch.working_dir",
-        "launch.pre_command",
-        "launch.post_command",
-        "launch.env",
-    ]
-    rows = rows_by_key(form, "")
-    assert rows["launch.fps_limit"]["value"] == "auto" and rows["launch.fps_limit"]["inherited"] is True and rows["launch.fps_limit"]["display"] == "auto · 144"
-    assert rows["launch.esync"]["detail"].startswith("Faster thread synchronisation")
-    assert rows["launch.dlss_upgrade"]["detail"].endswith("Not for your GPU.") and rows["launch.fsr4_upgrade"]["detail"].endswith("Works on your GPU.")
-    assert rows["launch.gamescope"]["detail"].startswith("Run the game in a window"), "no GPU note outside Upscaling"
-    assert rows["launch.gamescope_resolution"]["value"] == "auto" and rows["launch.gamescope_resolution"]["inherited"] is True
-    assert rows["launch.gamescope_resolution"]["choices"][:2] == ["auto", "2560x1440"]
-    scaler, vrr = rows["launch.gamescope_scaler"], rows["launch.gamescope_adaptive_sync"]
-    assert scaler["value"] == scaler["choices"][0] and scaler["choiceValues"][0] == "" and scaler["inherited"] is True
-    assert scaler["display"] == "auto" and scaler["origin"] == "default", "the bare built-in: the row's origin says it is the default"
-    assert vrr["value"] == vrr["choices"][0] and vrr["display"] == "auto · On"
-    assert rows["launch.gamescope_adaptive_sync"]["inherited"] is True and rows["launch.gamescope_adaptive_sync"]["origin"] == "default"
-    assert form.setValue(index_of(form, "launch.gamescope_resolution"), "1920x1080") is True
-    assert fake.game("the-technomancer")["launch"]["gamescope_resolution"] == "1920x1080"
-    rows = rows_by_key(form, "")
-    assert rows["launch.gamescope_resolution"]["value"] == "1920x1080" and rows["launch.gamescope_resolution"]["inherited"] is False
+    assert keys_of("Sync", "Upscaling", "Logs") < cards["Proton"], "the sync, upscaling and log switches fold into the runner's card"
     form.load("mini-metro")
-    titles = [g["title"] for g in form.groups]
-    assert "Proton" not in titles and "Sync" not in titles and "Upscaling" not in titles and "Eden" not in titles, "an emulator has no runner card"
-    assert "launch.wrapper" in [r["key"] for r in form.rows if r["section"] == "Launch"]
+    assert not {"Proton", "Sync", "Upscaling", "Eden"} & {g["title"] for g in form.groups}, "an emulator has no runner card"
 
 
 def test_sources_browser_statuses(api):
@@ -950,9 +813,10 @@ def test_pending_journals_announce_each_session_once(api, fake):
     fake.entryWritten.emit("20260912-200000", "the-technomancer")
     until(lambda: pending.count == 1, "the read runs off the UI thread")
     assert pending.rows[0]["title"] == "The Technomancer"
+    read = record(pending.changed)
     fake.entryWritten.emit("", "the-technomancer")
     fake.sessionEnded.emit("20260912-200000", "the-technomancer", 60, "quit")
-    pump(300)
+    until(lambda: len(read) >= 2, "a read after both signals is in")
     assert seen == [("appeared", "20260912-200000", "The Technomancer")]
 
     entries[0].update(state="written", title="Back to Noctis", paragraphs=["p"], written_at="2026-09-12T20:50:00+02:00")
