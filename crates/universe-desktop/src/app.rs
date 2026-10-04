@@ -927,7 +927,7 @@ fn debug_facts() -> Vec<(&'static str, String)> {
         .map(|v| v.trim_matches('"').to_string())
         .unwrap_or_default();
     vec![
-        ("Universe Desktop", format!("{} ({})", universe::VERSION, universe::BUILD)),
+        ("Universe Desktop", universe::BUILD.to_string()),
         ("GTK", format!("{}.{}.{}", gtk::major_version(), gtk::minor_version(), gtk::micro_version())),
         ("libadwaita", format!("{}.{}.{}", adw::major_version(), adw::minor_version(), adw::micro_version())),
         ("Distribution", distro),
