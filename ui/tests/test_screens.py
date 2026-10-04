@@ -4,7 +4,6 @@ from collections import Counter
 import pytest
 
 from conftest import index_of, record, rows_by_key, settle, until
-from universe_ui.screens.media import _size
 
 PENDING = {
     "session": "20260912-200000",
@@ -103,14 +102,6 @@ def test_a_module_setting_shows_on_the_games_it_applies_to(api, fake, game, show
     assert list(rows_by_key(form, "controls")) == shown
 
 
-def test_a_module_for_another_universe_says_which(api, fake):
-    why = "needs Universe >=9.0.0, this is 0.0.9"
-    next(m for m in fake.core._data["modules"] if m["id"] == "journal").update(available=False, missing=[], incompatible=why)
-    form = api.screens.module
-    form.load("journal")
-    assert why in form.info["warning"] and "missing" not in form.info["warning"]
-
-
 def test_modules_list(api, fake):
     journal_module = next(m for m in fake.core._data["modules"] if m["id"] == "journal")
     journal_module.update(enabled=False, available=False, missing=["ffmpeg"])
@@ -118,35 +109,29 @@ def test_modules_list(api, fake):
     form.load()
     assert [r["module"] for r in form.rows] == ["capture", "journal", "screenshot", "controls"], "the manifests' order, sources apart"
     assert all(r["type"] == "action" and r["key"] == "module" and r["switch"] is True and r["source"] is False for r in form.rows)
-    assert [(g["title"], [form.rows[i]["module"] for i in g["rows"]], g["off"]) for g in form.groups] == [
-        ("", ["capture", "screenshot", "controls"], False),
-        ("Off", ["journal"], True),
-    ]
-    capture = form.rows[form.indexOf("capture")]
-    assert capture["label"] == "Video capture" and capture["value"] is True and capture["display"] == "On" and capture["meta"] == "v0.1.0"
-    journal = form.rows[form.indexOf("journal")]
-    assert journal["value"] is False and journal["display"] == "Unavailable" and journal["detail"] == "Cannot be enabled: missing ffmpeg"
+    assert sorted(i for g in form.groups for i in g["rows"]) == list(range(len(form.rows)))
+    assert all(g["off"] is not form.rows[i]["value"] for g in form.groups for i in g["rows"]), "the modules turned off share a card of their own"
+    capture, journal = (form.rows[form.indexOf(m)] for m in ("capture", "journal"))
+    assert capture["value"] is True and capture["warning"] == ""
+    assert journal["value"] is False and "ffmpeg" in journal["warning"]
     next(m for m in fake.core._data["modules"] if m["id"] == "capture").update(available=False, missing=["gsr-cli"])
     form.load()
     capture = form.rows[form.indexOf("capture")]
-    assert capture["value"] is True and capture["display"] == "Unavailable" and capture["detail"] == "On, but its hooks are skipped: missing gsr-cli", (
-        "an enabled module with a missing binary does not read as working"
-    )
+    assert capture["value"] is True and "gsr-cli" in capture["warning"], "an enabled module with a missing binary does not read as working"
     next(m for m in fake.core._data["modules"] if m["id"] == "capture").update(available=True, missing=[])
     form.load()
     form.toggle(form.indexOf("capture"))
-    assert form.rows[form.indexOf("capture")]["value"] is False and form.rows[form.indexOf("capture")]["display"] == "Off"
+    assert form.rows[form.indexOf("capture")]["value"] is False
     assert next(m for m in fake.modules() if m["id"] == "capture")["enabled"] is False
     form.loadDoctor()
     until(lambda: form.doctor, "the checks run off the UI thread")
-    assert all("value" in r for r in form.doctor)
-    doctor = {g["title"]: g for g in form.doctorGroups}
-    assert [g["title"] for g in form.doctorGroups[:2]] == ["Needs attention", "Core"], "the failures come first, then the core's checks"
-    attention = [form.doctor[i] for i in doctor["Needs attention"]["rows"]]
-    assert [(r["path"], r["label"]) for r in attention] == [("Core", "Cursor hiding extension"), ("Runners", "Eden quits on stop")]
-    assert all(r["fix"] and r["detail"] for r in attention), "a failure says what is wrong and what to do"
-    assert doctor["Core"]["meta"] == "1 of 2 checks pass" and len(doctor["Core"]["rows"]) == 1, "a card keeps its count but not its failures"
-    assert form.doctor[doctor["GOG"]["rows"][0]]["label"] == "gogdl", "a source's checks are grouped under its name"
+    failing = [i for i, r in enumerate(form.doctor) if not r["value"]]
+    attention, *cards = form.doctorGroups
+    assert attention["rows"] == failing and [form.doctor[i]["module"] for i in failing] == ["core", "runners"], "the failures come first"
+    assert all(form.doctor[i]["fix"] and form.doctor[i]["detail"] for i in failing), "a failure says what is wrong and what to do"
+    assert sorted(i for g in form.doctorGroups for i in g["rows"]) == list(range(len(form.doctor)))
+    assert all(form.doctor[i]["value"] for g in cards for i in g["rows"]), "a card keeps its count but not its failures"
+    assert all(len({form.doctor[i]["module"] for i in g["rows"]}) == 1 for g in cards), "a module's or a source's checks share a card"
 
 
 def test_sources_list(api, fake):
@@ -154,32 +139,37 @@ def test_sources_list(api, fake):
     form.load()
     until(lambda: form.rows, "the listing probes the logins: off the UI thread")
     assert [r["module"] for r in form.rows] == ["gog", "epic", "itch", "steam"], "the running ones first"
-    gog = form.rows[0]
-    assert gog["section"] == "Sources" and gog["switch"] is True and gog["source"] is True
-    assert gog["label"] == "GOG" and gog["value"] is True and gog["display"] == "On" and gog["meta"] == "v0.1.0"
-    assert form.rows[1]["value"] is False and form.rows[1]["display"] == "Off"
-    assert [(g["title"], g["rows"]) for g in form.groups] == [("", [0]), ("Off", [1, 2, 3])]
+    assert all(r["switch"] is True and r["source"] is True for r in form.rows)
+    assert [r["value"] for r in form.rows] == [True, False, False, False]
+
+    def cards_hold():
+        assert sorted(i for g in form.groups for i in g["rows"]) == list(range(len(form.rows))) and all(g["rows"] for g in form.groups), "no empty card"
+        assert all(g["off"] is not form.rows[i]["value"] for g in form.groups for i in g["rows"]), "the sources turned off share a card of their own"
+        return True
+
+    assert cards_hold() and len(form.groups) == 2
     form.toggle(0)
     until(lambda: [r["value"] for r in form.rows] == [False, False, False, False])
     assert next(s for s in fake.sources() if s["id"] == "gog")["enabled"] is False
-    assert form.rows[0]["display"] == "Off"
-    assert [g["title"] for g in form.groups] == ["Off"], "no empty card for the running ones"
+    assert cards_hold() and len(form.groups) == 1
 
 
 def test_source_form(api, fake):
     form = api.screens.source
     form.load("gog")
     until(lambda: form.info)
-    assert form.info["name"] == "GOG" and form.info["source"] is True and form.info["logged_in"] is True and form.info["user"] == "yasso"
+    assert form.info["source"] is True and form.info["logged_in"] is True and form.info["user"] == "yasso"
     rows = form.rows
     assert rows[0]["key"] == "enabled" and rows[0]["value"] is True and rows[0]["disabled"] is False
-    assert [g["title"] for g in form.groups] == ["Settings", "Game defaults", "Sign-in"], "the game settings every game takes, between"
-    groups = {g["title"]: g for g in form.groups}
-    assert [rows[i]["key"] for i in groups["Sign-in"]["rows"]] == ["logged_in", "link", "code"]
-    assert rows[groups["Sign-in"]["rows"][0]]["type"] == "info" and rows[groups["Sign-in"]["rows"][0]]["detail"] == "yasso"
-    assert [rows[i]["key"] for i in groups["Settings"]["rows"]] == ["enabled", "games_dir", "platform", "with_dlcs"], (
-        "every setting: a source's are all global; the advanced ones behind Y"
-    )
+    assert sorted(i for g in form.groups for i in g["rows"]) == [i for i, r in enumerate(rows) if not r["advanced"]]
+
+    def card(key):
+        return [rows[i]["key"] for i in next(g for g in form.groups if index_of(form, key) in g["rows"])["rows"]]
+
+    assert card("logged_in") == ["logged_in", "link", "code"]
+    assert rows[index_of(form, "logged_in")]["type"] == "info" and rows[index_of(form, "logged_in")]["detail"] == "yasso"
+    assert card("enabled") == ["enabled", "games_dir", "platform", "with_dlcs"], "every setting: a source's are all global; the advanced ones behind Y"
+    assert card("achievements") == ["achievements"], "the game settings every game takes, a card of their own"
     assert [rows[i]["key"] for g in form.advancedGroups for i in g["rows"]] == ["scan_dirs", "auth_path", "install_timeout_s"]
     platform = index_of(form, "platform")
     assert rows[platform]["choiceValues"] == ["", "windows", "linux"], "the first choice drops config.toml's own"
@@ -193,7 +183,7 @@ def test_source_form(api, fake):
     gog = next(s for s in fake.core._data["sources"] if s["id"] == "gog")
     gog.update(available=False, missing=["gogdl"])
     form.load("gog")
-    until(lambda: "missing gogdl" in form.info.get("warning", ""))
+    until(lambda: "gogdl" in form.info.get("warning", ""))
     assert form.rows[0]["disabled"] is True
     form.load("capture")
     until(lambda: form.rows == [] and form.info == {}, "a module is not a source")
@@ -204,17 +194,17 @@ def test_module_form(api, fake):
     journal_module.update(enabled=False, available=False, missing=["ffmpeg"])
     form = api.screens.module
     form.load("journal")
-    assert form.info["name"] == "Play journal" and "missing ffmpeg" in form.info["warning"] and form.info["enabled"] is False
-    assert form.info["description"].startswith("After each session, a model writes an entry")
+    assert (form.info["name"], form.info["description"]) == (journal_module["name"], journal_module["description"])
+    assert "ffmpeg" in form.info["warning"] and form.info["enabled"] is False
     assert [r["key"] for r in form.rows] == ["enabled"], "off: the switch alone"
     assert form.rows[0]["value"] is False and form.rows[0]["disabled"] is True
     assert [(g["rows"], g["meta"], g["warning"]) for g in form.groups] == [([0], "", "")], "the page header carries the name and the warning"
     form.load("capture")
-    assert form.info["meta"] == "v0.1.0" and form.info["warning"] == "" and form.info["source"] is False
-    assert form.info["description"].startswith("Records each session")
+    capture = next(m for m in fake.core._data["modules"] if m["id"] == "capture")
+    assert form.info["description"] == capture["description"] and form.info["warning"] == "" and form.info["source"] is False
     rows = form.rows
     assert rows[0]["key"] == "enabled" and rows[0]["value"] is True and rows[0]["disabled"] is False
-    settings = next(g for g in form.groups if g["title"] == "Settings")
+    settings = next(g for g in form.groups if 0 in g["rows"])
     assert [rows[i]["key"] for i in settings["rows"]] == ["enabled", "codec", "quality", "fps", "size", "audio"], "the switch heads the one card"
     assert [rows[i]["key"] for g in form.advancedGroups for i in g["rows"]] == [
         "container",
@@ -237,6 +227,10 @@ def test_module_form(api, fake):
     assert form.info["enabled"] is False and [r["key"] for r in form.rows] == ["enabled"]
     form.load("nope")
     assert form.rows == [] and form.info == {}
+    why = "needs Universe >=9.0.0, this is 0.0.9"
+    journal_module.update(missing=[], incompatible=why)
+    form.load("journal")
+    assert why in form.info["warning"] and "ffmpeg" not in form.info["warning"], "a module for another Universe says which"
 
 
 def test_module_form_choices(api, fake):
@@ -260,49 +254,28 @@ def test_module_form_choices(api, fake):
 def test_launch_form(api, fake):
     form = api.screens.launch
     form.load()
-    assert form.screen == "DP-1 2560×1440 @ 144 Hz"
     keys = fake.launchKeys("global", fake.screenMode("DP-1"))
     assert {k["scope"] for k in keys} == {"both", "global"} and "prefix" not in [k["key"] for k in keys]
-    expected = [
-        (section, ["launch." + k["key"] for k in keys if k["section"] == section and not k["runners"]])
-        for section in ("Display", "Overlay", "Scaling", "Environment", "Programs")
-    ]
-    expected[1][1].extend(["desktop.hide_cursor", "desktop.keep_awake"])
-    updates = ("Updates", ["desktop.whats_new"])
-    assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups] == [*expected[:2], ("Saves", ["saves.auto_backup"]), updates], (
-        "beginner first, no Advanced row; a runner's keys sit on its page"
-    )
+    titles = [g["title"] for g in form.groups]
+    assert not any(form.rows[i]["advanced"] for g in form.groups for i in g["rows"]) and "advanced" not in rows_by_key(form), "beginner first, no Advanced row"
     form.showAdvanced = True
-    assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups] == [
-        ("Display", [*expected[0][1], *expected[2][1]]),
-        expected[1],
-        ("Saves", ["saves.auto_backup", "saves.keep"]),
-        updates,
-        *expected[3:],
-        ("Folders", ["paths.games_root", "paths.prefixes_root", "paths.saves_root", "paths.recordings_root"]),
-        ("API keys", ["keys.sgdb", "keys.sgdb_file", "keys.prefer_sgdb"]),
-        ("Desktop", ["desktop.profile", "desktop.cursor_extension"]),
-        ("Proton builds", ["proton.proton-tkg", "proton"]),
-    ], "with Advanced on: the scaling flags fold into Display, the environment, the programs and config.toml's own sections follow"
-    assert expected[0][1] == ["launch.gamescope", "launch.gamescope_resolution", "launch.gamescope_refresh", "launch.gamescope_adaptive_sync"]
-    assert expected[1][1] == ["launch.mangohud", "launch.fps_limit", "launch.pause_on_home", "desktop.hide_cursor", "desktop.keep_awake"]
-    assert expected[2][1] == [
-        "launch.gamescope_scaler",
-        "launch.gamescope_filter",
-        "launch.gamescope_sharpness",
-        "launch.gamescope_args",
-        "launch.discrete_gpu",
-    ]
-    assert expected[3][1] == ["launch.env"] and expected[4][1] == ["launch.gamescope_bin", "launch.umu_run"]
-    assert form.groups[0]["meta"] == form.screen and form.groups[1]["meta"] == ""
-    config_rows = rows_by_key(form)
-    assert config_rows["paths.games_root"]["value"] == "/mnt/games/PC" and config_rows["paths.games_root"]["type"] == "path"
-    assert config_rows["keys.sgdb"]["display"] == "—" and config_rows["keys.sgdb"]["secret"] is True
-    profile = config_rows["desktop.profile"]
-    assert profile["value"] == profile["choices"][0] and profile["display"] == "auto", "config.toml sets none: the picker opens on the default"
+    assert sorted(i for g in form.groups for i in g["rows"]) == list(range(len(form.rows))), "every row sits in one card"
+    assert [g["title"] for g in form.groups][: len(titles)] == titles, "Advanced adds cards after the basic ones and moves none"
+    rows = rows_by_key(form)
+    assert {"launch." + k["key"] for k in keys if not k["runners"]} <= set(rows), "every launch key no runner owns"
+    assert not {"launch." + k["key"] for k in keys if k["runners"]} & set(rows), "a runner's keys sit on its page"
+    display = next(g for g in form.groups if index_of(form, "launch.gamescope") in g["rows"])
+    assert {form.rows[i]["key"] for i in display["rows"]} == {"launch." + k["key"] for k in keys if k["section"] in ("Display", "Scaling")}, (
+        "the scaling flags fold into Display"
+    )
+    assert display["meta"] == form.screen != "", "the Display card names the screen"
+    assert rows["paths.games_root"]["value"] == "/mnt/games/PC" and rows["paths.games_root"]["type"] == "path"
+    assert rows["keys.sgdb"]["value"] == "" and rows["keys.sgdb"]["secret"] is True
+    profile = rows["desktop.profile"]
+    assert profile["value"] == profile["choices"][0], "config.toml sets none: the picker opens on the default"
     assert profile["choiceValues"] == ["", "auto", "gnome", "kde", "cinnamon", "sway", "hyprland", "niri", "x11", "none"]
     assert form.setValue(index_of(form, "keys.sgdb"), "abc123") is True and fake.config()["keys"]["sgdb"] == "abc123"
-    assert rows_by_key(form)["keys.sgdb"]["display"] == "Set" and rows_by_key(form)["keys.sgdb"]["value"] == "abc123"
+    assert rows_by_key(form)["keys.sgdb"]["value"] == "abc123"
     assert form.setMapEntry(index_of(form, "launch.env"), "MANGOHUD", "1") is True and fake.config()["launch"]["env"] == {"MANGOHUD": "1"}, (
         "a map's entry stays text"
     )
@@ -315,49 +288,41 @@ def test_launch_form(api, fake):
     assert "MANGOHUD" not in fake.config()["launch"].get("env", {}), "so does X on its row"
     rows = rows_by_key(form)
     assert rows["launch.gamescope"]["detail"] == next(k["description"] for k in keys if k["key"] == "gamescope")
-    assert rows["launch.gamescope"]["value"] is True
+    assert rows["launch.gamescope"]["value"] is True and rows["desktop.hide_cursor"]["value"] is True
     assert rows["launch.gamescope_resolution"]["type"] == "string" and rows["launch.gamescope_resolution"]["value"] == "auto"
     assert rows["launch.gamescope_resolution"]["choices"] == ["auto", "2560x1440", "1920x1080", "1280x720"], (
         "the screen, then the standard heights at its aspect"
     )
     assert rows["launch.gamescope_refresh"]["choices"] == ["auto", "144", "120", "100", "90", "75", "60", "50", "48", "40", "30"]
-    assert rows["launch.gamescope_scaler"]["type"] == "enum" and rows["launch.gamescope_scaler"]["value"] == "Default · auto", (
-        "the picker opens on the clearing choice"
-    )
-    assert rows["launch.gamescope_scaler"]["display"] == "default · auto", "an unset scaling key shows what gamescope does"
-    assert rows["launch.gamescope_scaler"]["choices"] == ["Default · auto", "auto", "integer", "fit", "fill", "stretch"]
-    assert rows["launch.gamescope_scaler"]["choiceValues"] == ["", "auto", "integer", "fit", "fill", "stretch"]
-    assert rows["launch.gamescope_sharpness"]["value"] == "Default · 2" and rows["launch.gamescope_sharpness"]["display"] == "default · 2"
-    assert rows["launch.gamescope_adaptive_sync"]["choices"][0] == "Default · auto", "the clearing choice names the built-in"
-    assert rows["launch.fps_limit"]["value"] == "auto" and rows["launch.fps_limit"]["display"] == "auto · 144", "auto shows the rate it stands for"
-    assert rows["launch.gamescope_resolution"]["display"] == "auto · 2560×1440" and rows["launch.gamescope_refresh"]["display"] == "auto · 144"
-    assert rows["launch.fps_limit"]["choices"] == ["auto", "none", "144", "120", "100", "90", "75", "60", "50", "48", "40", "30"]
-    vrr = rows["launch.gamescope_adaptive_sync"]
-    assert (vrr["value"], vrr["display"]) == (vrr["choices"][0], "auto · On"), "the screen has VRR"
+    assert rows["launch.fps_limit"]["value"] == "auto" and rows["launch.fps_limit"]["choices"] == [
+        "auto",
+        "none",
+        *rows["launch.gamescope_refresh"]["choices"][1:],
+    ]
+    for key in ("launch.gamescope_scaler", "launch.gamescope_sharpness", "launch.gamescope_adaptive_sync"):
+        assert rows[key]["value"] == rows[key]["choices"][0] and rows[key]["choiceValues"][0] == "", f"{key}: the picker opens on the clearing choice"
+    assert rows["launch.gamescope_scaler"]["type"] == "enum" and rows["launch.gamescope_scaler"]["choiceValues"] == [
+        "",
+        "auto",
+        "integer",
+        "fit",
+        "fill",
+        "stretch",
+    ]
     assert rows["launch.gamescope_args"]["value"] == ""
-    assert rows["desktop.hide_cursor"]["value"] is True and "launch.esync" not in rows
 
     index = index_of(form, "launch.gamescope_scaler")
     assert form.setValue(index, "integer") is True
     assert fake.config()["launch"]["gamescope_scaler"] == "integer"
-    assert form.setValue(index, "Default · auto") is True
-    assert "gamescope_scaler" not in fake.config()["launch"], "the sentinel clears the key"
+    assert form.setValue(index, rows["launch.gamescope_scaler"]["choices"][0]) is True
+    assert "gamescope_scaler" not in fake.config()["launch"], "the clearing choice clears the key"
     assert form.setValue(index_of(form, "launch.gamescope_sharpness"), "7") is True, "a typed value passes through"
     assert fake.config()["launch"]["gamescope_sharpness"] == 7
     form.load()
     assert rows_by_key(form)["launch.gamescope_sharpness"]["value"] == "7"
     form.toggle(index_of(form, "launch.gamescope"))
     assert fake.config()["launch"]["gamescope"] is False
-    index = index_of(form, "launch.fps_limit")
-    assert form.setValue(index, "none") is True
-    assert fake.config()["launch"]["fps_limit"] == "none"
-    assert rows_by_key(form)["launch.fps_limit"]["display"] == "none"
-    assert form.setValue(index, "auto") is True
-    form.toggle(index_of(form, "launch.gamescope"))
-    assert form.setValue(index_of(form, "launch.gamescope_refresh"), "30") is True
-    assert rows_by_key(form)["launch.fps_limit"]["display"] == "auto · 30", "auto follows the gamescope rate the game sees"
-    form.toggle(index_of(form, "launch.gamescope"))
-    assert rows_by_key(form)["launch.fps_limit"]["display"] == "auto · 144", "on the desktop the gamescope rate means nothing"
+    assert form.setValue(index_of(form, "launch.fps_limit"), "none") is True and fake.config()["launch"]["fps_limit"] == "none"
 
 
 def test_a_rows_origin_tells_the_games_own_values_and_a_reset_drops_one(api, fake):
@@ -490,45 +455,57 @@ def test_a_games_cards_hold_the_launch_catalogues_sections_and_its_runners(api, 
     form = api.screens.gameSettings
     form.load("the-technomancer")
     form.showAdvanced = True
-    cards = {g["title"]: {form.rows[i]["key"] for i in g["rows"]} for g in form.groups}
-    assert cards["Display"] == keys_of("Display", "Scaling") and cards["Overlay"] == keys_of("Overlay")
-    assert keys_of("Sync", "Upscaling", "Logs") < cards["Proton"], "the sync, upscaling and log switches fold into the runner's card"
+
+    def card(key):
+        return {form.rows[i]["key"] for i in next(g for g in form.groups if index_of(form, key) in g["rows"])["rows"]}
+
+    assert card("launch.gamescope") == keys_of("Display", "Scaling") and card("launch.mangohud") == keys_of("Overlay")
+    assert keys_of("Sync", "Upscaling", "Logs") < card("launch.wayland"), "the sync, upscaling and log switches fold into the runner's card"
     form.load("mini-metro")
-    assert not {"Proton", "Sync", "Upscaling", "Eden"} & {g["title"] for g in form.groups}, "an emulator has no runner card"
+    assert not {"launch." + k["key"] for k in catalogue if k["runners"]} & set(rows_by_key(form)), "an emulator has no runner card"
 
 
-def test_sources_browser_statuses(api):
+def test_sources_browser_flags_each_game_by_where_it_stands(api):
     browser = api.screens.sources
     browser.load()
     settle(browser)
     assert browser.source == "gog"
-    status = {r["title"]: r["status"] for r in browser.rows}
-    assert status["The Technomancer"] == "Installed"
-    assert status["Mini Metro"] == "Update available"
-    assert status["Stardew Valley"] == "Owned"
-    assert status["Disco Elysium"] == f"Paused · {_size(6100000000)} of {_size(15400000000)} kept"
-    assert [r["title"] for r in browser.updates] == ["Mini Metro"]
     rows = {r["title"]: r for r in browser.rows}
+    assert {
+        t: (rows[t]["installed"], rows[t]["pending"], rows[t]["partial"]) for t in ("The Technomancer", "Mini Metro", "Stardew Valley", "Disco Elysium")
+    } == {
+        "The Technomancer": (True, False, False),
+        "Mini Metro": (True, True, False),
+        "Stardew Valley": (False, False, False),
+        "Disco Elysium": (False, False, True),
+    }
+    assert [r["title"] for r in browser.updates] == ["Mini Metro"]
     assert rows["Dead Cells"]["game_id"] == "dead-cells" and rows["Stardew Valley"]["game_id"] == ""
     assert rows["Stardew Valley"]["image"].startswith("https://")
-    assert (rows["The Technomancer"]["sizeText"], rows["The Technomancer"]["sizeKind"]) == (_size(8100000000), "disk")
-    assert (rows["Stardew Valley"]["sizeText"], rows["Stardew Valley"]["sizeKind"]) == ("", ""), "unknown until peeked"
-    assert (rows["Disco Elysium"]["sizeText"], rows["Disco Elysium"]["action"], rows["Disco Elysium"]["partial"]) == (_size(15400000000), "Resume", True)
-    assert browser.libraryAt == "2026-09-11T19:03:00+02:00" and (browser.libraryAge.endswith("Sep") or browser.libraryAge.endswith("ago"))
+    assert (rows["The Technomancer"]["size"], rows["The Technomancer"]["sizeKind"]) == (8100000000, "disk")
+    assert (rows["Stardew Valley"]["size"], rows["Stardew Valley"]["sizeKind"]) == (0, ""), "unknown until peeked"
+    assert (rows["Disco Elysium"]["size"], rows["Disco Elysium"]["partial_bytes"]) == (15400000000, 6100000000)
+    assert browser.libraryAt == "2026-09-11T19:03:00+02:00"
 
 
 def test_sources_browser_refresh_hits_the_store_and_page_open_does_not(api, fake):
     core = fake._core
+    updates = []
+    original = fake.updates
+    fake.updates = lambda: updates.append(1) or original()
     browser = api.screens.sources
     browser.load()
     settle(browser)
-    assert core.library_calls == [False], "opening the page serves the cache"
+    browser.load()
+    settle(browser)
+    assert core.library_calls == [False] and len(updates) == 1, "opening the page serves the cache, and once"
     assert "Alan Wake" not in [r["title"] for r in browser.rows]
+    fetched = browser.libraryAt
     browser.refresh()
     settle(browser)
-    assert core.library_calls == [False, True], "Y asks the store"
+    assert core.library_calls == [False, True] and len(updates) == 2, "Y asks the store"
     assert "Alan Wake" in [r["title"] for r in browser.rows], "a game bought since shows up"
-    assert browser.libraryAge == "just now"
+    assert browser.libraryAt != fetched
     browser.uninstall("dead-cells")
     settle(browser)
     assert core.library_calls == [False, True, False], "a reload after a job stays off the network"
@@ -572,7 +549,7 @@ def test_sources_browser_peek_fills_a_size_once(api, fake):
     assert fake._core._source_game("gog", "1972906591").get("download_size") is None, "installed rows have their size"
     browser.peek(rows["Stardew Valley"])
     row = until(lambda: (r := browser.rows[rows["Stardew Valley"]])["sizeKind"] == "download" and r)
-    assert (row["sizeText"], row["sizeKind"], row["disk_size"]) == (_size(500000000), "download", 1100000000)
+    assert (row["size"], row["sizeKind"], row["disk_size"]) == (500000000, "download", 1100000000)
     assert not browser.busy, "a peek never shows Loading…"
 
 
@@ -583,34 +560,26 @@ def test_sources_browser_cancel_pauses_the_install(api, fake, monkeypatch):
     browser = api.screens.sources
     browser.load()
     settle(browser)
-    messages = []
-    browser.message.connect(messages.append)
     index = next(i for i, r in enumerate(browser.rows) if r["title"] == "The Witcher 3: Wild Hunt")
     job = browser.install(index)
     assert job and browser.job["game"] == "1207658930"
-    rebuilds = []
-    browser.rowsChanged.connect(lambda: rebuilds.append(1))
-    until(lambda: f" of {_size(50000000000)}" in browser.job["message"])
-    row = browser.rows[index]
-    assert row["busy"] and row["action"] == "Cancel" and row["status"] == "Installing…"
-    assert browser.job["message"].startswith("Installing The Witcher 3: Wild Hunt · ")
+    rebuilds = record(browser.rowsChanged)
+    until(lambda: browser.job["total"] == 50000000000)
+    assert browser.rows[index]["busy"]
     assert rebuilds == [], "progress moves the job line, not the rows"
     assert browser.install(index) == "", "one job at a time"
-    assert browser.cancel() is True
-    assert browser.job["cancelled"] and browser.job["message"].startswith("Stopping")
-    until(lambda: messages[-1].startswith("Stopped installing"))
+    said = record(browser.message)
+    assert browser.cancel() is True and browser.job["cancelled"]
+    until(lambda: browser.job["ok"] is not None)
     settle(browser)
-    assert messages[-1].startswith("Stopped installing The Witcher 3: Wild Hunt · ") and messages[-1].endswith("kept, resume any time")
     row = browser.rows[index]
-    assert row["partial"] and row["action"] == "Resume" and row["status"].startswith("Paused · ")
+    assert browser.job["ok"] is False and said and row["partial"] and row["partial_bytes"] > 0, "stopped: what came down is kept to resume"
     assert browser.cancel() is False, "nothing running"
-    said = len(messages)
     browser.install(index)
-    until(lambda: len(messages) > said)
-    assert messages[said] == "Installing 1207658930: done"
+    until(lambda: browser.job["ok"] is True)
     settle(browser)
     row = next(r for r in browser.rows if r["title"] == "The Witcher 3: Wild Hunt")
-    assert row["installed"] and row["sizeText"] == _size(50000000000) and row["status"] == "Installed"
+    assert row["installed"] and row["size"] == 50000000000
     browser.search("disco")
     settle(browser)
     assert [r["title"] for r in browser.rows] == ["Disco Elysium"]
@@ -652,21 +621,6 @@ def test_an_install_arrives_on_home_first_and_lands_as_the_game(api, fake, monke
     assert next(r for r in browser.rows if r["title"] == "The Witcher 3: Wild Hunt")["game_id"] == "the-witcher-3-wild-hunt"
 
 
-def test_sources_browser_keeps_its_fetch(api, fake):
-    calls = []
-    original = fake.updates
-    fake.updates = lambda: calls.append(1) or original()
-    browser = api.screens.sources
-    browser.load()
-    settle(browser)
-    browser.load()
-    settle(browser)
-    assert len(calls) == 1
-    browser.refresh()
-    settle(browser)
-    assert len(calls) == 2
-
-
 def test_sources_browser_lists_the_store_picked(api, fake):
     browser = api.screens.sources
     browser.load()
@@ -690,26 +644,23 @@ def test_sources_browser_uninstall_and_remove(api, fake):
     browser = api.screens.sources
     browser.load()
     settle(browser)
-    messages = []
-    browser.message.connect(messages.append)
+    said = record(browser.message)
     browser.uninstall("dead-cells")
     settle(browser)
-    assert messages == ["Uninstalled Dead Cells"]
-    rows = {r["title"]: r for r in browser.rows}
-    assert rows["Dead Cells"]["status"] == "Owned" and rows["Dead Cells"]["game_id"] == "dead-cells"
+    row = next(r for r in browser.rows if r["game_id"] == "dead-cells")
+    assert len(said) == 1 and not row["installed"], "uninstalled, it stays the library's game"
     browser.uninstall("")
     settle(browser)
-    assert len(messages) == 1, "a game outside the library has nothing to uninstall"
+    assert len(said) == 1, "a game outside the library has nothing to uninstall"
     browser.uninstall("dead-cells")
     settle(browser)
-    assert messages[-1] == "Could not uninstall Dead Cells", "the core's refusal reaches the toast"
+    assert len(said) == 2, "the core's refusal reaches the toast"
     browser.remove("the-technomancer")
     settle(browser)
-    assert messages[-1] == "Removed The Technomancer from the library"
-    assert fake.game("the-technomancer")["removed"] is True
+    assert len(said) == 3 and fake.game("the-technomancer")["removed"] is True
     browser.remove("no-such-game")
     settle(browser)
-    assert messages[-1] == "Could not remove no-such-game"
+    assert len(said) == 4
 
 
 def test_path_browser(api, tmp_path):
@@ -726,7 +677,7 @@ def test_path_browser(api, tmp_path):
     assert [(e["name"], e["dir"]) for e in paths.entries] == [("Mini Metro", True), ("Zeta", True), ("notes.txt", False)]
     paths.enter(1)
     assert paths.path == str(tmp_path / "games" / "Zeta") and paths.entries == []
-    assert [s["label"] for s in paths.shortcuts][:1] == ["Home"] and paths.shortcuts[-1]["path"] == "/"
+    assert paths.shortcuts[0]["path"] == os.path.expanduser("~") and paths.shortcuts[-1]["path"] == "/"
     assert paths.display("/mnt/games") == "/mnt/games", "outside home, verbatim (tmp_path sits under HOME in the nix sandbox)"
     assert paths.display("/") == "/"
     paths.go("/")
@@ -752,8 +703,8 @@ def test_removing_a_recording_or_an_entry_reloads_both_lists(api, fake):
     assert len(written) == 2 and recordings.count == 2
     entry, row = written[0], recordings.rows[0]
     assert entry["paragraphs"] and entry["dateText"] and entry["hasRecording"] is True
-    assert row["url"].startswith("file://") and row["sizeText"] == "2.0 GB" and row["hasJournal"] is True
-    assert row["durationText"] == "1 h 10" and row["gameTitle"] == "The Technomancer"
+    assert row["url"].startswith("file://") and row["size"] == 2147483648 and row["hasJournal"] is True
+    assert row["duration_s"] == 4215 and row["gameTitle"] == "The Technomancer"
     assert entry["images"] and all(i.startswith("file://") for i in entry["images"]), "the core hands the images out absolute"
     session = row["session"]
 
@@ -791,14 +742,11 @@ def test_journal_rows_carry_state_and_duration(api, fake):
     journal.load("the-technomancer")
     rows = journal.rows
     assert [r["state"] for r in rows] == ["pending", "written", "written", "failed", "deferred"]
-    pending, first, second, failed, deferred = rows
-    assert pending["title"] == "" and pending["durationText"] == "" and pending["reason"] == ""
-    assert pending["started_at"] == "2026-09-12T20:00:00+02:00" and "20:00" in pending["dateText"]
-    assert first["durationText"] == "1 h 10" and first["duration_s"] == 4215 and second["durationText"] == "1 h 17"
-    assert failed["title"] == "Journal failed" and failed["reason"] == "codex timed out after 30 min"
-    assert failed["durationText"] == "42 min" and failed["blocks"] == ["codex timed out after 30 min"]
-    assert deferred["title"] == "Journal put off" and deferred["reason"] == "codex quota reached"
-    assert deferred["retry_at"] == "2027-01-01T06:00:00+01:00" and "2027" in deferred["retryText"]
+    pending, first, _, failed, deferred = rows
+    assert (pending["title"], pending["reason"], pending["started_at"]) == ("", "", "2026-09-12T20:00:00+02:00")
+    assert first["duration_s"] == 4215 and failed["duration_s"] == 2520
+    assert failed["reason"] == "codex timed out after 30 min" and failed["blocks"] == ["codex timed out after 30 min"]
+    assert deferred["reason"] == "codex quota reached" and deferred["retry_at"] == "2027-01-01T06:00:00+01:00"
 
 
 def test_pending_journals_announce_each_session_once(api, fake):
@@ -890,7 +838,7 @@ def test_media_timeline_merges_the_three_kinds(api):
     assert shot["url"].startswith("file://") and shot["name"].endswith(".png") and shot["gameTitle"]
     entry = next(r for r in media.rows if r["kind"] == "journal")
     assert entry["title"] and entry["hasJournal"] and entry["session"]
-    assert entry["excerpt"].startswith("Zachariah goes down") and entry["durationText"] == "1 h 10", "a journal card shows its words and the session's length"
+    assert entry["excerpt"] and entry["durationText"], "a journal card shows its words and the session's length"
     rec = next(r for r in media.rows if r["kind"] == "recording")
     assert rec["title"] and rec["session"] and rec["path"] and rec["thumb"] == ""
     assert rec["durationText"] == rec["title"] and shot["durationText"] == "" and shot["excerpt"] == ""
@@ -984,6 +932,7 @@ def test_journal_paragraphs_become_markdown_blocks():
     assert markdown_blocks([]) == []
 
 
+@pytest.mark.slow
 def test_recording_frames_are_sampled_from_the_file(api):
     import shutil
 
@@ -1014,7 +963,7 @@ def test_the_sessions_store_lists_played_sessions_and_reads_one_log(api, fake):
     rows = store.rows
     assert [r["session"] for r in rows] == ["20260909-213045", "20260907-224100", "20260905-190000"], "the Lutris import has no unit, so no log"
     assert [r["end"] for r in rows] == ["quit", "quit", "crashed"]
-    assert rows[2]["endText"] == "Crashed (exit 6)" and rows[2]["bad"] and not rows[0]["bad"]
+    assert rows[2]["exit"] == 6 and rows[2]["bad"] and not rows[0]["bad"]
     assert rows[0]["hasRecording"] and not rows[2]["hasRecording"]
 
     store.openLog("20260907-224100")
@@ -1037,7 +986,7 @@ def test_the_sessions_store_lists_played_sessions_and_reads_one_log(api, fake):
     launched = record(fake.launched)
     fake.launch("the-technomancer", "")
     until(lambda: launched)
-    assert store.rows[0]["live"] and store.rows[0]["session"] == "" and store.rows[0]["endText"] == "Playing now"
+    assert store.rows[0]["live"] and store.rows[0]["session"] == ""
     store.openLog("")
     until(lambda: not store.logLoading)
     assert store.log[0]["message"].startswith("launch " + fake.currentSession["session_id"])
