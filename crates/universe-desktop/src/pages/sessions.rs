@@ -15,14 +15,28 @@ use crate::window::Window;
 // The lines a log page shows: a crash's last words, not a whole evening of gamescope.
 const TAIL: usize = 400;
 
+/// How the session ended, said whole: who ended it, and how.
 fn end_text(row: &SessionRow) -> String {
     match universe::sessions::end_of(&row.session) {
-        "quit" => gettext("Quit"),
-        "stopped" => gettext("Stopped"),
-        "crashed" => gettext("Crashed (exit {})").replace("{}", &row.session.exit.to_string()),
-        "killed" => gettext("Killed"),
-        _ => gettext("Ended"),
+        "quit" => gettext("The game quit"),
+        "stopped" => gettext("Stopped from Universe"),
+        "crashed" => gettext("Crashed, exit code {}").replace("{}", &row.session.exit.to_string()),
+        "killed" => gettext("Killed by the system"),
+        _ => gettext("Ended, how is not recorded"),
     }
+}
+
+/// A session row's line: how long, how it ended, then what it left, a recording and a journal entry.
+fn line(row: &SessionRow) -> String {
+    let mut parts = vec![format::duration(row.session.duration_s), end_text(row)];
+    if row.recording.as_ref().is_some_and(|r| r.exists) {
+        parts.push(gettext("Recorded"));
+    }
+    if row.journal.is_some() {
+        parts.push(gettext("Journal entry"));
+    }
+    parts.retain(|p| !p.is_empty());
+    parts.join(" · ")
 }
 
 fn scrolled(child: &impl IsA<gtk::Widget>) -> gtk::ScrolledWindow {
@@ -75,25 +89,12 @@ pub fn open(win: &Window, game: &str) {
                     added.push(row);
                 }
                 for session in listed {
-                    let bad = matches!(universe::sessions::end_of(&session.session), "crashed" | "killed");
-                    let subtitle = [format::duration(session.session.duration_s), end_text(&session)].join(" · ");
                     let when = media::moment(&session.session.started_at);
-                    let row = crate::rows::plain(adw::ActionRow::builder().activatable(true).build(), &when, &subtitle);
-                    let icon = gtk::Image::from_icon_name(if bad { "dialog-warning-symbolic" } else { "object-select-symbolic" });
-                    if bad {
+                    let row = crate::rows::plain(adw::ActionRow::builder().activatable(true).build(), &when, line(&session));
+                    if matches!(universe::sessions::end_of(&session.session), "crashed" | "killed") {
+                        let icon = gtk::Image::from_icon_name("dialog-warning-symbolic");
                         icon.add_css_class("error");
-                    } else {
-                        icon.add_css_class("dimmed");
-                    }
-                    row.add_prefix(&icon);
-                    if session.recording.as_ref().is_some_and(|r| r.exists) {
-                        let camera = gtk::Image::builder().icon_name("camera-video-symbolic").tooltip_text(gettext("Recorded")).css_classes(["dimmed"]).build();
-                        row.add_suffix(&camera);
-                    }
-                    if session.journal.is_some() {
-                        let entry =
-                            gtk::Image::builder().icon_name("text-x-generic-symbolic").tooltip_text(gettext("Journal entry")).css_classes(["dimmed"]).build();
-                        row.add_suffix(&entry);
+                        row.add_prefix(&icon);
                     }
                     row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
                     let (weak, game, row_data) = (win.downgrade(), game.clone(), session.clone());
@@ -258,4 +259,37 @@ pub fn open_log(win: &Window, game: &str, session: &str, when: &str, row: Option
         held.take();
     });
     win.push_page(&page);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use universe::sessions::{JournalState, RecordingInfo, Session};
+
+    fn row(exit: i32, stopped: Option<bool>) -> SessionRow {
+        SessionRow {
+            session: Session { exit, stopped, duration_s: 600, ..Default::default() },
+            title: String::new(),
+            recording: None,
+            journal: None,
+            debug_log: None,
+        }
+    }
+
+    #[test]
+    fn each_ending_reads_apart_and_what_a_session_left_is_written_out() {
+        let ends: Vec<String> = [row(0, None), row(143, Some(true)), row(1, Some(false)), row(-1, Some(false)), row(-1, None)].iter().map(end_text).collect();
+        let mut distinct = ends.clone();
+        distinct.sort();
+        distinct.dedup();
+        assert_eq!(distinct.len(), 5, "quit, stopped, crashed, killed and ended each say their own: {ends:?}");
+
+        let bare = line(&row(0, None));
+        let mut kept = row(0, None);
+        kept.recording = Some(RecordingInfo { path: String::new(), size: 0, exists: true, duration_s: 0, started_at: String::new(), pauses: vec![] });
+        kept.journal = Some(JournalState { state: "written".into(), title: String::new(), written_at: String::new() });
+        let full = line(&kept);
+        assert!(full.starts_with(&bare), "the recording and the entry follow the ending");
+        assert_eq!(full.matches(" · ").count(), bare.matches(" · ").count() + 2, "in words on the line, not glyphs on a tooltip");
+    }
 }
