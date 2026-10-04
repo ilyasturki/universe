@@ -87,6 +87,31 @@ def test_a_typed_value_then_asks_which_games_it_is_for(game_page, fake, look):
 
 
 @pytest.mark.parametrize("look", LOOKS)
+def test_a_typed_value_for_all_games_given_up_leaves_the_next_one_asking(game_page, fake, look):
+    fake.core.set("the-technomancer", "launch.gamescope_args", "--expose-wayland")
+    window, page, hints = game_page(look, "the-technomancer", "launch.gamescope_resolution")
+    landed = "row" if look == "reprise" else "currentRow"
+    before = glyphs(hints)
+    click(window, Qt.Key.Key_Return)
+    until(lambda: "Y" in glyphs(hints), "the picker offers all games on Y")
+    picking = glyphs(hints)
+    click(window, Qt.Key.Key_Down, len(value(page, landed)["choices"]) + 1)
+    click(window, Qt.Key.Key_F)
+    until(lambda: glyphs(hints) not in (before, picking), "Y on Type a value…: the keyboard is up")
+    click(window, Qt.Key.Key_Escape if look == "reprise" else Qt.Key.Key_I)
+    until(lambda: glyphs(hints) == before, "given up")
+    page.setProperty("landKey", "launch.gamescope_args")
+    QMetaObject.invokeMethod(page, "landNow")
+    until(lambda: (value(page, landed) or {}).get("key") == "launch.gamescope_args")
+    click(window, Qt.Key.Key_Return)
+    until(lambda: glyphs(hints) != before, "the keyboard is up")
+    click(window, Qt.Key.Key_Return if look == "reprise" else Qt.Key.Key_F1)
+    until(lambda: "Y" in glyphs(hints), "this game on A, all games on Y: nothing went to every game unasked")
+    assert "gamescope_args" not in (fake.config()["set"].get("launch") or {})
+    click(window, Qt.Key.Key_Escape)
+
+
+@pytest.mark.parametrize("look", LOOKS)
 def test_a_switch_flips_here_on_a_and_for_every_game_from_the_options(game_page, api, fake, look):
     window, _page, hints = game_page(look, "the-technomancer", "launch.mangohud")
     told = record(api.screens.gameSettings.message)

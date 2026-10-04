@@ -26,6 +26,7 @@ FocusScope {
         done = after;
         doneAll = all && row.reach ? all : null;
         pendingRow = row;
+        customAll = false;
         var choices = row.choices || [];
         if (row.type === "enum" || ((row.type === "int" || row.type === "string") && choices.length > 0)) {
             var current = choices.indexOf(String(row.value));
@@ -65,6 +66,7 @@ FocusScope {
         done = after;
         doneAll = null;
         pendingRow = null;
+        customAll = false;
         sheetsOf().sheet.show(label, value, "text");
     }
 
@@ -73,6 +75,7 @@ FocusScope {
         done = after;
         doneAll = all && row && row.reach ? all : null;
         pendingRow = row || null;
+        customAll = false;
         sheetsOf().sheet.showPair(label, names, first, second);
     }
 
@@ -133,6 +136,11 @@ FocusScope {
         editor.finish(choices[Number(action)], undefined, all);
     }
 
+    function dismiss() {
+        customAll = false;
+        closed();
+    }
+
     function hide() {
         picker.hide();
         if (sheets.item) {
@@ -147,7 +155,7 @@ FocusScope {
         anchors.fill: parent
         z: 3
 
-        onDismissed: editor.closed()
+        onDismissed: editor.dismiss()
     }
 
     Loader {
@@ -176,7 +184,7 @@ FocusScope {
                     var row = editor.pendingRow || ({});
                     sheet.show(row.label || "", path, "path");
                 }
-                onDismissed: editor.closed()
+                onDismissed: editor.dismiss()
             }
 
             KeyboardSheet {
@@ -194,7 +202,7 @@ FocusScope {
                     var row = editor.pendingRow || ({});
                     paths.show(row.label || "", path, editor.isFile(row));
                 }
-                onDismissed: editor.closed()
+                onDismissed: editor.dismiss()
             }
         }
     }
