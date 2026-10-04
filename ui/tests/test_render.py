@@ -1413,11 +1413,11 @@ def test_the_switch2_forms_share_the_sidebar_and_y(api, fake):
     click(Qt.Key.Key_Right)
     click(Qt.Key.Key_Down, 3)
     row = until(lambda: (row := page.property("currentRow").toVariant()) and row["key"] == "gamescope" and row)
-    assert row["origin"] == "global" and labels(page) == ["Hide advanced", "Reset", "Back", "Toggle"]
+    assert row["origin"] == "default" and labels(page) == ["Hide advanced", "Reset", "Back", "Toggle"], "config.toml leaves gamescope to its default"
     click(Qt.Key.Key_Return)
     until(lambda: form.rows[row["form"]]["origin"] == "runner", "toggling the inherited switch sets it on the runner")
     click(Qt.Key.Key_I)
-    until(lambda: form.rows[row["form"]]["origin"] == "global", "X clears it back")
+    until(lambda: form.rows[row["form"]]["origin"] == "default", "X clears it back")
     click(Qt.Key.Key_Escape, 2)
     settle(window)
     page = push("pages/FormPage.qml", {"source": "gog"})

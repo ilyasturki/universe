@@ -85,10 +85,10 @@ def test_runner_form_cards(api, fake):
     assert game["type"] == "action" and game["action"] == "Options" and game["gameId"] == "lego-batman" and game["label"] == "LEGO Batman: The Videogame"
     assert game["image"].startswith("file://") and game["display"] == "1.1 h" and game["installed"] is False
     assert next(g for g in form.groups if g["title"] == "Games")["meta"] == "1 game"
-    assert rows["exe"]["type"] == "path" and rows["exe"]["inherited"] is True and rows["exe"]["origin"] == "" and not form.resettable(rows["exe"])
+    assert rows["exe"]["type"] == "path" and rows["exe"]["inherited"] is True and rows["exe"]["origin"] == "found" and not form.resettable(rows["exe"])
     assert rows["exe"]["value"].endswith("dolphin-emu") and rows["exe"]["display"] == rows["exe"]["value"], "the found program is the value shown"
     assert rows["exe"]["detail"] == "Found on PATH"
-    assert rows["gamescope"]["type"] == "bool" and rows["gamescope"]["inherited"] is True and rows["gamescope"]["origin"] == "global"
+    assert rows["gamescope"]["type"] == "bool" and rows["gamescope"]["inherited"] is True and rows["gamescope"]["origin"] == "default"
     assert rows["batch"]["type"] == "bool" and rows["batch"]["value"] is True
     assert rows["add_file"]["type"] == "action" and rows["add_file"]["runner"] == "dolphin"
     form.toggle(index_of(form, "gamescope"))
@@ -96,7 +96,7 @@ def test_runner_form_cards(api, fake):
     assert rows["gamescope"]["value"] is False and rows["gamescope"]["origin"] == "runner" and form.resettable(rows["gamescope"]), (
         "toggling the inherited switch sets it on the runner"
     )
-    assert form.reset(index_of(form, "gamescope")) is True and rows_by_key(form)["gamescope"]["origin"] == "global"
+    assert form.reset(index_of(form, "gamescope")) is True and rows_by_key(form)["gamescope"]["origin"] == "default"
     assert rows_by_key(form)["gamescope"]["value"] is True, "X drops the runner's own value: the global's again"
     form.load("rpcs3")
     assert form.info["warning"] == "not found"
@@ -177,7 +177,8 @@ def test_runner_form_carries_its_launch_keys(api, fake):
     assert rows["launch.esync"]["value"] is True and rows["launch.esync"]["inherited"] is False
     assert rows["launch.dlss_upgrade"]["detail"].endswith("an anti-cheat. Not for your GPU.")
     assert rows["launch.fsr4_upgrade"]["detail"].endswith("Works on your GPU.") and rows["launch.optiscaler"]["detail"].endswith("Works on your GPU.")
-    assert (rows["launch.fsr4_upgrade"]["value"], rows["launch.fsr4_upgrade"]["display"]) == ("off", "off"), "a DLL swap is opt-in"
+    fsr4 = rows["launch.fsr4_upgrade"]
+    assert (fsr4["value"], fsr4["display"]) == (fsr4["choices"][0], "off"), "a DLL swap is opt-in: config.toml sets none, the picker opens on the default"
     assert rows["launch.fsr4_upgrade"]["choices"] == ["Default · off", "auto", "on", "off"]
     assert form.setValue(index_of(form, "launch.fsr4_upgrade"), "auto") is True
     assert fake.config()["launch"]["fsr4_upgrade"] == "auto" and rows_by_key(form)["launch.fsr4_upgrade"]["display"] == "auto · Off", (

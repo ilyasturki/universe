@@ -447,16 +447,20 @@ impl Config {
         v["config_file"] = serde_json::Value::String(paths::config_file().to_string_lossy().into());
         v["config_writable"] = serde_json::Value::Bool(Self::writable(&paths::config_file()));
         v["config_owner"] = Self::owner(&paths::config_file()).into();
-        // The keys the file sets itself, as written: what a frontend tells a chosen value from a default by.
-        v["set"] = std::fs::read_to_string(paths::config_file())
-            .ok()
-            .and_then(|s| s.parse::<toml::Table>().ok())
-            .map(|t| crate::modules::toml_to_json(&toml::Value::Table(t)))
-            .unwrap_or_else(|| serde_json::json!({}));
+        v["set"] = Self::file_set();
         v["data_home"] = serde_json::Value::String(paths::data_home().to_string_lossy().into());
         v["protons"] = self.proton_names().into();
         v["os"] = crate::distro::detect().as_str().into();
         v
+    }
+
+    /// The keys the file sets itself, as written: what a frontend tells a chosen value from a default by.
+    pub fn file_set() -> serde_json::Value {
+        std::fs::read_to_string(paths::config_file())
+            .ok()
+            .and_then(|s| s.parse::<toml::Table>().ok())
+            .map(|t| crate::modules::toml_to_json(&toml::Value::Table(t)))
+            .unwrap_or_else(|| serde_json::json!({}))
     }
 
     pub fn set_key(path: &Path, key: &str, value: &str) -> crate::Result<()> {

@@ -18,6 +18,8 @@ from .errors import UniverseError
 
 FIXTURE = Path(__file__).parent / "fixtures" / "library.json"
 LAUNCH_KEYS = Path(__file__).parent / "fixtures" / "launch_keys.json"
+# A rate stays the text config.toml holds it as: `auto` or `60`.
+RATE_KEYS = {f"launch.{k['key']}" for k in json.loads(LAUNCH_KEYS.read_text()) if k["type"] in ("refresh", "fps")}
 COMPONENTS = Path(__file__).parent / "fixtures" / "components.json"
 GPU = {
     "vendor": "amd",
@@ -640,6 +642,8 @@ class FakeCore:
 
     def _resolved(self, game):
         out = copy.deepcopy(game)
+        if not isinstance(out.get("source"), dict):
+            out["source"] = {"kind": str(out.get("source") or "")}
         out.setdefault("stats", {"hours": 0, "play_count": 0, "last_played": None})
         out.setdefault("removed", False)
         out["media"] = self._effective_media(game)
@@ -737,6 +741,11 @@ class FakeCore:
         parts = key.split(".")
         if parts[0] == "capture":
             parts = ["modules", "capture", *parts[1:]]
+        # The core checks a module's or a source's setting against its manifest.
+        if parts[0] == "modules" and len(parts) == 3:
+            return self.set_module_setting(parts[1], ident, parts[2], value)
+        if parts[0] == "sources" and len(parts) == 3:
+            return self.set_source_setting(parts[1], parts[2], value, ident)
         for part in parts[:-1]:
             node = node.setdefault(part, {})
         leaf = parts[-1]
@@ -1038,6 +1047,8 @@ class FakeCore:
         spec = self._runner(self._runner_of({"runner": runner}))
         if spec is None:
             raise UniverseError("NotFound", f"runner {runner}")
+        for root in (self._config, self._set):
+            self._write_setting(root, f"runners.{spec['id']}.{key}", value)
         if key == "exe":
             spec["exe"] = value
             spec["path"] = value or spec.get("detected", "")
@@ -1420,15 +1431,17 @@ class FakeCore:
 
     def set_source_setting(self, ident, key, value, game_id=""):
         schema = {s["key"]: s for s in self._source(ident).get("settings", [])}
-        if not game_id:
-            for root in (self._config, self._set):
-                root.setdefault("sources", {}).setdefault(ident, {})[key] = _coerce(schema, ident, key, value)
-            return
-        if (schema.get(key) or {}).get("scope") != "game":
+        if game_id and (schema.get(key) or {}).get("scope") != "game":
             raise UniverseError("Invalid", f"{ident}.{key} is a global setting")
-        game = self._game(game_id)
-        game.setdefault("sources", {}).setdefault(ident, {})[key] = _coerce(schema, ident, key, value)
-        self._write_game(game)
+        owners = [self._game(game_id)] if game_id else [self._config, self._set]
+        for owner in owners:
+            table = owner.setdefault("sources", {}).setdefault(ident, {})
+            if value == "":
+                table.pop(key, None)
+            else:
+                table[key] = _coerce(schema, ident, key, value)
+        if game_id:
+            self._write_game(owners[0])
 
     def login_url(self, source):
         return self._data.get("login_url", "https://example.invalid/login")
@@ -2062,6 +2075,47 @@ class FakeCore:
     def settings(self):
         return {**copy.deepcopy(self._config), "set": copy.deepcopy(self._set)}
 
+    # The core's own forms and writes, built from the views this fake answers: no form logic of its own.
+    def _form_inputs(self, kind, ident):
+        return {
+            "set": self._set,
+            "protons": list(self._config.get("protons") or []),
+            "game": self.get(ident) if kind == "game" else None,
+            "modules": self.modules(),
+            "sources": self.sources(),
+            "runners": self.runners(),
+            "gpu": self.gpu(),
+            "under_steam": self.under_steam(),
+        }
+
+    def form(self, kind, ident, screen=None):
+        import universe_core
+
+        return universe_core._form_fields(kind, ident, self._form_inputs(kind, ident), screen)
+
+    def set_field(self, kind, ident, key, value):
+        import universe_core
+
+        self._apply(universe_core._set_writes(kind, ident, key, value))
+
+    def promote_field(self, kind, ident, key):
+        import universe_core
+
+        self._apply(universe_core._promote_writes(kind, ident, key, self._form_inputs(kind, ident)))
+
+    def _apply(self, writes):
+        setters = {
+            "config": lambda w: self.set_setting(w["key"], w["value"]),
+            "runner": lambda w: self.set_runner_setting(w["runner"], w["key"], w["value"]),
+            "game": lambda w: self.set(w["game"], w["key"], w["value"]),
+            "module": lambda w: self.set_module_setting(w["module"], "", w["key"], w["value"]),
+            "source": lambda w: self.set_source_setting(w["source"], w["key"], w["value"]),
+            "enable_module": lambda w: self.enable_module(w["module"], w["on"]),
+            "enable_source": lambda w: self.enable_source(w["source"], w["on"]),
+        }
+        for write in writes:
+            setters[write["to"]](write)
+
     def set_setting(self, key, value):
         for root in (self._config, self._set):
             self._write_setting(root, key, value)
@@ -2076,7 +2130,7 @@ class FakeCore:
             node = node[part]
         if value == "":
             node.pop(parts[-1], None)
-        elif len(parts) == 3 and parts[0] == "launch" and parts[1] in ("env", "dll_overrides"):
+        elif (len(parts) == 3 and parts[0] == "launch" and parts[1] in ("env", "dll_overrides")) or key in RATE_KEYS:
             node[parts[-1]] = value
         elif value in ("true", "false"):
             node[parts[-1]] = value == "true"

@@ -122,19 +122,27 @@ group of its own (`basicGroups` and `advancedGroups` are always there, for a loo
 out itself). `hasAdvanced` says whether there are any, the pages flip `showAdvanced` from Y, and
 `reveal(key, module)` returns a row's index and sets `showAdvanced` when the row sits behind it —
 what a search hit lands on. The controller screen alone keeps a gate row (`key: "advanced"`, an
-action, its group `wide: true`). A row that can inherit carries `origin`: `game` (set on the game),
-`runner` (set on the runner), `global` (`config.toml` sets it, told by `settings()["set"]`) or
-`default` (nothing does) — the looks chip the first three THIS GAME, THIS RUNNER, GLOBAL, the value
-shown bare, and a default, most rows, reads plain; `inherited` is true for the last two, and a row
-inherited with no `origin` (a runner's found program) is only that, chipped INHERITED. A value is overridden by changing it; X is
-`reset(index)` where `resettable(row)` says so — a `game` or `runner` row, whose own value goes
-(an empty write, the key leaves the file) so the row inherits again, or a map's entry, which goes
-out of the map. On a game's page a row with a global twin carries it as `global` (`{key}` in
-`config.toml`, `{module, key}`, `{source, key}` or `{runner, key}`); where `promotable(row)` says
-so — a `game` row with one — `promote(index)` writes the game's value there and clears the game's,
-which follows it from then on, other games keeping theirs: Reprise's More menu lists it as Apply to
-all games, PS5's as Apply to All Games, the GTK dialog as a button beside the reset one
-(`Field.promotable`, `Entry.promotable`, `Core::promote_field`). A runner picker's `valueIcon` is the picked runner's logo, drawn by the value;
+action, its group `wide: true`). The launch, runner, game, module and source forms are the core's
+(`client.form(kind, id, screen)` over `Core::form`, see api.md): `screens/settings.py` only lays
+the fields out and words them (`field_row`, `entry_rows`), and writes through `setField` and
+`promoteField` (`Core::set_field`, `Core::promote_field`) — what a value is, where it comes from,
+what a reset or a promotion does and which games' rows show a module's setting are the core's
+alone. The fake core (`fake_core.py`) builds the same forms from its fixture through
+`universe_core`'s internal `_form_fields`, `_set_writes` and `_promote_writes`. A row's `field`
+is the key `set_field` takes (a module's game setting keeps its own `key` and its `module`). On a
+game's or a runner's page a row that can inherit carries `origin`: `game` (set on the game),
+`runner` (set on the runner), `global` (`config.toml` sets it), `default` (nothing does) or `found`
+(a runner's program found on PATH); `inherited` says the value comes from elsewhere and `changed`
+that the page sets it itself — the looks mark a `changed` row CHANGED and color its value. A value
+is overridden by changing it; X is `reset(index)` where `resettable(row)` says so (`Field.resettable`:
+the page's own value goes, the key leaves the file, so the row inherits again; a map's entry goes
+out of the map). Where `promotable(row)` says so (`Field.promotable`, `Entry.promotable`: a game's
+own value of a key with a global twin) `promote(index)` makes it the global value and clears the
+game's, which follows it from then on, other games keeping theirs: Reprise's More menu lists it as
+Apply to all games, PS5's as Apply to All Games, the GTK dialog as a button beside the reset one.
+A picker over an inheriting `enum`, `int` or `toggle` opens on a first choice that clears the
+page's own value (`choiceValues[0]` is empty), worded by where the value then comes from and what
+it reads: `Default · auto`, `Global · 60`. A runner picker's `valueIcon` is the picked runner's logo, drawn by the value;
 `icons` are the choices'. A `path` row under a pad opens the folder sheet (`ui/PathSheet.qml`,
 Switch 2 `FolderSheet`, over `api.screens.paths`: the value's nearest folder, Y to type the path
 instead; Switch 2 shows the shortcuts as chips, Reprise's Start opens a menu of Use this folder,
@@ -827,38 +835,35 @@ row instead unfolds into its games. B closes the search from anywhere in it.
 ## The launch and modules sections
 
 `api.screens.launch` is Settings › Launch, what every game starts with, each row a `config.toml`
-key written through `set_setting`. The rows are the core's launch-key catalogue
-(`launch_keys(scope, screen)`, `client.launchKeys`) in the catalogue's order, the keys tied to no
-runner (`runners` empty): each entry's `section` is the card — Display (the gamescope switch,
-resolution, refresh rate, adaptive sync; the card's meta is the screen, `screen`: `DP-1 3840×2160 @
-60 Hz`), Overlay (MangoHud, the frame rate limit, pause on HOME, then `desktop.hide_cursor` and
-`desktop.keep_awake` added by
-the screen), then behind Y Scaling (scaler, filter, sharpness, the raw gamescope arguments),
-folded into Display, and Environment (one row per variable, then Add a variable…, X removing one),
-Programs, Folders, API keys and Desktop as cards of their own — beginner first, expert last; Updates
-(`desktop.whats_new`, see "What's new") is a card shown without Y, after Overlay. Its
-`label` and `description` (the row's `detail`) come with it, and its `choices` are
-sized by the screen the window is on (`screen_mode`: `auto`, the screen's mode, the standard heights
-below it at its aspect ratio; the rates below its own). `screens/settings.py`'s `launch_row` is the
-presentation over an entry: an `enum`, `toggle` or `int` with choices lists a `default` choice that clears the
-key (through `choiceValues`), a `proton` entry lists the settings' `protons` (the `[proton]` names and the builds found), `fps_limit`'s
-`auto` displays as `auto · 60`, the rate it stands for, and a `toggle` (adaptive sync, the upscaler
-upgrades) on `auto` as `auto · On` or `auto · Off`, what it comes to here (`gpu().auto`, the
-screen's `vrr`). The keys tied to a runner (`proton`, the
-sync modes, Wayland, HDR, the upscaler upgrades) are set on that runner's page instead (below).
-`load()` reads the config again.
+key: the core's launch form (`client.form("launch", "", screen)`), the launch keys tied to no
+runner in the catalogue's order, then the config's own keys. Each field's `section` is the card —
+Display (the gamescope switch, resolution, refresh rate, adaptive sync; the card's meta is the
+screen, `screen`: `DP-1 3840×2160 @ 60 Hz`), Overlay (MangoHud, the frame rate limit, pause on HOME,
+`desktop.hide_cursor`, `desktop.keep_awake`), Saves (`saves.auto_backup`, with `saves.keep` under
+its Advanced rule) and Updates (`desktop.whats_new`, see "What's new"), then behind Y Scaling
+(scaler, filter, sharpness, the raw gamescope arguments), folded into Display, and Environment (one
+row per variable, then Add a variable…, X removing one), Programs, Folders, API keys, Desktop and
+Proton builds as cards of their own — beginner first, expert last. Its `label` and `description` (the row's `detail`) come with it,
+and its `choices` are sized by the screen the window is on (`screen_mode`: `auto`, the screen's
+mode, the standard heights below it at its aspect ratio; the rates below its own). `field_row` is
+the presentation over a field: a `proton` field lists the `protons` (the `[proton]` names and the
+builds found), `auto` displays as `auto · 60`, the rate it stands for (`resolved`), a `toggle`
+(adaptive sync, the upscaler upgrades) on `auto` as `auto · On` or `auto · Off`, a scaling key left
+unset as `default · linear`. The keys tied to a runner (`proton`, the sync modes, Wayland, HDR, the
+upscaler upgrades) are set on that runner's page instead (below). `load()` reads the form again.
 
 The game settings page (`pages/GameSettingsPage.qml`, `switch2/pages/GameSettingsPage.qml`: a
 sidebar of the form's cards — the game's own, then the modules' — beside the picked card's rows,
 Y showing the power user's rows inside them under their rules (the sidebar never moves with it);
 Reprise's sidebar and rows are `ui/CardSections.qml`, shared with the form page, LT / RT stepping
-the cards, B going back to the sidebar, then closing) reads the same catalogue with scope `game`,
-filtered by the runner's kind (`runners`), and mirrors the cards — Display (with Scaling folded in),
+the cards, B going back to the sidebar, then closing) is the core's game form (`client.form("game",
+id, screen)`: the launch keys of the runner's kind, the module and source settings the game's runner
+and platform take), and mirrors the cards — Display (with Scaling folded in),
 Overlay — then the runner's own, named after it (Proton: the build, Wayland, HDR; folded in, the
 Wine prefix, the DLL overrides, Sync, Upscaling, Logs), then Launch (the runner picker, the program,
 an emulator's options; folded in, the wrapper, arguments, working directory, the environment), then
 Desktop and library (with Artwork folded in), then each module's game-scope settings and the game's
-source's (GOG's Achievements switch, written as `sources.gog.achievements` through `set`); a `both` key inherited from the global value until set
+source's (GOG's Achievements switch, written as `sources.gog.achievements`); a `both` key inherited from the global value until set
 (a `toggle` inherits the global switch, not what `effective` resolved it to). X on a row resets the
 game's own value or removes a variable (`reset` above); an inherited value is overridden by
 changing it. Adding a variable is one sheet with two fields (`ValueEditor.promptPair`,
@@ -884,8 +889,8 @@ sidebar of its cards beside the picked one, Y for the advanced rows) is on `api.
 `api.screens.source` (`PageForm`): `load(id)` builds its head (`info`: name, meta, `description`
 from the manifest, warning, `enabled`, `source`, and a source's `logged_in` and `user`) and a
 Settings card headed by the switch (`enabled`, `disabled` while the entry's programs are missing)
-and, once on, its settings — a module's global ones, a source's all — a `dynamic` setting's
-choices fetched off the UI thread. A source's page adds a Sign-in card: `Signed
+and, once on, the settings of its core form (`client.form("module" | "source", id)`), a
+`dynamic` setting's choices fetched off the UI thread. A source's page adds a Sign-in card: `Signed
 in` (an `info` row, the user as its detail), `Get a sign-in link` (`link`: `api.screens.login.begin`,
 the QR code and the URL then show under the cards) and `Enter the code` (`code`: a prompt into
 `login.submit`); `login.finished` reloads both source screens. Listing the sources probes their
@@ -918,19 +923,19 @@ Settings' `components` section id lands here in every look.
 
 A runner's row opens `pages/FormPage.qml` with `{ runner }` over the tab (`theme.qml` `openSub`, the
 same loader as the game's sub pages), on `api.screens.runner`: `load(id)` builds its head (`info`:
-name, platforms and where its program was found, a warning) and a Runner card for the program
-(`exe`, a path; the detected one shown as the value, inherited, where it was found as the detail;
-`origin: "runner"` once set here, X clearing it back) — on Proton's page umu-run's component row
-right under it — arguments and the gamescope switch (`origin` `global` or `runner`, X likewise);
+name, platforms and where its program was found, a warning) and, from the core's runner form
+(`client.form("runner", id, screen)`), a Runner card for the program (`exe`, a path; the detected
+one shown as the value, `origin: "found"`, where it was found as the detail; `origin: "runner"` once
+set here, X clearing it back) — on Proton's page umu-run's component row right under it —
+arguments and the gamescope switch (`origin` `default`, `global` or `runner`, X likewise);
 then a Builds card, where the build is picked: on Proton's page first the `launch.proton` row, the
 default build, whose choices are every Proton found (`config.protons`: the families' builds, Steam's
 own, `[proton]`'s, the local ones), then one component row per build family: the runner's own, or
 Proton's (GE-Proton, Proton-CachyOS, Proton-EM, umu-proton; the one in use first). There is no Build
 row, and Proton's launch card leaves the `proton` key to the Builds card. Then — for
-Proton and Wine — the launch keys tied to its kind (`launchKeys("global")` filtered by `runners`:
-the Proton card, with Sync, Upscaling and Logs folded in behind Y, or into the Runner card on plain
-Wine; the global `[launch]` values written through `set_setting`), each option by its type in an
-Options card, and a Games card — one `game` row per library game running through it (`gameId`, its
+Proton and Wine — the launch keys tied to its kind (the Proton card, with Sync, Upscaling and Logs
+folded in behind Y, or into the Runner card on plain Wine; the global `[launch]` values), each
+option by its type in an Options card (`origin: "runner"` once set here), and a Games card — one `game` row per library game running through it (`gameId`, its
 square or box art as `image`, its hours as the display, `installed` when it has an install folder),
 by title — ending in an "Add a game…" action. `setValue(index, value)` writes through
 `set_runner_setting` (a `launch.*` row through `set_setting`); on the add row it keeps the picked

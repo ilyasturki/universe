@@ -1432,11 +1432,10 @@ impl Core {
         serde_json::json!({ "screen": screen, "width": mode.width, "height": mode.height, "refresh": mode.refresh, "vrr": mode.vrr })
     }
 
-    /// Under Steam the HUD and the frame limit are its Quick Access menu's, and no HOME reaches a game to pause it.
     pub fn launch_keys(&self, scope: &str, screen: Option<crate::gamescope::Mode>) -> Result<Vec<crate::launch_keys::Row>> {
         let mut rows = crate::launch_keys::rows(crate::launch_keys::Scope::parse(scope)?, screen);
         if self.under_steam() {
-            rows.retain(|r| !["mangohud", "fps_limit", "pause_on_home"].contains(&r.key));
+            rows.retain(|r| !crate::launch_keys::STEAM_OWNS.contains(&r.key));
         }
         Ok(rows)
     }

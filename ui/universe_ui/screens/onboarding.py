@@ -4,10 +4,11 @@ from PySide6.QtCore import Signal, Slot
 
 from ..qt import Property
 from .add import _source_status
-from .settings import RowsForm, _add, _plural, _row, launch_row, login_rows
+from .settings import RowsForm, _add, _plural, _row, field_row, login_rows
 
 MEMORY_KEY = "onboarded"
-PREFERENCE_KEYS = ("hdr",)
+# Fields of Proton's runner form: the global values its games take.
+PREFERENCE_KEYS = ("launch.hdr",)
 FAMILY_DETAIL = "The pad the button hints and the controller art follow until one is plugged in."
 READ_ONLY_HOME_MANAGER = "Settings are managed by home-manager on this machine: change them in programs.universe.settings."
 READ_ONLY = "config.toml is read-only on this machine: make it writable to change settings here."
@@ -48,7 +49,7 @@ def _step(ident):
     return {"id": ident, "title": TITLES[ident], "subtitle": SUBTITLES.get(ident, "")}
 
 
-def preference_rows(controller, config, gpu, keys):
+def preference_rows(controller, fields):
     rows, groups = [], []
     if not controller.families:
         controller.load()
@@ -57,15 +58,11 @@ def preference_rows(controller, config, gpu, keys):
     row = _row("Controller", "controller.family", "Buttons and glyphs", "enum", current, [f["name"] for f in families], detail=FAMILY_DETAIL)
     row["choiceValues"] = [f["id"] for f in families]
     _add(rows, groups, "Controller", row, caps=True)
-    launch, fits = config.get("launch") or {}, gpu.get("fits") or {}
-    for spec in keys:
-        if spec["key"] not in PREFERENCE_KEYS or fits.get(spec["key"]) is False:
+    for field in fields:
+        if field["key"] not in PREFERENCE_KEYS or field.get("fits") is False:
             continue
-        value = launch.get(spec["key"])
-        if value in (None, "", {}):
-            value = spec["default"]
-        row = launch_row("Graphics", spec, value, gpu=gpu)
-        row.update(advanced=False, detail=HDR_DETAIL if spec["key"] == "hdr" else row["detail"])
+        row = field_row(field, "Graphics", "launch")
+        row.update(advanced=False, detail=HDR_DETAIL if field["key"] == "launch.hdr" else row["detail"])
         _add(rows, groups, "Graphics", row, caps=True)
     return rows, groups
 
@@ -186,13 +183,13 @@ class Onboarding(RowsForm):
         def look():
             everything = client.sources()
             gog = client.getSourceSettings("gog") if any(s["id"] == "gog" for s in everything) else {}
-            return client.core.discover(), everything, client.config(), client.gpu(), client.launchKeys("global", None), gog
+            return client.core.discover(), everything, client.config(), client.form("runner", "proton"), gog
 
         def done(found, error):
             if error:
                 self.message.emit(f"Could not look at this machine: {error}")
-            report, everything, config, gpu, keys, gog = found or ({}, [], {}, {}, [], {})
-            self._prefs = {"config": config or {}, "gpu": gpu or {}, "keys": keys or []}
+            report, everything, config, fields, gog = found or ({}, [], {}, [], {})
+            self._prefs = {"config": config or {}, "fields": fields or []}
             self._writable = bool(self._prefs["config"].get("config_writable", True))
             self._home_manager = self._prefs["config"].get("config_owner") == "home-manager"
             self._gog_dirs = [str(d) for d in report.get("gog_dirs") or []]
@@ -332,7 +329,7 @@ class Onboarding(RowsForm):
             auto = (config.get("saves") or {}).get("auto_backup", True)
             entries.append(("", _row("", "saves.auto_backup", "Back up saves after playing", "bool", auto is not False, detail=AUTO_DETAIL), False))
         elif step == "preferences":
-            self._set_rows(*preference_rows(self._controller, **self._prefs))
+            self._set_rows(*preference_rows(self._controller, self._prefs["fields"]))
             return
         elif step == "done":
             for key, label, display, state in self._summary():
@@ -516,7 +513,7 @@ class Onboarding(RowsForm):
             return True
         ok = self._client.setConfig(row["key"], payload)
         if ok:
-            self._prefs["config"] = self._client.config()
+            self._prefs.update(config=self._client.config(), fields=self._client.form("runner", "proton"))
         return ok
 
     def _reload(self, row):

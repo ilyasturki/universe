@@ -239,12 +239,17 @@ impl Setting {
 
     /// Whether a game run by `runner` (its canonical id) on `platform` shows this setting.
     pub fn applies_to(&self, runner: &str, platform: &str) -> bool {
-        (self.runners.is_empty() || self.runners.iter().any(|r| r == runner)) && (self.platforms.is_empty() || self.platforms.iter().any(|p| p == platform))
+        applies_to(&self.runners, &self.platforms, runner, platform)
     }
 
     pub fn choice_label<'a>(&'a self, value: &'a str) -> &'a str {
         self.choice_labels.get(value).map(String::as_str).unwrap_or(value)
     }
+}
+
+/// A setting's `runners` and `platforms` against a game's: an empty list takes every one.
+pub fn applies_to(runners: &[String], platforms: &[String], runner: &str, platform: &str) -> bool {
+    (runners.is_empty() || runners.iter().any(|r| r == runner)) && (platforms.is_empty() || platforms.iter().any(|p| p == platform))
 }
 
 pub fn setting_json(s: &Setting) -> serde_json::Value {

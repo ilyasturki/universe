@@ -64,11 +64,11 @@ def test_a_runner_form_keeps_its_cards_when_y_shows_the_advanced_rows(ps5, api):
     click(window, Qt.Key.Key_Right)
     click(window, Qt.Key.Key_Down, 3)
     row = until(lambda: (r := value(page, "currentRow")) and r["key"] == "gamescope" and r)
-    assert row["origin"] == "global" and labels(page) == ["Hide advanced", "Reset", "Back", "Toggle"]
+    assert row["origin"] == "default" and labels(page) == ["Hide advanced", "Reset", "Back", "Toggle"], "config.toml leaves gamescope to its default"
     click(window, Qt.Key.Key_Return)
     until(lambda: form.rows[row["form"]]["origin"] == "runner", "toggling the inherited switch sets it on the runner")
     click(window, Qt.Key.Key_I)
-    until(lambda: form.rows[row["form"]]["origin"] == "global", "X clears it back")
+    until(lambda: form.rows[row["form"]]["origin"] == "default", "X clears it back")
     click(window, Qt.Key.Key_Escape, 2)
     page = push(root, "pages/FormPage.qml", {"source": "gog"})
     until(lambda: sections(page) == ["Settings", "Sign-in"] and labels(page) == ["Show advanced", "Back", "OK"])

@@ -35,7 +35,7 @@ Item {
     readonly property string path: entry.path !== undefined && entry.path !== null ? String(entry.path) : ""
     readonly property string tag: entry.tag !== undefined && entry.tag !== null ? String(entry.tag) : ""
     // A value this game or runner sets for itself; what it inherits reads plain.
-    readonly property bool changed: entry.origin === "game" || entry.origin === "runner"
+    readonly property bool changed: entry.changed === true
     readonly property var tags: [tag, changed ? "CHANGED" : ""].filter(Boolean)
 
     opacity: entry.disabled === true && !focused ? 0.45 : 1.0

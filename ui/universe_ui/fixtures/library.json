@@ -762,6 +762,9 @@
     "desktop": {"hide_cursor": true},
     "proton": {"proton-tkg": "/opt/proton-tkg"},
     "protons": ["Proton 9.0", "proton-cachyos", "proton-em", "proton-ge", "proton-tkg"],
+    "runners": {
+      "melonds": {"exe": "/home/yasso/.local/share/lutris/runners/melonds/melonDS-x86_64.AppImage", "args": "--fullscreen", "fullscreen": false}
+    },
     "modules": {
       "enabled": ["capture", "journal"],
       "capture": {"codec": "av1_10bit"},

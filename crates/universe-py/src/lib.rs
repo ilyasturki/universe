@@ -1,5 +1,6 @@
 use pyo3::prelude::*;
 use serde::de::DeserializeOwned;
+use universe::forms::Form;
 
 pyo3::create_exception!(universe_core, UniverseError, pyo3::exceptions::PyException);
 
@@ -518,6 +519,21 @@ impl Core {
     fn gpu(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.value_infallible(py, |c| c.gpu())
     }
+    /// `kind`: launch, runner, game, module or source; `id` names the last four. `screen`: a `screen_mode()` dict, or `None`.
+    #[pyo3(signature = (kind, id, screen=None))]
+    fn form(&self, py: Python<'_>, kind: String, id: String, screen: Option<&Bound<'_, PyAny>>) -> PyResult<Py<PyAny>> {
+        let form = Form::parse(&kind, &id).map_err(err)?;
+        let screen: Option<universe::gamescope::Mode> = screen.map(typed).transpose()?;
+        self.value(py, |c| async move { c.form(&form, screen).await })
+    }
+    fn set_field(&self, py: Python<'_>, kind: String, id: String, key: String, value: String) -> PyResult<()> {
+        let form = Form::parse(&kind, &id).map_err(err)?;
+        self.run(py, |c| async move { c.set_field(&form, &key, &value).await })
+    }
+    fn promote_field(&self, py: Python<'_>, kind: String, id: String, key: String) -> PyResult<()> {
+        let form = Form::parse(&kind, &id).map_err(err)?;
+        self.run(py, |c| async move { c.promote_field(&form, &key).await })
+    }
     fn doctor(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.value_infallible(py, |c| c.doctor())
     }
@@ -552,11 +568,41 @@ fn host_gamescope(py: Python<'_>, screen: String) -> PyResult<Option<Vec<String>
     Ok(py.detach(|| rt.block_on(universe::launcher::host_gamescope_for(&config, &screen))).map(|(p, a)| std::iter::once(p).chain(a).collect()))
 }
 
+/// The fake core's forms: the core's own, built from the views it hands over (`forms::Inputs`).
+#[pyfunction]
+#[pyo3(name = "_form_fields", signature = (kind, id, inputs, screen=None))]
+fn form_fields(py: Python<'_>, kind: String, id: String, inputs: &Bound<'_, PyAny>, screen: Option<&Bound<'_, PyAny>>) -> PyResult<Py<PyAny>> {
+    let form = Form::parse(&kind, &id).map_err(err)?;
+    let inputs: universe::forms::Inputs = typed(inputs)?;
+    let screen: Option<universe::gamescope::Mode> = screen.map(typed).transpose()?;
+    py_of(py, &universe::forms::fields(&form, &inputs, screen).map_err(err)?)
+}
+
+/// The writes `Core.set_field` makes, for the fake core to make with its own setters.
+#[pyfunction]
+#[pyo3(name = "_set_writes")]
+fn set_writes(py: Python<'_>, kind: String, id: String, key: String, value: String) -> PyResult<Py<PyAny>> {
+    let form = Form::parse(&kind, &id).map_err(err)?;
+    py_of(py, &universe::forms::set_writes(&form, &key, &value))
+}
+
+/// The writes `Core.promote_field` makes.
+#[pyfunction]
+#[pyo3(name = "_promote_writes")]
+fn promote_writes(py: Python<'_>, kind: String, id: String, key: String, inputs: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+    let form = Form::parse(&kind, &id).map_err(err)?;
+    let inputs: universe::forms::Inputs = typed(inputs)?;
+    py_of(py, &universe::forms::promote_writes(&form, &key, &inputs).map_err(err)?)
+}
+
 #[pymodule]
 fn universe_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     universe::init_tracing();
     m.add_class::<Core>()?;
     m.add_function(wrap_pyfunction!(host_gamescope, m)?)?;
+    m.add_function(wrap_pyfunction!(form_fields, m)?)?;
+    m.add_function(wrap_pyfunction!(set_writes, m)?)?;
+    m.add_function(wrap_pyfunction!(promote_writes, m)?)?;
     m.add("UniverseError", m.py().get_type::<UniverseError>())?;
     Ok(())
 }

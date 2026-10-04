@@ -154,8 +154,10 @@ def test_a_module_row_shows_choice_labels_and_sends_the_stored_value(api, fake):
     row = rows_by_key(form, "capture")["source"]
     stored = fake.settings("the-technomancer")["capture"]["source"]
     assert row["detail"] == setting["description"]
-    assert row["choiceValues"] == setting["choices"] and row["choices"] == [setting["choice_labels"][c] for c in setting["choices"]]
-    assert row["value"] == row["display"] == setting["choice_labels"][stored], "the row reads the label of what is stored"
+    assert row["choiceValues"] == ["", *setting["choices"]], "the first choice drops the game's own value"
+    assert row["choices"][1:] == [setting["choice_labels"][c] for c in setting["choices"]]
+    assert row["display"] == setting["choice_labels"][stored], "the row reads the label of what is stored"
+    assert row["value"] == row["choices"][0], "the game sets none: the picker opens on the inherited value"
     other = next(c for c in setting["choices"] if c != stored)
     assert form.setValue(index_of(form, "source"), setting["choice_labels"][other]) is True
     assert fake.settings("the-technomancer")["capture"]["source"] == other, "the picked label is written as its stored value"
@@ -255,8 +257,8 @@ def test_source_form(api, fake):
     )
     assert [rows[i]["key"] for g in form.advancedGroups for i in g["rows"]] == ["scan_dirs", "auth_path", "install_timeout_s"]
     platform = index_of(form, "platform")
-    assert rows[platform]["choiceValues"] == ["windows", "linux"]
-    linux = rows[platform]["choices"][1]
+    assert rows[platform]["choiceValues"] == ["", "windows", "linux"], "the first choice drops config.toml's own"
+    linux = rows[platform]["choices"][2]
     assert form.setValue(platform, linux) is True
     until(lambda: form.rows[index_of(form, "platform")]["value"] == linux)
     assert fake.getSourceSettings("gog")["platform"] == "linux"
@@ -330,7 +332,7 @@ def test_module_form_choices(api, fake):
     form = api.screens.module
     form.load("capture")
     rows = rows_by_key(form, "capture")
-    assert rows["fps"]["type"] == "int" and rows["fps"]["choiceValues"] == ["auto", "120", "90", "60", "30"]
+    assert rows["fps"]["type"] == "int" and rows["fps"]["choiceValues"] == ["", "auto", "120", "90", "60", "30"]
     form.load("journal")
     until(
         lambda: rows_by_key(form, "journal").get("model", {}).get("choices") == ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.5"],
@@ -338,7 +340,7 @@ def test_module_form_choices(api, fake):
     )
     form.load("capture")
     fps = index_of(form, "fps")
-    auto = form.rows[fps]["choices"][0]
+    auto = form.rows[fps]["choices"][1]
     assert form.setValue(fps, auto) is True
     assert fake.getSettings("capture", "")["fps"] == "auto"
     assert form.rows[fps]["display"] == auto, "the stored value reads as its label"
@@ -356,19 +358,20 @@ def test_launch_form(api, fake):
     ]
     expected[1][1].extend(["desktop.hide_cursor", "desktop.keep_awake"])
     updates = ("Updates", ["desktop.whats_new"])
-    assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups] == [*expected[:2], updates], (
+    assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups] == [*expected[:2], ("Saves", ["saves.auto_backup"]), updates], (
         "beginner first, no Advanced row; a runner's keys sit on its page"
     )
     form.showAdvanced = True
     assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups] == [
         ("Display", [*expected[0][1], *expected[2][1]]),
         expected[1],
+        ("Saves", ["saves.auto_backup", "saves.keep"]),
         updates,
         *expected[3:],
         ("Folders", ["paths.games_root", "paths.prefixes_root", "paths.saves_root", "paths.recordings_root"]),
-        ("Saves", ["saves.auto_backup", "saves.keep"]),
         ("API keys", ["keys.sgdb", "keys.sgdb_file", "keys.prefer_sgdb"]),
         ("Desktop", ["desktop.profile", "desktop.cursor_extension"]),
+        ("Proton builds", ["proton.proton-tkg", "proton"]),
     ], "with Advanced on: the scaling flags fold into Display, the environment, the programs and config.toml's own sections follow"
     assert form.groups[0]["dividers"] == [{"at": 4, "label": "Advanced · Scaling"}]
     assert expected[0][1] == ["launch.gamescope", "launch.gamescope_resolution", "launch.gamescope_refresh", "launch.gamescope_adaptive_sync"]
@@ -385,8 +388,9 @@ def test_launch_form(api, fake):
     config_rows = rows_by_key(form)
     assert config_rows["paths.games_root"]["value"] == "/mnt/games/PC" and config_rows["paths.games_root"]["type"] == "path"
     assert config_rows["keys.sgdb"]["display"] == "—" and config_rows["keys.sgdb"]["secret"] is True
-    assert config_rows["desktop.profile"]["value"] == "auto"
-    assert config_rows["desktop.profile"]["choices"] == ["auto", "gnome", "kde", "cinnamon", "sway", "hyprland", "niri", "x11", "none"]
+    profile = config_rows["desktop.profile"]
+    assert profile["value"] == profile["choices"][0] and profile["display"] == "auto", "config.toml sets none: the picker opens on the default"
+    assert profile["choiceValues"] == ["", "auto", "gnome", "kde", "cinnamon", "sway", "hyprland", "niri", "x11", "none"]
     assert form.setValue(index_of(form, "keys.sgdb"), "abc123") is True and fake.config()["keys"]["sgdb"] == "abc123"
     assert rows_by_key(form)["keys.sgdb"]["display"] == "Set" and rows_by_key(form)["keys.sgdb"]["value"] == "abc123"
     assert form.setMapEntry(index_of(form, "launch.env"), "MANGOHUD", "1") is True and fake.config()["launch"]["env"] == {"MANGOHUD": "1"}, (
@@ -418,7 +422,8 @@ def test_launch_form(api, fake):
     assert rows["launch.fps_limit"]["value"] == "auto" and rows["launch.fps_limit"]["display"] == "auto · 144", "auto shows the rate it stands for"
     assert rows["launch.gamescope_resolution"]["display"] == "auto · 2560×1440" and rows["launch.gamescope_refresh"]["display"] == "auto · 144"
     assert rows["launch.fps_limit"]["choices"] == ["auto", "none", "144", "120", "100", "90", "75", "60", "50", "48", "40", "30"]
-    assert (rows["launch.gamescope_adaptive_sync"]["value"], rows["launch.gamescope_adaptive_sync"]["display"]) == ("auto", "auto · On"), "the screen has VRR"
+    vrr = rows["launch.gamescope_adaptive_sync"]
+    assert (vrr["value"], vrr["display"]) == (vrr["choices"][0], "auto · On"), "the screen has VRR"
     assert rows["launch.gamescope_args"]["value"] == ""
     assert rows["desktop.hide_cursor"]["value"] is True and "launch.esync" not in rows
 
@@ -458,7 +463,7 @@ def test_game_settings_reset(api, fake):
         "changing an inherited value is what writes it on the game"
     )
     vrr = index_of(form, "launch.gamescope_adaptive_sync")
-    assert form.rows[vrr]["value"] == "Global · auto" and "pin" not in form.rows[vrr] and form.reset(vrr) is False
+    assert form.rows[vrr]["value"] == form.rows[vrr]["choices"][0] and form.rows[vrr]["choiceValues"][0] == "" and form.reset(vrr) is False
     assert form.setValue(vrr, "on") is True and fake.game("the-technomancer")["launch"]["gamescope_adaptive_sync"] == "on"
     assert form.reset(vrr) is True and "gamescope_adaptive_sync" not in fake.game("the-technomancer")["launch"]
     assert form.reset(index_of(form, "launch.runner")) is False, "the runner has no global to go back to"
@@ -572,11 +577,10 @@ def test_game_settings_mirrors_the_cards(api, fake):
     assert rows["launch.gamescope"]["detail"].startswith("Run the game in a window"), "no GPU note outside Upscaling"
     assert rows["launch.gamescope_resolution"]["value"] == "auto" and rows["launch.gamescope_resolution"]["inherited"] is True
     assert rows["launch.gamescope_resolution"]["choices"][:2] == ["auto", "2560x1440"]
-    assert rows["launch.gamescope_scaler"]["value"] == "Global · auto" and rows["launch.gamescope_scaler"]["inherited"] is True
-    assert rows["launch.gamescope_scaler"]["display"] == "auto" and rows["launch.gamescope_scaler"]["origin"] == "default", (
-        "the bare built-in: the row's origin says it is the default"
-    )
-    assert rows["launch.gamescope_adaptive_sync"]["value"] == "Global · auto" and rows["launch.gamescope_adaptive_sync"]["display"] == "auto · On"
+    scaler, vrr = rows["launch.gamescope_scaler"], rows["launch.gamescope_adaptive_sync"]
+    assert scaler["value"] == scaler["choices"][0] and scaler["choiceValues"][0] == "" and scaler["inherited"] is True
+    assert scaler["display"] == "auto" and scaler["origin"] == "default", "the bare built-in: the row's origin says it is the default"
+    assert vrr["value"] == vrr["choices"][0] and vrr["display"] == "auto · On"
     assert rows["launch.gamescope_adaptive_sync"]["inherited"] is True and rows["launch.gamescope_adaptive_sync"]["origin"] == "default"
     assert form.setValue(index_of(form, "launch.gamescope_resolution"), "1920x1080") is True
     assert fake.game("the-technomancer")["launch"]["gamescope_resolution"] == "1920x1080"

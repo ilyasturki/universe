@@ -126,10 +126,7 @@ impl Source {
     pub fn merged_settings(&self, config: &Config, game: Option<&Game>) -> serde_json::Map<String, serde_json::Value> {
         let mut out = serde_json::Map::new();
         for s in &self.manifest.settings {
-            out.insert(s.key.clone(), modules::toml_to_json(&s.default));
-        }
-        if out.get("games_dir").and_then(|v| v.as_str()) == Some("") {
-            out.insert("games_dir".into(), serde_json::Value::String(config.games_root().to_string_lossy().into()));
+            out.insert(s.key.clone(), default_value(&s.key, &modules::toml_to_json(&s.default), config));
         }
         for (k, v) in config.sources.settings.get(self.id()).into_iter().flatten() {
             out.insert(k.clone(), modules::toml_to_json(v));
@@ -148,6 +145,14 @@ impl Source {
         }
         modules::validate_value(key, &s.kind, &s.choices, value)
     }
+}
+
+/// A setting's value with nothing set: the manifest's default, an empty `games_dir` the config's games folder.
+pub fn default_value(key: &str, default: &serde_json::Value, config: &Config) -> serde_json::Value {
+    if key == "games_dir" && default.as_str() == Some("") {
+        return serde_json::Value::String(config.games_root().to_string_lossy().into());
+    }
+    default.clone()
 }
 
 /// User sources override system sources on the same id.

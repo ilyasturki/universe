@@ -7,7 +7,7 @@ from PySide6.QtCore import Signal, Slot
 from ..models import file_url
 from ..qt import QVARIANT, Property
 from .components import NO_BUILD, NO_BUILD_META, build_text, catalogue_warning
-from .settings import HOMES, RowsForm, _group, _plural, _row, _to_bus, global_launch_rows, launch_row, proton_choices, runner_logo
+from .settings import HOMES, RowsForm, _group, _plural, _row, _to_bus, field_row, launch_cards, runner_logo
 
 FOUND = {"path": "Found on PATH"}
 PROTON_TOOL = "umu-run"
@@ -158,9 +158,9 @@ class RunnersForm(RowsForm):
 
 
 def build_runner(client, ident, screen_mode, listing=None, row_of: Callable[[dict], dict] = dict):
-    """A runner's page: its program and gamescope, its builds (Proton's default, what Universe installs of it), the global launch
-    keys of its kind (the advanced ones folded into the Proton card, else the runner's), its options, its games. Without
-    `listing` (the search) the Builds card holds no component."""
+    """A runner's page: the core's runner form — its program, arguments and gamescope, the global launch keys of its kind (the
+    advanced ones folded into the Proton card, else the runner's), its options — with what Universe installs of it beside its
+    program and its builds, then its games. Without `listing` (the search) no card holds a component."""
     runner = next((r for r in client.runners() if r["id"] == ident), None)
     if runner is None:
         return {}, [], []
@@ -178,58 +178,30 @@ def build_runner(client, ident, screen_mode, listing=None, row_of: Callable[[dic
         meta, warning = platforms, "not found"
     info = {"id": ident, "name": name, "meta": meta, "warning": warning, "icon": runner_logo(ident)}
     own = runner_components(ident, kind, listing.get("components") or []) if listing else []
-    rows, groups = [], []
-    if kind != "linux":
-        exe = runner.get("exe") or ""
-        where = (f"Installed by Universe ({runner.get('version')})" if source == "universe" else FOUND.get(source, "Found")) if found and not exe else ""
-        rows.append(
-            _row(name, "exe", "Program", "path", exe or found, module=ident, detail=where, inherited=not exe and bool(found), origin="runner" if exe else "")
-        )
-        rows.extend({**row_of(c), "section": name} for c in own if c["id"] == PROTON_TOOL)
-        rows.append(_row(name, "args", "Arguments", "string", runner.get("args") or "", module=ident))
-    config = client.config()
-    launch = config.get("launch") or {}
-    gamescope = runner.get("gamescope")
-    rows.append(
-        _row(
-            name,
-            "gamescope",
-            "Gamescope",
-            "bool",
-            bool(launch.get("gamescope", True)) if gamescope is None else bool(gamescope),
-            module=ident,
-            origin="global" if gamescope is None else "runner",
-        )
-    )
-    groups.append(_group("Runner", list(range(len(rows))), caps=True))
     mode = screen_mode()
+    fields = client.form("runner", ident, mode)
+    rows, groups = [], []
+    for field in (f for f in fields if f["section"] == "Runner"):
+        row = field_row(field, name, "runner", ident)
+        if field["key"] == "exe":
+            source_word = f"Installed by Universe ({runner.get('version')})" if source == "universe" else FOUND.get(source, "Found")
+            row["detail"] = source_word if found and not field["own"] else ""
+        rows.append(row)
+        if field["key"] == "exe":
+            rows.extend({**row_of(c), "section": name} for c in own if c["id"] == PROTON_TOOL)
+    groups.append(_group("Runner", list(range(len(rows))), caps=True))
     first = len(rows)
-    rows.extend(
-        launch_row(spec["section"], spec, launch.get(spec["key"]) or spec["default"], protons=proton_choices(config))
-        for spec in client.launchKeys("global", mode)
-        if kind in spec["runners"] and spec["key"] in BUILD_KEYS
-    )
+    rows.extend(field_row(f, f["section"], "launch") for f in fields if f["section"] == BUILDS)
     rows.extend({**row_of(c), "section": name} for c in _in_use_first(own) if c["id"] != PROTON_TOOL)
     if len(rows) > first:
         groups.append(_group(BUILDS, list(range(first, len(rows))), caps=True, warning=catalogue_warning(listing or {})))
     home = "Proton" if kind == "proton" else "Runner"
     homes = {**HOMES, "Sync": home, "Upscaling": home, "Logs": home}
-    global_launch_rows(rows, groups, client, config, mode, lambda spec: kind in spec["runners"] and spec["key"] not in BUILD_KEYS, client.gpu(), homes)
-    options = runner.get("options") or []
+    launch_cards([f for f in fields if f["key"].startswith("launch.") and f["section"] != BUILDS], rows, groups, mode, client.gpu(), homes)
+    options = [field_row(f, name, "runner", ident) for f in fields if f["section"] == "Options"]
     if options:
         first = len(rows)
-        rows.extend(
-            _row(
-                name,
-                option["key"],
-                option.get("label", option["key"]),
-                option.get("type", "string"),
-                option.get("value", option.get("default")),
-                option.get("choices"),
-                ident,
-            )
-            for option in options
-        )
+        rows.extend(options)
         groups.append(_group("Options", list(range(first, len(rows))), caps=True))
     games = sorted((g for g in client.list() if _runner_of(g) == ident), key=lambda g: str(g.get("title") or "").casefold())
     first = len(rows)
@@ -287,15 +259,15 @@ class RunnerForm(RowsForm):
         if row["key"] == "add_file":
             self._pending = {"runner": row["module"], "name": row["section"], "file": str(value or "")}
             return bool(self._pending["file"])
+        if not row.get("field"):
+            return False
         ok = self._write(row, _to_bus(row, value))
         if ok:
             self._refresh()
         return bool(ok)
 
     def _write(self, row, payload):
-        if row["key"].startswith("launch."):
-            return self._client.setConfig(row["key"], payload)
-        return self._client.setRunnerSetting(row["module"], row["key"], payload)
+        return self._client.setField("runner", self._runner["id"], row["field"], payload)
 
     def _reload(self, row):
         self._refresh()

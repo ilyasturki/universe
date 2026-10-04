@@ -275,7 +275,7 @@ FocusScope {
                 // A search hit: where the row lives, muted, in front of its label.
                 readonly property string path: entry.path !== undefined && entry.path !== null ? String(entry.path) : ""
                 // A value this game or runner sets for itself; what it inherits reads plain.
-                readonly property bool changed: entry.origin === "game" || entry.origin === "runner"
+                readonly property bool changed: entry.changed === true
 
                 function esc(text) {
                     return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");

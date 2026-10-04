@@ -156,6 +156,9 @@ pub static LAUNCH_KEYS: &[LaunchKey] = &[
     key!("options", Kind::Map, "", "Runner options", "", Game, &[], "The runner's options, validated against `universe runner options <id>`."),
 ];
 
+/// Under Steam the HUD and the frame limit are its Quick Access menu's, and no HOME reaches a game to pause it.
+pub const STEAM_OWNS: [&str; 3] = ["mangohud", "fps_limit", "pause_on_home"];
+
 pub fn find(key: &str) -> Option<&'static LaunchKey> {
     LAUNCH_KEYS.iter().find(|k| k.key == key)
 }

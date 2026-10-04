@@ -761,6 +761,21 @@ class CoreClient(QObject):
     def gpu(self):
         return self._guarded(None, self._core.gpu) or {}
 
+    # One settings form's fields (`kind`: launch, runner, game, module, source; `ident` names the last four); `screen` a
+    # `screenMode()` dict sizing the screen's choices.
+    def form(self, kind, ident, screen=None):
+        return self._guarded([], self._core.form, kind, ident, dict(screen) if screen else None)
+
+    # A module's or a source's own switch changes the lists that show it.
+    def setField(self, kind, ident, key, value):
+        ok = self._done(self._core.set_field, kind, ident, key, str(value))
+        if ok and key == "enabled" and kind in ("module", "source"):
+            (self.modulesChanged if kind == "module" else self.sourcesChanged).emit()
+        return ok
+
+    def promoteField(self, kind, ident, key):
+        return self._done(self._core.promote_field, kind, ident, key)
+
     @Slot(result=str)
     def version(self):
         return self._guarded("", self._core.version)

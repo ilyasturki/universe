@@ -501,6 +501,7 @@ class SettingsSearch(QObject):
                             "display": str(row.get("display") or ""),
                             "own": not row.get("inherited", False),
                             "origin": str(row.get("origin") or ""),
+                            "changed": bool(row.get("changed")),
                             "value": normal(row.get("display")),
                         }
                     )
@@ -623,7 +624,12 @@ class SettingsSearch(QObject):
             else:
                 row.update(label=entry.label, path=game["title"])
             row.update(
-                display=game["display"], inherited=game["own"] is False, origin=game["origin"], kind="gamerow", target={**entry.target, "id": game["id"]}
+                display=game["display"],
+                inherited=game["own"] is False,
+                origin=game["origin"],
+                changed=game["changed"],
+                kind="gamerow",
+                target={**entry.target, "id": game["id"]},
             )
             rows.append(row)
         return rows
