@@ -32,6 +32,22 @@ fn split(checks: &[Check], gnome: bool) -> (Option<&Check>, Vec<&Check>, Vec<&Ch
     (setup, failing, passing)
 }
 
+/// The passing checks by area, Core first, each with how many of the area's checks the lists hold.
+fn by_area<'a>(failing: &[&'a Check], passing: &[&'a Check], area: impl Fn(&str) -> String) -> Vec<(String, Vec<&'a Check>, usize)> {
+    let mut seen = HashSet::new();
+    let mut areas: Vec<String> = passing.iter().map(|c| area(&c.module)).filter(|name| seen.insert(name.clone())).collect();
+    let core = area("core");
+    areas.sort_by_key(|name| *name != core);
+    areas
+        .into_iter()
+        .map(|name| {
+            let these: Vec<&Check> = passing.iter().copied().filter(|c| area(&c.module) == name).collect();
+            let total = these.len() + failing.iter().filter(|c| area(&c.module) == name).count();
+            (name, these, total)
+        })
+        .collect()
+}
+
 /// Left in English for whoever reads the report.
 pub fn debug_info(facts: &[(&str, String)], checks: Option<&[Check]>) -> String {
     let mut lines: Vec<String> = facts.iter().filter(|(_, v)| !v.is_empty()).map(|(k, v)| format!("{k}: {v}")).collect();
@@ -172,13 +188,7 @@ fn load(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>) {
                 group.add(&row);
             }
         }
-        let mut seen = HashSet::new();
-        let mut areas: Vec<String> = passing.iter().map(|c| area(&c.module)).filter(|name| seen.insert(name.clone())).collect();
-        let core = gettext("Core");
-        areas.sort_by_key(|name| *name != core);
-        for name in areas {
-            let total = checks.iter().filter(|c| area(&c.module) == name).count();
-            let these: Vec<&&Check> = passing.iter().filter(|c| area(&c.module) == name).collect();
+        for (name, these, total) in by_area(&failing, &passing, area) {
             let group = page.group(&name, &gettext("{} of {} pass").replacen("{}", &these.len().to_string(), 1).replacen("{}", &total.to_string(), 1));
             for check in these {
                 group.add(&check_row(&dialog, &page, check));
@@ -218,6 +228,18 @@ mod tests {
         let (setup, failing, _) = split(&checks, false);
         assert!(setup.is_none());
         assert_eq!(ids(&failing), [EXTENSION, "gamescope"], "elsewhere it is a check like the others");
+    }
+
+    #[test]
+    fn an_area_counts_the_checks_it_lists_not_the_extension_set_apart() {
+        let mut runner = check("wine", true);
+        runner.module = "runners".into();
+        let checks = [check("systemd", true), check(EXTENSION, true), check("gamescope", false), runner];
+        let (_, failing, passing) = split(&checks, true);
+        let area = |module: &str| if module.is_empty() { "core".to_string() } else { module.to_string() };
+        let areas: Vec<(String, Vec<String>, usize)> =
+            by_area(&failing, &passing, area).into_iter().map(|(name, these, total)| (name, ids(&these), total)).collect();
+        assert_eq!(areas, [("core".into(), vec!["systemd".to_string()], 2), ("runners".into(), vec!["wine".into()], 1)], "Core first, out of 2 not 3");
     }
 
     #[test]
