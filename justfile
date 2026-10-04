@@ -122,12 +122,14 @@ test *suites: build develop env
     cd "{{ justfile_directory() }}"
     suites="{{ suites }}"
     [ -n "$suites" ] || suites="rust python"
+    # A third of the cores, at most 8: more workers wait on each other and push tests past their 2 s.
+    workers=$(( $(nproc) / 3 )); workers=$(( workers < 1 ? 1 : workers > 8 ? 8 : workers ))
     for suite in $suites; do
         case "$suite" in
             rust) cargo test ;;
-            python) "{{ python }}" -m pytest -q ;;
+            python) "{{ python }}" -m pytest -q -n "$workers" ;;
             bindings) "{{ python }}" -m pytest -q crates/universe-py/tests ;;
-            ui|modules|extension|sources) "{{ python }}" -m pytest -q "$suite" ;;
+            ui|modules|extension|sources) "{{ python }}" -m pytest -q -n "$workers" "$suite" ;;
             desktop) tools/desktop-test ;;
             *) echo "test: unknown suite '$suite' (rust, python, ui, modules, extension, sources, bindings, desktop)" >&2; exit 2 ;;
         esac

@@ -559,6 +559,7 @@
               ++ [
                 ps.setuptools
                 ps.pytest-qt
+                ps.pytest-xdist
               ]
             ))
             SDL2
