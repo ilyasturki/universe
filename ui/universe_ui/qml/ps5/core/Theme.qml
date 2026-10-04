@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import "../../core" as Base
 import "../../core/Format.js" as Format
+import "../../ui/PadNames.js" as Names
 
 QtObject {
     id: t
@@ -127,6 +128,12 @@ QtObject {
         repeat: true
         triggeredOnStart: true
         onTriggered: t.clock = Format.clock()
+    }
+
+    readonly property string padFamily: api.screens.controller.seen ? api.screens.controller.family : "dualsense"
+    // Copy naming a button: buttonName("A") is "✕" until a pad of another kind is seen.
+    function buttonName(name) {
+        return Names.buttonName(name, padFamily);
     }
 
     readonly property string fontOverride: api.theme.fontPath !== "" ? "file://" + api.theme.fontPath : ""

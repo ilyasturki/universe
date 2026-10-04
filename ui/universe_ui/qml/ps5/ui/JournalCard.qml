@@ -42,7 +42,7 @@ Item {
         if (pending)
             return "The journal module is writing it: " + elapsed(row.started_at) + " so far.";
         if (blank)
-            return "A session nobody wrote about. A writes its entry.";
+            return "A session nobody wrote about. " + Theme.buttonName("A") + " writes its entry.";
         if (phase === "deferred")
             return row.reason + (row.retryText !== "" ? " · another try " + row.retryText : "");
         if (phase === "failed")

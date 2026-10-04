@@ -22,7 +22,7 @@ def started(api):
 
 def test_rows_follow_the_watcher_and_the_macros(api, fake):
     screen = api.screens.controller
-    assert not screen.connected and screen.family == "xbox"
+    assert not screen.connected and screen.family == "xbox" and screen.seen is False
     assert [r["type"] for r in pad_rows(screen)] == ["info"] and len(screen.groups) == 2, "the pad card, the Advanced row"
     timing = {r["key"]: r for r in screen.rows if r["advanced"]}
     assert timing["controller.hold_ms"]["value"] == "600" and timing["controller.volume_step"]["value"] == "2" and timing["controller.hold_ms"]["type"] == "int"
@@ -41,7 +41,7 @@ def test_rows_follow_the_watcher_and_the_macros(api, fake):
     watcher = FakeWatcher("dualsense-edge")
     assert screen.start(watcher) is True
     assert screen.connected and screen.family == "dualsense-edge" and screen.status == "ready"
-    assert api.memory.get("controllerFamily") == "dualsense-edge"
+    assert api.memory.get("controllerFamily") == "dualsense-edge" and screen.seen is True
     rows = rows_by_key(screen)
     assert "device" not in rows, "one pad needs no picker row"
     assert rows["paddle_left"]["display"] == "Press · Volume down"

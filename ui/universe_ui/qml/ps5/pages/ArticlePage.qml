@@ -345,11 +345,11 @@ FocusScope {
                     if (page.pending)
                         return "The journal module is writing this entry: " + page.elapsed(page.row.started_at) + " so far. It shows up here when it is done.";
                     if (page.row.state === "none")
-                        return "Nobody wrote about this session yet. A asks the journal module for its entry.";
+                        return "Nobody wrote about this session yet. " + Theme.buttonName("A") + " asks the journal module for its entry.";
                     if (page.row.state === "deferred")
-                        return page.row.reason + ". Another try " + page.row.retryText + ", or ask for one now with A.";
+                        return page.row.reason + ". Another try " + page.row.retryText + ", or ask for one now with " + Theme.buttonName("A") + ".";
                     if (page.row.state === "failed")
-                        return page.row.reason + ". Ask for another try with A.";
+                        return page.row.reason + ". Ask for another try with " + Theme.buttonName("A") + ".";
                     return "";
                 }
                 color: page.row && page.row.state === "failed" ? Theme.danger : Theme.textMuted

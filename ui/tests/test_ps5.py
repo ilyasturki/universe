@@ -158,6 +158,42 @@ def test_back_from_a_game_the_home_builds_itself_up_again(api, fake):
     window.close()
 
 
+def test_glyphs_are_the_dualsense_s_until_a_pad_is_seen_then_that_pad_s(ps5, api):
+    from universe_ui.screens.controller import FakeWatcher
+
+    _window, root = ps5
+    QMetaObject.invokeMethod(root, "push", Q_ARG("QVariant", "pages/InstallPage.qml"), Q_ARG("QVariant", {}))
+
+    # The page's hint box rebuilds its glyphs as it loads: the families are read in one pass.
+    def families():
+        page = root.property("topPage")
+        found = page.findChildren(QObject) if page else []
+        return {o.property("family") for o in found if o.metaObject().className().startswith("HintGlyph")}
+
+    assert until(families) == {"dualsense"}
+    screen = api.screens.controller
+    screen.restart_ms = 0
+    screen.start(FakeWatcher("xbox"))
+    until(lambda: families() == {"xbox"})
+
+
+@pytest.mark.parametrize(("family", "names"), [("dualsense", ["✕", "□"]), ("xbox", ["A", "X"]), ("switch-pro", ["A", "X"])])
+def test_copy_names_the_button_the_pad_carries(app, family, names):
+    from pathlib import Path
+
+    from PySide6.QtCore import QUrl
+    from PySide6.QtQml import QQmlComponent, QQmlEngine
+
+    names_js = Path(__file__).resolve().parents[1] / "universe_ui" / "qml" / "ui" / "PadNames.js"
+    engine = QQmlEngine()
+    component = QQmlComponent(engine)
+    qml = f'import QtQuick\nimport "{names_js.as_uri()}" as Names\nQtObject {{ property var out: [Names.buttonName("A", "{family}"), Names.buttonName("X", "{family}")] }}\n'
+    component.setData(qml.encode(), QUrl("file:///names.qml"))
+    obj = component.create()
+    assert obj is not None, [e.toString() for e in component.errors()]
+    assert obj.property("out").toVariant() == names
+
+
 def test_a_dialog_taller_than_the_screen_scrolls_its_text(ps5):
     window, root = ps5
     dialog = root.findChild(QObject, "dialog")

@@ -68,6 +68,14 @@ function glyph(family, slot) {
     return out;
 }
 
+var SYMBOL_TEXT = { cross: "✕", circle: "○", triangle: "△", square: "□" };
+
+// How copy names a hint's button on this family's pad: "A" on an Xbox pad, "✕" on a DualSense.
+function buttonName(name, family) {
+    var g = glyph(family, hintSlot(name, family));
+    return g.text || SYMBOL_TEXT[g.symbol] || name;
+}
+
 var HINT_SLOTS = {
     A: "south", B: "east", X: "west", Y: "north", LB: "lb", RB: "rb", LT: "lt", RT: "rt",
     LS: "ls", RS: "rs", Start: "start", Select: "select", dpad: "dpad"

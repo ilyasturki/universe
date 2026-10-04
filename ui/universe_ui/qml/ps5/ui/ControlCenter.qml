@@ -1401,7 +1401,7 @@ FocusScope {
                 Label {
                     anchors.centerIn: parent
                     visible: cc.sheet === "captures" ? cc.shots.length === 0 : cc.trophyRows.length === 0
-                    text: cc.sheet === "captures" ? "No screenshots of this game yet. X takes one." : api.screens.dockAchievements.loading ? "Loading…" : "No trophies listed."
+                    text: cc.sheet === "captures" ? "No screenshots of this game yet. " + Theme.buttonName("X") + " takes one." : api.screens.dockAchievements.loading ? "Loading…" : "No trophies listed."
                     color: Theme.textSecondary
                 }
             }

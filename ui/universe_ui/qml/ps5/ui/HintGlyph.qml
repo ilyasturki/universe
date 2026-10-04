@@ -12,7 +12,7 @@ Item {
     property color ink: Theme.onLight
     property bool dim: false
 
-    readonly property string family: api.screens.controller.family
+    readonly property string family: Theme.padFamily
     readonly property string slot: Names.hintSlot(glyph, family)
     readonly property bool cross: slot.indexOf("dpad") === 0
 

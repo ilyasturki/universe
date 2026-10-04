@@ -956,6 +956,8 @@ class ControllerScreen(AdvancedRows, QObject):
     count = Property(int, lambda self: len(self._rows), notify=rowsChanged)
     unboundSlots = Property(list, _unbound, notify=rowsChanged)
     family = Property(str, _family, notify=devicesChanged)
+    # False while `family` is only the fallback, no pad ever seen: a look may show its own console's glyphs then.
+    seen = Property(bool, lambda self: bool(self._devices or self._memory.get("controllerFamily") or getattr(self._client, "deck", "")), notify=devicesChanged)
     families = Property(
         "QVariantList", lambda self: [{"id": f["id"], "name": f.get("name") or f["id"]} for f in self._families().values()], notify=stateChanged
     )
