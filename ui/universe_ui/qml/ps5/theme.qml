@@ -169,7 +169,18 @@ FocusScope {
             width: Theme.dp(650)
         }, function (i) {
             var act = i >= 0 ? items[i].act : "";
-            if (act === "quit" || act === "logout")
+            if ((act === "quit" || act === "logout") && session)
+                dialogAsk({
+                    message: act === "logout" ? "Log out?" : "Quit Universe?",
+                    detail: session.title + " will be closed. Unsaved progress will be lost.",
+                    buttons: ["Cancel", act === "logout" ? "Log Out" : "Quit"],
+                    danger: 1,
+                    index: 0
+                }, function (k) {
+                    if (k === 1)
+                        Qt.quit();
+                });
+            else if (act === "quit" || act === "logout")
                 Qt.quit();
             else if (act === "suspend") {
                 Base.Notices.show("Entering rest mode…", "power");

@@ -194,6 +194,25 @@ def test_copy_names_the_button_the_pad_carries(app, family, names):
     assert obj.property("out").toVariant() == names
 
 
+def test_the_power_menu_s_way_out_asks_first_while_a_game_runs(ps5, api):
+    window, root = ps5
+    QMetaObject.invokeMethod(root, "launch", Q_ARG("QVariant", api.allGames.byId("dead-cells")))
+    until(lambda: api.home.shown == "game")
+    QMetaObject.invokeMethod(root, "askPower")
+    popup = root.findChild(QObject, "popup")
+    until(lambda: popup.property("open") is True)
+    acts = [i["act"] for i in value(popup, "items")]
+    for _ in range(len(acts) - 1):
+        QTest.keyClick(window, Qt.Key.Key_Down)
+    assert acts[popup.property("index")] in ("quit", "logout")
+    QTest.keyClick(window, Qt.Key.Key_Return)
+    dialog = root.findChild(QObject, "dialog")
+    until(lambda: dialog.property("open") is True, "the game under Home would be closed")
+    QTest.keyClick(window, Qt.Key.Key_Escape)
+    until(lambda: dialog.property("open") is False)
+    assert api.universe.currentSession, "Cancel leaves the game running"
+
+
 def test_a_dialog_taller_than_the_screen_scrolls_its_text(ps5):
     window, root = ps5
     dialog = root.findChild(QObject, "dialog")
