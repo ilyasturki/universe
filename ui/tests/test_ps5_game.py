@@ -202,6 +202,7 @@ def test_the_play_log_lists_the_sessions_and_reads_one(ps5, api):
     entries = value(page, "entries")
     assert page.property("strip") is False
     assert any(e["detail"].startswith("Crashed") for e in entries), "how a session ended"
+    assert {e["icon"] for e in entries if e["detail"].startswith("Crashed")} == {"warning"}, "a crash wears a warning"
     click(window, Qt.Key.Key_Return)
     until(lambda: root.property("depth") == depth + 1)
     log = root.property("topPage")

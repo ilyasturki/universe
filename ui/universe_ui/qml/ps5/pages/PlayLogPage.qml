@@ -64,7 +64,7 @@ FocusScope {
             key: r.live ? "live" : r.session,
             label: r.live ? "Playing now" : r.dateText,
             type: "action",
-            icon: r.live ? "play" : r.bad ? "info" : "clock",
+            icon: r.live ? "play" : r.bad ? "warning" : "clock",
             display: r.live ? "" : r.durationText,
             detail: bits.join(" · "),
             session: r.session,
