@@ -41,15 +41,31 @@ fn order(items: &mut Vec<Value>) -> usize {
     before - items.len()
 }
 
-fn hidden_row(count: usize) -> adw::ActionRow {
-    let title = ngettext("{} hidden achievement", "{} hidden achievements", count as u32).replace("{}", &count.to_string());
-    let row = crate::rows::plain(adw::ActionRow::builder().build(), title, gettext("Keep playing to find out."));
+/// The ordered list cut where the unlocked ones end.
+fn split(items: &[Value]) -> (&[Value], &[Value]) {
+    let at = items.iter().position(|v| text(v, "unlocked_at").is_empty()).unwrap_or(items.len());
+    items.split_at(at)
+}
+
+/// The icon a row leads with, room above and under it.
+fn icon(path: String, locked: bool) -> Cover {
     let icon = Cover::new(48, 48);
     icon.set_placeholder("trophy-symbolic");
     icon.add_css_class("thumb");
-    icon.add_css_class("locked");
+    if locked {
+        icon.add_css_class("locked");
+    }
     icon.set_valign(gtk::Align::Center);
-    row.add_prefix(&icon);
+    icon.set_margin_top(8);
+    icon.set_margin_bottom(8);
+    icon.set_path(path);
+    icon
+}
+
+fn hidden_row(count: usize) -> adw::ActionRow {
+    let title = ngettext("{} hidden achievement", "{} hidden achievements", count as u32).replace("{}", &count.to_string());
+    let row = crate::rows::plain(adw::ActionRow::builder().build(), title, gettext("Keep playing to find out."));
+    row.add_prefix(&icon(String::new(), true));
     row
 }
 
@@ -57,16 +73,8 @@ fn row(item: &Value) -> adw::ActionRow {
     let unlocked = !text(item, "unlocked_at").is_empty();
     let name = if text(item, "name").is_empty() { text(item, "key") } else { text(item, "name") };
     let row = crate::rows::plain(adw::ActionRow::builder().build(), name, text(item, "description"));
-    let icon = Cover::new(48, 48);
-    icon.set_placeholder("trophy-symbolic");
-    icon.add_css_class("thumb");
-    icon.set_valign(gtk::Align::Center);
     let locked_icon = text(item, "icon_locked");
-    icon.set_path(if unlocked || locked_icon.is_empty() { text(item, "icon") } else { locked_icon });
-    if !unlocked {
-        icon.add_css_class("locked");
-    }
-    row.add_prefix(&icon);
+    row.add_prefix(&icon(if unlocked || locked_icon.is_empty() { text(item, "icon") } else { locked_icon }, !unlocked));
     let side = if unlocked {
         chrono::DateTime::parse_from_rfc3339(&text(item, "unlocked_at")).map(|t| format::relative(t.timestamp(), chrono::Local::now())).unwrap_or_default()
     } else {
@@ -143,16 +151,37 @@ pub fn open(win: &Window, game: &str) {
                     let ago = format::ago(fetched.timestamp(), chrono::Local::now());
                     button.set_tooltip_text(Some(&gettext("Ask the Store Again · updated {}").replace("{}", &ago)));
                 }
-                column.append(&head);
                 let hidden = order(&mut items);
-                let group = adw::PreferencesGroup::new();
-                for item in &items {
-                    group.add(&row(item));
+                let (unlocked_items, locked_items) = split(&items);
+                let unlocked_group = adw::PreferencesGroup::builder().title(gettext("Unlocked")).visible(!unlocked_items.is_empty()).build();
+                for item in unlocked_items {
+                    unlocked_group.add(&row(item));
+                }
+                let locked_group = adw::PreferencesGroup::builder().title(gettext("Locked")).visible(!locked_items.is_empty() || hidden > 0).build();
+                for item in locked_items {
+                    locked_group.add(&row(item));
                 }
                 if hidden > 0 {
-                    group.add(&hidden_row(hidden));
+                    locked_group.add(&hidden_row(hidden));
                 }
-                column.append(&group);
+                if unlocked_group.is_visible() && locked_group.is_visible() {
+                    let shown = adw::ToggleGroup::builder().halign(gtk::Align::Start).margin_top(4).build();
+                    for (name, label) in [("all", gettext("All")), ("unlocked", gettext("Unlocked")), ("locked", gettext("Locked"))] {
+                        shown.add(adw::Toggle::builder().name(name).label(label).build());
+                    }
+                    shown.set_active_name(Some("all"));
+                    let (unlocked_ref, locked_ref) = (unlocked_group.downgrade(), locked_group.downgrade());
+                    shown.connect_active_name_notify(move |shown| {
+                        let (Some(unlocked), Some(locked)) = (unlocked_ref.upgrade(), locked_ref.upgrade()) else { return };
+                        let name = shown.active_name().unwrap_or_default();
+                        unlocked.set_visible(name != "locked");
+                        locked.set_visible(name != "unlocked");
+                    });
+                    head.append(&shown);
+                }
+                column.append(&head);
+                column.append(&unlocked_group);
+                column.append(&locked_group);
                 stack.set_visible_child_name("list");
             });
         })
@@ -198,5 +227,10 @@ mod tests {
         assert_eq!(order(&mut items), 2);
         let keys: Vec<String> = items.iter().map(|v| text(v, "key")).collect();
         assert_eq!(keys, ["new", "found", "old", "common", "rare"]);
+        let (unlocked, locked) = split(&items);
+        let keys = |items: &[Value]| items.iter().map(|v| text(v, "key")).collect::<Vec<_>>();
+        assert_eq!(keys(unlocked), ["new", "found", "old"], "each under its own heading");
+        assert_eq!(keys(locked), ["common", "rare"]);
+        assert_eq!(split(&items[..3]).1.len(), 0, "every one unlocked: no Locked group");
     }
 }

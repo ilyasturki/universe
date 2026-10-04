@@ -1391,7 +1391,10 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
   newest first, then folds the played sessions without one into a single "N sessions without an
   entry" expander, each with Write; an entry shows only the pictures still on disk, from the text's
   edge. A picture that is missing shows what it stands for — a pad for a game, a page for an entry, a
-  camera for a shot — not the app's mark.
+  camera for a shot — not the app's mark. Sessions and Logs says in words how each session ended
+  (the game quit, stopped from Universe, crashed with its exit code, killed by the system) and what it
+  left (Recorded, Journal entry), a warning only on a crash or a kill. Achievements puts the unlocked
+  and the locked under headings of their own, an All · Unlocked · Locked toggle showing one.
 - **Game data**: the game page's "Saves and Storage" group (`pages/game_data.rs`) is loaded on a task of
   its own, not in the details' chain, since sizes walk the folders and the saves ask ludusavi: the
   saves with Back Up, the backups in an expander (Restore each, asking first; Export to the home
