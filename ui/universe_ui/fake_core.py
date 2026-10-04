@@ -992,6 +992,10 @@ class FakeCore:
     def under_steam(self):
         return self.nested() and os.environ.get("UNIVERSE_FAKE_STEAM") == "1"
 
+    # `UNIVERSE_FAKE_SESSION=1` plays the Universe session.
+    def session(self):
+        return os.environ.get("UNIVERSE_FAKE_SESSION") == "1"
+
     def deck_model(self):
         model = os.environ.get("UNIVERSE_DECK", "")
         return model if model in ("lcd", "oled") else ""

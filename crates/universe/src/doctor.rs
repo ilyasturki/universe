@@ -333,16 +333,13 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
     push("proton", &format!("Proton ({name})"), ok, detail, format!("install {name}, or point [proton] {name} at it in config.toml"), "core");
     let desktop = crate::desktop::detect(config);
     let gnome = desktop == Profile::Gnome;
+    let session = crate::nest::session();
+    let (ok, detail) = desktop_state(desktop, &config.desktop.profile, session);
     push(
         "desktop",
         "Desktop",
-        desktop != Profile::None || config.desktop.profile == "none",
-        match (desktop, config.desktop.profile.as_str()) {
-            (Profile::None, "none") => "none (desktop.profile): no window focus, OSD or screenshots from the desktop".into(),
-            (Profile::None, _) => "none detected: the launcher cannot focus a game's window, draw the OSD or take screenshots on this desktop".into(),
-            (d, "auto") => format!("{} (detected)", d.name()),
-            (d, _) => format!("{} (desktop.profile)", d.name()),
-        },
+        ok,
+        detail,
         format!("set desktop.profile to one of {}, or to none to stop asking", crate::desktop::PROFILES[1..crate::desktop::PROFILES.len() - 1].join(", ")),
         "core",
     );
@@ -371,7 +368,7 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
             "core",
         );
     }
-    if config.desktop.hide_cursor {
+    if config.desktop.hide_cursor && !session {
         if let Err(why) = crate::desktop::cursor_route(desktop) {
             push("cursor", "Cursor hiding", false, why.to_string(), "set desktop.hide_cursor = false to stop asking".into(), "core");
         }
@@ -623,6 +620,17 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
     out
 }
 
+/// In the Universe session gamescope has the screen to itself: no desktop to find, and it hides the cursor itself.
+fn desktop_state(desktop: Profile, configured: &str, session: bool) -> (bool, String) {
+    match (desktop, configured) {
+        (Profile::None, _) if session => (true, "none: the Universe session, gamescope alone on the screen".into()),
+        (Profile::None, "none") => (true, "none (desktop.profile): no window focus, OSD or screenshots from the desktop".into()),
+        (Profile::None, _) => (false, "none detected: the launcher cannot focus a game's window, draw the OSD or take screenshots on this desktop".into()),
+        (d, "auto") => (true, format!("{} (detected)", d.name())),
+        (d, _) => (true, format!("{} (desktop.profile)", d.name())),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -704,6 +712,15 @@ echo '{"check":"gog-comet","label":"GOG achievements (comet)","ok":false,"detail
         let checks = hook_checks(Hooker::Source(source), &toml::from_str("").unwrap()).await;
         let seen: Vec<_> = checks.iter().map(|c| (c.check.as_str(), c.ok, c.module.as_str(), c.component.as_str())).collect();
         assert_eq!(seen, [("gog-comet", false, "gog", "comet")]);
+    }
+
+    #[test]
+    fn no_desktop_passes_in_the_universe_session_or_once_configured() {
+        let ok = |desktop, configured, session| desktop_state(desktop, configured, session).0;
+        assert!(ok(Profile::None, "auto", true));
+        assert!(ok(Profile::None, "none", false));
+        assert!(!ok(Profile::None, "auto", false), "a desktop the launcher cannot drive");
+        assert!(ok(Profile::Gnome, "auto", false));
     }
 
     #[test]

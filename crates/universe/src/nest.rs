@@ -65,6 +65,14 @@ pub fn own() -> Option<Own> {
     }
 }
 
+/// Set by the launcher on the gamescope it starts as a display manager's session (`universe-ui --session`).
+pub const SESSION_ENV: &str = "UNIVERSE_SESSION";
+
+/// The Universe session: the launcher alone on the screen, where quitting logs out.
+pub fn session() -> bool {
+    own() == Some(Own::Drm) && std::env::var(SESSION_ENV).as_deref() == Ok("1")
+}
+
 /// Steam drives a gamescope it runs with --steam (Game Mode): it sets the base layer's app id on the root, and hands its
 /// games (this launcher among them, as a non-Steam shortcut) a SteamGameId.
 pub fn steam_driven(own: Option<Own>, baselayer: bool, steam_game_id: bool) -> bool {

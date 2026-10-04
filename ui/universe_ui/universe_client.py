@@ -313,6 +313,8 @@ class CoreClient(QObject):
     nested = property(lambda self: bool(self._core.nested()))
     # Inside Steam's gamescope (Game Mode), where Steam owns power, sound, screenshots and the HUD.
     underSteam = property(lambda self: bool(self._core.under_steam()))
+    # The display manager's Universe session: the launcher alone on the screen, where quitting logs out.
+    session = property(lambda self: bool(self._core.session()))
     # "lcd" or "oled" on a Steam Deck, else "".
     deck = property(lambda self: str(self._core.deck_model()))
 

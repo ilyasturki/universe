@@ -430,6 +430,7 @@ class System(QObject):
         self._client = client
         self._actions = []
         self._steam = bool(client.underSteam)
+        self._session = bool(client.session)
         self._deck = str(client.deck)
         self._controls = []
         client.powerActionsAsync(self._set_actions)
@@ -476,6 +477,8 @@ class System(QObject):
     controls = Property("QVariantList", lambda self: self._controls, notify=controlsChanged)
     # Inside Steam's Game Mode: power, sound, screenshots and the HUD are Steam's, and no HOME reaches the launcher over a game.
     steam = Property(bool, lambda self: self._steam, constant=True)
+    # The Universe session a display manager started: quitting the launcher logs out.
+    session = Property(bool, lambda self: self._session, constant=True)
     # "lcd" | "oled" on a Steam Deck, else "".
     deck = Property(str, lambda self: self._deck, constant=True)
 

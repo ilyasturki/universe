@@ -654,6 +654,10 @@ mod tests {
         assert_eq!((from_env(&env), x11_display().as_deref()), (Profile::X11, Some(":0")));
         host(&[("XDG_CURRENT_DESKTOP", "GNOME"), ("XDG_SESSION_TYPE", "wayland"), ("WAYLAND_DISPLAY", "wayland-0")]);
         assert_eq!((from_env(&env), x11_display()), (Profile::Gnome, None), "GNOME's Xwayland is no X11 desktop");
+        for session_type in ["wayland", "tty"] {
+            host(&[("XDG_CURRENT_DESKTOP", "Universe"), ("XDG_SESSION_TYPE", session_type), ("DISPLAY", ""), ("WAYLAND_DISPLAY", "")]);
+            assert_eq!((from_env(&env), x11_display()), (Profile::None, None), "the Universe session, from a display manager or a tty");
+        }
     }
 
     #[test]

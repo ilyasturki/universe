@@ -233,6 +233,9 @@ impl Core {
     fn under_steam(&self) -> bool {
         self.core.under_steam()
     }
+    fn session(&self) -> bool {
+        universe::nest::session()
+    }
     fn system_controls(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.value_infallible(py, |c| c.system_controls())
     }
