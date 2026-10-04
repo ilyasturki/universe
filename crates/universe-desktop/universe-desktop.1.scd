@@ -13,7 +13,10 @@ universe-desktop - the Universe game library for mouse and keyboard
 Shows the library (GTK 4, libadwaita) over the Universe core linked
 in-process: the games of every source and platform, their pages, the Store,
 screenshots, recordings and the journal, and the preferences of the launch,
-the runners, the controller, the stores, the modules and the artwork.
+the runners, the controller, the stores and the modules. The main menu also
+opens the library's artwork, a system check of what Universe needs from the
+machine, and the storage the games and their files take. A right click or a
+long press on a game opens its menu.
 
 Games launch as transient systemd units bound to the app's own scope: quitting
 it (SIGINT and SIGTERM included) stops the running game first, and asks before
