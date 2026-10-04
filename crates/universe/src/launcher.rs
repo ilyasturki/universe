@@ -219,6 +219,9 @@ pub fn prefix_command(r: &Resolved, config: &Config, tool: &str, args: &[String]
     if tool == "run" && args.first().is_none_or(|exe| !crate::paths::expand(exe).is_file()) {
         return Err(crate::Error::NotFound(format!("{}: no program to run in the prefix", g.id)));
     }
+    // umu-run refuses winetricks without a verb.
+    let gui = ["--gui".to_string()];
+    let args = if tool == "winetricks" && args.is_empty() { &gui[..] } else { args };
     let tool_args = |head: &[&str]| head.iter().map(|a| a.to_string()).chain(args.iter().cloned()).collect::<Vec<_>>();
     let unknown = || crate::Error::Invalid(format!("unknown prefix tool '{tool}': winecfg, winetricks, run or kill"));
     let mut env = config.launch.env.clone();
@@ -636,6 +639,19 @@ mod tests {
         assert_eq!(p.env["WINEFSYNC"], "1");
         assert_eq!(p.env["WINEDLLOVERRIDES"], "amd_ags_x64=n,b");
         assert!(!p.env.contains_key("PROTONPATH") && !p.env.contains_key("PROTON_ENABLE_WAYLAND"));
+    }
+
+    #[test]
+    fn winetricks_without_verbs_opens_its_gui_and_passes_verbs_as_they_are() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = Config::default();
+        for runner in ["proton", "wine"] {
+            let r = crate::library::resolve(game(dir.path(), "Game.exe", runner), &cfg, &[]);
+            let args = |verbs: &[&str]| prefix_command(&r, &cfg, "winetricks", &verbs.iter().map(|v| v.to_string()).collect::<Vec<_>>()).unwrap().1;
+            let head: &[&str] = if runner == "proton" { &["winetricks"] } else { &[] };
+            assert_eq!(args(&[]), [head, &["--gui"]].concat(), "{runner}");
+            assert_eq!(args(&["corefonts", "vcrun2019"]), [head, &["corefonts", "vcrun2019"]].concat(), "{runner}");
+        }
     }
 
     #[test]
