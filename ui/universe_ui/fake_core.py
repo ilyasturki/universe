@@ -338,6 +338,7 @@ class FakeCore:
         self.library_calls = []
         self._backups = {}
         self.prefix_tools, self.restored, self.trashed = [], [], []
+        self.failing_tools = {}
         self._leftovers = [
             {"kind": "prefix", "path": "/mnt/games/prefixes/cyberpunk-2077-bak", "id": "cyberpunk-2077-bak", "title": "", "bytes": 9_100_000_000},
             {"kind": "recordings", "path": os.path.expanduser("~/Videos/universe/.archive/hades"), "id": "hades", "title": "Hades", "bytes": 3_400_000_000},
@@ -937,6 +938,8 @@ class FakeCore:
         if not self.game_data(ident)["prefix"]:
             raise UniverseError("Invalid", f"{ident} keeps no Wine prefix")
         self.prefix_tools.append((ident, tool, list(args)))
+        if tool in self.failing_tools:
+            raise UniverseError("Io", self.failing_tools[tool])
         if tool == "kill":
             return {"tool": tool, "stopped": 0}
         return {"tool": tool, "unit": f"universe-prefix-{ident}-{tool}-20260911-120000"}

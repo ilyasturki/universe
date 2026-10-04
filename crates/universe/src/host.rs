@@ -359,6 +359,20 @@ impl Units {
         }
     }
 
+    /// A process of the unit is `program`: its comm, the name the kernel keeps to 15 bytes.
+    pub async fn holds(&self, unit: &str, program: &str) -> bool {
+        match self {
+            Units::Systemd(_) => {
+                let Some(cg) = self.cgroup(unit).await else { return false };
+                let name = &program.as_bytes()[..program.len().min(15)];
+                let procs = std::fs::read_to_string(PathBuf::from("/sys/fs/cgroup").join(cg.trim_start_matches('/')).join("cgroup.procs")).unwrap_or_default();
+                procs.lines().any(|pid| std::fs::read(format!("/proc/{}/comm", pid.trim())).is_ok_and(|c| c.strip_suffix(b"\n").unwrap_or(&c) == name))
+            }
+            #[cfg(test)]
+            Units::Memory(m) => m.units.lock().unwrap().get(unit).is_some_and(|u| u.active),
+        }
+    }
+
     /// The cgroup path the manager reports for a unit, `None` while it is not loaded.
     pub async fn cgroup(&self, unit: &str) -> Option<String> {
         match self {
@@ -581,6 +595,7 @@ pub struct Memory {
     units: std::sync::Mutex<BTreeMap<String, UnitState>>,
     calls: std::sync::Mutex<Vec<String>>,
     start_fails: std::sync::atomic::AtomicBool,
+    next_start_exits: std::sync::Mutex<Option<(i32, String)>>,
 }
 
 #[cfg(test)]
@@ -604,7 +619,16 @@ impl Memory {
         }
         let log = UnitLog { started: Some(chrono::Local::now()), ..Default::default() };
         self.units.lock().unwrap().insert(spec.name.clone(), UnitState { spec: spec.clone(), active: true, log, lines: vec![] });
+        if let Some((exit, line)) = self.next_start_exits.lock().unwrap().take() {
+            self.write_line(&spec.name, "universe-test", &line);
+            self.finish(&spec.name, exit);
+        }
         Ok(())
+    }
+
+    /// The next unit started ends at once with `exit`, its program having written `line`.
+    pub fn exit_next_start(&self, exit: i32, line: &str) {
+        *self.next_start_exits.lock().unwrap() = Some((exit, line.into()));
     }
 
     pub fn refuse_starts(&self, refuse: bool) {

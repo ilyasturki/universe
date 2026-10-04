@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use serde_json::{json, Value};
 
@@ -432,9 +433,43 @@ impl Core {
             ..Default::default()
         };
         self.host.units.start(&spec).await?;
+        let shows_as = match tool {
+            "winecfg" => "winecfg.exe".to_string(),
+            "run" => args.first().and_then(|exe| Path::new(exe).file_name()).map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
+            _ => tool.to_string(),
+        };
+        self.tool_up(&spec.name, &shows_as).await?;
         Ok(json!({"tool": tool, "unit": spec.name}))
     }
+
+    /// umu sets its container up first: a failure can come 20 s in, and one past `TOOL_UP_WAIT` goes unreported.
+    async fn tool_up(&self, unit: &str, program: &str) -> Result<()> {
+        let units = &self.host.units;
+        let deadline = tokio::time::Instant::now() + TOOL_UP_WAIT;
+        while tokio::time::Instant::now() < deadline {
+            if !units.is_active(unit).await {
+                let mut log = units.log(unit).await;
+                for _ in 0..8 {
+                    if log.ended.is_some() {
+                        break;
+                    }
+                    tokio::time::sleep(Duration::from_millis(250)).await;
+                    log = units.log(unit).await;
+                }
+                let Some(code) = log.exit.filter(|c| *c != 0) else { return Ok(()) };
+                let said = units.journal(unit, 50).await.into_iter().rev().find(|l| l.source != "systemd").map(|l| format!(": {}", l.message));
+                return Err(Error::Io(format!("{program} failed with exit status {code}{}", said.unwrap_or_default())));
+            }
+            if units.holds(unit, program).await {
+                return Ok(());
+            }
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        }
+        Ok(())
+    }
 }
+
+const TOOL_UP_WAIT: Duration = Duration::from_secs(60);
 
 /// Wine names a prefix's server dir `server-<dev>-<ino>` after the prefix, in whichever `/tmp` the server sees (umu's sandbox keeps its own).
 fn server_dir_name(prefix: &Path) -> Option<String> {
@@ -478,7 +513,7 @@ async fn stop_wine(prefix: &Path) -> Result<usize> {
             if !servers.iter().any(|p| alive(*p)) {
                 return true;
             }
-            tokio::time::sleep(std::time::Duration::from_millis(125)).await;
+            tokio::time::sleep(Duration::from_millis(125)).await;
         }
         false
     };
@@ -743,6 +778,9 @@ mod tests {
         assert_eq!((Path::new(&spec.program), spec.args.as_slice()), (env.path().join("bin/umu-run").as_path(), ["winecfg".to_string()].as_slice()));
         assert_eq!(Path::new(&spec.env["WINEPREFIX"]), held);
         assert!(matches!(core.prefix_tool("one", "run", &["/nowhere.exe".into()]).await, Err(Error::NotFound(_))));
+        memory.exit_next_start(127, "/usr/bin/env: 'bash': No such file or directory");
+        let failed = core.prefix_tool("one", "winetricks", &[]).await;
+        assert!(matches!(&failed, Err(Error::Io(m)) if m.contains("127") && m.contains("No such file")), "{failed:?}: reported with its reason, not started");
         let units = memory.calls().len();
         assert_eq!(core.prefix_tool("one", "kill", &[]).await.unwrap()["stopped"], 0, "no Wine runs in the prefix");
         assert_eq!(memory.calls().len(), units, "kill starts no unit");
