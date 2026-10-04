@@ -81,6 +81,130 @@
 
 - Reprise favourites.
 
+## [0.0.6] - 2026-09-24
+
+### Breaking
+
+- Screenshots come from a new `screenshot` module instead of capture, and with modules opt-in nothing takes them until you turn it on with `universe module enable screenshot` or in Settings › Modules. It grabs the game's window alone by default, and its own per-game `window` and `cursor` settings replace capture's `source` and `cursor` for screenshots.
+- The journal writes nothing until it has a writing model: set `provider` with `universe module set journal provider=codex` (or `openai`), or pick it on the journal's page, which takes you there when you turn the journal on. `universe doctor` says it is waiting. `model` is empty by default, so Codex uses its own default model instead of `gpt-5.6-sol`.
+- `universe info --json` puts a game's merged module settings under `effective.modules`. The top-level `modules` is now the game's own `game.toml` table.
+
+### Added
+
+- The journal writes through any OpenAI-compatible endpoint: `provider = "openai"` with `base_url` and `api_key` or `api_key_file`.
+- Journal settings for web lookups, reasoning effort, tries per session, the request timeout, the frame size and a `prompt_file` that replaces the built-in prompt.
+- `universe journal <name> --write <session>` writes an entry on the spot for a session that has none or whose entry failed, and `--force` writes a written one again. The journal page lists every session, with Write the entry, Try again now and Write it again.
+- Settings › Sound in both looks, the dock's Output row and `universe output` pick the audio output.
+- A running game keeps the desktop awake, so a session played on the pad alone no longer blanks or suspends. `desktop.keep_awake` turns it off.
+- Your keyboard layout reaches gamescope, so AZERTY and other layouts type right inside it, and the on-screen keyboards follow it. The UI needs the `xkbcommon` Python package.
+- Mouse and keyboard in the Reprise look: hovering brightens, a click picks then presses, a right click is back, the wheel and a touchpad scroll, the keyboard types in text sheets, and the hints show keys once a keyboard or mouse was used last.
+- A button walk sets up a pad's buttons and sticks one at a time, with a step back. It is offered the first time a pad with nothing learned connects, and Settings › Controller › Set up the buttons starts it again.
+- Battery levels for 8BitDo pads and Bluetooth LE pads, and the battery badge tints the pad in use.
+- The controller test screen draws each pad's own outline and shows the sticks' and triggers' readings and the last inputs.
+- A store install under way heads the home row in both looks with its progress and turns into the game when it ends. On the store page an installed game's menu offers Play and Details.
+- HOME during a launch raises the dock over the poster with Home and Quit, even before the game's session has started, and the dock gains a Sharpness row.
+- Reprise shows a scrollbar on a journal entry, a game's details, a session log and settings cards.
+
+### Changed
+
+- A journal entry that fails for a passing reason (a quota, a timeout, an unmounted recording) is put off and tried again after 15 minutes, 1 hour, then 4 hours, or once the quota lifts. Entries are retried one at a time and never while a game runs, and a later try reuses the frames and the answer an earlier one got.
+- The journal needs `codex` installed only when Codex is its writing model.
+- Game settings show a sidebar of cards beside the picked card's rows in both looks, and module, source and runner pages are laid out the same way.
+- Y shows the advanced settings on the settings pages, folded into the cards they belong to, instead of an Advanced row. X on a value set on the game or the runner resets it so it inherits again, and no longer opens the game's details.
+- A value set on the game, the runner or globally is tagged THIS GAME, THIS RUNNER or GLOBAL, and a default reads plain.
+- A setting on `auto` shows what it comes to here (`auto · 144`). On a game's page, the choice that clears the game's own value names the global value it falls back to.
+- Environment variables and DLL overrides are one row each, and Add a variable takes the name and the value in one sheet.
+- Notices queue and show one at a time, in Reprise's hint bar, the dock's status row and the Switch 2 top corner. A failure is marked red and stays longer.
+- `universe doctor` and the Doctor page give each check a plain name, list the failing ones first and say how to fix each.
+- Media tab cards show their kind: a screenshot whole, a recording with a play disc and its length, a journal entry by its title and opening lines.
+- Recent games count a game added or installed as well as one played, and reinstalling a removed game from its store brings it back.
+- In Reprise, focus rings sit a gap off the art and captions clear them, and the home rail holds the last twelve games, with the Library tile holding the rest.
+- A screenshot taken with no game running uses the screenshot module's global settings, and a failed one says why.
+
+### Fixed
+
+- A launch and its recording go to a screen that is being drawn on, not one whose cable is in but whose monitor is off, and a recording moves off a monitor turned off mid-session.
+- A recorder that fails to start says "Recording failed" on screen.
+- 8BitDo Pro 3 in D-input mode: its lettered buttons, L4, R4 and back paddles map correctly, its sticks and triggers are told apart, and its right-hand A confirms.
+- The text caret sits at the insertion point in both looks.
+- A pad button sent as a key with no keysym no longer switches the hints to the keyboard's.
+- The UI quits cleanly when its X display goes away, instead of crashing on the way out.
+- The UI plays its sounds through PulseAudio, because Qt's PipeWire backend could freeze it for good.
+- The Nix package's desktop entry claims gamescope's window class, so the GNOME overview shows Universe's icon for the fullscreen launcher.
+
+## [0.0.5] - 2026-09-21
+
+### Added
+
+- `universe logs <name>` prints what a game's session wrote, and each game's Sessions page (Reprise: the Sessions pill on its details; Switch 2: Software Options › Play Log) lists its sessions and opens their logs. `universe doctor` warns when a reboot would drop them.
+- Each session records how it ended (quit, stopped, crashed or killed), shown by `universe sessions`, both looks and the end-of-session toast.
+- `launch.debug_log` keeps Proton's, Wine's and DXVK's full logs for each session of a Proton or Wine game.
+- An empty home offers Set up beside Add a game, which opens the first-run setup again.
+- In Reprise, X on a game's settings opens its details, and B brings the settings back on the same row.
+
+### Changed
+
+- Reprise's Library is no longer a tab: Home's library tile opens it, and B goes back to Home.
+- The first-run setup has Back and Continue buttons.
+- Reprise's tab bar search is on every tab, Settings included.
+- In the game menu, Right opens an item with a chevron and Left goes back.
+
+### Fixed
+
+- The dock over a running game reads the controller again.
+- Stopping a game no longer sends SIGTERM into the session's closing steps once the game has exited.
+- On Reprise's Media tab, Guide and the menu key open the highlighted item's menu.
+- Reprise's home rail lands on its first game when games arrive behind the setup dialog.
+- Scrolling to a settings card's last row shows the card's bottom edge.
+
+## [0.0.4] - 2026-09-21
+
+### Breaking
+
+- Modules are opt-in: with no `[modules] enabled` in `config.toml`, capture and the journal no longer run, while a list you set yourself is kept. Turn them on with `universe module enable capture` and `universe module enable journal`, or in Settings › Modules.
+- Two defaults flip: MangoHud's overlay starts hidden (`launch.mangohud = true` shows it, the row is now Show MangoHud and the dock reads Shown or Hidden), and capture no longer records the microphone (`audio = "output+input"` does).
+- `universe migrate` no longer rewrites an old `[launch] backend` as `runner`, and it no longer fills games it already imported with Lutris's wrapper, DLL overrides and Proton switches. Set `launch.runner` by hand on a game that still has `backend`.
+- Journal entries that name a screenshot as `attachments/<name>` no longer find it in `screenshots/`, so drop the `attachments/` prefix in the entry's `images`. Shots left in `journal/attachments/` are no longer moved for you, and old entries no longer take their session times from `.migrated-sessions.jsonl`.
+- The `switch2-white` and `switch2-black` look ids are gone and open Reprise. Pick Switch 2 again in Settings › Themes.
+- A per-game module switch that an older `universe module set` wrote as `enabled = ["false"]` reads as on. Set it again.
+
+### Added
+
+- A first-run setup over the home screen finds Lutris, Steam, Heroic and your emulators' game folders, imports what Universe can launch, signs you in to your stores, and asks for your controller and the graphics upgrades your GPU takes. Settings › About › First-run setup opens it again.
+- `universe rescan` adds the games in the folders your emulators list (Eden, Dolphin, Ryujinx, RPCS3, PCSX2, DuckStation, Cemu, shadPS4, Flycast), and `universe discover` lists what other launchers and those folders hold.
+- A screen recording follows a monitor switch: the recorder moves to the new screen and the parts are joined into one file. Capture needs `ffmpeg`.
+- `launch.proton` finds the newest build of a family (`proton-ge` is the latest `GE-Proton`) in Lutris's, Steam's and Heroic's folders, native or Flatpak.
+- The DLSS, FSR 4 and XeSS upgrades take `auto`, which turns each one on where the GPU makes it a plain win. They stay off by default, and `true` and `false` still work.
+- The banner art shows on the Switch 2 news cards and info pane when they have no picture, and behind a game or its launch when it has no background.
+
+### Changed
+
+- Adaptive sync is `auto` by default, on when the screen takes a variable refresh rate.
+- Capture picks the best codec the GPU encodes by default (`codec = "auto"`).
+- The Home Manager module leaves `config.toml` to Universe unless `programs.universe.settings` is set. When it is set, settings writes are refused with a message naming the option.
+- With capture on, the NixOS module requires gpu-screen-recorder 6.1 or later.
+- Settings cards start level with the page title, and store rows show square thumbnails.
+
+### Fixed
+
+- A Proton, Wine or native game finds the controller after an earlier session left InputPlumber holding it.
+- Stopping an Eden game sends one SIGTERM, so Eden is no longer killed mid-shutdown, and `universe doctor` flags Eden asking before it closes.
+- The launch poster holds until the game's window shows, however long that takes, and Cancel drops it, leaving the game starting behind the launcher.
+- An enabled module whose programs are missing reads Unavailable in Settings › Modules, and a notice after the session says it ran nothing. `universe doctor` says `gsr-cli` comes with gpu-screen-recorder 6.1.
+
+### Performance
+
+- Screenshot grids show thumbnails the core makes in the background instead of decoding the full-size shots, and the Media list builds off the UI thread.
+- Recording frames are extracted on the GPU, and the recordings page reads no file until a recording is opened.
+- Behind a running game the launcher stops animating, and inside gamescope the library loads once at start.
+
+### Removed
+
+- The search row on the Reprise look's store page.
+
 [0.0.9]: https://github.com/ilyasturki/universe/compare/v0.0.8...v0.0.9
 [0.0.8]: https://github.com/ilyasturki/universe/compare/v0.0.7...v0.0.8
 [0.0.7]: https://github.com/ilyasturki/universe/compare/v0.0.6...v0.0.7
+[0.0.6]: https://github.com/ilyasturki/universe/compare/v0.0.5...v0.0.6
+[0.0.5]: https://github.com/ilyasturki/universe/compare/v0.0.4...v0.0.5
+[0.0.4]: https://github.com/ilyasturki/universe/compare/v0.0.3...v0.0.4

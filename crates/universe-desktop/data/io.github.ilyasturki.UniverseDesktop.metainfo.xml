@@ -131,6 +131,58 @@
         </ul>
       </description>
     </release>
-    <release version="0.0.6" date="2026-09-24"/>
+    <release version="0.0.6" date="2026-09-24">
+      <description>
+        <p>Breaking</p>
+        <ul>
+          <li>Screenshots come from a new <code>screenshot</code> module instead of capture, and with modules opt-in nothing takes them until you turn it on with <code>universe module enable screenshot</code> or in Settings › Modules. It grabs the game's window alone by default, and its own per-game <code>window</code> and <code>cursor</code> settings replace capture's <code>source</code> and <code>cursor</code> for screenshots.</li>
+          <li>The journal writes nothing until it has a writing model: set <code>provider</code> with <code>universe module set journal provider=codex</code> (or <code>openai</code>), or pick it on the journal's page, which takes you there when you turn the journal on. <code>universe doctor</code> says it is waiting. <code>model</code> is empty by default, so Codex uses its own default model instead of <code>gpt-5.6-sol</code>.</li>
+          <li><code>universe info --json</code> puts a game's merged module settings under <code>effective.modules</code>. The top-level <code>modules</code> is now the game's own <code>game.toml</code> table.</li>
+        </ul>
+        <p>Added</p>
+        <ul>
+          <li>The journal writes through any OpenAI-compatible endpoint: <code>provider = "openai"</code> with <code>base_url</code> and <code>api_key</code> or <code>api_key_file</code>.</li>
+          <li>Journal settings for web lookups, reasoning effort, tries per session, the request timeout, the frame size and a <code>prompt_file</code> that replaces the built-in prompt.</li>
+          <li><code>universe journal &lt;name&gt; --write &lt;session&gt;</code> writes an entry on the spot for a session that has none or whose entry failed, and <code>--force</code> writes a written one again. The journal page lists every session, with Write the entry, Try again now and Write it again.</li>
+          <li>Settings › Sound in both looks, the dock's Output row and <code>universe output</code> pick the audio output.</li>
+          <li>A running game keeps the desktop awake, so a session played on the pad alone no longer blanks or suspends. <code>desktop.keep_awake</code> turns it off.</li>
+          <li>Your keyboard layout reaches gamescope, so AZERTY and other layouts type right inside it, and the on-screen keyboards follow it. The UI needs the <code>xkbcommon</code> Python package.</li>
+          <li>Mouse and keyboard in the Reprise look: hovering brightens, a click picks then presses, a right click is back, the wheel and a touchpad scroll, the keyboard types in text sheets, and the hints show keys once a keyboard or mouse was used last.</li>
+          <li>A button walk sets up a pad's buttons and sticks one at a time, with a step back. It is offered the first time a pad with nothing learned connects, and Settings › Controller › Set up the buttons starts it again.</li>
+          <li>Battery levels for 8BitDo pads and Bluetooth LE pads, and the battery badge tints the pad in use.</li>
+          <li>The controller test screen draws each pad's own outline and shows the sticks' and triggers' readings and the last inputs.</li>
+          <li>A store install under way heads the home row in both looks with its progress and turns into the game when it ends. On the store page an installed game's menu offers Play and Details.</li>
+          <li>HOME during a launch raises the dock over the poster with Home and Quit, even before the game's session has started, and the dock gains a Sharpness row.</li>
+          <li>Reprise shows a scrollbar on a journal entry, a game's details, a session log and settings cards.</li>
+        </ul>
+        <p>Changed</p>
+        <ul>
+          <li>A journal entry that fails for a passing reason (a quota, a timeout, an unmounted recording) is put off and tried again after 15 minutes, 1 hour, then 4 hours, or once the quota lifts. Entries are retried one at a time and never while a game runs, and a later try reuses the frames and the answer an earlier one got.</li>
+          <li>The journal needs <code>codex</code> installed only when Codex is its writing model.</li>
+          <li>Game settings show a sidebar of cards beside the picked card's rows in both looks, and module, source and runner pages are laid out the same way.</li>
+          <li>Y shows the advanced settings on the settings pages, folded into the cards they belong to, instead of an Advanced row. X on a value set on the game or the runner resets it so it inherits again, and no longer opens the game's details.</li>
+          <li>A value set on the game, the runner or globally is tagged THIS GAME, THIS RUNNER or GLOBAL, and a default reads plain.</li>
+          <li>A setting on <code>auto</code> shows what it comes to here (<code>auto · 144</code>). On a game's page, the choice that clears the game's own value names the global value it falls back to.</li>
+          <li>Environment variables and DLL overrides are one row each, and Add a variable takes the name and the value in one sheet.</li>
+          <li>Notices queue and show one at a time, in Reprise's hint bar, the dock's status row and the Switch 2 top corner. A failure is marked red and stays longer.</li>
+          <li><code>universe doctor</code> and the Doctor page give each check a plain name, list the failing ones first and say how to fix each.</li>
+          <li>Media tab cards show their kind: a screenshot whole, a recording with a play disc and its length, a journal entry by its title and opening lines.</li>
+          <li>Recent games count a game added or installed as well as one played, and reinstalling a removed game from its store brings it back.</li>
+          <li>In Reprise, focus rings sit a gap off the art and captions clear them, and the home rail holds the last twelve games, with the Library tile holding the rest.</li>
+          <li>A screenshot taken with no game running uses the screenshot module's global settings, and a failed one says why.</li>
+        </ul>
+        <p>Fixed</p>
+        <ul>
+          <li>A launch and its recording go to a screen that is being drawn on, not one whose cable is in but whose monitor is off, and a recording moves off a monitor turned off mid-session.</li>
+          <li>A recorder that fails to start says "Recording failed" on screen.</li>
+          <li>8BitDo Pro 3 in D-input mode: its lettered buttons, L4, R4 and back paddles map correctly, its sticks and triggers are told apart, and its right-hand A confirms.</li>
+          <li>The text caret sits at the insertion point in both looks.</li>
+          <li>A pad button sent as a key with no keysym no longer switches the hints to the keyboard's.</li>
+          <li>The UI quits cleanly when its X display goes away, instead of crashing on the way out.</li>
+          <li>The UI plays its sounds through PulseAudio, because Qt's PipeWire backend could freeze it for good.</li>
+          <li>The Nix package's desktop entry claims gamescope's window class, so the GNOME overview shows Universe's icon for the fullscreen launcher.</li>
+        </ul>
+      </description>
+    </release>
   </releases>
 </component>
