@@ -562,6 +562,11 @@ FocusScope {
                 action: "sessions"
             },
             {
+                icon: "folder",
+                label: "Data and saves",
+                action: "data"
+            },
+            {
                 icon: "eye-off",
                 label: "Remove from library…",
                 action: "remove",
@@ -576,6 +581,7 @@ FocusScope {
             recordings: "RecordingsPage",
             journal: "JournalPage",
             sessions: "SessionsPage",
+            data: "DataPage",
             achievements: "AchievementsPage"
         };
         var openPage = function (action) {
@@ -967,6 +973,11 @@ FocusScope {
                         }
                         function onPowerRequested() {
                             root.askPower();
+                        }
+                        function onDataRequested(game) {
+                            root.openSub("pages/DataPage.qml", {
+                                game: game
+                            });
                         }
                         function onArtworkRequested(game, slot) {
                             root.openSub("pages/ArtworkPage.qml", {

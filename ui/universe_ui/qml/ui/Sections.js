@@ -53,6 +53,11 @@ var list = [
         icon: "bolt"
     },
     {
+        id: "storage",
+        name: "Storage",
+        icon: "folder"
+    },
+    {
         id: "doctor",
         name: "Doctor",
         icon: "pulse"

@@ -22,6 +22,7 @@ FocusScope {
     signal setupRequested
     signal powerRequested
     signal artworkRequested(var game, string slot)
+    signal dataRequested(var game)
     signal message(string text)
 
     readonly property var currentGame: null
@@ -219,7 +220,7 @@ FocusScope {
     }
 
     readonly property bool refreshable: sectionId === "install"
-    readonly property bool canRefresh: refreshable || sectionId === "runners" || sectionId === "doctor" || sectionId === "controller" || sectionId === "sound" || sectionId === "system"
+    readonly property bool canRefresh: refreshable || sectionId === "runners" || sectionId === "doctor" || sectionId === "controller" || sectionId === "sound" || sectionId === "system" || sectionId === "storage"
 
     readonly property real sideMargin: Theme.dp(80)
     readonly property real sideWidth: Theme.dp(300)
@@ -441,6 +442,26 @@ FocusScope {
                 groups: groups
             };
         }
+        if (sectionId === "storage") {
+            api.screens.storage.rows.forEach(function (r) {
+                if (r.heading) {
+                    groups.push({
+                        title: r.label,
+                        meta: r.display,
+                        rows: []
+                    });
+                    return;
+                }
+                rows.push(Object.assign({}, r, {
+                    section: "Storage"
+                }));
+                groups[groups.length - 1].rows.push(rows.length - 1);
+            });
+            return {
+                rows: rows,
+                groups: groups
+            };
+        }
         if (sectionId === "system") {
             var controls = api.system.controls;
             for (var c = 0; c < controls.length; c++) {
@@ -554,6 +575,8 @@ FocusScope {
             api.home.loadOutputs();
         else if (sectionId === "system")
             api.system.reload();
+        else if (sectionId === "storage")
+            api.screens.storage.load();
     }
 
     function refreshNow() {
@@ -727,6 +750,23 @@ FocusScope {
                         api.system.set(row.key, Controls.values(row.control)[at]);
                 });
             }
+        } else if (sectionId === "storage" && row.gameId) {
+            var game = api.allGames.byId(row.gameId);
+            if (game)
+                page.dataRequested(game);
+            else
+                Sound.edge();
+        } else if (sectionId === "storage" && row.target) {
+            dialog.ask({
+                message: api.screens.storage.question(row.key).title,
+                detail: row.target,
+                yes: api.screens.storage.question(row.key).confirm,
+                index: 0
+            }, function (yes) {
+                if (yes)
+                    api.screens.storage.act(row.key);
+                cards.forceActiveFocus();
+            });
         } else if (sectionId === "about" && row.key === "setup") {
             Sound.enter();
             page.setupRequested();
@@ -1066,6 +1106,8 @@ FocusScope {
             api.home.loadOutputs();
         else if (sections[section].id === "doctor")
             modulesForm.loadDoctor();
+        else if (sections[section].id === "storage")
+            api.screens.storage.load();
         else if (sections[section].id === "runners")
             runners.load();
         Qt.callLater(function () {
@@ -1478,6 +1520,16 @@ FocusScope {
         z: 4
 
         onDismissed: cards.forceActiveFocus()
+    }
+
+    Connections {
+        target: api.screens.storage
+        function onFinished(key, ok, message) {
+            if (ok)
+                Notices.show(message);
+            else
+                Notices.fail(message);
+        }
     }
 
     ConfirmDialog {

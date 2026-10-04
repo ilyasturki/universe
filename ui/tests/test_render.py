@@ -1053,7 +1053,7 @@ def test_reprise_about_shows_the_build(api, fake):
     assert [r["label"] for r in content["rows"]] == ["Version", "First-run setup", "Power"]
     assert content["rows"][0]["display"] == fake.version()
     assert page.property("acceptLabel") == "", "nothing to select on the version"
-    assert [s["id"] for s in page.property("sections").toVariant()][-3:] == ["sound", "doctor", "about"], "no Search, Updates or Quit section"
+    assert [s["id"] for s in page.property("sections").toVariant()][-4:] == ["sound", "storage", "doctor", "about"], "no Search, Updates or Quit section"
     QMetaObject.invokeMethod(page, "activate", Q_ARG("QVariant", 2), Q_ARG("QVariant", content["rows"][2]))
     confirm = window.findChild(QObject, "confirm")
     until(lambda: confirm.property("open") is True and confirm.property("message") == "Power", "the row opens the menu B held opens")
@@ -1100,9 +1100,9 @@ def test_the_reprise_game_menu_groups_its_rows_and_hides_the_media_a_game_has_no
     until(lambda: actions() == ["play", "details", "favourite", "manage"], "nothing to browse: no Media row")
     click(Qt.Key.Key_Down, 3)
     click(Qt.Key.Key_Return)
-    until(lambda: menu.property("title") == "Manage" and actions() == ["settings", "artwork", "sessions", "remove"])
-    assert menu.property("items").toVariant()[3]["danger"] is True
-    click(Qt.Key.Key_Down, 3)
+    until(lambda: menu.property("title") == "Manage" and actions() == ["settings", "artwork", "sessions", "data", "remove"])
+    assert menu.property("items").toVariant()[4]["danger"] is True
+    click(Qt.Key.Key_Down, 4)
     click(Qt.Key.Key_Return)
     until(lambda: menu.property("open") is True and menu.property("title") == "Remove Mini Metro?")
     click(Qt.Key.Key_Down)
