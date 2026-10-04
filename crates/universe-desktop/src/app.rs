@@ -33,7 +33,7 @@ pub struct Unlocks {
 
 const BIG_SCREEN: &str = "universe-ui";
 
-// About's link to the System Check: `activate-link` catches it before anything opens it.
+// Never opened: `activate-link` intercepts it.
 const SYSTEM_CHECK_URI: &str = "universe-desktop:system-check";
 
 // Started by the shell for a search, the app stays up between keystrokes rather than open the core for each.
@@ -892,15 +892,12 @@ impl Application {
             about.set_release_notes(&notes);
         }
         about.add_link(&gettext("_System Check"), SYSTEM_CHECK_URI);
-        let app = self.downgrade();
-        about.connect_activate_link(move |about, uri| {
+        about.connect_activate_link(|about, uri| {
             if uri != SYSTEM_CHECK_URI {
                 return false;
             }
             about.close();
-            if let Some(win) = app.upgrade().and_then(|app| app.active_window()).and_downcast::<Window>() {
-                crate::dialogs::system_check::present(&win);
-            }
+            gio::Application::default().inspect(|app| app.activate_action("system-check", None));
             true
         });
         let facts = debug_facts();
@@ -917,10 +914,10 @@ impl Application {
     }
 }
 
-/// What About's debugging information says of the build and the machine.
 fn debug_facts() -> Vec<(&'static str, String)> {
     let env = |var: &str| std::env::var(var).unwrap_or_default();
     let distro = std::fs::read_to_string("/etc/os-release")
+        .or_else(|_| std::fs::read_to_string("/usr/lib/os-release"))
         .unwrap_or_default()
         .lines()
         .find_map(|l| l.strip_prefix("PRETTY_NAME="))
