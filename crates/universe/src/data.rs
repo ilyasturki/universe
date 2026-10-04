@@ -138,12 +138,12 @@ fn move_dir(from: &Path, to: &Path) -> Result<(bool, Option<PathBuf>)> {
         Err(e) => return Err(Error::Io(format!("move {} to {}: {e}", from.display(), to.display()))),
     }
     if let Err(e) = copy_tree(from, to) {
-        let _ = std::fs::remove_dir_all(to);
+        remove_copy(to);
         return Err(e);
     }
     let count = |p: &Path| (disk_usage(p), walk_count(p));
     if count(from) != count(to) {
-        let _ = std::fs::remove_dir_all(to);
+        remove_copy(to);
         return Err(Error::Io(format!("the copy of {} into {} came out different; the original is untouched", from.display(), to.display())));
     }
     match trash::delete(from) {
@@ -153,6 +153,21 @@ fn move_dir(from: &Path, to: &Path) -> Result<(bool, Option<PathBuf>)> {
             Ok((true, Some(from.to_path_buf())))
         }
     }
+}
+
+/// The copy keeps the original's read-only folders, which `remove_dir_all` can't empty.
+fn remove_copy(dir: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        let _ = std::fs::set_permissions(&d, std::fs::Permissions::from_mode(0o700));
+        for e in std::fs::read_dir(&d).into_iter().flatten().flatten() {
+            if e.path().symlink_metadata().is_ok_and(|m| m.is_dir()) {
+                stack.push(e.path());
+            }
+        }
+    }
+    let _ = std::fs::remove_dir_all(dir);
 }
 
 fn walk_count(dir: &Path) -> usize {
@@ -173,7 +188,6 @@ fn walk_count(dir: &Path) -> usize {
 pub(crate) fn copy_tree(from: &Path, to: &Path) -> Result<()> {
     let failed = |p: &Path, e: std::io::Error| Error::Io(format!("copy {}: {e}", p.display()));
     std::fs::create_dir(to).map_err(|e| failed(to, e))?;
-    std::fs::set_permissions(to, std::fs::metadata(from)?.permissions())?;
     for e in std::fs::read_dir(from)?.flatten() {
         let (src, dest) = (e.path(), to.join(e.file_name()));
         let meta = src.symlink_metadata().map_err(|e| failed(&src, e))?;
@@ -188,7 +202,7 @@ pub(crate) fn copy_tree(from: &Path, to: &Path) -> Result<()> {
             }
         }
     }
-    Ok(())
+    std::fs::set_permissions(to, std::fs::metadata(from)?.permissions()).map_err(|e| failed(to, e))
 }
 
 impl Core {
@@ -728,6 +742,30 @@ mod tests {
         assert_eq!(std::fs::read_link(to.join("dosdevices/z:")).unwrap(), Path::new("/"), "z: still points at / and the root was not copied");
         assert_eq!(std::fs::read_link(to.join("dosdevices/c:")).unwrap(), Path::new("../drive_c"));
         assert_eq!((disk_usage(&from), walk_count(&from)), (disk_usage(&to), walk_count(&to)));
+    }
+
+    #[test]
+    fn a_read_only_folder_is_copied_with_its_mode_and_a_failed_copy_still_goes() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let from = dir.path().join("pfx");
+        let locked = from.join("drive_c/locked");
+        std::fs::create_dir_all(locked.join("inner")).unwrap();
+        std::fs::write(locked.join("inner/data.bin"), b"kept").unwrap();
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o555)).unwrap();
+        let to = dir.path().join("moved");
+        let copied = copy_tree(&from, &to);
+        let mode = std::fs::metadata(to.join("drive_c/locked")).map(|m| m.permissions().mode() & 0o777);
+        let same = (disk_usage(&from), walk_count(&from)) == (disk_usage(&to), walk_count(&to));
+        let content = std::fs::read(to.join("drive_c/locked/inner/data.bin"));
+        remove_copy(&to);
+        let removed = !to.exists();
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755)).unwrap();
+        copied.unwrap();
+        assert_eq!(mode.unwrap(), 0o555);
+        assert_eq!(content.unwrap(), b"kept");
+        assert!(same, "the copy-equals-original check holds");
+        assert!(removed, "a copy holding a read-only folder can still be removed");
     }
 
     #[test]
