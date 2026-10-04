@@ -194,6 +194,27 @@ def test_copy_names_the_button_the_pad_carries(app, family, names):
     assert obj.property("out").toVariant() == names
 
 
+def test_a_menu_row_with_a_detail_is_as_tall_as_its_text(ps5):
+    from PySide6.QtCore import Q_RETURN_ARG
+
+    _window, root = ps5
+    popup = root.findChild(QObject, "popup")
+    QMetaObject.invokeMethod(
+        root,
+        "showMenu",
+        Q_ARG("QVariant", {"items": [{"label": "One line", "detail": "Short."}, {"label": "Long", "detail": "Words " * 40}]}),
+        Q_ARG("QVariant", None),
+    )
+    until(lambda: len(value(popup, "detailHeights")) == 2)
+
+    def height(i):
+        return QMetaObject.invokeMethod(popup, "heightOf", Q_RETURN_ARG("QVariant"), Q_ARG("QVariant", i))
+
+    row = popup.property("rowHeight")
+    assert row < height(0) < 2 * row, "one line of detail, no empty band under it"
+    assert height(1) > height(0) + row / 2, "three lines take their room"
+
+
 def test_the_power_menu_s_way_out_asks_first_while_a_game_runs(ps5, api):
     window, root = ps5
     QMetaObject.invokeMethod(root, "launch", Q_ARG("QVariant", api.allGames.byId("dead-cells")))

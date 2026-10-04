@@ -31,7 +31,8 @@ Modal {
         }
     ]
     readonly property real rowHeight: Theme.dp(72)
-    readonly property real detailRowHeight: Theme.dp(176)
+    // Index → a detail row's height, reported by the row once its text is laid out.
+    property var detailHeights: ({})
     readonly property bool marks: items.some(function (i) {
         return i.check !== undefined;
     })
@@ -44,6 +45,7 @@ Modal {
 
     function show(spec, done) {
         title = spec.title || "";
+        detailHeights = {};
         items = spec.items || [];
         at = spec.at || null;
         panelWidth = spec.width || Theme.dp(560);
@@ -55,7 +57,17 @@ Modal {
 
     function heightOf(i) {
         var item = items[i];
-        return item && item.detail ? detailRowHeight : rowHeight;
+        if (!item || !item.detail)
+            return rowHeight;
+        return detailHeights[i] !== undefined ? detailHeights[i] : rowHeight + Theme.dp(40);
+    }
+
+    function measured(i, h) {
+        if (detailHeights[i] === h)
+            return;
+        var next = Object.assign({}, detailHeights);
+        next[i] = h;
+        detailHeights = next;
     }
 
     Keys.onPressed: function (event) {
@@ -222,6 +234,14 @@ Modal {
                         y: row.item.detail ? Theme.dp(20) : (parent.height - height) / 2
                         width: parent.width - x - (toggle.visible ? toggle.width + Theme.dp(52) : Theme.dp(30))
                         spacing: Theme.dp(8)
+
+                        function report() {
+                            if (row.item.detail)
+                                menu.measured(index, height + Theme.dp(40));
+                        }
+
+                        onHeightChanged: report()
+                        Component.onCompleted: report()
 
                         Label {
                             width: parent.width
