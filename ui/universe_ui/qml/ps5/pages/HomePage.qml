@@ -399,7 +399,7 @@ FocusScope {
                 badge: "clock",
                 caption: ended ? "Last played " + Format.lastPlayed(ended).toLowerCase() : "Last session",
                 title: Format.playTime(last.duration_s) || "A few moments",
-                body: Format.sessions(game.playCount) + (game.playTime > 0 ? " · " + Home.hours(game.playTime) + " in all" : ""),
+                body: [Format.sessions(game.playCount), game.playTime > 0 ? Home.hours(game.playTime) + " in all" : ""].filter(Boolean).join(" · "),
                 open: {
                     page: "pages/PlayLogPage.qml",
                     args: {

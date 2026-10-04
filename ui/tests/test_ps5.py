@@ -72,6 +72,22 @@ def test_the_hub_hides_the_strips_above_and_fades_under_the_header(ps5):
     assert strips[1].property("opacity") == 1 and strips[2].property("opacity") == 1
 
 
+def hub_of(home, **game):
+    from PySide6.QtCore import Q_RETURN_ARG
+
+    blank = {"playCount": 0, "playTime": 0, "achievementsTotal": 0, "description": "", "summary": "", "players": 0, "source": ""}
+    lists = {"developerList": [], "genreList": [], "publisherList": [], "assets": {"screenshotList": [], "background": "", "banner": "", "boxFront": ""}}
+    return QMetaObject.invokeMethod(home, "hubFor", Q_RETURN_ARG("QVariant"), Q_ARG("QVariant", {**blank, **lists, **game})).toVariant()
+
+
+def test_the_hub_s_last_session_card_has_no_stray_separator_without_a_session_count(ps5):
+    _window, root = ps5
+    home = root.findChild(QObject, "homePage")
+    strips = hub_of(home, id="the-technomancer", title="The Technomancer", playTime=15 * 3600)
+    body = strips[0]["cards"][0]["body"]
+    assert body and not body.startswith("·") and not body.startswith(" ")
+
+
 def test_left_of_the_first_game_is_the_welcome_hub(ps5):
     window, root = ps5
     home = root.findChild(QObject, "homePage")
