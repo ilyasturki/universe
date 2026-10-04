@@ -395,9 +395,22 @@ FocusScope {
                 value: api.theme.bootIntro,
                 detail: "The Universe mark when the launcher starts full screen; any button skips it."
             });
+            rows.push({
+                section: "Themes",
+                key: "sound_dir",
+                label: "Sound folder",
+                type: "path",
+                value: api.theme.soundsPath,
+                display: api.theme.soundsPath ? api.theme.soundsPath.split("/").pop() + " · " + Object.keys(api.theme.soundFiles).length + " sounds" : "Bundled",
+                detail: "WAVs named tick.wav, enter.wav, launch.wav… replace the bundled ones."
+            });
             groups.push({
                 title: "Look",
                 rows: [0, 1]
+            });
+            groups.push({
+                title: "Sounds",
+                rows: [3]
             });
             groups.push({
                 title: "Startup",
@@ -729,6 +742,11 @@ FocusScope {
         } else if (sectionId === "themes" && row.key === "boot_intro") {
             Sound.favourite(!row.value);
             api.theme.bootIntro = !row.value;
+        } else if (sectionId === "themes" && row.key === "sound_dir") {
+            Sound.panel();
+            editor.edit(row, function (path) {
+                api.theme.soundsPath = path;
+            });
         } else if (sectionId === "themes") {
             Sound.panel();
             editor.edit(row, function (value) {

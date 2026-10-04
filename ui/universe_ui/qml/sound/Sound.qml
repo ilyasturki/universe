@@ -3,6 +3,8 @@ import QtQuick
 
 SoundPool {
     dir: Qt.resolvedUrl("../assets/sounds/")
+    // The singleton outlives a switch to another look, whose folder is not ours.
+    overrides: api.theme.current === "reprise" ? api.theme.soundFiles : ({})
     // Restarting a playing SoundEffect rebuilds its pulse stream and clicks, so a burst spreads over voices.
     poolSizes: ({
             tick: 4,

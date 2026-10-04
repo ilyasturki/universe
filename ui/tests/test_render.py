@@ -114,7 +114,7 @@ def test_themes_render_and_switch_live(api):
     window.close()
 
 
-@pytest.mark.parametrize("look", ["switch2", "ps5"])
+@pytest.mark.parametrize("look", ["reprise", "switch2", "ps5"])
 def test_every_look_s_themes_has_a_sound_folder_row(api, look):
     _engine, window = render(api)
     if look == api.theme.current:
@@ -1538,7 +1538,7 @@ def test_the_sound_section_plays_through_the_output_picked_in_both_looks(api, fa
     window.close()
 
 
-@pytest.mark.parametrize("look", ["switch2", "ps5"])
+@pytest.mark.parametrize("look", ["reprise", "switch2", "ps5"])
 def test_in_the_universe_session_the_way_out_logs_out(universe_session, api, look):
     until(lambda: api.system.actions)
     if look != "reprise":
@@ -1555,7 +1555,7 @@ def test_in_the_universe_session_the_way_out_logs_out(universe_session, api, loo
     window.close()
 
 
-@pytest.mark.parametrize("look", ["switch2", "ps5"])
+@pytest.mark.parametrize("look", ["reprise", "switch2", "ps5"])
 def test_each_looks_themes_page_says_it_is_not_affiliated(api, look):
     _engine, window = render(api)
     for step in ["ps5", "reprise"] if look == "reprise" else [look]:
