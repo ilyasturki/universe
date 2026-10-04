@@ -155,7 +155,7 @@
           installPhase = ''
             mkdir -p $out/share/universe
             cp -r . $out/share/universe/${kind}
-            rm -rf $out/share/universe/${kind}/*/tests
+            rm -rf $out/share/universe/${kind}/*/tests $out/share/universe/${kind}/conftest.py $out/share/universe/${kind}/test_*.py
             patchShebangs $out/share/universe/${kind}
           '';
         };

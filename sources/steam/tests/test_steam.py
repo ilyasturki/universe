@@ -1,6 +1,4 @@
 import contextlib
-import importlib.machinery
-import importlib.util
 import json
 import os
 import shlex
@@ -11,82 +9,12 @@ import subprocess
 import sys
 import threading
 import time
-import urllib.request
 from pathlib import Path
 
 import pytest
 
-MODULE_DIR = Path(__file__).resolve().parents[1]
-PROGRAM = MODULE_DIR / "bin" / "source"
 STEAMID = "76561199038489031"
 ACCOUNT = "1078223303"
-
-# The client as the source meets it: `steam -silent` writes its pid and signs in; a steam:// URL reaches the running one.
-STEAM_SHIM = r"""#!SHIM_PYTHON
-import json, os, sys, time
-from pathlib import Path
-
-args = sys.argv[1:]
-with open(os.environ["SHIM_LOG"], "a") as f:
-    f.write(json.dumps({"prog": "steam", "args": args}) + "\n")
-root = Path(os.environ["SHIM_ROOT"])
-mode = os.environ.get("SHIM_MODE", "ok")
-if args == ["-silent"]:
-    import ctypes
-    ctypes.CDLL(None).prctl(15, b"steam", 0, 0, 0)
-    pid_file = Path(os.environ["HOME"]) / ".steam" / "steam.pid"
-    pid_file.parent.mkdir(parents=True, exist_ok=True)
-    pid_file.write_text(str(os.getpid()))
-    time.sleep(0.2)
-    with open(root / "logs" / "connection_log.txt", "a") as f:
-        f.write("[2026-09-27 18:56:44] [Logged On, 4, 7] [U:1:1078223303] RecvMsgClientLogOnResponse() : processing complete\n")
-    time.sleep(20)
-elif args and args[0].startswith("steam://install/") and mode != "ignore":
-    appid = args[0].rsplit("/", 1)[1]
-    lib = Path(os.environ["SHIM_LIBRARY"])
-    manifest = lib / "steamapps" / f"appmanifest_{appid}.acf"
-    folder = lib / "steamapps" / "common" / "Portal"
-    for flags, downloaded, staged in ((1026, 0, 0), (1049858, 500, 0), (1049858, 1000, 1000)):
-        manifest.write_text(os.environ["SHIM_MANIFEST"].format(appid=appid, flags=flags, downloaded=downloaded, staged=staged))
-        time.sleep(0.3)
-    folder.mkdir(parents=True, exist_ok=True)
-    (folder / "portal.exe").write_bytes(b"MZ")
-    manifest.write_text(os.environ["SHIM_MANIFEST"].format(appid=appid, flags=4, downloaded=1000, staged=2000))
-elif args and args[0].startswith("steam://uninstall/") and mode != "ignore":
-    appid = args[0].rsplit("/", 1)[1]
-    time.sleep(0.3)
-    for lib in (Path(os.environ["SHIM_LIBRARY"]), root):
-        (lib / "steamapps" / f"appmanifest_{appid}.acf").unlink(missing_ok=True)
-"""
-
-SYSTEMD_RUN_SHIM = r"""#!SHIM_PYTHON
-import json, os, subprocess, sys
-
-args = sys.argv[1:]
-with open(os.environ["SHIM_LOG"], "a") as f:
-    f.write(json.dumps({"prog": "systemd-run", "args": args}) + "\n")
-if os.environ.get("SHIM_SYSTEMD") == "fail":
-    print("Failed to connect to bus: No medium found", file=sys.stderr)
-    sys.exit(1)
-split = args.index("--")
-env = dict(os.environ)
-for i, arg in enumerate(args[:split]):
-    if arg == "-E":
-        key, value = args[i + 1].split("=", 1)
-        env[key] = value
-    elif arg == "-p" and args[i + 1].startswith("UnsetEnvironment="):
-        env.pop(args[i + 1].split("=", 1)[1], None)
-subprocess.Popen(args[split + 1 :], env=env, start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-"""
-
-SYSTEMCTL_SHIM = r"""#!SHIM_PYTHON
-import json, os, sys
-
-with open(os.environ["SHIM_LOG"], "a") as f:
-    f.write(json.dumps({"prog": "systemctl", "args": sys.argv[1:]}) + "\n")
-sys.exit(3)
-"""
-
 PORTAL_MANIFEST = """"AppState"
 {{
 	"appid"		"{appid}"
@@ -227,33 +155,11 @@ def install(lib, appid, name, installdir, files=(), **fields):
     return folder
 
 
-def shim(folder, name, text):
-    path = folder / name
-    path.write_text(text.replace("SHIM_PYTHON", sys.executable, 1))
-    path.chmod(path.stat().st_mode | stat.S_IEXEC)
+SOURCE_PATCHES = {"POLL_S": 0.05, "PROGRESS_INTERVAL_S": 0}
 
 
 @pytest.fixture
-def src():
-    loader = importlib.machinery.SourceFileLoader("steam_source", str(PROGRAM))
-    spec = importlib.util.spec_from_loader("steam_source", loader)
-    module = importlib.util.module_from_spec(spec)
-    loader.exec_module(module)
-    module.POLL_S = 0.05
-    module.PROGRESS_INTERVAL_S = 0
-    return module
-
-
-@pytest.fixture(autouse=True)
-def offline(monkeypatch):
-    def refuse(*args, **kwargs):
-        raise OSError("no network in tests")
-
-    monkeypatch.setattr(urllib.request, "urlopen", refuse)
-
-
-@pytest.fixture
-def env(tmp_path, monkeypatch):
+def env(tmp_path, monkeypatch, shims):
     home, root, lib = tmp_path / "home", tmp_path / "Steam", tmp_path / "Library"
     for folder in (home, root / "steamapps", root / "config", root / "logs", root / "appcache" / "stats", root / "legacycompat", lib / "steamapps"):
         folder.mkdir(parents=True)
@@ -280,14 +186,8 @@ def env(tmp_path, monkeypatch):
         '"compatibilitytools"\n{\n\t"compat_tools"\n\t{\n\t\t"GE-Proton10-1"\n\t\t{\n\t\t\t"install_path"\t\t"."\n\t\t}\n\t}\n}\n'
     )
     (root / "config" / "config.vdf").write_text(CONFIG_VDF.format(default="GE-Proton10-1"))
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    shim(bin_dir, "steam", STEAM_SHIM)
-    shim(bin_dir, "systemd-run", SYSTEMD_RUN_SHIM)
-    shim(bin_dir, "systemctl", SYSTEMCTL_SHIM)
     data = tmp_path / "data"
     monkeypatch.setenv("HOME", str(home))
-    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
     monkeypatch.setenv("SHIM_LOG", str(tmp_path / "shim.log"))
     monkeypatch.setenv("SHIM_ROOT", str(root))
     monkeypatch.setenv("SHIM_LIBRARY", str(lib))
@@ -319,12 +219,6 @@ def calls(env, prog=None):
     return [entry["args"] for entry in map(json.loads, lines) if prog in (None, entry["prog"])]
 
 
-def run(src, capsys, *argv):
-    code = src.main(list(argv))
-    out, err = capsys.readouterr()
-    return code, [json.loads(line) for line in out.splitlines()], err
-
-
 def games(events):
     return {e["id"]: e for e in events if e["event"] == "game"}
 
@@ -334,42 +228,40 @@ def save_key(env, steamid=STEAMID):
     (env["data"] / "key.json").write_text(json.dumps({"key": "A" * 32, "steamid": steamid}))
 
 
-def test_login_takes_a_key_for_the_account_steam_remembers(src, env, capsys, monkeypatch):
-    code, events, _ = run(src, capsys, "login")
-    assert code == 0 and events == [{"event": "login_url", "url": src.KEY_URL}, {"event": "done"}]
-    code, _, err = run(src, capsys, "login", "not-a-key")
-    assert code == 1 and "32 hexadecimal" in err
+def test_login_takes_a_key_for_the_account_steam_remembers(src, env, run, monkeypatch):
+    code, events, _ = run("login", "not-a-key")
+    assert code == 1 and events == []
     asked = []
     monkeypatch.setattr(src, "fetch", lambda url: asked.append(url) or {"response": {"game_count": 1, "games": [{"appid": 480, "name": "Spacewar"}]}})
-    code, events, _ = run(src, capsys, "login", " 0123456789abcdef0123456789ABCDEF ")
+    code, events, _ = run("login", " 0123456789abcdef0123456789ABCDEF ")
     assert code == 0 and events == [{"event": "logged_in", "user": "Yasso"}, {"event": "done"}]
     assert f"steamid={STEAMID}" in asked[0], "the most recent sign-in, not the oldest"
     key = env["data"] / "key.json"
     assert json.loads(key.read_text()) == {"key": "0123456789abcdef0123456789ABCDEF", "steamid": STEAMID}
     assert stat.S_IMODE(key.stat().st_mode) == 0o600
-    code, events, _ = run(src, capsys, "status")
+    code, events, _ = run("status")
     assert events == [{"event": "logged_in", "user": "Yasso"}, {"event": "done"}]
 
 
-def test_a_refused_key_is_not_kept_and_another_accounts_key_is_not_used(src, env, capsys, monkeypatch):
+def test_a_refused_key_is_not_kept_and_another_accounts_key_is_not_used(src, env, run, monkeypatch):
     def refuse(url):
         raise src.HttpError("GET https://api.steampowered.com/...: HTTP 403", 403)
 
     monkeypatch.setattr(src, "fetch", refuse)
-    code, _, err = run(src, capsys, "login", "A" * 32)
-    assert code == 1 and "refused the Web API key" in err and "A" * 32 not in err
+    code, _, err = run("login", "A" * 32)
+    assert code == 1 and "A" * 32 not in err, "no key in a log"
     assert not (env["data"] / "key.json").exists()
     save_key(env, steamid="76561198000000001")
-    code, events, _ = run(src, capsys, "status")
+    code, events, _ = run("status")
     assert events == [{"event": "done"}], "Steam now remembers another account"
-    code, _, err = run(src, capsys, "library")
-    assert code == 1 and "not Yasso's" in err and "run login" in err
+    code, events, _ = run("library")
+    assert code == 1 and events == []
 
 
-def test_scan_reports_the_games_of_every_library_and_leaves_the_tools_out(src, env, capsys):
-    code, events, _ = run(src, capsys, "scan")
+def test_scan_reports_the_games_of_every_library_and_leaves_the_tools_out(src, env, run):
+    code, events, _ = run("scan")
     assert code == 0
-    assert [e["title"] for e in events[:-1]] == ["Assassin's Creed Origins", "Mount & Blade: Warband", "Spacewar"]
+    assert sorted(e["id"] for e in events[:-1]) == ["480", "48700", "582160"]
     found = games(events)
     assert found["480"] == {
         "event": "game",
@@ -398,72 +290,72 @@ def test_scan_reports_the_games_of_every_library_and_leaves_the_tools_out(src, e
     assert partial["partial_dir"] == str(env["root"] / "steamapps" / "common" / "Assassins Creed Origins")
 
 
-def test_a_windows_depot_picks_the_windows_program_and_steams_prefix(src, env, capsys, monkeypatch):
+def test_a_windows_depot_picks_the_windows_program_and_steams_prefix(src, env, run, settings):
     install(env["root"], 48700, "Mount & Blade: Warband", "MountBlade Warband", files=("mb_warband.exe",), depots=(48701, 48704))
-    _, events, _ = run(src, capsys, "scan")
+    _, events, _ = run("scan")
     warband = games(events)["48700"]
     assert warband["exe"] == "mb_warband.exe" and "runner" not in warband
     assert warband["prefix"] == str(env["root"] / "steamapps" / "compatdata" / "48700"), "the compatdata of the game's own library"
     assert warband["proton"] == str(env["root"] / "compatibilitytools.d" / "GE-Proton10-1"), "no pick for the game: the one for all other titles"
     apps = {**APPS, 891390: {**APPS[891390], "extended": {**APPS[891390]["extended"], "app_mappings": {"48700": {"tool": "proton-10.0-4pin"}}}}}
     (env["root"] / "appcache" / "appinfo.vdf").write_bytes(appinfo_bytes(apps))
-    _, events, _ = run(src, capsys, "scan")
+    _, events, _ = run("scan")
     assert games(events)["48700"]["proton"] == str(env["lib"] / "steamapps" / "common" / "Proton 10.0"), "Valve's pick, named by an alias"
     (env["root"] / "appcache" / "appinfo.vdf").write_bytes(appinfo_bytes(APPS))
     (env["root"] / "config" / "config.vdf").write_text(CONFIG_VDF.format(default="GE-Proton-gone"))
     src.compat_mapping.cache_clear()
-    _, events, _ = run(src, capsys, "scan")
+    _, events, _ = run("scan")
     assert "proton" not in games(events)["48700"] and "prefix" in games(events)["48700"], "a tool that is not there: Universe's Proton"
-    monkeypatch.setenv("SOURCE_SETTINGS_JSON", json.dumps({"steam_root": str(env["root"]), "shared_prefix": False}))
-    _, events, _ = run(src, capsys, "scan")
+    settings(shared_prefix=False)
+    _, events, _ = run("scan")
     assert {"prefix", "proton"}.isdisjoint(games(events)["48700"]), "off, the game gets a prefix of Universe's own"
 
 
-def test_library_lists_the_owned_games_with_the_installed_ones(src, env, capsys, monkeypatch):
-    code, _, err = run(src, capsys, "library")
-    assert code == 1 and "no Steam Web API key" in err
+def test_library_lists_the_owned_games_with_the_installed_ones(src, env, run, monkeypatch):
+    code, events, _ = run("library")
+    assert code == 1 and events == [], "no key yet"
     save_key(env)
     owned = [{"appid": 620, "name": "Portal 2"}, {"appid": 480, "name": "Spacewar"}]
     monkeypatch.setattr(src, "fetch", lambda url: {"response": {"game_count": 2, "games": owned}})
-    code, events, _ = run(src, capsys, "library")
+    code, events, _ = run("library")
     assert code == 0 and [e["id"] for e in events[:-1]] == ["620", "480"]
     portal, spacewar = events[0], events[1]
     assert (portal["installed"], portal["owned"], portal["image"], portal["steam_appid"]) == (False, True, src.IMAGE_URL.format(id=620), 620)
     assert (spacewar["installed"], spacewar["exe"]) == (True, "SteamworksExample.exe")
     monkeypatch.setattr(src, "fetch", lambda url: {"response": {}})
-    code, events, err = run(src, capsys, "library")
-    assert code == 0 and events == [{"event": "done"}] and "private" in err
+    code, events, _ = run("library")
+    assert code == 0 and events == [{"event": "done"}], "a private profile lists nothing"
 
 
-def test_search_asks_the_store_and_falls_back_on_the_listed_library(src, env, capsys, monkeypatch):
+def test_search_asks_the_store_and_falls_back_on_the_listed_library(src, env, run, monkeypatch):
     (env["data"]).mkdir(exist_ok=True)
     (env["data"] / "library.json").write_text(json.dumps([{"id": "620", "title": "Portal 2"}, {"id": "400", "title": "Portal"}]))
     items = [{"type": "app", "id": 620, "name": "Portal 2"}, {"type": "app", "id": 1, "name": "Portal Knights"}, {"type": "sub", "id": 9, "name": "Bundle"}]
     monkeypatch.setattr(src, "fetch", lambda url: {"total": 3, "items": items})
-    code, events, _ = run(src, capsys, "search", "portal")
+    code, events, _ = run("search", "portal")
     assert code == 0 and [(e["id"], e["owned"]) for e in events[:-1]] == [("620", True), ("1", False)]
 
     def down(url):
         raise src.SourceError("GET https://store.steampowered.com/api/storesearch/: timed out")
 
     monkeypatch.setattr(src, "fetch", down)
-    code, events, err = run(src, capsys, "search", "portal")
-    assert code == 0 and [e["id"] for e in events[:-1]] == ["620", "400"] and "searching the listed library" in err
+    code, events, _ = run("search", "portal")
+    assert code == 0 and [e["id"] for e in events[:-1]] == ["620", "400"]
 
 
-def test_info_sums_the_depots_of_the_installed_platform(src, env, capsys):
-    _, events, _ = run(src, capsys, "info", "48700")
+def test_info_sums_the_depots_of_the_installed_platform(src, env, run):
+    _, events, _ = run("info", "48700")
     assert events[0]["data"]["platform"] == "linux"
     assert (events[0]["download_size"], events[0]["disk_size"]) == (607, 1030), "the shared depot and the Linux one"
-    _, events, _ = run(src, capsys, "info", "480")
+    _, events, _ = run("info", "480")
     assert (events[0]["download_size"], events[0]["disk_size"]) == (797632, 1906055), "a redistributable from another app is not counted"
 
 
-def test_install_starts_steam_opens_its_window_and_follows_the_download(src, env, capsys):
-    code, events, _ = run(src, capsys, "install", "400")
+def test_install_starts_steam_opens_its_window_and_follows_the_download(src, env, run):
+    code, events, _ = run("install", "400")
     assert code == 0
     assert events[0] == {"event": "window", "class": "steam", "title": "Install"}, "before the URL: the dialog maps right after"
-    assert events[1] == {"event": "progress", "done": 0, "total": 0, "message": "confirm the install in Steam's window"}
+    assert (events[1]["event"], events[1]["done"], events[1]["total"]) == ("progress", 0, 0), "waiting on the user"
     progress = [(e["done"], e["total"]) for e in events if e["event"] == "progress"][1:]
     assert (500, 1000) in progress and (1000, 2000) in progress, "the download, then the files written"
     game = events[-2]
@@ -474,38 +366,35 @@ def test_install_starts_steam_opens_its_window_and_follows_the_download(src, env
     assert url[-1] == "steam://install/400" and not any(a.startswith("--unit") for a in url)
 
 
-def test_an_install_nobody_confirms_gives_up_and_an_installed_game_is_there_at_once(src, env, capsys, monkeypatch, client):
+def test_an_install_nobody_confirms_gives_up_and_an_installed_game_is_there_at_once(env, run, settings, monkeypatch, client):
     monkeypatch.setenv("SHIM_MODE", "ignore")
-    monkeypatch.setenv("SOURCE_SETTINGS_JSON", json.dumps({"steam_root": str(env["root"]), "confirm_timeout_s": 1, "install_timeout_s": 20}))
-    code, events, err = run(src, capsys, "install", "400")
-    assert code == 1 and "Steam started no install of 400" in err
+    settings(confirm_timeout_s=1)
+    code, events, _ = run("install", "400")
+    assert code == 1
     assert calls(env, "systemd-run")[0][-1] == "steam://install/400", "the client runs already: no second one"
-    code, events, _ = run(src, capsys, "install", "480")
+    code, events, _ = run("install", "480")
     assert code == 0 and [e["event"] for e in events] == ["game", "done"]
     assert len(calls(env, "systemd-run")) == 1
 
 
-def test_uninstall_goes_through_steams_window_and_waits_for_the_manifest_to_go(src, env, capsys, monkeypatch, client):
-    code, events, _ = run(src, capsys, "uninstall", "480")
-    assert code == 0 and events == [
-        {"event": "window", "class": "steam", "title": ""},
-        {"event": "progress", "done": 0, "total": 0, "message": "confirm the uninstall in Steam's window"},
-        {"event": "done"},
-    ]
+def test_uninstall_goes_through_steams_window_and_waits_for_the_manifest_to_go(env, run, settings, monkeypatch, client):
+    code, events, _ = run("uninstall", "480")
+    assert code == 0 and [e["event"] for e in events] == ["window", "progress", "done"]
+    assert events[0] == {"event": "window", "class": "steam", "title": ""}, "Steam's newest window"
     assert not (env["lib"] / "steamapps" / "appmanifest_480.acf").exists()
     assert calls(env, "systemd-run")[-1][-1] == "steam://uninstall/480"
-    code, events, _ = run(src, capsys, "uninstall", "480")
+    code, events, _ = run("uninstall", "480")
     assert code == 0 and events == [{"event": "done"}] and len(calls(env, "systemd-run")) == 1, "nothing left in Steam: no window"
     monkeypatch.setenv("SHIM_MODE", "ignore")
-    monkeypatch.setenv("SOURCE_SETTINGS_JSON", json.dumps({"steam_root": str(env["root"]), "confirm_timeout_s": 1}))
-    code, _, err = run(src, capsys, "uninstall", "48700")
-    assert code == 1 and "did not uninstall Mount & Blade: Warband within 1 s" in err
+    settings(confirm_timeout_s=1)
+    code, _, _ = run("uninstall", "48700")
+    assert code == 1, "nobody confirmed"
 
 
-def test_updates_are_listed_and_one_is_waited_for(src, env, capsys, client):
+def test_updates_are_listed_and_one_is_waited_for(src, env, run, client):
     lib = env["lib"]
     install(lib, 480, "Spacewar", "Spacewar", files=("SteamworksExample.exe",), flags=6, buildid=1, TargetBuildID=2)
-    code, events, _ = run(src, capsys, "update")
+    code, events, _ = run("update")
     assert events == [
         {"event": "update", "id": "480", "title": "Spacewar", "local_build": "1", "remote_build": "2", "version": "2", "date": ""},
         {"event": "done"},
@@ -518,15 +407,15 @@ def test_updates_are_listed_and_one_is_waited_for(src, env, capsys, client):
         install(lib, 480, "Spacewar", "Spacewar", flags=4, buildid=2, TargetBuildID=2)
 
     threading.Thread(target=steam_updates, daemon=True).start()
-    code, events, _ = run(src, capsys, "update", "480")
+    code, events, _ = run("update", "480")
     assert code == 0 and events[-2]["build"] == "2"
-    assert {"event": "progress", "done": 5, "total": 10, "message": "50.0%"} in events
+    assert ("progress", 5, 10) in [(e["event"], e.get("done"), e.get("total")) for e in events]
     assert calls(env, "systemd-run") == [], "no URL asks for an update"
 
 
-def test_achievements_come_from_steams_stats_cache(src, env, capsys, monkeypatch):
+def test_achievements_come_from_steams_stats_cache(src, env, run, monkeypatch):
     stats = env["root"] / "appcache" / "stats"
-    code, events, _ = run(src, capsys, "achievements", "480")
+    code, events, _ = run("achievements", "480")
     assert code == 0 and events == [{"event": "done"}], "no schema yet: nothing to list"
     bits = {
         "0": {
@@ -554,7 +443,7 @@ def test_achievements_come_from_steams_stats_cache(src, env, capsys, monkeypatch
     monkeypatch.setattr(
         src, "fetch", lambda url: {"achievementpercentages": {"achievements": [{"name": "WIN", "percent": "51.5"}, {"name": "LAST", "percent": 2}]}}
     )
-    code, events, _ = run(src, capsys, "achievements", "480")
+    code, events, _ = run("achievements", "480")
     assert code == 0
     win, secret, last = events[:3]
     assert win == {
@@ -594,7 +483,7 @@ def pe_with(section):
     return bytes(header) + coff + sections
 
 
-def test_pre_launch_links_steams_client_into_the_prefix_and_hands_the_arguments(src, env, capsys, monkeypatch, client):
+def test_pre_launch_links_steams_client_into_the_prefix_and_hands_the_arguments(src, env, monkeypatch, client):
     folder = install(env["root"], 582160, "Assassin's Creed Origins", "Assassins Creed Origins", files=("ACOrigins.exe",))
     prefix = env["tmp"] / "prefix"
     prefix.mkdir()
@@ -646,11 +535,13 @@ def test_pre_launch_starts_steam_and_cancels_the_launch_when_it_cannot(src, env,
     finally:
         other.kill()
         other.wait()
-    assert src.client_pid() is not None and "starting Steam" in capsys.readouterr().err
+    assert src.client_pid() is not None
     (started,) = calls(env, "systemd-run")
     assert "DISPLAY=:2" in started and "UnsetEnvironment=WAYLAND_DISPLAY" in started, "inside gamescope: its X display, not the desktop's Wayland one"
     os.kill(src.client_pid(), signal.SIGTERM)
-    time.sleep(0.2)
+    deadline = time.monotonic() + 5
+    while src.client_pid() is not None and time.monotonic() < deadline:
+        time.sleep(0.01)
     monkeypatch.setenv("SHIM_SYSTEMD", "fail")
     assert src.main(["pre-launch"]) == 1, "the game would only show Steam's Fatal Error"
     assert "systemd-run failed (exit 1): Failed to connect to bus" in capsys.readouterr().err

@@ -105,7 +105,7 @@ install -Dm755 target/release/universe -t %{buildroot}%{_bindir}
 for kind in modules sources; do
   install -d %{buildroot}%{_datadir}/universe/$kind
   cp -r $kind/. %{buildroot}%{_datadir}/universe/$kind
-  rm -rf %{buildroot}%{_datadir}/universe/$kind/*/tests
+  rm -rf %{buildroot}%{_datadir}/universe/$kind/*/tests %{buildroot}%{_datadir}/universe/$kind/conftest.py %{buildroot}%{_datadir}/universe/$kind/test_*.py
 done
 install -Dm644 %{SOURCE1} %{buildroot}%{_datadir}/universe/sources/gog/GalaxyCommunication.exe
 install -Dm644 extension/metadata.json extension/extension.js -t %{buildroot}%{_datadir}/gnome-shell/extensions/%{extension}

@@ -45,7 +45,7 @@ for kind in modules sources; do
     rm -rf "${out:?}/share/universe/$kind"
     mkdir -p "$out/share/universe/$kind"
     cp -r "$repo/$kind/." "$out/share/universe/$kind"
-    rm -rf "$out/share/universe/$kind"/*/tests
+    rm -rf "$out/share/universe/$kind"/*/tests "$out/share/universe/$kind"/conftest.py "$out/share/universe/$kind"/test_*.py
     find "$out/share/universe/$kind" -name __pycache__ -prune -exec rm -rf {} +
 done
 # The flake's galaxyServiceStub: same URL and hash

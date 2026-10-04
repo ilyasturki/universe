@@ -1,0 +1,197 @@
+#!/usr/bin/env python3
+# butler as the source drives it: `daemon` answers JSON-RPC lines, `configure` lists a folder's executables.
+# Its state is a JSON file (games, uploads, keys, caves, locations); the profiles and the keys also land in the
+# SQLite database the source reads directly.
+import json, os, shutil, sqlite3, sys, time
+from pathlib import Path
+
+args = sys.argv[1:]
+state_path = Path(os.environ["SHIM_STATE"])
+mode = os.environ.get("SHIM_MODE", "ok")
+
+
+def load():
+    return json.loads(state_path.read_text())
+
+
+def save(state):
+    state_path.write_text(json.dumps(state))
+
+
+if args[0] == "configure":
+    folder = Path(args[-1])
+    wanted = args[args.index("--os-filter") + 1]
+    candidates = []
+    for path in sorted(folder.rglob("*")):
+        if not path.is_file() or ".itch" in path.parts:
+            continue
+        name, depth = path.name, len(path.relative_to(folder).parts)
+        flavor = "windows" if name.endswith(".exe") else "script" if name.endswith(".sh") else "linux" if path.suffix in ("", ".x86_64") else None
+        if flavor is None or (flavor == "windows") != (wanted == "windows"):
+            continue
+        entry = {"path": str(path.relative_to(folder)), "depth": depth, "flavor": flavor, "arch": "amd64", "size": path.stat().st_size}
+        if name.startswith("unins"):
+            entry["windowsInfo"] = {"installerType": "inno"}
+        candidates.append(entry)
+    print(json.dumps({"type": "log", "level": "info", "message": "configured"}))
+    print(json.dumps({"type": "result", "value": {"basePath": str(folder), "totalSize": 0, "candidates": candidates}}))
+    sys.exit(0)
+
+db = sqlite3.connect(args[args.index("--dbpath") + 1])
+db.execute("CREATE TABLE IF NOT EXISTS profiles (id INTEGER PRIMARY KEY, api_key TEXT, last_connected TEXT, user_id INTEGER)")
+db.execute("CREATE TABLE IF NOT EXISTS download_keys (id INTEGER PRIMARY KEY, game_id INTEGER)")
+if key := load().get("api_key"):
+    db.execute("INSERT OR REPLACE INTO profiles VALUES (7, ?, '2026-09-27T12:00:00Z', 7)", (key,))
+db.commit()
+with open(os.environ["SHIM_LOG"], "a") as f:
+    f.write(json.dumps({"daemon": args}) + "\n")
+server_ids = iter(range(1000))
+
+
+def send(message):
+    print(json.dumps({"jsonrpc": "2.0", **message}), flush=True)
+
+
+def notify(method, params):
+    send({"method": method, "params": params})
+
+
+def ask(method, params):
+    ident = next(server_ids)
+    send({"id": ident, "method": method, "params": params})
+    reply = json.loads(sys.stdin.readline())
+    assert reply["id"] == ident
+    return reply.get("result")
+
+
+def profiles():
+    return [
+        {"id": row[0], "lastConnected": row[1], "user": {"id": row[0], "username": "yasso"}} for row in db.execute("SELECT id, last_connected FROM profiles")
+    ]
+
+
+def page(items, params):
+    start = int(params.get("cursor") or 0)
+    size = params.get("limit") or len(items)
+    end = start + min(size, 2)
+    return {"items": items[start:end], **({"nextCursor": str(end)} if end < len(items) else {})}
+
+
+def cave_record(cave_id, game, upload, build, location, folder):
+    return {"id": cave_id, "game": game, "upload": upload, "build": build, "location": location, "folder": folder}
+
+
+def cave_of(state, cave_id):
+    cave = dict(state["caves"][cave_id])
+    location = state["locations"][cave.pop("location")]
+    cave["installInfo"] = {"installFolder": str(Path(location) / cave.pop("folder")), "installedSize": 4096, "installLocation": "x"}
+    return cave
+
+
+def handle(method, params):
+    state = load()
+    with open(os.environ["SHIM_LOG"], "a") as f:
+        f.write(json.dumps({"method": method, "params": params}) + "\n")
+    if method == "Profile.LoginWithAPIKey":
+        if params["apiKey"] != "good-key":
+            raise ValueError("itch.io API error (403): /profile: invalid key")
+        db.execute("INSERT OR REPLACE INTO profiles VALUES (7, ?, '2026-09-27T12:00:00Z', 7)", (params["apiKey"],))
+        db.commit()
+        return {"profile": {"id": 7, "user": {"id": 7, "username": "yasso"}}}
+    if method == "Profile.List":
+        return {"profiles": profiles()}
+    if method == "Fetch.ProfileOwnedKeys":
+        if params.get("fresh"):
+            for key in state["keys"]:
+                db.execute("INSERT OR REPLACE INTO download_keys VALUES (?, ?)", (key["id"], key["gameId"]))
+            db.commit()
+        keys = [{**k, "game": state["games"][str(k["gameId"])]} for k in state["keys"]]
+        return page(keys, params)
+    if method == "Fetch.Caves":
+        return page([cave_of(state, c) for c in state["caves"]], params)
+    if method == "Fetch.Cave":
+        return {"cave": cave_of(state, params["caveId"])} if params["caveId"] in state["caves"] else {}
+    if method == "Fetch.Game":
+        return {"game": state["games"].get(str(params["gameId"]))}
+    if method == "Fetch.GameUploads":
+        return {"uploads": state["uploads"].get(str(params["gameId"]), [])}
+    if method == "Install.PlanUpload":
+        return {"info": {"type": "archive", "diskUsage": {"finalDiskUsage": 9000}}}
+    if method == "Install.Locations.Add":
+        if "readonly" in params["path"]:
+            raise ValueError("install location is not writable")
+        state["locations"][params["id"]] = params["path"]
+        save(state)
+        return {"installLocation": {"id": params["id"], "path": params["path"]}}
+    if method == "Install.Locations.List":
+        return {"installLocations": [{"id": k, "path": v} for k, v in state["locations"].items()]}
+    if method == "Install.Queue":
+        cave_id = params.get("caveId")
+        if not cave_id:
+            if any(c["upload"]["id"] == params["upload"]["id"] for c in state["caves"].values()):
+                raise ValueError("That upload is already installed!")
+            cave_id = f"cave-{params['game']['id']}"
+            location, folder = state["locations"][params["installLocationId"]], params["game"]["title"].lower()
+        else:
+            location, folder = state["locations"][state["caves"][cave_id]["location"]], state["caves"][cave_id]["folder"]
+        ident = f"op-{params['game']['id']}"
+        state["queued"][ident] = cave_record(
+            cave_id, params["game"], params["upload"], None, params.get("installLocationId") or state["caves"][cave_id]["location"], folder
+        )
+        save(state)
+        return {"id": ident, "caveId": cave_id, "installFolder": str(Path(location) / folder), "stagingFolder": str(Path(location) / "downloads" / ident)}
+    if method == "Install.Perform":
+        staging = Path(params["stagingFolder"])
+        queued = next(q for i, q in state["queued"].items() if staging.name == i)
+        staging.mkdir(parents=True, exist_ok=True)
+        (staging / "operate-context.json").write_text(json.dumps({"caveId": queued["id"]}))
+        notify("TaskStarted", {"type": "install", "totalSize": 2000})
+        if mode == "partial":
+            (staging / "part.bin").write_bytes(b"x" * 300)
+            notify("Progress", {"progress": 0.25, "eta": 3, "bps": 100})
+            time.sleep(60)
+        notify("Progress", {"progress": 0.5, "eta": 1, "bps": 100})
+        notify("Progress", {"progress": 1.0, "eta": 0, "bps": 100})
+        folder = Path(state["locations"][queued["location"]]) / queued["folder"]
+        folder.mkdir(parents=True, exist_ok=True)
+        linux = bool(queued["upload"].get("platforms", {}).get("linux"))
+        (folder / ("game.x86_64" if linux else "Game.exe")).write_bytes(b"x" * 64)
+        (folder / ("unins000.exe")).write_bytes(b"x" * 999)
+        for f in staging.iterdir():
+            f.unlink()
+        staging.rmdir()
+        state["caves"][queued["id"]] = {**queued, "build": queued["upload"].get("build")}
+        save(state)
+        return {"caveId": queued["id"], "events": []}
+    if method == "CheckUpdate":
+        updates = [u for u in state["updates"] if u["caveId"] in params.get("caveIds", [])]
+        return {"updates": [{**u, "game": state["caves"][u["caveId"]]["game"]} for u in updates], "warnings": []}
+    if method == "Uninstall.Perform":
+        cave = state["caves"].pop(params["caveId"], None)
+        if cave:
+            shutil.rmtree(Path(state["locations"][cave["location"]]) / cave["folder"], ignore_errors=True)
+        save(state)
+        return {}
+    if method == "Install.Locations.Scan":
+        found = []
+        for ident, location in state["locations"].items():
+            for receipt in Path(location).glob("*/.itch/receipt.json"):
+                data = json.loads(receipt.read_text())
+                cave_id = f"cave-{data['game']['id']}"
+                if cave_id not in state["caves"]:
+                    found.append((cave_id, cave_record(cave_id, data["game"], data["upload"], None, ident, receipt.parent.parent.name)))
+        if found and not (ask("Install.Locations.Scan.ConfirmImport", {"numItems": len(found)}) or {}).get("confirm"):
+            return {"numFoundItems": len(found), "numImportedItems": 0}
+        state["caves"].update(dict(found))
+        save(state)
+        return {"numFoundItems": len(found), "numImportedItems": len(found)}
+    raise KeyError(method)
+
+
+print(json.dumps({"level": "info", "message": "butlerd: listening", "type": "log"}), file=sys.stderr, flush=True)
+for line in sys.stdin:
+    request = json.loads(line)
+    try:
+        send({"id": request["id"], "result": handle(request["method"], request["params"])})
+    except (ValueError, KeyError) as exc:
+        send({"id": request["id"], "error": {"code": -32603, "message": str(exc)}})

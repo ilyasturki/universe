@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+# The client as the source meets it: `steam -silent` writes its pid and signs in; a steam:// URL reaches the running one.
+import json, os, sys, time
+from pathlib import Path
+
+args = sys.argv[1:]
+with open(os.environ["SHIM_LOG"], "a") as f:
+    f.write(json.dumps({"prog": "steam", "args": args}) + "\n")
+root = Path(os.environ["SHIM_ROOT"])
+mode = os.environ.get("SHIM_MODE", "ok")
+if args == ["-silent"]:
+    import ctypes
+
+    ctypes.CDLL(None).prctl(15, b"steam", 0, 0, 0)
+    pid_file = Path(os.environ["HOME"]) / ".steam" / "steam.pid"
+    pid_file.parent.mkdir(parents=True, exist_ok=True)
+    pid_file.write_text(str(os.getpid()))
+    time.sleep(0.2)
+    with open(root / "logs" / "connection_log.txt", "a") as f:
+        f.write("[2026-09-27 18:56:44] [Logged On, 4, 7] [U:1:1078223303] RecvMsgClientLogOnResponse() : processing complete\n")
+    time.sleep(20)
+elif args and args[0].startswith("steam://install/") and mode != "ignore":
+    appid = args[0].rsplit("/", 1)[1]
+    lib = Path(os.environ["SHIM_LIBRARY"])
+    manifest = lib / "steamapps" / f"appmanifest_{appid}.acf"
+    folder = lib / "steamapps" / "common" / "Portal"
+    for flags, downloaded, staged in ((1026, 0, 0), (1049858, 500, 0), (1049858, 1000, 1000)):
+        manifest.write_text(os.environ["SHIM_MANIFEST"].format(appid=appid, flags=flags, downloaded=downloaded, staged=staged))
+        time.sleep(0.3)
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "portal.exe").write_bytes(b"MZ")
+    manifest.write_text(os.environ["SHIM_MANIFEST"].format(appid=appid, flags=4, downloaded=1000, staged=2000))
+elif args and args[0].startswith("steam://uninstall/") and mode != "ignore":
+    appid = args[0].rsplit("/", 1)[1]
+    time.sleep(0.3)
+    for lib in (Path(os.environ["SHIM_LIBRARY"]), root):
+        (lib / "steamapps" / f"appmanifest_{appid}.acf").unlink(missing_ok=True)

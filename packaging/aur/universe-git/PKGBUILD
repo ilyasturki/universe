@@ -106,7 +106,7 @@ package_universe-git() {
   for kind in modules sources; do
     install -d "$pkgdir/usr/share/universe/$kind"
     cp -r "$kind/." "$pkgdir/usr/share/universe/$kind"
-    rm -rf "$pkgdir/usr/share/universe/$kind"/*/tests
+    rm -rf "$pkgdir/usr/share/universe/$kind"/*/tests "$pkgdir/usr/share/universe/$kind"/conftest.py "$pkgdir/usr/share/universe/$kind"/test_*.py
   done
   install -Dm644 "$srcdir/GalaxyCommunication-comet-0.3.2.exe" "$pkgdir/usr/share/universe/sources/gog/GalaxyCommunication.exe"
   install -Dm644 extension/metadata.json extension/extension.js -t "$pkgdir/usr/share/gnome-shell/extensions/universe@ilyasturki.github.io"
