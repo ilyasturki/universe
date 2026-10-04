@@ -5,7 +5,7 @@ import "../../sound" as Base
 Base.SoundPool {
     dir: Qt.resolvedUrl("../assets/sounds/")
     // The singleton outlives a switch to another look, whose folder is not ours.
-    overrides: api.theme.current === "switch2" ? api.theme.soundFiles : ({})
+    overrides: api && api.theme && api.theme.current === "switch2" ? api.theme.soundFiles : ({})
     poolSizes: ({
             tick: 4,
             "tick-side": 4,

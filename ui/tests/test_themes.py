@@ -1,3 +1,5 @@
+import pytest
+
 from universe_ui import host
 from universe_ui.api import Memory
 from universe_ui.themes import THEMES, ThemeSelector
@@ -66,6 +68,23 @@ def test_each_look_keeps_its_own_font(app, tmp_path):
     assert memory.get("ps5Font") == "/fonts/sst.ttf" and memory.get("switch2Font") == "/fonts/udsg.ttf"
     selector.set("switch2")
     assert selector.fontPath == "/fonts/udsg.ttf"
+
+
+@pytest.mark.parametrize("sound", ["sound", "switch2/sound", "ps5/sound"])
+def test_a_look_s_sounds_load_before_the_api_has_a_theme(app, sound):
+    from PySide6.QtCore import QObject, QUrl
+    from PySide6.QtQml import QQmlComponent, QQmlEngine
+
+    engine = QQmlEngine()
+    bare = QObject()
+    engine.rootContext().setContextProperty("api", bare)
+    component = QQmlComponent(engine)
+    component.setData(
+        f'import QtQuick\nimport "{(host.QML_DIR / sound).as_uri()}"\nQtObject {{ property var out: Sound.overrides }}\n'.encode(), QUrl("file:///sound.qml")
+    )
+    obj = component.create()
+    assert obj is not None, [e.toString() for e in component.errors()]
+    assert obj.property("out").toVariant() == {}
 
 
 def test_a_pool_started_on_a_folder_goes_back_to_its_bundled_sounds(app):
