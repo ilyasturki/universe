@@ -4,6 +4,7 @@ import "../core"
 import "../sound"
 import "../ui"
 import "Groups.js" as Groups
+import "Home.js" as Home
 
 // The console's Game Library: the whole collection in a grid of five, a rail of search, sort and filter, and add.
 FocusScope {
@@ -331,113 +332,14 @@ FocusScope {
             Sound.play("edge");
             return;
         }
-        var playing = game.id === playingId;
-        var items = playing ? [
-            {
-                label: "Resume",
-                glyph: "play",
-                act: "resume"
-            },
-            {
-                label: "Close Game",
-                glyph: "stop",
-                act: "close"
-            }
-        ] : [
-            {
-                label: game.playTime > 0 ? "Continue" : "Play",
-                glyph: "play",
-                act: "play"
-            }
-        ];
-        items.push({
-            label: "Information",
-            glyph: "info",
-            act: "info"
-        });
-        if (game.achievementsTotal > 0)
-            items.push({
-                label: "Trophies",
-                glyph: "trophy",
-                act: "trophies"
-            });
-        items.push({
-            label: "Game Settings",
-            glyph: "sliders",
-            act: "settings"
-        }, {
-            label: "Media Gallery",
-            glyph: "gallery",
-            act: "gallery"
-        }, {
-            label: "Journal",
-            glyph: "journal",
-            act: "journal"
-        }, {
-            label: "Play Log",
-            glyph: "clock",
-            act: "log"
-        }, {
-            label: "Saved Data and Storage",
-            glyph: "storage",
-            act: "data"
-        }, {
-            label: "Artwork",
-            glyph: "image",
-            act: "artwork"
-        }, {
-            label: "Favourite",
-            glyph: "star",
-            toggle: game.favorite,
-            act: "favourite",
-            gap: true
-        }, {
-            label: "Remove from Library…",
-            glyph: "trash",
-            act: "remove",
-            gap: true
-        });
-        var id = game.id, title = game.title;
-        var pages = {
-            info: "pages/SoftwareInfoPage.qml",
-            trophies: "pages/AchievementsPage.qml",
-            settings: "pages/GameSettingsPage.qml",
-            gallery: "pages/MediaGalleryPage.qml",
-            journal: "pages/NewsPage.qml",
-            log: "pages/PlayLogPage.qml",
-            data: "pages/DataPage.qml",
-            artwork: "pages/ArtworkPage.qml"
-        };
+        var items = Home.options(game, game.id === playingId);
+        var id = game.id;
         Sound.play("open");
         shell.showMenu({
             items: items
         }, function (i) {
-            if (i < 0)
-                return;
-            var act = items[i].act;
-            var g = api.allGames.byId(id);
-            if (act === "play" && g)
-                shell.launch(g);
-            else if (act === "resume")
-                shell.resume();
-            else if (act === "close")
-                shell.closeSoftware(g);
-            else if (act === "favourite" && g)
-                page.toggleFavourite(g);
-            else if (act === "remove")
-                shell.dialogAsk({
-                    message: "Remove " + title + " from the library?",
-                    detail: "The install folder, the hours and the journal stay on disk.",
-                    buttons: ["Cancel", "Remove"],
-                    danger: 1
-                }, function (k) {
-                    if (k === 1 && api.universe.remove(id, false))
-                        shell.showToast("Removed " + title + " from the library");
-                });
-            else if (pages[act])
-                shell.push(pages[act], {
-                    gameId: id
-                });
+            if (i >= 0)
+                shell.gameOption(items[i].act, id);
         });
     }
 

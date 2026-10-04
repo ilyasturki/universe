@@ -184,14 +184,6 @@ FocusScope {
             glyph: "image",
             act: "artwork"
         });
-        var pages = {
-            trophies: "pages/AchievementsPage.qml",
-            settings: "pages/GameSettingsPage.qml",
-            gallery: "pages/MediaGalleryPage.qml",
-            log: "pages/PlayLogPage.qml",
-            data: "pages/DataPage.qml",
-            artwork: "pages/ArtworkPage.qml"
-        };
         var id = game.id;
         shell.showMenu({
             items: items
@@ -204,9 +196,7 @@ FocusScope {
             else if (act === "shots")
                 page.openShot(page.shotIndex);
             else
-                page.shell.push(pages[act], {
-                    gameId: id
-                });
+                page.shell.gameOption(act, id);
         });
     }
 

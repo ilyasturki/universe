@@ -61,13 +61,33 @@ def test_the_cursor_walks_the_collections_and_a_opens_the_game_card(ps5):
     QTest.keyClick(window, Qt.Key.Key_Return)
     until(lambda: store.property("zone") == "card")
     assert value(store, "cardEntry")["title"] == "Mini Metro"
-    assert [a["id"] for a in value(store, "cardActions")][:2] == ["update", "play"], "an update waits: Update first"
+    assert [a["act"] for a in value(store, "cardActions")] == ["update", "more"], "an update waits: Update, the rest under …"
     QTest.keyClick(window, Qt.Key.Key_Escape)
     until(lambda: store.property("zone") == "main", "B closes the card, not the page")
     assert root.property("depth") == 1, "B closes the card, not the page"
     QTest.keyClick(window, Qt.Key.Key_Up)
     QTest.keyClick(window, Qt.Key.Key_Up)
     until(lambda: store.property("zone") == "top")
+
+
+def test_the_card_s_more_button_opens_the_game_s_shared_menu(ps5):
+    window, root = ps5
+    store = open_store(root)
+    QTest.keyClick(window, Qt.Key.Key_Right)
+    QTest.keyClick(window, Qt.Key.Key_Down)
+    until(lambda: value(store, "current")["title"] == "Mini Metro")
+    QTest.keyClick(window, Qt.Key.Key_Return)
+    until(lambda: store.property("zone") == "card")
+    QTest.keyClick(window, Qt.Key.Key_Right)
+    QTest.keyClick(window, Qt.Key.Key_Return)
+    popup = root.findChild(QObject, "popup")
+    until(lambda: popup.property("open") is True)
+    acts = [i["act"] for i in value(popup, "items")]
+    assert {"play", "info", "settings", "data"} <= set(acts), "the hero's and the Library's menu"
+    assert acts[-2:] == ["uninstall", "remove"]
+    QTest.keyClick(window, Qt.Key.Key_Escape)
+    until(lambda: popup.property("open") is False)
+    assert store.property("zone") == "card"
 
 
 def test_a_search_narrows_the_store_to_its_results_and_b_clears_it(ps5, api):
@@ -96,7 +116,7 @@ def test_an_install_runs_as_a_job_heads_the_home_row_and_x_stops_it(ps5, api, fa
     QTest.keyClick(window, Qt.Key.Key_Right)
     QTest.keyClick(window, Qt.Key.Key_Return)
     until(lambda: store.property("zone") == "card")
-    assert value(store, "cardActions")[0]["id"] == "install"
+    assert value(store, "cardActions")[0]["act"] == "install"
     QTest.keyClick(window, Qt.Key.Key_Return)
     until(lambda: root.property("modal") is True, "an install asks first, with the sizes")
     QTest.keyClick(window, Qt.Key.Key_Return)

@@ -5,6 +5,7 @@ import "sound"
 import "ui"
 import "pages"
 import "pages/Sections.js" as Sections
+import "pages/Home.js" as Home
 
 FocusScope {
     id: root
@@ -353,6 +354,37 @@ FocusScope {
             if (i === 1)
                 root.stopSession();
         });
+    }
+
+    function gameOption(act, id) {
+        var g = api.allGames.byId(id);
+        if (!g)
+            return;
+        var title = g.title;
+        if (act === "play")
+            launch(g);
+        else if (act === "resume")
+            resume();
+        else if (act === "close")
+            closeSoftware(g);
+        else if (act === "favourite") {
+            g.favorite = !g.favorite;
+            Sound.play("select");
+            showToast(g.favorite ? "Added " + title + " to Favourites" : "Removed " + title + " from Favourites");
+        } else if (act === "remove")
+            dialogAsk({
+                message: "Remove " + title + " from the library?",
+                detail: "The install folder, the hours and the journal stay on disk.",
+                buttons: ["Cancel", "Remove"],
+                danger: 1
+            }, function (k) {
+                if (k === 1 && api.universe.remove(id, false))
+                    root.showToast("Removed " + title + " from the library");
+            });
+        else if (Home.PAGES[act])
+            push(Home.PAGES[act], {
+                gameId: id
+            });
     }
 
     // The unit gets a SIGTERM, a second one after ~3 s: `stopping` puts up the notice that covers the wait.

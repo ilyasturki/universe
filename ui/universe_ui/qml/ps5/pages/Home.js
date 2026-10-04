@@ -34,6 +34,41 @@ function art(game) {
     return { source: game.assets.boxFront, cropped: true };
 }
 
+var PAGES = {
+    info: "pages/SoftwareInfoPage.qml",
+    trophies: "pages/AchievementsPage.qml",
+    settings: "pages/GameSettingsPage.qml",
+    gallery: "pages/MediaGalleryPage.qml",
+    journal: "pages/NewsPage.qml",
+    log: "pages/PlayLogPage.qml",
+    data: "pages/DataPage.qml",
+    artwork: "pages/ArtworkPage.qml"
+};
+
+// The game's "…" menu wherever it opens (hero, Library, Store card); the shell's gameOption() runs a row's `act`.
+function options(game, playing) {
+    var items = playing ? [
+        { label: "Resume", glyph: "play", act: "resume" },
+        { label: "Close Game", glyph: "stop", act: "close" }
+    ] : [
+        { label: game.playTime > 0 ? "Continue" : "Play", glyph: "play", act: "play" }
+    ];
+    items.push({ label: "Information", glyph: "info", act: "info" });
+    if (game.achievementsTotal > 0)
+        items.push({ label: "Trophies", glyph: "trophy", act: "trophies" });
+    items.push(
+        { label: "Game Settings", glyph: "sliders", act: "settings" },
+        { label: "Media Gallery", glyph: "gallery", act: "gallery" },
+        { label: "Journal", glyph: "journal", act: "journal" },
+        { label: "Play Log", glyph: "clock", act: "log" },
+        { label: "Saved Data and Storage", glyph: "storage", act: "data" },
+        { label: "Artwork", glyph: "image", act: "artwork" },
+        { label: "Favourite", glyph: "star", toggle: game.favorite, act: "favourite", gap: true },
+        { label: "Remove from Library…", glyph: "trash", act: "remove", gap: true }
+    );
+    return items;
+}
+
 function tagline(game) {
     if (!game)
         return "";

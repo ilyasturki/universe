@@ -3,6 +3,7 @@ import "../core"
 import "../sound"
 import "../ui"
 import "../../core/Format.js" as Format
+import "Home.js" as Home
 
 // The Store: the linked store's games as the console's collections under a hero for the focused one, a game's card
 // with its Install on A, and Downloads — what installs, what waits for an update, what is on the disk.
@@ -345,58 +346,71 @@ FocusScope {
         return parts.join(" · ");
     }
 
-    function actionsFor(g) {
-        var out = [];
-        var inLibrary = g.game_id !== "" && !!api.allGames.byId(g.game_id);
+    function libraryGameOf(g) {
+        return g && g.game_id !== "" ? api.allGames.byId(g.game_id) : null;
+    }
+
+    function mainOf(g) {
         if (g.busy)
-            out.push({
-                id: "cancel",
+            return {
+                act: "cancel",
                 label: "Cancel",
                 glyph: "stop"
-            });
-        else if (g.partial)
-            out.push({
-                id: "resume",
+            };
+        if (g.partial)
+            return {
+                act: "resume",
                 label: "Resume",
                 glyph: "download"
-            });
-        else if (g.pending)
-            out.push({
-                id: "update",
+            };
+        if (g.pending)
+            return {
+                act: "update",
                 label: "Update",
                 glyph: "download"
-            });
-        else if (!g.installed && g.status !== "Not owned")
-            out.push({
-                id: "install",
+            };
+        if (!g.installed && g.status !== "Not owned")
+            return {
+                act: "install",
                 label: "Install",
                 glyph: "download"
-            });
-        if (g.installed && inLibrary)
-            out.push({
-                id: "play",
+            };
+        if (g.installed && libraryGameOf(g))
+            return {
+                act: "play",
                 label: "Play",
                 glyph: "play"
-            });
-        if (inLibrary)
-            out.push({
-                id: "info",
-                label: "Information",
-                glyph: "info"
-            }, {
-                id: "settings",
-                label: "Game Settings",
-                glyph: "sliders"
-            });
-        if (g.installed && g.game_id)
-            out.push({
-                id: "uninstall",
+            };
+        return null;
+    }
+
+    function moreOf(g) {
+        var game = libraryGameOf(g);
+        if (!game)
+            return [];
+        var session = api.universe.currentSession;
+        var items = Home.options(game, !!session && session.id === game.id);
+        if (g.installed) {
+            items[items.length - 1].gap = false;
+            items.splice(items.length - 1, 0, {
                 label: "Uninstall…",
-                glyph: "trash"
-            }, {
-                id: "remove",
-                label: "Remove from Library…",
-                glyph: "eye-off"
+                glyph: "trash",
+                act: "uninstall",
+                gap: true
+            });
+        }
+        return items;
+    }
+
+    function actionsFor(g) {
+        var main = mainOf(g);
+        var out = main ? [main] : [];
+        if (moreOf(g).length > 0)
+            out.push({
+                act: "more",
+                label: "Options",
+                glyph: "more",
+                round: true
             });
         return out;
     }
@@ -437,17 +451,15 @@ FocusScope {
             Sound.play(sources.install(index) !== "" ? "ok" : "edge");
         } else if (id === "cancel") {
             cancel();
-        } else if (id === "play") {
-            shell.launch(api.allGames.byId(gameId));
-        } else if (id === "info") {
-            Sound.play("ok");
-            shell.push("pages/SoftwareInfoPage.qml", {
-                gameId: gameId
-            });
-        } else if (id === "settings") {
-            Sound.play("ok");
-            shell.push("pages/GameSettingsPage.qml", {
-                gameId: gameId
+        } else if (id === "more") {
+            Sound.play("open");
+            var items = moreOf(g);
+            shell.showMenu({
+                title: title,
+                items: items
+            }, function (i) {
+                if (i >= 0)
+                    page.perform(items[i].act, g, index);
             });
         } else if (id === "uninstall") {
             var via = api.universe.uninstallVia(gameId);
@@ -472,6 +484,8 @@ FocusScope {
                 if (k === 1)
                     sources.remove(gameId);
             });
+        } else {
+            shell.gameOption(id, gameId);
         }
     }
 
@@ -577,13 +591,8 @@ FocusScope {
     function options() {
         var g = zone === "card" ? cardEntry : tab === 0 ? current : lineGame;
         var index = zone === "card" ? cardRow : tab === 0 ? currentRow : line ? line.row : -1;
-        var items = g ? actionsFor(g).map(function (a) {
-            return {
-                label: a.label,
-                glyph: a.glyph,
-                act: a.id
-            };
-        }) : [];
+        var main = g ? mainOf(g) : null;
+        var items = (main ? [main] : []).concat(g ? moreOf(g) : []);
         var general = [
             {
                 label: "Search…",
@@ -814,7 +823,7 @@ FocusScope {
                 Sound.play("edge");
             else if (api.keys.isAccept(event)) {
                 var a = cardActions[cardIndex];
-                a ? perform(a.id, cardEntry, cardRow) : Sound.play("edge");
+                a ? perform(a.act, cardEntry, cardRow) : Sound.play("edge");
             } else if (api.keys.isCancel(event))
                 closeCard();
             else
@@ -1147,12 +1156,12 @@ FocusScope {
                     spacing: Theme.dp(18)
 
                     StoreButton {
-                        readonly property var action: page.current ? page.actionsFor(page.current)[0] || null : null
+                        readonly property var action: page.current ? page.mainOf(page.current) : null
                         visible: action !== null
                         text: action ? action.label : ""
                         glyph: action ? action.glyph : ""
                         direct: false
-                        onPicked: page.perform(action.id, page.current, page.currentRow)
+                        onPicked: page.perform(action.act, page.current, page.currentRow)
                     }
 
                     StoreButton {
@@ -1691,9 +1700,10 @@ FocusScope {
                     model: page.cardActions
 
                     StoreButton {
-                        text: modelData.label
+                        text: modelData.round ? "" : modelData.label
                         glyph: modelData.glyph
-                        danger: modelData.id === "cancel"
+                        round: modelData.round === true
+                        danger: modelData.act === "cancel"
                         focused: page.cardOpen && page.activeFocus && index === Math.min(page.cardIndex, page.cardActions.length - 1)
                         onPicked: page.cardIndex = index
                     }
