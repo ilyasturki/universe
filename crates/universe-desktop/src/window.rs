@@ -380,13 +380,23 @@ impl Window {
         if self.imp().state.borrow().onboarded {
             self.set_onboarded();
         }
+        let mut onboarding = false;
         if !backend::core().onboarded() && !self.app().scripted() {
             if self.app().library().is_empty() {
                 crate::dialogs::onboarding::present(self);
+                onboarding = true;
             } else {
                 self.set_onboarded();
             }
         }
+        let win = self.downgrade();
+        glib::spawn_future_local(async move {
+            let core = backend::core();
+            let releases = backend::run(async move { core.whats_new().await }).await;
+            if let Some(win) = win.upgrade().filter(|_| !onboarding && !releases.is_empty()) {
+                crate::dialogs::whats_new::present(&win, &releases);
+            }
+        });
         if let Some(steps) = self.app().take_script() {
             glib::spawn_future_local(script::run(self.clone().upcast(), steps));
         }

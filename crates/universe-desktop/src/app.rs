@@ -16,6 +16,7 @@ use universe::session::Current;
 
 use crate::backend;
 use crate::config;
+use crate::dialogs::whats_new;
 use crate::jobs::{self, Job, Kind, Outcome};
 use crate::library::Library;
 use crate::script::{self, Step};
@@ -872,6 +873,11 @@ impl Application {
             .issue_url("https://github.com/ilyasturki/universe/issues")
             .comments(gettext("Your games, from every store and emulator, in one library"))
             .build();
+        let notes = whats_new::about_notes(&universe::changelog::releases(), universe::VERSION);
+        if !notes.is_empty() {
+            about.set_release_notes_version(universe::VERSION);
+            about.set_release_notes(&notes);
+        }
         about.present(self.active_window().as_ref());
     }
 }
