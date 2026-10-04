@@ -2,8 +2,8 @@ import pytest
 from looks import invoke, read
 from PySide6.QtCore import QCoreApplication, QEvent, QObject, QUrl
 from PySide6.QtQml import QQmlComponent, QQmlEngine
+from uitest import record, until
 
-from conftest import record, until
 from universe_ui import host
 
 FAMILIES = ["steam-deck", "dualsense-edge", "dualsense", "dualshock4", "xbox-elite", "xbox", "switch-pro", "8bitdo-pro-3", "generic"]

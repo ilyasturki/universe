@@ -3,8 +3,7 @@ from pathlib import Path
 from looks import call
 from PySide6.QtCore import QUrl
 from PySide6.QtQml import QQmlComponent, QQmlEngine
-
-from conftest import record, until
+from uitest import record, until
 
 
 def keys(store):

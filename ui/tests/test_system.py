@@ -1,6 +1,6 @@
 import pytest
+from uitest import record, until
 
-from conftest import record, until
 from universe_ui.api import Api
 from universe_ui.screens.network import FAKE as FAKE_NET
 from universe_ui.screens.power import FAKE

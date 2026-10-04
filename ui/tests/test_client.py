@@ -3,8 +3,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QTimer
-
-from conftest import record, until
+from uitest import record, until
 
 
 def test_errors_are_signalled_not_raised(fake):

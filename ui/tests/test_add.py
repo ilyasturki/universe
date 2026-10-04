@@ -1,4 +1,5 @@
-from conftest import record, settle, until
+from uitest import record, settle, until
+
 from universe_ui.screens.add import runner_candidates
 
 

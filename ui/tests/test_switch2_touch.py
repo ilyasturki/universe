@@ -3,8 +3,8 @@ from looks import Look, call, invoke
 from PySide6.QtCore import Q_ARG, Q_RETURN_ARG, QMetaObject, QPointF, Qt
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QTest
+from uitest import until
 
-from conftest import until
 from universe_ui import gamepad
 
 

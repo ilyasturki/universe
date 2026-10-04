@@ -1,8 +1,8 @@
 import pytest
 from looks import Look, read
 from PySide6.QtCore import QPointF
+from uitest import until
 
-from conftest import until
 from universe_ui import gamepad
 
 

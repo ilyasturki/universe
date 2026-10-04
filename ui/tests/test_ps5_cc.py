@@ -5,8 +5,8 @@ from looks import Look, read, settle
 from PySide6.QtCore import Q_ARG, Q_RETURN_ARG, QMetaObject, QObject, Qt
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QTest
+from uitest import until
 
-from conftest import until
 from universe_ui import host
 
 

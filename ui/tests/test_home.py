@@ -5,8 +5,8 @@ import pytest
 from looks import Look, invoke, lit_fraction, read, settle
 from PySide6.QtCore import QObject, Qt
 from PySide6.QtTest import QTest
+from uitest import record, until
 
-from conftest import record, until
 from universe_ui import host
 
 

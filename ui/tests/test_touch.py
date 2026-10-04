@@ -1,8 +1,8 @@
 import pytest
 from PySide6.QtCore import Property, QCoreApplication, QEvent, QObject, QUrl, Signal, Slot
 from PySide6.QtQuick import QQuickView
+from uitest import until
 
-from conftest import until
 from universe_ui import gamepad, host
 
 SCENE = """

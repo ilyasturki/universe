@@ -1,4 +1,5 @@
-from conftest import index_of, record, rows_by_key, settle, until
+from uitest import index_of, record, rows_by_key, settle, until
+
 from universe_ui.screens.runners import suggested_title
 
 

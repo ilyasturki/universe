@@ -1,6 +1,6 @@
 from PySide6.QtCore import QDateTime, QUrl
+from uitest import until
 
-from conftest import until
 from universe_ui.models import (
     FavouritesFirstGames,
     Game,

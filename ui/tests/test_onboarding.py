@@ -4,8 +4,7 @@ import threading
 import pytest
 from looks import Look, page_name
 from PySide6.QtCore import QObject, Qt
-
-from conftest import index_of, record, rows_by_key, until
+from uitest import index_of, record, rows_by_key, until
 
 
 @pytest.fixture

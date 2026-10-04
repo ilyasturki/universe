@@ -1,4 +1,5 @@
-from conftest import until
+from uitest import until
+
 from universe_ui.screens.search import word_score
 
 SECTIONS = [

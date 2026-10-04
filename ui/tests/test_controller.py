@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QTimer
+from uitest import record, rows_by_key, until
 
-from conftest import record, rows_by_key, until
 from universe_ui.screens.controller import FakeWatcher, Watcher
 
 

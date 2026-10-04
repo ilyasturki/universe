@@ -4,8 +4,7 @@ import pytest
 from looks import Look, call, invoke, page_name, read
 from PySide6.QtCore import QObject, Qt, QUrl
 from PySide6.QtTest import QTest
-
-from conftest import record, until
+from uitest import record, until
 
 QML = Path(__file__).resolve().parents[1] / "universe_ui" / "qml"
 

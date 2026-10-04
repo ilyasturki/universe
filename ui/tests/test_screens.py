@@ -2,8 +2,7 @@ import os
 from collections import Counter
 
 import pytest
-
-from conftest import index_of, own, record, rows_by_key, settle, until
+from uitest import index_of, own, record, rows_by_key, settle, until
 
 PENDING = {
     "session": "20260912-200000",

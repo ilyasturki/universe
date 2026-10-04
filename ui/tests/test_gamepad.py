@@ -2,8 +2,8 @@ from types import SimpleNamespace
 
 import pytest
 from PySide6.QtCore import QCoreApplication, Qt
+from uitest import record
 
-from conftest import record
 from universe_ui import gamepad
 from universe_ui.gamepad import Mapper
 

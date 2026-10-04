@@ -3,8 +3,7 @@ import os
 
 from looks import invoke
 from PySide6.QtCore import QObject, Qt
-
-from conftest import record, until
+from uitest import record, until
 
 
 def test_the_store_orders_unlocks_first_and_folds_the_hidden_ones(api, fake):

@@ -4,8 +4,8 @@ import pytest
 from looks import current_row, invoke, read, settle
 from PySide6.QtCore import QObject, Qt
 from PySide6.QtTest import QTest
+from uitest import own, record, until
 
-from conftest import own, record, until
 from universe_ui import host
 
 # What closes each look's keyboard on the value typed, and what gives it up.

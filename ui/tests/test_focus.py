@@ -1,7 +1,7 @@
 import pytest
 from PySide6.QtCore import Qt
+from uitest import record, until
 
-from conftest import record, until
 from universe_ui import focus as focus_module
 from universe_ui.focus import Focus
 

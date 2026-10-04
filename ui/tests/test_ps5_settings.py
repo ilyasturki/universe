@@ -4,8 +4,8 @@ from looks import read as value
 from PySide6.QtCore import Q_ARG, QMetaObject, QObject, Qt
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QTest
+from uitest import record, settle, until
 
-from conftest import record, settle, until
 from universe_ui.screens.controller import FakeWatcher
 
 

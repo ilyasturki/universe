@@ -5,8 +5,8 @@ from looks import LOOKS, MENU, Look, call, current_row, invoke, lit_fraction, re
 from PySide6.QtCore import QObject, Qt
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QTest
+from uitest import own, pump, record, until
 
-from conftest import own, pump, record, until
 from universe_ui import host
 
 

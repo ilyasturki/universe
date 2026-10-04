@@ -1,8 +1,7 @@
 import pytest
 from looks import Look, invoke, read
 from PySide6.QtCore import Qt
-
-from conftest import until
+from uitest import until
 
 
 @pytest.fixture

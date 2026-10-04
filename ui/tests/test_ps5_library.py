@@ -1,8 +1,7 @@
 import pytest
 from looks import invoke, read
 from PySide6.QtCore import Qt
-
-from conftest import until
+from uitest import until
 
 pytestmark = pytest.mark.parametrize("look", ["ps5"], indirect=True)
 

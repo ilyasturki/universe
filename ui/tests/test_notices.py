@@ -1,8 +1,7 @@
 from pathlib import Path
 
 import pytest
-
-from conftest import until
+from uitest import until
 
 CORE = Path(__file__).resolve().parents[1] / "universe_ui" / "qml" / "core"
 INFO_MS = 50

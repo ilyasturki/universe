@@ -1,4 +1,4 @@
-from conftest import record, settle, until
+from uitest import record, settle, until
 
 
 def slot_of(view, game, slot):

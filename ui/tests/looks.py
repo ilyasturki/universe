@@ -3,8 +3,8 @@ from PySide6.QtGui import QColor
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuick import QQuickWindow  # noqa: F401  (rootObjects() down-cast, for grabWindow)
 from PySide6.QtTest import QTest
+from uitest import until
 
-from conftest import until
 from universe_ui import host
 
 LOOKS = ["reprise", "switch2", "ps5"]

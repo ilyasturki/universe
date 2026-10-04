@@ -3,8 +3,7 @@ from looks import Look
 from looks import read as value
 from PySide6.QtCore import Q_ARG, QMetaObject, QObject, Qt
 from PySide6.QtTest import QTest
-
-from conftest import record, until
+from uitest import record, until
 
 PAGES = (
     "AchievementsPage",
