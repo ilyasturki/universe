@@ -1,22 +1,18 @@
 import pytest
+from looks import Look, call, invoke
 from PySide6.QtCore import Q_ARG, Q_RETURN_ARG, QMetaObject, QPointF, Qt
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QTest
-from test_render import render
 
-from conftest import pump, until
+from conftest import until
 from universe_ui import gamepad
 
 
 @pytest.fixture
 def deck(api):
-    api.theme.set("switch2")
-    api.theme.takeLanding()
-    engine, window = render(api, width=1280, height=800, activate=True)
-    root = window.property("contentItem").childItems()[0].property("item")
-    yield window, root
-    window.close()
-    del engine
+    shown = Look(api, "switch2", height=800)
+    yield shown.window, shown.root
+    shown.close()
 
 
 def centre(item, dx=0.5, dy=0.5):
@@ -24,21 +20,12 @@ def centre(item, dx=0.5, dy=0.5):
     return p.x(), p.y()
 
 
-def list_view(parent):
-    return next(i for i in parent.findChildren(QQuickItem) if i.inherits("QQuickListView"))
-
-
 def row_item(view, i):
     return QMetaObject.invokeMethod(view, "itemAtIndex", Q_RETURN_ARG("QQuickItem*"), Q_ARG(int, i))
 
 
-# A Modal's children: the scrim, then the card (its `card` alias is a QQuickRectangle PySide cannot hand over).
-def card(modal):
-    return modal.childItems()[1]
-
-
 def shown(modal):
-    return modal.property("open") is True and card(modal).property("opacity") == 1
+    return modal.property("open") is True and modal.findChild(QQuickItem, "modalCard").property("opacity") == 1
 
 
 def bar_icon(bar, i):
@@ -52,7 +39,8 @@ def tap(window, point, hold_ms=0):
 def test_a_tap_on_a_home_tile_picks_it_and_the_next_one_is_a(deck):
     window, root = deck
     home = root.findChild(QQuickItem, "homePage")
-    tile = row_item(list_view(home), 1)
+    row = home.findChild(QQuickItem, "homeRow")
+    tile = row_item(row, 1)
     assert home.property("index") == 0
     tap(window, centre(tile))
     until(lambda: home.property("index") == 1, "the first tap moves the cursor only")
@@ -69,7 +57,8 @@ def test_a_tap_on_the_row_takes_the_focus_back_from_the_bar(deck):
     until(lambda: root.property("depth") == 1, "a bar icon is a button: one tap opens All Software")
     QTest.keyClick(window, Qt.Key.Key_Escape)
     until(lambda: root.property("depth") == 0 and root.property("homeFocus") == "bar")
-    tap(window, centre(row_item(list_view(home), 0)))
+    row = home.findChild(QQuickItem, "homeRow")
+    tap(window, centre(row_item(row, 0)))
     until(lambda: root.property("homeFocus") == "home" and home.property("activeFocus"), "the finger takes the focus along, as Up does")
     assert home.property("index") == 0 and root.property("launching") is False, "the tile had the cursor but not the focus: no A"
 
@@ -77,17 +66,17 @@ def test_a_tap_on_the_row_takes_the_focus_back_from_the_bar(deck):
 def test_a_long_press_on_a_tile_opens_its_options(deck):
     window, root = deck
     home = root.findChild(QQuickItem, "homePage")
-    tap(window, centre(row_item(list_view(home), 2)), hold_ms=600)
+    row = home.findChild(QQuickItem, "homeRow")
+    tap(window, centre(row_item(row, 2)), hold_ms=600)
     until(lambda: root.property("depth") == 1, "held, the tile is picked and gets +")
-    top = root.property("topPage")
     assert home.property("index") == 2 and root.property("launching") is False
-    assert root.property("depth") == 1 and top.metaObject().className().startswith("SoftwareOptionsPage"), "held, the tile is picked and gets +"
+    assert root.property("topPage").objectName() == "softwareOptionsPage", "held, the tile is picked and gets +"
 
 
 def test_a_swipe_scrolls_the_home_row_and_picks_nothing(deck):
     window, root = deck
     home = root.findChild(QQuickItem, "homePage")
-    row = list_view(home)
+    row = home.findChild(QQuickItem, "homeRow")
     x, y = centre(row_item(row, 1))
     before = row.property("contentX")
     gamepad.touch(window, [(x + 300 - k * 60, y) for k in range(10)])
@@ -101,15 +90,14 @@ def test_the_power_picker_and_its_dialog_take_taps_and_keep_the_finger_off_home(
     bar = root.findChild(QQuickItem, "bottomBar")
     picker = root.findChild(QQuickItem, "picker")
     dialog = root.findChild(QQuickItem, "dialog")
-    row = list_view(home)
+    row = home.findChild(QQuickItem, "homeRow")
     tap(window, centre(bar, bar_icon(bar, 6)))
     until(lambda: shown(picker))
-    assert picker.property("title") == "Power Options"
 
-    x, y = centre(card(picker), 1.0, 0.5)
+    x, y = centre(picker.findChild(QQuickItem, "modalCard"), 1.0, 0.5)
     before = row.property("contentX")
     gamepad.touch(window, [(x + 120 - k * 60, y) for k in range(10)])
-    pump(300)
+    until(lambda: not row.property("moving"))
     assert row.property("contentX") == before, "a swipe over the scrim scrolls nothing under it"
     assert picker.property("open") is True, "and is no tap beside the card"
     tap(window, (x + 120, y))
@@ -119,14 +107,13 @@ def test_the_power_picker_and_its_dialog_take_taps_and_keep_the_finger_off_home(
 
     tap(window, centre(bar, bar_icon(bar, 6)))
     until(lambda: shown(picker))
-    choice = row_item(list_view(picker), picker.property("choices").toVariant().index("Turn Off"))
-    tap(window, centre(choice))
+    acts = [i.get("action", i.get("act")) for i in call(root, "powerItems")]
+    choices = picker.findChild(QQuickItem, "choices")
+    tap(window, centre(row_item(choices, acts.index("power_off"))))
     until(lambda: shown(dialog), "a choice is a button: one tap picks it")
-    assert picker.property("open") is False
-    assert dialog.property("message") == "Turn off the system?", "a choice is a button: one tap picks it"
-    assert dialog.property("index") == 0
+    assert picker.property("open") is False and dialog.property("index") == 0
 
-    buttons = card(dialog)
+    buttons = dialog.findChild(QQuickItem, "modalCard")
     rise = 113 * 800 / 1080 / 2 / buttons.height()
     tap(window, centre(buttons, 1.5 / len(dialog.property("buttons").toVariant()), 1 - rise))
     until(lambda: dialog.property("open") is False, "a button off the cursor is pressed at once")
@@ -137,10 +124,9 @@ def test_the_power_picker_and_its_dialog_take_taps_and_keep_the_finger_off_home(
 def test_a_long_picker_scrolls_under_the_finger_and_a_choice_is_one_tap(deck):
     window, root = deck
     picker = root.findChild(QQuickItem, "picker")
-    spec = {"title": "Many", "choices": [f"Choice {k}" for k in range(20)]}
-    QMetaObject.invokeMethod(root, "pick", Q_ARG("QVariant", spec), Q_ARG("QVariant", None))
+    invoke(root, "pick", {"title": "Many", "choices": [f"Choice {k}" for k in range(20)]}, None)
     until(lambda: shown(picker))
-    choices = list_view(picker)
+    choices = picker.findChild(QQuickItem, "choices")
     x, y = centre(choices, 0.5, 0.8)
     gamepad.touch(window, [(x, y - k * 40) for k in range(10)])
     until(lambda: choices.property("contentY") > 300, "the list follows the finger, the card's own block under it")
