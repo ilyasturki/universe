@@ -90,6 +90,28 @@ def test_the_card_s_more_button_opens_the_game_s_shared_menu(ps5):
     assert store.property("zone") == "card"
 
 
+def test_the_card_menu_s_resume_goes_back_to_the_running_game(ps5, api):
+    window, root = ps5
+    QMetaObject.invokeMethod(root, "launch", Q_ARG("QVariant", api.allGames.byId("mini-metro")))
+    until(lambda: api.home.shown == "game")
+    api.home.toLauncher()
+    until(lambda: api.home.shown == "launcher")
+    store = open_store(root)
+    QTest.keyClick(window, Qt.Key.Key_Right)
+    QTest.keyClick(window, Qt.Key.Key_Down)
+    until(lambda: value(store, "current")["title"] == "Mini Metro")
+    QTest.keyClick(window, Qt.Key.Key_Return)
+    until(lambda: store.property("zone") == "card")
+    QTest.keyClick(window, Qt.Key.Key_Right)
+    QTest.keyClick(window, Qt.Key.Key_Return)
+    popup = root.findChild(QObject, "popup")
+    until(lambda: popup.property("open") is True)
+    assert [i["act"] for i in value(popup, "items")].index("resume") == 0
+    QTest.keyClick(window, Qt.Key.Key_Return)
+    until(lambda: api.home.shown == "game", "the game comes back, no download starts")
+    assert not api.screens.sources.job
+
+
 def test_a_search_narrows_the_store_to_its_results_and_b_clears_it(ps5, api):
     window, root = ps5
     sources = api.screens.sources

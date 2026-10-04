@@ -359,7 +359,7 @@ FocusScope {
             };
         if (g.partial)
             return {
-                act: "resume",
+                act: "resume-download",
                 label: "Resume",
                 glyph: "download"
             };
@@ -447,7 +447,7 @@ FocusScope {
         if (id === "install") {
             Sound.play("ok");
             askInstall(g, index);
-        } else if (id === "resume" || id === "update") {
+        } else if (id === "resume-download" || id === "update") {
             Sound.play(sources.install(index) !== "" ? "ok" : "edge");
         } else if (id === "cancel") {
             cancel();
