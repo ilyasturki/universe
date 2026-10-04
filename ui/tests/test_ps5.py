@@ -255,6 +255,26 @@ def test_a_trophy_s_unlock_date_is_relative_and_an_unknown_one_is_blank(app):
     assert earned == played and unknown == "" and rarity == ""
 
 
+def tabs_of(item):
+    found = [item] if item.metaObject().className().startswith("TabLabel") else []
+    for child in item.childItems():
+        found += tabs_of(child)
+    return found
+
+
+@pytest.mark.parametrize("page", ["", "pages/LibraryPage.qml", "pages/InstallPage.qml", "pages/MediaGalleryPage.qml"])
+def test_every_tab_bar_boxes_its_focused_tab_the_same_way(ps5, page):
+    window, root = ps5
+    if page:
+        QMetaObject.invokeMethod(root, "push", Q_ARG("QVariant", page), Q_ARG("QVariant", {}))
+        until(lambda: root.property("depth") == 1 and root.property("topPage").property("activeFocus"))
+    top = root.property("topPage") if page else root.findChild(QObject, "homePage")
+    for _ in range(3):
+        QTest.keyClick(window, Qt.Key.Key_Up)
+    tabs = until(lambda: (found := tabs_of(top)) and any(t.property("focused") for t in found) and found)
+    assert len(tabs) >= 2 and sum(t.property("focused") for t in tabs) == 1
+
+
 def test_a_dialog_taller_than_the_screen_scrolls_its_text(ps5):
     window, root = ps5
     dialog = root.findChild(QObject, "dialog")

@@ -903,7 +903,7 @@ FocusScope {
         trailing: page.libraryLine
     }
 
-    // The tabs, boxed as the console's; the icons at the right.
+    // The tabs; the icons at the right.
     Item {
         id: topRow
 
@@ -919,42 +919,12 @@ FocusScope {
             Repeater {
                 model: page.tabs
 
-                Item {
-                    id: tabItem
-
-                    readonly property bool current: index === page.tab
-                    readonly property bool focused: page.zone === "top" && page.topIndex === index && page.activeFocus
-
-                    width: tabLabel.implicitWidth + Theme.dp(56)
-                    height: parent.height
-
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: Theme.dp(4)
-                        color: tabItem.focused ? Qt.rgba(1, 1, 1, 0.14) : "transparent"
-                        border.width: tabItem.current || tabItem.focused ? Theme.dp(2) : 0
-                        border.color: tabItem.focused ? Qt.rgba(1, 1, 1, 0.85) : Qt.rgba(1, 1, 1, 0.45)
-
-                        Behavior on color {
-                            ColorAnimation {
-                                duration: Theme.durFocus
-                            }
-                        }
-                    }
-
-                    Label {
-                        id: tabLabel
-                        anchors.centerIn: parent
-                        text: modelData
-                        color: tabItem.current || tabItem.focused ? Theme.text : Theme.textSecondary
-                        font.weight: Font.Light
-                        font.pixelSize: Theme.dp(Theme.fontTitle)
-                    }
-
-                    Touch {
-                        current: tabItem.focused
-                        onPicked: page.pointTop(index)
-                    }
+                TabLabel {
+                    text: modelData
+                    current: index === page.tab
+                    focused: page.zone === "top" && page.topIndex === index && page.activeFocus
+                    boxHeight: parent.height
+                    onPicked: page.pointTop(index)
                 }
             }
         }

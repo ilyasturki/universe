@@ -32,52 +32,22 @@ Item {
 
     Row {
         id: tabs
-        x: Theme.dp(Theme.tabX)
+        x: Theme.dp(Theme.tabX - 18)
         y: Theme.dp(Theme.barY) - height / 2
-        spacing: Theme.dp(82)
+        spacing: Theme.dp(82 - 36)
 
         Repeater {
             model: ["Games", "Media"]
 
-            Item {
-                id: tabItem
-
-                readonly property bool current: index === bar.tab
-                readonly property bool focused: bar.active && index === bar.index
-
-                width: tabLabel.implicitWidth
-                height: tabLabel.implicitHeight
-
-                Label {
-                    id: tabLabel
-                    text: modelData
-                    color: tabItem.current || tabItem.focused ? Theme.text : Qt.rgba(1, 1, 1, 0.66)
-                    font.weight: tabItem.current ? Font.DemiBold : Font.Light
-                    font.pixelSize: Theme.dp(Theme.fontTab)
-
-                    Behavior on color {
-                        ColorAnimation {
-                            duration: Theme.durFocus
-                        }
-                    }
-                }
-
-                FocusFrame {
-                    target: tabLabel
-                    anchors.leftMargin: -Theme.dp(18)
-                    anchors.rightMargin: -Theme.dp(18)
-                    anchors.topMargin: -Theme.dp(6)
-                    anchors.bottomMargin: -Theme.dp(6)
-                    shown: tabItem.focused
-                    radius: Theme.dp(8)
-                    gap: 0
-                }
-
-                Touch {
-                    anchors.margins: -Theme.dp(12)
-                    current: tabItem.focused
-                    onPicked: bar.pointed(index)
-                }
+            TabLabel {
+                text: modelData
+                current: index === bar.tab
+                focused: bar.active && index === bar.index
+                weight: current ? Font.DemiBold : Font.Light
+                fontSize: Theme.dp(Theme.fontTab)
+                pad: Theme.dp(18)
+                boxHeight: Theme.dp(64)
+                onPicked: bar.pointed(index)
             }
         }
     }

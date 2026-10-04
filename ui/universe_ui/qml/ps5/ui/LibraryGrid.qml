@@ -225,51 +225,20 @@ FocusScope {
 
             Row {
                 id: tabRow
+                x: -Theme.dp(18)
                 y: Theme.dp(43) - height / 2
-                spacing: Theme.dp(66)
+                spacing: Theme.dp(66 - 36)
 
                 Repeater {
                     model: grid.tabNames
 
-                    Item {
-                        id: tabItem
-
-                        readonly property bool current: index === grid.tab
-                        readonly property bool focused: grid.tabsActive && index === grid.tab
-
-                        width: tabLabel.implicitWidth
-                        height: tabLabel.implicitHeight
-
-                        Label {
-                            id: tabLabel
-                            text: modelData
-                            color: tabItem.current ? Theme.text : Qt.rgba(1, 1, 1, 0.38)
-                            font.weight: Font.Light
-                            font.pixelSize: Theme.dp(Theme.fontTitle)
-
-                            Behavior on color {
-                                ColorAnimation {
-                                    duration: Theme.durFocus
-                                }
-                            }
-                        }
-
-                        FocusFrame {
-                            target: tabLabel
-                            anchors.leftMargin: -Theme.dp(18)
-                            anchors.rightMargin: -Theme.dp(18)
-                            anchors.topMargin: -Theme.dp(6)
-                            anchors.bottomMargin: -Theme.dp(6)
-                            shown: tabItem.focused
-                            radius: Theme.dp(8)
-                            gap: 0
-                        }
-
-                        Touch {
-                            anchors.margins: -Theme.dp(12)
-                            current: tabItem.focused
-                            onPicked: grid.tabPicked(index)
-                        }
+                    TabLabel {
+                        text: modelData
+                        current: index === grid.tab
+                        focused: grid.tabsActive && index === grid.tab
+                        pad: Theme.dp(18)
+                        boxHeight: Theme.dp(64)
+                        onPicked: grid.tabPicked(index)
                     }
                 }
             }
