@@ -177,7 +177,13 @@ const CONFIG_KEYS: &[ConfigKey] = &[
     },
     config_key("Folders", "paths.games_root", "path", "Games", "Where sources install games."),
     config_key("Folders", "paths.prefixes_root", "path", "Wine prefixes", "Where a game's prefix is made when it names none."),
+    config_key("Folders", "paths.saves_root", "path", "Save backups", "Where each game's save backups are kept."),
     config_key("Folders", "paths.recordings_root", "path", "Recordings", "Where the capture module files its videos."),
+    ConfigKey {
+        advanced: false,
+        ..config_key("Saves", "saves.auto_backup", "bool", "Back up after playing", "Back up a game's saves each time a session ends, through ludusavi.")
+    },
+    config_key("Saves", "saves.keep", "int", "Backups kept", "How many backups each game keeps, the oldest going first."),
     config_key(
         "API keys",
         "keys.sgdb",

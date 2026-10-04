@@ -89,6 +89,32 @@ pub struct Config {
     pub controller: crate::controller::ControllerConfig,
     pub system: SystemConfig,
     pub components: ComponentsConfig,
+    pub saves: SavesConfig,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SavesConfig {
+    /// A backup of the game's saves after each session.
+    pub auto_backup: bool,
+    /// Backups kept per game, the oldest going first.
+    pub keep: u32,
+}
+
+impl Default for SavesConfig {
+    fn default() -> Self {
+        SavesConfig { auto_backup: true, keep: 5 }
+    }
+}
+
+impl SavesConfig {
+    /// ludusavi takes 1 to 255 full backups.
+    pub fn validate_keep(value: &str) -> crate::Result<u32> {
+        match value.trim().parse::<u32>() {
+            Ok(n) if (1..=255).contains(&n) => Ok(n),
+            _ => Err(crate::Error::Invalid(format!("saves.keep must be a number of backups from 1 to 255, not '{value}'"))),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -124,6 +150,7 @@ pub struct SystemConfig {
 pub struct Paths {
     pub games_root: String,
     pub prefixes_root: String,
+    pub saves_root: String,
     pub recordings_root: String,
 }
 
@@ -206,6 +233,7 @@ impl Default for Config {
             controller: crate::controller::ControllerConfig::default(),
             system: SystemConfig::default(),
             components: ComponentsConfig::default(),
+            saves: SavesConfig::default(),
         }
     }
 }
@@ -215,6 +243,7 @@ impl Default for Paths {
         Paths {
             games_root: paths::user_dir("GAMES", "Games").to_string_lossy().into(),
             prefixes_root: paths::data_home().join("prefixes").to_string_lossy().into(),
+            saves_root: paths::data_home().join("saves").to_string_lossy().into(),
             recordings_root: paths::user_dir("VIDEOS", "Videos").join("universe").to_string_lossy().into(),
         }
     }
@@ -342,6 +371,9 @@ impl Config {
     }
     pub fn prefixes_root(&self) -> PathBuf {
         paths::expand(&self.paths.prefixes_root)
+    }
+    pub fn saves_root(&self) -> PathBuf {
+        paths::expand(&self.paths.saves_root)
     }
 
     /// Resolves a Proton name (or path) to a directory; proton/<name> under data_home wins, then [proton], then a path,
@@ -497,6 +529,9 @@ mod tests {
         assert_eq!(Config::default().sources.enabled, vec!["gog"]);
         assert!(c.paths.games_root.ends_with("/Games"), "{}", c.paths.games_root);
         assert!(c.paths.prefixes_root.ends_with("/prefixes"));
+        assert!(c.paths.saves_root.ends_with("/saves"));
+        assert_eq!(c.saves, SavesConfig { auto_backup: true, keep: 5 }, "a backup after each session, the last five kept");
+        assert!(SavesConfig::validate_keep("0").is_err() && SavesConfig::validate_keep("256").is_err() && SavesConfig::validate_keep("3").is_ok());
     }
 
     #[test]

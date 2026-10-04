@@ -1401,6 +1401,7 @@ schema = 1
 [paths]                              # defaults follow XDG and xdg-user-dirs
 games_root = "~/Games"               # $XDG_GAMES_DIR: where sources install
 prefixes_root = "~/.local/share/universe/prefixes"
+saves_root = "~/.local/share/universe/saves"      # ludusavi's backups, one folder per game (see Game data)
 recordings_root = "~/Videos/universe"            # $XDG_VIDEOS_DIR/universe
 
 [launch]
@@ -1434,6 +1435,10 @@ profile = "auto"                     # auto | gnome | kde | cinnamon | sway | hy
 hide_cursor = true
 cursor_extension = ""                # empty: the Universe extension hides the pointer after 5 s at rest; another extension's uuid is enabled for the session instead, restored to its prior state after
 keep_awake = true                    # the desktop's idle inhibitors held for the session (see universe keep-awake): a pad is no activity to it, and the screen would blank and suspend mid-game
+
+[saves]                              # see Game data
+auto_backup = true                   # a backup of the game's saves after each session
+keep = 5                             # backups kept per game (1 to 255), the oldest going first
 
 [system]                             # the machine's controls as last set (see System), put back at the launcher's start outside Steam; "" leaves one as the system has it
 tdp = ""                             # watts

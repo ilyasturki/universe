@@ -9,7 +9,10 @@ from .settings import HIDE_CURSOR, KEEP_AWAKE, RowsForm, _add, _dig, _row, globa
 CONFIG_ROWS = [
     ("Folders", "paths.games_root", "Games", "path", (), "Where sources install games."),
     ("Folders", "paths.prefixes_root", "Wine prefixes", "path", (), "Where a game's prefix is made when it names none."),
+    ("Folders", "paths.saves_root", "Save backups", "path", (), "Where each game's save backups are kept."),
     ("Folders", "paths.recordings_root", "Recordings", "path", (), "Where the capture module files its videos."),
+    ("Saves", "saves.auto_backup", "Back up after playing", "bool", (), "Back up a game's saves each time a session ends, through ludusavi."),
+    ("Saves", "saves.keep", "Backups kept", "int", (), "How many backups each game keeps, the oldest going first."),
     (
         "API keys",
         "keys.sgdb",

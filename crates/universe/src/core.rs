@@ -1440,6 +1440,9 @@ impl Core {
         if key == "controller.volume_step" {
             crate::controller::volume_step_value(value)?;
         }
+        if key == "saves.keep" && !value.is_empty() {
+            crate::config::SavesConfig::validate_keep(value)?;
+        }
         if let Some(field) = key.strip_prefix("launch.") {
             crate::launch_keys::validate(crate::launch_keys::Scope::Global, field, value)?;
         }

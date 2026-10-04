@@ -42,7 +42,7 @@ class PathBrowser(QObject):
 
     def _load_shortcuts(self):
         paths = self._client.config().get("paths") or {}
-        wanted = [("Home", "~"), ("Games", paths.get("games_root")), ("Prefixes", paths.get("prefixes_root"))]
+        wanted = [("Home", "~"), ("Games", paths.get("games_root")), ("Prefixes", paths.get("prefixes_root")), ("Saves", paths.get("saves_root"))]
         wanted += [(os.path.basename(m), m) for m in _mounts()]
         wanted.append(("Root", "/"))
         seen, out = set(), []
