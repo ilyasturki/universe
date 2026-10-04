@@ -48,6 +48,7 @@ Item {
 
             Image {
                 id: logoImage
+                objectName: "heroLogo"
                 anchors.fill: parent
                 source: hero.logo
                 fillMode: Image.PreserveAspectFit
@@ -57,13 +58,20 @@ Item {
                 smooth: true
                 mipmap: true
                 sourceSize.width: 900
-                visible: status === Image.Ready
+                opacity: status === Image.Ready ? 1.0 : 0.0
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: Theme.durHero
+                    }
+                }
             }
 
             Label {
+                objectName: "heroTitle"
                 anchors.bottom: parent.bottom
                 width: Math.min(Theme.dp(1000), hero.width - x - Theme.dp(Theme.sideTile + Theme.columnRight + 60))
-                visible: !logoImage.visible
+                visible: String(hero.logo) === "" || logoImage.status === Image.Error
                 text: hero.isGame ? hero.game.title : hero.entry ? hero.entry.label || "" : ""
                 wrapMode: Text.WordWrap
                 maximumLineCount: 2

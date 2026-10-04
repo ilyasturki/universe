@@ -56,6 +56,18 @@ def test_down_goes_into_the_hero_then_the_hub_and_b_goes_back_up(ps5):
     until(lambda: home.property("zone") == "rail" and home.property("scroll") == 0)
 
 
+def test_the_hero_never_shows_the_plain_title_while_a_logo_loads(ps5):
+    window, root = ps5
+    home = root.findChild(QObject, "homePage")
+    title = root.findChild(QObject, "heroTitle")
+    logo = root.findChild(QObject, "heroLogo")
+    shown = record(title.visibleChanged)
+    for _ in range(3):
+        QTest.keyClick(window, Qt.Key.Key_Right)
+        until(lambda: home.property("heroShown") is True and logo.property("progress") == 1)
+    assert title.property("visible") is False and not shown
+
+
 def test_the_hero_side_tile_takes_a_screenshot_before_the_banner(ps5):
     _window, root = ps5
     home = root.findChild(QObject, "homePage")
