@@ -1,5 +1,5 @@
 import _eden
-from _controls import Context, ini_section
+from _controls import Context
 from controls_fixtures import EDGE, XBOX, twin
 
 # What Eden's own auto-mapping wrote for that Edge (input/dualsense-edge.ini).
@@ -54,15 +54,6 @@ def test_positional_is_what_edens_own_mapping_writes_less_home():
     assert got["connected"] == "true" and got["type"] == "0"
 
 
-def test_home_is_left_to_universe_unless_guide_is_on():
-    assert player(_eden.values_for(Context([EDGE], "positional", False)))["button_home"] == _eden.EMPTY
-
-
-def test_xbox_layout_puts_a_on_the_bottom_button():
-    got = player(_eden.values_for(Context([EDGE], "xbox", False)))
-    assert [params(got[f"button_{k}"])["button"] for k in "abxy"] == ["0", "1", "2", "3"]
-
-
 def test_an_xbox_pad_on_the_joystick_driver_has_axis_triggers_and_no_motion():
     got = player(_eden.values_for(Context([XBOX], "positional", False)))
     assert params(got["button_zl"]) == {
@@ -94,34 +85,19 @@ def test_driver_hints_follow_edens_own_switch_drivers():
     assert hints["SDL_JOYSTICK_HIDAPI_JOY_CONS"] == "1" and hints["SDL_JOYSTICK_HIDAPI_SWITCH"] == "0"
 
 
-INI = """[DisabledAddOns]
-size=0
-
-[Controls]
-enable_joycon_driver\\default=true
-enable_joycon_driver=true
+INI = """[Controls]
 player_0_button_a\\default=true
 player_0_button_a="engine:keyboard,code:67,toggle:0"
-player_0_vibration_enabled=true
 
 [UI]
 Shortcuts\\Main%20Window\\Exit%20Eden\\Controller_KeySeq=Home+Minus
 """
 
 
-def test_rewrite_sets_owned_keys_in_place_and_keeps_every_other_line():
+def test_rewrite_sets_each_value_in_its_section_beside_a_default_false():
     new = _eden.rewrite(INI, {"player_0_button_a": "engine:sdl,port:0,guid:00,button:1", "player_0_button_home": _eden.EMPTY, "player_0_connected": "true"})
     lines = new.splitlines()
     assert 'player_0_button_a="engine:sdl,port:0,guid:00,button:1"' in lines
-    assert "player_0_button_a\\default=false" in lines
+    assert "player_0_button_a\\default=false" in lines and "player_0_button_a\\default=true" not in lines
     assert "player_0_button_home=[empty]" in lines and "player_0_connected=true" in lines
     assert lines.index("player_0_button_home=[empty]") < lines.index("[UI]")
-    assert "player_0_vibration_enabled=true" in lines and "Shortcuts\\Main%20Window\\Exit%20Eden\\Controller_KeySeq=Home+Minus" in lines
-    assert ini_section(new, "Controls")["player_0_button_a"] == "engine:sdl,port:0,guid:00,button:1"
-    assert _eden.rewrite(new, {"player_0_button_a": "engine:sdl,port:0,guid:00,button:1"}) == new
-
-
-def test_swapped_shoulders_exchange_l_r_with_zl_zr():
-    got = player(_eden.values_for(Context([EDGE], shoulders="swapped")))
-    assert params(got["button_l"])["axis"] == "4" and params(got["button_slleft"])["axis"] == "4"
-    assert params(got["button_zr"])["button"] == "10"

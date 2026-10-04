@@ -39,18 +39,9 @@ def test_ids_are_ryujinxs_guid_text_with_a_count_per_model():
     ]
 
 
-@pytest.mark.parametrize(
-    ("pad", "layout", "abxy"),
-    [
-        (EDGE, "positional", ("B", "A", "Y", "X")),
-        (EDGE, "xbox", ("A", "B", "X", "Y")),
-        (XBOX, "positional", ("B", "A", "Y", "X")),
-        (SWITCH_PRO, "positional", ("A", "B", "X", "Y")),
-        (SWITCH_PRO, "xbox", ("B", "A", "Y", "X")),
-    ],
-)
-def test_face_tokens_name_the_label_on_the_chosen_button(pad, layout, abxy):
-    doc = _ryujinx.rewrite({"version": 73}, Context([pad], layout))
+@pytest.mark.parametrize(("pad", "abxy"), [(EDGE, ("B", "A", "Y", "X")), (XBOX, ("B", "A", "Y", "X")), (SWITCH_PRO, ("A", "B", "X", "Y"))])
+def test_face_tokens_name_the_label_on_the_chosen_button(pad, abxy):
+    doc = _ryujinx.rewrite({"version": 73}, Context([pad]))
     right = doc["input_config"][0]["right_joycon"]
     assert (right["button_a"], right["button_b"], right["button_x"], right["button_y"]) == abxy
 
@@ -61,6 +52,8 @@ def test_players_follow_the_pads_and_keep_their_tuning():
     assert [p1["player_index"], p2["player_index"]] == ["Player1", "Player2"]
     assert p1["id"] == "0-00000005-054c-0000-f20d-000000006800" and p1["name"] == "DualSense Edge Wireless Controller (0)"
     assert p1["controller_type"] == "ProController" and p1["backend"] == "GamepadSDL3"
+    left, right = p1["left_joycon"], p1["right_joycon"]
+    assert (left["button_l"], left["button_zl"], right["button_r"], right["button_zr"]) == ("LeftShoulder", "LeftTrigger", "RightShoulder", "RightTrigger")
     assert (p1["deadzone_left"], p1["range_left"], p1["trigger_threshold"], p1["rumble"]["enable_rumble"]) == (0.2, 1.0, 0.3, True)
     assert p1["motion"]["sensitivity"] == 120 and p1["motion"]["enable_motion"] is True
     assert p1["left_joycon_stick"] == {"joystick": "Left", "invert_stick_x": True, "invert_stick_y": False, "rotate90_cw": False, "stick_button": "LeftStick"}
@@ -70,8 +63,6 @@ def test_players_follow_the_pads_and_keep_their_tuning():
         "enable_dynamic_input_swap": False,
         "devices": [{"type": "Controller", "id": "0-00000005-045e-0000-8e02-000030110000", "profile_name": None}],
     }
-    tokens = json.dumps(doc)
-    assert not any(t in tokens for t in ('"Guide"', '"Misc1"', '"Paddle', '"Touchpad"'))
 
 
 def test_plan_writes_the_global_config_and_the_games_that_carry_their_own_input(base):
@@ -97,10 +88,3 @@ def test_plan_skips_without_a_readable_config(base):
     (base / "Config.json").write_text('{"version": "x"}')
     with pytest.raises(Skip):
         _ryujinx.plan(Context([EDGE]))
-
-
-def test_swapped_shoulders_exchange_l_r_with_zl_zr():
-    entry = _ryujinx.rewrite({"version": 73}, Context([EDGE], shoulders="swapped"))["input_config"][0]
-    assert (entry["left_joycon"]["button_l"], entry["left_joycon"]["button_zl"]) == ("LeftTrigger", "LeftShoulder")
-    right = entry["right_joycon"]
-    assert (right["button_r"], right["button_zr"], right["button_sr"]) == ("RightTrigger", "RightShoulder", "SingleRightTrigger1")

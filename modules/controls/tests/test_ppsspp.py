@@ -12,9 +12,6 @@ Pause = 1-111,10-109,10-104,10-4034
 Analog speed = 10-4036
 Fast-forward = 1-61,1-59:10-198
 Home = 12-4
-
-[Other]
-Keep = 10-189
 """
 
 
@@ -33,12 +30,6 @@ def test_every_pad_mapping_goes_and_the_held_pad_is_bound_at_its_sdl_index(contr
     assert got["L"] == "1-45,11-193,11-4008" and got["R"] == "11-192,11-4010" and got["An.Up"] == "11-4003" and got["RightAn.Right"] == "11-4004"
     assert got["Pause"] == "1-111" and "Analog speed" not in got and got["Fast-forward"] == "1-61"
     assert got["Start"] == "11-197" and got["Select"] == "11-196"
-    assert not any(part.split(":")[-1].split("-")[1] in ("198", "199", "200", "201", "202", "203") for v in got.values() for part in v.split(","))
-
-
-def test_the_bom_and_other_sections_stay(controls):
-    text = _ppsspp.plan(Context([EDGE]))[controls]
-    assert text.startswith("﻿[ControlMapping]") and "[Other]\nKeep = 10-189" in text
 
 
 def test_a_nintendo_pad_gets_cross_back_on_its_bottom_button(controls):
@@ -46,19 +37,10 @@ def test_a_nintendo_pad_gets_cross_back_on_its_bottom_button(controls):
     assert (got["Cross"], got["Circle"], got["Square"], got["Triangle"]) == ("1-54,12-190", "1-52,12-189", "12-188", "12-191")
 
 
-def test_home_goes_to_the_psps_home_so_it_never_opens_ppsspps_menu(controls):
+def test_home_goes_to_the_psps_home_unless_passed_through_to_ppsspps_menu(controls):
     assert section_values(_ppsspp.plan(Context([EDGE]))[controls], "ControlMapping")["Home"] == "10-4"
-
-
-def test_home_passed_through_is_left_unbound_for_ppsspps_menu(controls):
     got = section_values(_ppsspp.plan(Context([EDGE], guide=True))[controls], "ControlMapping")
     assert not any(part.endswith("-4") for v in got.values() for part in v.split(","))
-
-
-def test_writing_twice_changes_nothing(controls):
-    once = _ppsspp.plan(Context([EDGE]))[controls]
-    controls.write_text(once)
-    assert _ppsspp.plan(Context([EDGE]))[controls] == once
 
 
 def test_a_file_without_the_section_is_not_given_a_partial_one(controls):

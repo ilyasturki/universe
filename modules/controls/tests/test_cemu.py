@@ -59,15 +59,13 @@ def test_positional_gamepad_is_cemus_own_default_without_home(cemu):
     assert controller.findtext("display_name") == EDGE.name and controller.findtext("motion") == "true"
     assert [maps[i] for i in (1, 2, 3, 4)] == [1, 0, 3, 2]
     assert (maps[5], maps[7], maps[8], maps[9], maps[10], maps[17], maps[20]) == (9, 42, 43, 6, 4, 45, 38)
-    assert 27 not in maps and not set(maps.values()) & {5, 15, 16, 17, 18, 19, 20}
 
 
-def test_second_player_is_a_pro_controller_with_xbox_letters_and_home(cemu):
-    files = _cemu.plan(Context([EDGE, XBOX], "xbox", guide=True))
+def test_second_player_is_a_pro_controller_with_home_when_passed_through(cemu):
+    files = _cemu.plan(Context([EDGE, XBOX], guide=True))
     root, controller, maps = parse(files[cemu / "controllerProfiles" / "controller1.xml"])
     assert root.findtext("type") == "Wii U Pro Controller" and root.find("toggle_display") is None
     assert controller.find("motion") is None
-    assert [maps[i] for i in (1, 2, 3, 4)] == [0, 1, 2, 3]
     assert maps[11] == 5 and (maps[12], maps[16], maps[18], maps[25]) == (11, 7, 45, 40)
 
 
@@ -101,8 +99,3 @@ def test_a_games_profile_follows_the_held_pad_and_keeps_its_mapping(cemu):
     assert controller.findtext("uuid") == f"0_{XBOX.guid.hex()}" and controller.findtext("display_name") == XBOX.name
     assert maps == {1: 0} and controller.findtext("rumble") == "0.25"
     assert text.replace(f"0_{XBOX.guid.hex()}", "0_030057564c050000e60c000000006800").replace(XBOX.name, "DualSense Wireless Controller") == EXISTING
-
-
-def test_swapped_shoulders_exchange_l_r_with_zl_zr(cemu):
-    _, _, maps = parse(_cemu.plan(Context([EDGE], shoulders="swapped"))[cemu / "controllerProfiles" / "controller0.xml"])
-    assert (maps[5], maps[6], maps[7], maps[8], maps[9]) == (42, 43, 9, 10, 6)

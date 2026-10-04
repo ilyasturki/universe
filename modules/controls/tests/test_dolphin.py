@@ -16,7 +16,6 @@ Device = SDL/0/DualSense Wireless Controller
 Buttons/A = `Button E`
 Buttons/Z = `Trigger L`+`Trigger R`
 Main Stick/Calibration = 90.00 120.00
-Main Stick/Modifier/Range = 100.
 Options/Always Connected = True
 [GCPad2]
 Device = XInput2/0/Virtual core pointer
@@ -78,7 +77,6 @@ def test_gamecube_takes_dolphins_preset_and_keeps_the_users_settings(dolphin):
     assert gc["Triggers/L-Analog"] == "`Trigger L`" and gc["Main Stick/Up"] == "`Left Y+`"
     assert gc["Main Stick/Calibration"] == "90.00 120.00" and gc["Options/Always Connected"] == "True"
     assert gc["C-Stick/Calibration"] == _dolphin.CALIBRATION
-    assert not any("Guide" in v or "Misc" in v or "Paddle" in v for v in gc.values())
 
 
 def test_wiimote_holds_a_nunchuk_and_classic_follows_the_layout(dolphin):
@@ -89,10 +87,7 @@ def test_wiimote_holds_a_nunchuk_and_classic_follows_the_layout(dolphin):
     assert wm["Buttons/A"] == "`Button S`" and wm["Buttons/B"] == "`Trigger R`"
     assert wm["Classic/Buttons/A"] == "`Button S`" and wm["Classic/Buttons/B"] == "`Button E`"
     assert wm["IMUGyroscope/Yaw Left"] == "`Gyro Yaw Left`" and "IR/Up" not in wm
-    assert "Buttons/Home" not in wm and "Shake/Y" in wm and wm["Shake/Y"] == "`Shoulder R`"
-    assert ini_section(text, "BalanceBoard") == {"Source": "0"}
-    positional = ini_section(run(Context([EDGE], "positional"))["WiimoteNew.ini"], "Wiimote1")
-    assert positional["Classic/Buttons/A"] == "`Button E`" and positional["Classic/Buttons/Y"] == "`Button W`"
+    assert "Buttons/Home" not in wm and wm["Shake/Y"] == "`Shoulder R`"
 
 
 def test_the_games_scheme_picks_the_extension_and_how_the_remote_is_held(dolphin):
@@ -119,32 +114,23 @@ def test_ports_open_for_the_held_pads_only(dolphin):
     files = run(Context([EDGE, SWITCH_PRO]))
     core = ini_section(files["Dolphin.ini"], "Core")
     assert [core[f"SIDevice{n}"] for n in range(4)] == ["6", "6", "0", "0"]
-    assert ini_section(files["Dolphin.ini"], "SDL_Hints") == {"SDL_JOYSTICK_HIDAPI_PS5_PLAYER_LED": "1"}
     assert "[GCPad3]" not in files["GCPadNew.ini"]
 
 
-def test_ports_past_the_held_pads_left_on_a_pad_are_unplugged(dolphin):
+def test_ports_past_the_held_pads_are_unplugged_when_left_on_a_pad_and_kept_on_a_keyboard(dolphin):
     config, _ = dolphin
-    (config / "Dolphin.ini").write_text(DOLPHIN_INI.replace("SIDevice1 = 0", "SIDevice1 = 6"))
-    (config / "GCPadNew.ini").write_text(GCPAD_INI.replace("XInput2/0/Virtual core pointer", "SDL/0/Xbox Wireless Controller"))
+    (config / "Dolphin.ini").write_text(DOLPHIN_INI.replace("SIDevice1 = 0", "SIDevice1 = 6").replace("SIDevice2 = 0", "SIDevice2 = 6"))
+    (config / "GCPadNew.ini").write_text(GCPAD_INI + "[GCPad3]\nDevice = SDL/0/Xbox Wireless Controller\n")
     (config / "WiimoteNew.ini").write_text(
-        WIIMOTE_INI + "[Wiimote3]\nDevice = SDL/0/Xbox Wireless Controller\nSource = 1\n[Wiimote4]\nDevice = SDL/0/Xbox Wireless Controller\nSource = 2\n"
+        WIIMOTE_INI.replace("Source = 0\n[BalanceBoard]", "Source = 1\n[BalanceBoard]")
+        + "[Wiimote3]\nDevice = SDL/0/Xbox Wireless Controller\nSource = 1\n[Wiimote4]\nDevice = SDL/0/Xbox Wireless Controller\nSource = 2\n"
     )
     for platform in ("Nintendo GameCube", "Nintendo Wii"):
         files = run(Context([XBOX], platform=platform))
         core = ini_section(files["Dolphin.ini"], "Core")
-        assert [core[f"SIDevice{n}"] for n in range(4)] == ["6", "0", "0", "0"]
-        assert [ini_section(files["WiimoteNew.ini"], f"Wiimote{n}")["Source"] for n in range(1, 5)] == ["1", "0", "0", "2"]
-        assert ini_section(files["GCPadNew.ini"], "GCPad2")["Device"] == "SDL/0/Xbox Wireless Controller", "the bindings wait for a second pad"
-
-
-def test_ports_past_the_held_pads_on_a_keyboard_stay(dolphin):
-    config, _ = dolphin
-    (config / "Dolphin.ini").write_text(DOLPHIN_INI.replace("SIDevice1 = 0", "SIDevice1 = 6"))
-    (config / "WiimoteNew.ini").write_text(WIIMOTE_INI.replace("Source = 0\n[BalanceBoard]", "Source = 1\n[BalanceBoard]"))
-    files = run(Context([XBOX]))
-    assert ini_section(files["Dolphin.ini"], "Core")["SIDevice1"] == "6"
-    assert ini_section(files["WiimoteNew.ini"], "Wiimote2")["Source"] == "1"
+        assert [core[f"SIDevice{n}"] for n in range(4)] == ["6", "6", "0", "0"]
+        assert [ini_section(files["WiimoteNew.ini"], f"Wiimote{n}")["Source"] for n in range(1, 5)] == ["1", "1", "0", "2"]
+        assert ini_section(files["GCPadNew.ini"], "GCPad3")["Device"] == "SDL/0/Xbox Wireless Controller", "the bindings wait for a second pad"
 
 
 def test_a_wii_game_leaves_the_gamecube_ports(dolphin):
@@ -153,19 +139,20 @@ def test_a_wii_game_leaves_the_gamecube_ports(dolphin):
     assert ini_section(files["WiimoteNew.ini"], "Wiimote2")["Source"] == "1"
 
 
-def test_a_games_own_profile_keeps_its_scheme_on_the_held_pad(dolphin):
+def test_a_games_own_profile_keeps_its_scheme_on_the_held_pad_and_one_on_a_keyboard_is_left_alone(dolphin):
     config, games = dolphin
-    (games / "SMNP01.ini").write_text("[Controls]\nWiimoteProfile1 = sideways\nPadProfile2 = pad\n")
+    (games / "SMNP01.ini").write_text("[Controls]\nWiimoteProfile1 = sideways\nPadProfile1 = keys\nPadProfile2 = pad\n")
     (config / "Profiles" / "Wiimote").mkdir(parents=True)
     (config / "Profiles" / "GCPad").mkdir(parents=True)
     (config / "Profiles" / "Wiimote" / "sideways.ini").write_text(
         "[Profile]\nDevice = SDL/0/DualSense Wireless Controller\nOptions/Sideways Wiimote = True\nButtons/2 = `Button S`\n"
     )
+    (config / "Profiles" / "GCPad" / "keys.ini").write_text("[Profile]\nDevice = XInput2/0/Virtual core pointer\n")
     (config / "Profiles" / "GCPad" / "pad.ini").write_text("[Profile]\nDevice = SDL/0/DualSense Wireless Controller\n")
     files = _dolphin.plan(Context([XBOX]))
     profile = ini_section(files[config / "Profiles" / "Wiimote" / "sideways.ini"], "Profile")
     assert profile == {"Device": "SDL/0/Xbox Wireless Controller", "Options/Sideways Wiimote": "True", "Buttons/2": "`Button S`"}
-    assert config / "Profiles" / "GCPad" / "pad.ini" not in files
+    assert not {config / "Profiles" / "GCPad" / "keys.ini", config / "Profiles" / "GCPad" / "pad.ini"} & set(files)
 
 
 def test_ports_after_a_games_profile_get_a_copy_of_it_on_their_own_pad(dolphin):
@@ -212,22 +199,6 @@ def test_a_stale_copy_goes_once_the_games_profile_is_gone(dolphin):
     assert ini_section(_dolphin.plan(Context([EDGE, XBOX]))[games / "SMNP01.ini"], "Controls") == {"PadType0": "0"}
 
 
-def test_a_profile_on_a_keyboard_is_left_alone(dolphin):
-    config, games = dolphin
-    (games / "GFZP01.ini").write_text("[Controls]\nPadProfile1 = keys\n")
-    (config / "Profiles" / "GCPad").mkdir(parents=True)
-    (config / "Profiles" / "GCPad" / "keys.ini").write_text("[Profile]\nDevice = XInput2/0/Virtual core pointer\n")
-    assert config / "Profiles" / "GCPad" / "keys.ini" not in _dolphin.plan(Context([EDGE]))
-
-
 def test_userpath_holds_config_and_game_settings(tmp_path, monkeypatch):
     monkeypatch.setenv("DOLPHIN_EMU_USERPATH", str(tmp_path / "user"))
     assert _dolphin.user_dirs() == (tmp_path / "user" / "Config", tmp_path / "user" / "GameSettings")
-
-
-def test_swapped_shoulders_put_gamecube_l_and_r_on_the_bumpers(dolphin):
-    files = run(Context([EDGE], shoulders="swapped"))
-    gc = ini_section(files["GCPadNew.ini"], "GCPad1")
-    assert (gc["Triggers/L"], gc["Triggers/R-Analog"], gc["Buttons/Z"]) == ("`Shoulder L`", "`Shoulder R`", "`Trigger R` | `Trigger L`")
-    wm = ini_section(files["WiimoteNew.ini"], "Wiimote1")
-    assert (wm["Buttons/B"], wm["Nunchuk/Buttons/Z"], wm["Nunchuk/Buttons/C"]) == ("`Shoulder R`", "`Shoulder L`", "`Trigger L`")

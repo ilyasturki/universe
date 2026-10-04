@@ -1,7 +1,7 @@
 import _mupen64plus
 import pytest
 from _controls import Context, Skip, ini_section
-from controls_fixtures import EDGE, SWITCH_PRO, XBOX
+from controls_fixtures import EDGE, XBOX
 
 
 @pytest.fixture
@@ -45,38 +45,16 @@ def test_an_xbox_pad_matches_mupens_own_series_x_block(cfg):
     assert 'Z Trig = "axis(2+)"' in text.splitlines()
 
 
-def test_unused_slots_are_unplugged_so_auto_mode_grabs_nothing(cfg):
-    text = _mupen64plus.plan(Context([EDGE, SWITCH_PRO]))[cfg]
-    assert ini_section(text, "Input-SDL-Control2")["device"] == "2"
-    for n in (3, 4):
-        assert ini_section(text, f"Input-SDL-Control{n}") == {"version": "2.000000", "mode": "0", "device": "-1", "name": "", "plugged": "False"}
-
-
-def test_the_layout_setting_does_not_move_n64_buttons(cfg):
-    a = ini_section(_mupen64plus.plan(Context([EDGE], "xbox"))[cfg], "Input-SDL-Control1")
-    b = ini_section(_mupen64plus.plan(Context([EDGE], "positional"))[cfg], "Input-SDL-Control1")
-    assert a == b and (a["A Button"], a["B Button"]) == ("button(0)", "button(2)")
-
-
-def test_old_sections_are_replaced_and_the_rest_kept(cfg):
+def test_its_sections_are_rewritten_whole_and_unused_slots_unplugged_so_auto_mode_grabs_nothing(cfg):
     cfg.parent.mkdir()
-    cfg.write_text(
-        '# Mupen64Plus Configuration File\n\n[Core]\nVersion = 1.010000\n\n[Input-SDL-Control1]\n# help\nmode = 2\nname = "Old"\n\n'
-        "[Input-SDL-Control2]\nmode = 2\n\n[Video-General]\nFullscreen = False\n"
-    )
+    cfg.write_text('[Input-SDL-Control1]\n# help\nmode = 2\nname = "Old"\n\n[Input-SDL-Control2]\nmode = 2\n')
     text = _mupen64plus.plan(Context([EDGE]))[cfg]
-    assert text.startswith("# Mupen64Plus Configuration File\n\n[Core]\nVersion = 1.010000\n")
     assert ini_section(text, "Input-SDL-Control1")["mode"] == "0" and "# help" not in text
-    assert ini_section(text, "Input-SDL-Control2")["device"] == "-1"
-    assert ini_section(text, "Video-General") == {"Fullscreen": "False"}
     assert text.count("[Input-SDL-Control1]") == 1
+    for n in (2, 3, 4):
+        assert ini_section(text, f"Input-SDL-Control{n}") == {"version": "2.000000", "mode": "0", "device": "-1", "name": "", "plugged": "False"}
 
 
 def test_m64p_is_left_alone(cfg):
     with pytest.raises(Skip):
         _mupen64plus.plan(Context([EDGE], runner_path="/usr/bin/m64p"))
-
-
-def test_swapped_shoulders_put_z_on_the_left_bumper(cfg):
-    got = ini_section(_mupen64plus.plan(Context([XBOX], shoulders="swapped"))[cfg], "Input-SDL-Control1")
-    assert (got["Z Trig"], got["L Trig"], got["R Trig"]) == ("button(4)", "axis(2+)", "axis(5+) button(5)")

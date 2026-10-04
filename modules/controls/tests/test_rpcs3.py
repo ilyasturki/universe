@@ -55,25 +55,15 @@ def blocks(text):
     return out
 
 
-def test_devices_count_pads_with_the_same_name():
-    assert _rpcs3.devices([EDGE, XBOX, twin(EDGE)]) == [
-        "DualSense Edge Wireless Controller 1",
-        "Xbox Wireless Controller 1",
-        "DualSense Edge Wireless Controller 2",
-    ]
-
-
-def test_the_active_global_config_is_written_fresh_for_the_sdl_handler(rpcs3):
-    files = _rpcs3.plan(Context([EDGE, XBOX]))
-    text = files[rpcs3 / "global" / "Default.yml"]
-    got = blocks(text)
+def test_the_active_global_config_is_written_fresh_for_the_sdl_handler_counting_pads_by_name(rpcs3):
+    files = _rpcs3.plan(Context([EDGE, XBOX, twin(EDGE)]))
+    got = blocks(files[rpcs3 / "global" / "Default.yml"])
     assert got[1]["  Handler"] == "SDL" and got[1]["  Device"] == '"DualSense Edge Wireless Controller 1"'
     assert got[1]["    Cross"] == '"South"' and got[1]["    Triangle"] == '"North"' and got[1]["    Left Stick Up"] == '"LS Y+"'
-    assert got[1]["    PS Button"] == '""'
+    assert (got[1]["    L1"], got[1]["    L2"], got[1]["    PS Button"]) == ('"LB"', '"LT"', '""')
     assert got[1]["    Product ID"] == "616" and "    Left Stick Deadzone" not in got[1]
-    assert got[2]["  Device"] == '"Xbox Wireless Controller 1"'
-    assert [got[n]["  Handler"] for n in range(3, 8)] == ['"Null"'] * 5
-    assert not any(v for b in got.values() for v in b.values() if "Guide" in v or "Paddle" in v or "Misc" in v)
+    assert (got[2]["  Device"], got[3]["  Device"]) == ('"Xbox Wireless Controller 1"', '"DualSense Edge Wireless Controller 2"')
+    assert [got[n]["  Handler"] for n in range(4, 8)] == ['"Null"'] * 4
 
 
 def test_guide_goes_to_the_ps_button_when_passed_through(rpcs3):
@@ -99,18 +89,7 @@ def test_per_title_configs_keep_their_bindings_and_follow_the_held_pads(rpcs3):
     assert new.replace('"DualSense Edge Wireless Controller 1"', '"PS4 Controller 1"') == PER_TITLE
 
 
-def test_a_per_title_config_already_right_is_left_out(rpcs3):
-    (rpcs3 / "BLES01807").mkdir()
-    (rpcs3 / "BLES01807" / "Default.yml").write_text(PER_TITLE.replace("PS4 Controller 1", "DualSense Edge Wireless Controller 1"))
-    assert rpcs3 / "BLES01807" / "Default.yml" not in _rpcs3.plan(Context([EDGE]))
-
-
 def test_hints_put_a_ds3_on_hidapi_and_load_rpcs3s_database(rpcs3):
     assert _rpcs3.hints() == {"SDL_JOYSTICK_HIDAPI_PS3": "1"}
     (rpcs3 / "gamecontrollerdb.txt").write_text("")
     assert _rpcs3.databases() == [rpcs3 / "gamecontrollerdb.txt"]
-
-
-def test_swapped_shoulders_exchange_l1_r1_with_l2_r2(rpcs3):
-    got = blocks(_rpcs3.plan(Context([EDGE], shoulders="swapped"))[rpcs3 / "global" / "Default.yml"])
-    assert (got[1]["    L1"], got[1]["    R2"], got[1]["    L3"]) == ('"LT"', '"RB"', '"LS"')

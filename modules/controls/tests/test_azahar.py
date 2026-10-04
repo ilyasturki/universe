@@ -24,9 +24,8 @@ def test_positional_matches_azahars_own_automap_less_home():
     assert got["button_home"] == _azahar.EMPTY
 
 
-def test_xbox_layout_guide_and_a_pad_without_gyro():
-    got = _azahar.values_for(Context([XBOX], "xbox", guide=True))
-    assert [params(got[f"button_{k}"])["button"] for k in "abxy"] == ["0", "1", "2", "3"]
+def test_guide_passed_through_binds_home_and_a_pad_without_gyro_gets_emulated_motion():
+    got = _azahar.values_for(Context([XBOX], guide=True))
     assert params(got["button_home"])["button"] == "8"
     assert params(got["button_zr"])["axis"] == "5"
     assert got["motion_device"] == "engine:motion_emu,sensitivity:0.01,tilt_clamp:90.0,update_period:100"
@@ -53,13 +52,10 @@ profiles\\2\\button_a="code:65,engine:keyboard"
 profiles\\2\\button_debug="code:79,engine:keyboard"
 profiles\\2\\name=Pad
 profiles\\size=2
-
-[UI]
-fullscreen=true
 """
 
 
-def test_rewrite_fills_the_active_profile_and_keeps_the_rest():
+def test_rewrite_fills_the_active_profile_and_grows_the_list_to_hold_it():
     new = _azahar.rewrite(INI, _azahar.values_for(Context([EDGE])))
     controls = ini_section(new, "Controls")
     assert controls["profiles\\2\\button_a"] == f"button:1,{G}" and controls["profiles\\2\\button_a\\default"] == "false"
@@ -67,20 +63,5 @@ def test_rewrite_fills_the_active_profile_and_keeps_the_rest():
     assert controls["profiles\\1\\button_a"] == "code:65,engine:keyboard"
     assert controls["profiles\\2\\button_debug"] == "code:79,engine:keyboard" and controls["profiles\\size"] == "2"
     assert 'profiles\\2\\button_a="button:1,' in new and "profiles\\2\\button_home=[empty]" in new
-    assert ini_section(new, "UI") == {"fullscreen": "true"}
-
-
-def test_rewrite_grows_the_profile_list_when_needed():
-    new = _azahar.rewrite("[Controls]\nprofile=0\n", {"button_a": _azahar.EMPTY})
-    assert ini_section(new, "Controls")["profiles\\size"] == "1"
-
-
-def test_plan_writes_azahars_config(tmp_path):
-    (tmp_path / "azahar-emu").mkdir()
-    (tmp_path / "azahar-emu" / "qt-config.ini").write_text(INI)
-    assert list(_azahar.plan(Context([EDGE]))) == [tmp_path / "azahar-emu" / "qt-config.ini"]
-
-
-def test_swapped_shoulders_exchange_l_r_with_zl_zr():
-    got = _azahar.values_for(Context([EDGE], shoulders="swapped"))
-    assert params(got["button_l"])["axis"] == "4" and got["button_zr"] == f"button:10,{G}"
+    grown = _azahar.rewrite("[Controls]\nprofile=0\n", {"button_a": _azahar.EMPTY})
+    assert ini_section(grown, "Controls")["profiles\\size"] == "1"

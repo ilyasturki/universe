@@ -6,14 +6,11 @@ def fields(line):
     return dict(f.split(":", 1) for f in line.rstrip(",").split(",")[2:])
 
 
-def test_universes_buttons_leave_the_mapping_and_the_rest_stays():
+def test_universes_buttons_leave_the_mapping_and_the_rest_stays_with_guide_when_passed_through():
     got = fields(_mapping.stripped(EDGE.mapping))
     assert not {"guide", "misc1", "paddle1", "paddle2", "paddle3", "paddle4"} & set(got)
     assert got["a"] == "b0" and got["touchpad"] == "b11" and got["crc"] == "27e0"
     assert _mapping.stripped(EDGE.mapping).startswith("0500e0274c050000f20d000000006800,*,")
-
-
-def test_guide_stays_when_it_is_passed_through():
     assert fields(_mapping.stripped(EDGE.mapping, guide=True))["guide"] == "b5"
 
 

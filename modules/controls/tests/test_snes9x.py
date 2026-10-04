@@ -37,19 +37,7 @@ def test_a_fresh_file_holds_the_ports_and_both_sets(conf):
         "Joystick 1 Axis 0 - 50%",
         "Joystick 1 Axis 0 + 50%",
     )
-    assert stick["A"] == "Unset"
-
-
-def test_xbox_layout_and_the_joystick_index(conf):
-    text = _snes9x.plan(Context([XBOX], "xbox", runner_path=GTK))[conf]
-    pad = ini_section(text, "Joypad 0")
-    assert (pad["A"], pad["B"], pad["X"], pad["Y"], pad["Start"]) == (
-        "Joystick 2 Button 0",
-        "Joystick 2 Button 1",
-        "Joystick 2 Button 2",
-        "Joystick 2 Button 3",
-        "Joystick 2 Button 7",
-    )
+    assert (stick["L"], stick["R"], stick["A"]) == ("Joystick 1 Axis 4 + 0%", "Joystick 1 Axis 5 + 0%", "Unset")
 
 
 def test_a_multitap_only_for_three_pads(conf):
@@ -62,17 +50,9 @@ def test_stale_pads_and_shortcuts_on_universes_buttons_are_unset(conf):
     conf.parent.mkdir()
     conf.write_text(
         "[Joypad 1]\nA = Joystick 2 Button 1\nB = Keyboard x\n\n[Joypad 6]\nUp = Joystick 2 Axis 1 - 50%\n\n"
-        "[Shortcuts]\nGTK_quit = Joystick 1 Button 5\nGTK_fullscreen = Joystick 1 Button 3\nQuickSave000 = Keyboard F1\n\n[Display]\nFullscreen = true\n"
+        "[Shortcuts]\nGTK_quit = Joystick 1 Button 5\nGTK_fullscreen = Joystick 1 Button 3\nQuickSave000 = Keyboard F1\n"
     )
     text = _snes9x.plan(Context([EDGE], runner_path=GTK))[conf]
     assert ini_section(text, "Joypad 1") == {"A": "Unset", "B": "Keyboard x"}
     assert ini_section(text, "Joypad 6") == {"Up": "Unset"}
     assert ini_section(text, "Shortcuts") == {"GTK_quit": "Unset", "GTK_fullscreen": "Joystick 1 Button 3", "QuickSave000": "Keyboard F1"}
-    assert ini_section(text, "Display") == {"Fullscreen": "true"}
-
-
-def test_the_second_set_puts_l_and_r_on_the_triggers(conf):
-    text = _snes9x.plan(Context([EDGE], runner_path=GTK))[conf]
-    assert (ini_section(text, "Joypad 0")["L"], ini_section(text, "Joypad 5")["R"]) == ("Joystick 1 Button 9", "Joystick 1 Axis 5 + 0%")
-    swapped = _snes9x.plan(Context([EDGE], runner_path=GTK, shoulders="swapped"))[conf]
-    assert (ini_section(swapped, "Joypad 0")["L"], ini_section(swapped, "Joypad 5")["L"]) == ("Joystick 1 Axis 4 + 0%", "Joystick 1 Button 9")

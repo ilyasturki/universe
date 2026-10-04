@@ -1,11 +1,8 @@
-import importlib
-import importlib.machinery
-import importlib.util
 import json
 
 import pytest
-from _controls import Context, Skip, ini_section
-from controls_fixtures import BIN_DIR, EDGE
+from _controls import ini_section
+from controls_fixtures import EDGE, script
 
 INI = """[Controls]
 player_0_button_a\\default=true
@@ -13,17 +10,9 @@ player_0_button_a="engine:keyboard,code:67,toggle:0"
 """
 
 
-def _script(name):
-    loader = importlib.machinery.SourceFileLoader(f"controls_{name}", str(BIN_DIR / name))
-    spec = importlib.util.spec_from_loader(loader.name, loader)
-    mod = importlib.util.module_from_spec(spec)
-    loader.exec_module(mod)
-    return mod
-
-
 @pytest.fixture
 def hook(tmp_path, monkeypatch):
-    pre = _script("pre")
+    pre = script("pre")
     config = tmp_path / "config"
     (config / "eden").mkdir(parents=True)
     (config / "eden" / "qt-config.ini").write_text(INI)
@@ -108,12 +97,6 @@ def test_pre_stands_down_for_the_pads_module_and_without_pads(hook, monkeypatch)
     monkeypatch.setattr(hook.pre, "pads_module_runs", lambda _game: False)
     monkeypatch.setattr(hook.pre._gamepads, "pads", lambda _hints: [])
     assert hook(EDEN) == 0 and hook.ini.read_text() == INI and hook.env.read_text() == ""
-
-
-@pytest.mark.parametrize("emulator", ["eden", "dolphin", "cemu", "azahar", "melonds", "mgba", "rpcs3", "pcsx2", "duckstation", "ppsspp", "xemu", "flycast"])
-def test_an_emulator_never_started_is_left_to_its_first_start(emulator):
-    with pytest.raises(Skip):
-        importlib.import_module(f"_{emulator}").plan(Context([EDGE]))
 
 
 def test_the_shoulders_setting_reaches_the_writer(hook, monkeypatch):

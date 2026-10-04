@@ -1,3 +1,5 @@
+import importlib.machinery
+import importlib.util
 from pathlib import Path
 
 from _gamepads import BIND_AXIS, BIND_BUTTON, BIND_HAT, Input, Pad
@@ -95,5 +97,17 @@ SWITCH_PRO = Pad(
 )
 
 
+# A Pro Controller whose ZL and ZR read as buttons, as on a driver without analog triggers.
+SWITCH_PRO_DIGITAL = Pad(**{**vars(SWITCH_PRO), "bindings": {**SWITCH_PRO.bindings, (A, 4): Input(B, 17), (A, 5): Input(B, 18)}})
+
+
 def twin(pad):
     return Pad(**{**vars(pad), "index": pad.index + 10, "player_index": pad.player_index + 10})
+
+
+def script(name):
+    loader = importlib.machinery.SourceFileLoader(f"controls_{name}", str(BIN_DIR / name))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return mod
