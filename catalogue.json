@@ -957,6 +957,20 @@
       {
        "arch": "x86_64",
        "format": "appimage",
+       "sha256": "b3053fc060eb4a7e093b9b4ad0aabe0eb740b2ca39d62a3e087fd60e83a5653f",
+       "size": 94062895,
+       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-46aee28f85b9cecc8fd0e5dee0c771f9c88cd27a/rpcs3-v0.0.43-20206-46aee28f_linux64.AppImage"
+      }
+     ],
+     "channel": "rolling",
+     "date": "2026-10-04T07:04:39Z",
+     "version": "0.0.43-20206-46aee28f"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "appimage",
        "sha256": "7b5a1a53c946e59758c8c84944c40fd88dba178817ca3047a52b4582c7a6f2e5",
        "size": 94034651,
        "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-e8b4646145c76da683d39cd019ae7dd57e77cfac/rpcs3-v0.0.43-20185-e8b46461_linux64.AppImage"
@@ -1021,20 +1035,6 @@
      "channel": "rolling",
      "date": "2026-09-29T10:41:29Z",
      "version": "0.0.42-20081-d9a72d6c"
-    },
-    {
-     "assets": [
-      {
-       "arch": "x86_64",
-       "format": "appimage",
-       "sha256": "3c4a963a2502bd3bc312518177a4f3570fe4d68efb55322da8c7eac44477c766",
-       "size": 94038511,
-       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-105c4988f02d0845aacb25e7b06d026130a76dee/rpcs3-v0.0.42-20073-105c4988_linux64.AppImage"
-      }
-     ],
-     "channel": "rolling",
-     "date": "2026-09-28T10:37:48Z",
-     "version": "0.0.42-20073-105c4988"
     }
    ],
    "homepage": "https://github.com/RPCS3/rpcs3-binaries-linux",
@@ -1295,6 +1295,20 @@
       {
        "arch": "x86_64",
        "format": "tar.xz",
+       "sha256": "c89f69cf22f6664e3791210fa3b40c6e9e6d2e27a9aaa466f5a26d9c56664a09",
+       "size": 101336808,
+       "url": "https://github.com/Kron4ek/Wine-Builds/releases/download/11.19/wine-11.19-staging-amd64-wow64.tar.xz"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-10-03T18:05:09Z",
+     "version": "11.19"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "tar.xz",
        "sha256": "15f312effe798838d4877a37126509618b3f98759744b37aeda0c6f55875d99a",
        "size": 101346404,
        "url": "https://github.com/Kron4ek/Wine-Builds/releases/download/11.18/wine-11.18-staging-amd64-wow64.tar.xz"
@@ -1408,6 +1422,6 @@
    "name": "xemu"
   }
  },
- "generated_at": "2026-10-03T10:29:16Z",
+ "generated_at": "2026-10-04T11:10:40Z",
  "schema": 1
 }
