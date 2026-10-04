@@ -590,7 +590,10 @@
         '';
       };
 
-      nixosModules.default = import ./nix/nixos.nix { gsrPkg = pkgs.gpu-screen-recorder; };
+      nixosModules.default = import ./nix/nixos.nix {
+        gsrPkg = pkgs.gpu-screen-recorder;
+        uiPkg = ui;
+      };
       homeModules.default = import ./nix/home-manager.nix {
         universePkg = universe;
         uiPkg = ui;
