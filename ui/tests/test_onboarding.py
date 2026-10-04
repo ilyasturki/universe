@@ -61,7 +61,7 @@ def test_the_ui_memory_flag_of_an_earlier_version_carries_over(empty_api, empty)
 def test_steps_and_found_rows(empty_api, empty):
     signed_out(empty)
     form = loaded(empty_api.screens.onboarding)
-    assert [s["id"] for s in form.steps] == ["found", "stores", "install", "preferences", "done"]
+    assert [s["id"] for s in form.steps] == ["found", "stores", "install", "data", "preferences", "done"]
     assert form.stepId == "found"
     rows = rows_by_key(form)
     assert form.rows[0]["key"] == "everything", "Add everything leads"
@@ -86,12 +86,12 @@ def test_steps_and_found_rows(empty_api, empty):
 def test_signed_in_stores_skip_their_step(empty_api, empty):
     empty.core._data["sources"] = [s for s in empty.core._data["sources"] if s["id"] == "gog"]
     form = loaded(empty_api.screens.onboarding)
-    assert [s["id"] for s in form.steps] == ["found", "install", "preferences", "done"], "every store signed in: nothing to do there"
+    assert [s["id"] for s in form.steps] == ["found", "install", "data", "preferences", "done"], "every store signed in: nothing to do there"
 
 
 def test_an_offered_store_turns_on_and_adopts_its_launchers_games_once_signed_in(empty_api, empty):
     form = loaded(empty_api.screens.onboarding)
-    assert [s["id"] for s in form.steps] == ["found", "stores", "install", "preferences", "done"], "Epic is off, its launcher is here"
+    assert [s["id"] for s in form.steps] == ["found", "stores", "install", "data", "preferences", "done"], "Epic is off, its launcher is here"
     finished = record(empty.jobFinished)
     assert form.runImport(index_of(form, "heroic-epic")) is True
     until(lambda: finished)
@@ -221,6 +221,17 @@ def test_the_install_folder_is_the_games_root_or_another_launchers(empty_api, em
     assert form.setValue(index_of(form, "paths.games_root"), "/srv/games") is True
     assert empty.core.settings()["paths"]["games_root"] == "/srv/games"
     assert [r["dir"] for r in form.rows if r["type"] == "static"] == ["/srv/games"], "a folder of one's own joins the list, in use"
+
+
+def test_the_data_step_sets_the_prefixes_and_save_backups_roots(empty_api, empty):
+    form = loaded(empty_api.screens.onboarding)
+    while form.stepId != "data":
+        form.next()
+    assert [(r["key"], r["type"]) for r in form.rows] == [("paths.prefixes_root", "path"), ("paths.saves_root", "path"), ("saves.auto_backup", "bool")]
+    assert form.setValue(index_of(form, "paths.saves_root"), "/srv/saves") is True
+    assert empty.core.settings()["paths"]["saves_root"] == "/srv/saves"
+    form.toggle(index_of(form, "saves.auto_backup"))
+    assert empty.core.settings()["saves"]["auto_backup"] is False
 
 
 def test_preferences_write_the_family_and_hdr(empty_api, empty):

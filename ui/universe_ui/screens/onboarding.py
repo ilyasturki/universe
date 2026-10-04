@@ -20,6 +20,7 @@ TITLES = {
     "found": "What's on this machine",
     "stores": "Your stores",
     "install": "Where games install",
+    "data": "Where game data goes",
     "preferences": "Controller and screen",
     "done": "You're set",
 }
@@ -27,6 +28,7 @@ SUBTITLES = {
     "found": "Games other launchers installed here. Adding them moves nothing.",
     "stores": "Sign in to see and install the games you own.",
     "install": "New installs go here. Games already installed stay where they are.",
+    "data": "New Windows games get their prefix here, and every game's saves are backed up here.",
     "preferences": "Both can be changed later in Settings.",
     "done": "Everything here can be changed later in Settings.",
 }
@@ -35,6 +37,11 @@ DONE_EMPTY = ("Nothing added yet", "Add games any time from Home.")
 DONE_HOME_MANAGER = "Settings come from home-manager on this machine."
 DONE_READ_ONLY = "config.toml is read-only here, so settings stay as they are."
 HDR_DETAIL = "Games that support HDR send it to an HDR screen."
+DATA_ROWS = (
+    ("paths.prefixes_root", "Wine prefixes", "Prefixes already elsewhere stay put; each game's Data page can move one here."),
+    ("paths.saves_root", "Save backups", "ludusavi keeps the last backups of each game here."),
+)
+AUTO_DETAIL = "A backup of the game's saves each time a session ends."
 
 
 def _step(ident):
@@ -210,7 +217,7 @@ class Onboarding(RowsForm):
             if any(not s.get("logged_in") for s in self._sources):
                 steps.append("stores")
             if self._writable:
-                steps += ["install", "preferences"]
+                steps += ["install", "data", "preferences"]
             steps.append("done")
             self._steps = [_step(s) for s in steps]
             self._set_loading(False)
@@ -317,6 +324,13 @@ class Onboarding(RowsForm):
                     row = _row("", "install_dir", label, "action", "", detail=why)
                     entries.append(("", {**row, "via": "folder", "dir": path, "display": "Use", "action": "Use", "verb": True}, False))
             entries.append(("", {**_row("", "paths.games_root", "Another folder…", "path", root), "display": ""}, False))
+        elif step == "data":
+            config = self._prefs["config"]
+            for key, label, detail in DATA_ROWS:
+                value = str((config.get("paths") or {}).get(key.split(".")[1]) or "")
+                entries.append(("", {**_row("", key, label, "path", value, detail=detail), "display": value.replace(os.path.expanduser("~"), "~", 1)}, False))
+            auto = (config.get("saves") or {}).get("auto_backup", True)
+            entries.append(("", _row("", "saves.auto_backup", "Back up saves after playing", "bool", auto is not False, detail=AUTO_DETAIL), False))
         elif step == "preferences":
             self._set_rows(*preference_rows(self._controller, **self._prefs))
             return
