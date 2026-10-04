@@ -48,3 +48,21 @@ jobs:
       - run: tools/ci-deps desktops
       - run: chown -R ci .
       - run: runuser -u ci -- env HOME=/home/ci tools/desktop-smoke
+  # Consumers follow their own nixpkgs, not this lock: evaluation only against today's newest stable and unstable heads
+  nixpkgs:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        channel: [stable, unstable]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: DeterminateSystems/nix-installer-action@v23
+      - run: |
+          if [ "${{ matrix.channel }}" = unstable ]; then
+            branch=nixos-unstable
+          else
+            branch=$(git ls-remote --heads https://github.com/NixOS/nixpkgs 'nixos-*' | grep -oE 'nixos-[0-9]{2}\.[0-9]{2}$' | sort -V | tail -1)
+          fi
+          echo "Evaluating against $branch"
+          nix build .#universe .#universe-ui .#universe-desktop .#universe-fhs --dry-run --override-input nixpkgs "github:NixOS/nixpkgs/$branch"
