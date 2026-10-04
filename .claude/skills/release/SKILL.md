@@ -14,6 +14,8 @@ The tag's GitHub release body is this version's `CHANGELOG.md` section, word for
 
 Current version: !`sed -n '/^\[workspace.package\]/,/^\[/{s/^version = "\(.*\)"$/\1/p}' Cargo.toml`
 
+Release readiness: !`just release-ready 2>&1 | head -1`
+
 Commits since the last tag, grouped by conventional type:
 
 !`tools/release-notes HEAD`
@@ -23,6 +25,8 @@ Top of CHANGELOG.md:
 !`head -40 CHANGELOG.md 2>/dev/null || echo "(no CHANGELOG.md yet)"`
 
 ## Steps
+
+0. **Ready.** The release readiness line above reads `ci green on <sha>, secrets set`. Any other line: stop and report it, so the user pushes and waits for ci, fixes it, or sets the secret it names.
 
 1. **Level.** `$ARGUMENTS` if it is `patch`, `minor`, `major` or `X.Y.Z`. Otherwise deduce it from the commits (0.0.x bumps patch even for breaking changes) and confirm with AskUserQuestion. Done when the new version number is fixed.
 
@@ -38,6 +42,6 @@ Top of CHANGELOG.md:
 
 3. **README.** Read the entry back and update `README.md` where it no longer matches (features, install paths, runners, commands). Skip for a fixes-only release.
 
-4. **Bump.** `just bump <level>`. It runs `just check` first, then rewrites every copy of the version, writes the entry into the metainfo's `<release>` (`tools/changelog metainfo`), commits it with `CHANGELOG.md` and `README.md` as `chore(release): vX.Y.Z`, and tags. If it fails, stop and report its output.
+4. **Bump.** `just bump <level>`. It runs `just release-ready` and `just check` first, then rewrites every copy of the version, writes the entry into the metainfo's `<release>` (`tools/changelog metainfo`), commits it with `CHANGELOG.md` and `README.md` as `chore(release): vX.Y.Z`, and tags. If it fails, stop and report its output.
 
-5. **Hand off.** Show the entry, and give `git push --follow-tags` for the user to run: the push publishes the GitHub release "Universe X.Y.Z" (`tools/changelog notes X.Y.Z` is its body), the COPR build and the `universe` and `universe-bin` AUR packages.
+5. **Hand off.** Show the entry, and give `git push --follow-tags` for the user to run: the tag reruns the whole ci on the release commit (about 35 minutes), and only once it is green publishes the GitHub release "Universe X.Y.Z" (`tools/changelog notes X.Y.Z` is its body), the COPR build and the `universe` and `universe-bin` AUR packages.

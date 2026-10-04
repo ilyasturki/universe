@@ -235,8 +235,29 @@ env:
     EOF
     echo "wrote $cfg"
 
+# Before a release: HEAD is on GitHub with a green ci run, and the secrets the release workflow publishes with are set
+release-ready:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{ justfile_directory() }}"
+    secrets="$(gh secret list --json name,updatedAt --jq '.[] | "\(.name) \(.updatedAt)"')"
+    for s in AUR_SSH_PRIVATE_KEY COPR_CONFIG; do
+        grep -q "^$s " <<< "$secrets" || { echo "release-ready: the repo has no $s secret (gh secret set $s)" >&2; exit 1; }
+    done
+    copr_set="$(sed -n 's/^COPR_CONFIG //p' <<< "$secrets")"
+    copr_age=$(( ($(date +%s) - $(date -d "$copr_set" +%s)) / 86400 ))
+    # copr.fedorainfracloud.org/api tokens expire after 180 days
+    [ "$copr_age" -lt 170 ] || { echo "release-ready: COPR_CONFIG was set $copr_age days ago and its token lasts 180: renew it at copr.fedorainfracloud.org/api" >&2; exit 1; }
+    head="$(git rev-parse HEAD)"
+    run="$(gh run list --workflow ci --commit "$head" --limit 1 --json status,conclusion,url --jq '.[0] // empty | "\(.status) \(.url) \(.conclusion)"')"
+    [ -n "$run" ] || { echo "release-ready: ci never ran on ${head::7}: push main and wait for it" >&2; exit 1; }
+    read -r status url conclusion <<< "$run"
+    [ "$status" = completed ] || { echo "release-ready: ci is still running on ${head::7}: $url" >&2; exit 1; }
+    [ "$conclusion" = success ] || { echo "release-ready: ci ended in $conclusion on ${head::7}: $url" >&2; exit 1; }
+    echo "release-ready: ci green on ${head::7}, secrets set"
+
 # Release, after /release wrote CHANGELOG.md's `## [X.Y.Z] - YYYY-MM-DD`: rewrite every copy of the version, the metainfo's release notes, commit it with the changelog as `chore(release): vX.Y.Z`, tag vX.Y.Z (no push).
-bump level: check
+bump level: release-ready check
     #!/usr/bin/env -S nix develop --quiet --command bash
     set -euo pipefail
     cd "{{ justfile_directory() }}"
