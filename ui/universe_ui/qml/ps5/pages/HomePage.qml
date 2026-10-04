@@ -1251,6 +1251,8 @@ FocusScope {
                     current: page.cardAt(index)
                     active: page.zone === "hub" && page.strip === index && page.activeFocus
                     opacity: page.zone !== "hub" ? 1.0 : index < page.strip ? 0.0 : index - page.strip <= 1 ? 1.0 : 0.35
+                    // Not visible: false, which the Column would close the gap of.
+                    enabled: page.zone !== "hub" || index >= page.strip
                     onPointed: function (i) {
                         if (page.zone === "hub" && page.strip === index && page.cardAt(index) === i) {
                             page.activate();

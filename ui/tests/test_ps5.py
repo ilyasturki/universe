@@ -91,6 +91,7 @@ def test_the_hub_hides_the_strips_above_and_fades_under_the_header(ps5):
     strips = [s for s in hub.childItems() if s.objectName() == "hubStrip"]
     until(lambda: strips[0].property("opacity") == 0 and scrim.property("opacity") == 1)
     assert strips[1].property("opacity") == 1 and strips[2].property("opacity") == 1
+    assert strips[0].property("enabled") is False, "and a tap where it hides picks nothing"
 
 
 def hub_of(home, **game):
