@@ -425,7 +425,9 @@
         pkgs.stdenvNoCC.mkDerivation {
           inherit name;
           src = pySrc dirs;
-          env = checkEnv;
+          env = checkEnv // {
+            UNIVERSE_TEST_BUDGET_S = "0";
+          };
           dontWrapQtApps = true;
           nativeBuildInputs = [ (pyEnv py) ] ++ runtime;
           postPatch = "patchShebangs .";
