@@ -63,6 +63,10 @@ class Frames:
     def file(self, index):
         return os.path.join(self.dir, f"{index:02d}.jpg")
 
+    # ffmpeg's output until it exits 0: a run killed midway leaves no frame that later passes for extracted.
+    def partial(self, index):
+        return os.path.join(self.dir, f"{index:02d}.part.jpg")
+
     def seconds(self, index):
         return (index + 0.5) / FRAME_COUNT * self.duration
 
@@ -259,13 +263,14 @@ class RecordingsList(QObject):
         proc = QProcess(self)
         self._running[job] = proc
         proc.finished.connect(lambda code, status: self._extracted(job, proc, code, vaapi is not None))
-        proc.start(ffmpeg, _ffmpeg_args(frames.path, frames.seconds(index), frames.file(index), vaapi))
+        proc.start(ffmpeg, _ffmpeg_args(frames.path, frames.seconds(index), frames.partial(index), vaapi))
 
     def _extracted(self, job, proc, code, hw):
         self._finish(job, proc)
         session, index = job
         frames = self._frames.get(session)
-        if frames is not None and code == 0 and os.path.exists(frames.file(index)):
+        if frames is not None and code == 0 and os.path.exists(frames.partial(index)):
+            os.replace(frames.partial(index), frames.file(index))
             frames.extracted.add(index)
             if hw:
                 self._hw = True

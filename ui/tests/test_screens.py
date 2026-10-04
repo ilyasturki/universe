@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 from conftest import index_of, pump, record, rows_by_key, settle, until
@@ -1081,6 +1083,30 @@ def test_selecting_a_recording_drops_the_frames_another_was_waiting_for(api, mon
     assert "scale=640:-2" in media._ffmpeg_args("/r.mkv", 1.5, "/out.jpg", None)
     recordings._running.clear()
     recordings._queue.clear()
+
+
+def test_a_frame_killed_midway_is_not_taken_for_extracted(api, monkeypatch, tmp_path):
+    from universe_ui.screens import media
+
+    api.universe.sessions("the-technomancer")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    ffmpeg = bin_dir / "ffmpeg"
+    ffmpeg.write_text('#!/bin/sh\nfor out; do :; done\nprintf "\\377\\330" > "$out"\nexec sleep 30\n')
+    ffmpeg.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
+    monkeypatch.setattr(media, "_cache_dir", lambda: str(tmp_path / "frames"))
+    recordings = media.RecordingsList(api.universe)
+    recordings._vaapi = None
+    recordings.load("the-technomancer")
+    session = recordings.rows[0]["session"]
+    frames = recordings._frames[session]
+    recordings.select(session)
+    until(lambda: os.path.exists(frames.partial(media.THUMB)), "ffmpeg has begun the thumbnail")
+    recordings.shutdown()
+
+    assert not any(os.path.exists(frames.file(i)) for i in range(media.FRAME_COUNT))
+    assert media.Frames(frames.path, frames.duration).extracted == set(), "a later start extracts it again"
 
 
 def test_journal_paragraphs_become_markdown_blocks():
