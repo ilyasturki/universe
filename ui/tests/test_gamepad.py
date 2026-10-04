@@ -1,5 +1,9 @@
-from PySide6.QtCore import Qt
+from types import SimpleNamespace
 
+import pytest
+from PySide6.QtCore import QCoreApplication, Qt
+
+from conftest import record
 from universe_ui import gamepad
 from universe_ui.gamepad import Mapper
 
@@ -101,16 +105,12 @@ def test_mapping_fields_follow_the_letters_and_the_positions():
 
 
 def test_covering_releases_what_was_held():
-    from PySide6.QtCore import Qt
-
-    from universe_ui.gamepad import AXIS_LEFTX, BTN_A, Mapper
-
     m = Mapper(Clock())
-    m.button(BTN_A, True)
-    m.axis(AXIS_LEFTX, 32767)
+    m.button(gamepad.BTN_A, True)
+    m.axis(gamepad.AXIS_LEFTX, 32767)
     assert m.release_all() == [(Qt.Key.Key_Return, False, False), (Qt.Key.Key_Right, False, False)]
     assert m.held == {} and m.release_all() == []
-    assert m.axis(AXIS_LEFTX, 32767) == [(Qt.Key.Key_Right, True, False)], "the axis is forgotten: the next push presses again"
+    assert m.axis(gamepad.AXIS_LEFTX, 32767) == [(Qt.Key.Key_Right, True, False)], "the axis is forgotten: the next push presses again"
 
 
 def test_covering_centers_a_stick_held_off_centre():
@@ -135,6 +135,80 @@ def test_a_covered_pad_drops_a_press_with_its_release(app, monkeypatch):
     thread._post(int(Qt.Key.Key_Escape), False, False)
     thread._post(int(Qt.Key.Key_Down), False, False)
     assert posted == [(Qt.Key.Key_Return, True), (Qt.Key.Key_Return, False), (Qt.Key.Key_Down, False)], "a dropped repeat does not take its key's release"
+
+
+@pytest.fixture
+def pad(app, monkeypatch):
+    sdl2 = pytest.importorskip("sdl2")
+    posted = []
+    monkeypatch.setattr(gamepad, "post_key", lambda key, pressed, autorepeat=False, window=None: posted.append((int(key), pressed)))
+    thread = gamepad.GamepadThread()
+    sdl = SimpleNamespace(mappings=[], closed=[], **{name: getattr(sdl2, name) for name in dir(sdl2) if name.startswith("SDL_CONTROLLER")})
+    sdl.__dict__.update(
+        SDL_JoystickGetDeviceVendor=lambda index: 0x0F0D,
+        SDL_JoystickGetDeviceProduct=lambda index: 0x0186,
+        SDL_JoystickGetDeviceGUID=lambda index: b"03000000f0d0000086010000",
+        SDL_JoystickGetGUIDString=lambda guid, buf, size: setattr(buf, "value", guid),
+        SDL_JoystickNameForIndex=lambda index: b"Pro 3, D-input",
+        SDL_GameControllerAddMapping=lambda line: sdl.mappings.append(line.decode()) or 1,
+        SDL_GameControllerOpen=lambda index: f"pad{index}",
+        SDL_GameControllerGetJoystick=lambda controller: controller,
+        SDL_JoystickInstanceID=lambda joystick: 7,
+        SDL_GameControllerName=lambda controller: b"Pro 3",
+        SDL_GameControllerClose=sdl.closed.append,
+    )
+    controllers, moved = {}, record(thread.stick)
+
+    def feed(*specs):
+        for kind, *fields in specs:
+            event = sdl2.SDL_Event()
+            if kind in ("down", "up"):
+                event.type = sdl.SDL_CONTROLLERBUTTONDOWN if kind == "down" else sdl.SDL_CONTROLLERBUTTONUP
+                event.cbutton.button = fields[0]
+            elif kind == "axis":
+                event.type = sdl.SDL_CONTROLLERAXISMOTION
+                event.caxis.axis, event.caxis.value = fields
+            else:
+                event.type = sdl.SDL_CONTROLLERDEVICEADDED if kind == "added" else sdl.SDL_CONTROLLERDEVICEREMOVED
+                event.cdevice.which = fields[0]
+            thread._handle(sdl, event, controllers)
+        QCoreApplication.sendPostedEvents(thread)
+
+    return SimpleNamespace(thread=thread, sdl=sdl, controllers=controllers, posted=posted, moved=moved, feed=feed)
+
+
+RETURN, DOWN, PAGE_UP = int(Qt.Key.Key_Return), int(Qt.Key.Key_Down), int(Qt.Key.Key_PageUp)
+
+
+@pytest.mark.parametrize(
+    ("events", "posted", "moved"),
+    [
+        ([("down", gamepad.BTN_A)], [(RETURN, True)], []),
+        ([("down", gamepad.BTN_A), ("up", gamepad.BTN_A)], [(RETURN, True), (RETURN, False)], []),
+        ([("down", gamepad.BTN_BACK)], [], []),
+        ([("axis", gamepad.AXIS_LEFTY, 32767), ("axis", gamepad.AXIS_LEFTY, 0)], [(DOWN, True), (DOWN, False)], []),
+        ([("axis", gamepad.AXIS_TRIGGERLEFT, 30000)], [(PAGE_UP, True)], []),
+        ([("axis", gamepad.AXIS_RIGHTX, -32767)], [], [("rightX", -1.0)]),
+    ],
+    ids=["press", "press-release", "unmapped", "stick-push-and-back", "trigger", "right-stick-scrubs"],
+)
+def test_a_pad_event_posts_its_key(pad, events, posted, moved):
+    pad.feed(*events)
+    assert (pad.posted, pad.moved) == (posted, moved)
+
+
+def test_a_covered_pad_reads_no_input_but_tracks_its_devices(pad):
+    pad.thread.setMapping(0x0F0D, 0x0186, "a:b1,b:b0")
+    pad.thread.setCovered(True)
+    pad.feed(("added", 0), ("down", gamepad.BTN_A), ("axis", gamepad.AXIS_RIGHTX, 32767))
+    assert (pad.posted, pad.moved) == ([], [])
+    assert pad.controllers == {7: "pad0"}
+    assert pad.sdl.mappings == ["03000000f0d0000086010000,Pro 3  D-input,a:b1,b:b0,"], "a comma would end the name in SDL's line"
+    pad.feed(("removed", 7))
+    assert pad.controllers == {} and pad.sdl.closed == ["pad0"]
+    pad.thread.setCovered(False)
+    pad.feed(("down", gamepad.BTN_A))
+    assert pad.posted == [(RETURN, True)]
 
 
 def test_post_key_needs_a_focus_window(app):
