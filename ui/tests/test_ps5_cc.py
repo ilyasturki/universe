@@ -91,6 +91,8 @@ def test_the_bar_opens_a_panel_over_its_icon_and_b_steps_back_out(api, fake):
     assert cc.property("current").toVariant()["id"] == "game"
     key(overlay, Qt.Key.Key_Return)
     until(lambda: cc.property("zone") == "panel")
+    cards = cc.findChild(QObject, "ccCards")
+    until(lambda: cards.property("opacity") < 0.5, "the cards step back behind the panel")
     shot(overlay, "cc-panel")
     assert [r["id"] for r in cc.property("panelRows").toVariant()] == ["resume", "details", "pause", "quit"]
     was = api.home.pauseOnHome

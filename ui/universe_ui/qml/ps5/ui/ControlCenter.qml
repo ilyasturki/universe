@@ -828,8 +828,9 @@ FocusScope {
 
         Item {
             id: cardRow
+            objectName: "ccCards"
             anchors.fill: parent
-            opacity: cc.zone === "sheet" ? 0.0 : 1.0
+            opacity: cc.zone === "sheet" ? 0.0 : cc.zone === "panel" ? 0.25 : 1.0
             visible: opacity > 0.01
 
             Behavior on opacity {
