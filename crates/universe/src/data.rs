@@ -299,6 +299,11 @@ impl Core {
         if !from.is_dir() {
             return Err(Error::NotFound(format!("{} does not exist", from.display())));
         }
+        let home = paths::home();
+        let unsafe_root = from.parent().is_none() || from == home || home.starts_with(&from) || from == config.games_root();
+        if unsafe_root || !saves::wine_prefix(&from).join("drive_c").is_dir() {
+            return Err(Error::Invalid(format!("refusing to move {}: it is no Wine prefix", from.display())));
+        }
         let mut moved: Vec<String> = vec![id.to_string()];
         moved.extend(sharers(&r.game, &self.games.read().await, &config));
         self.running(&moved).await?;
@@ -559,6 +564,18 @@ mod tests {
         core.reload_all().await;
         assert!(matches!(core.move_prefix("portal-2").await, Err(Error::Invalid(_))), "Steam's compatdata never moves");
         assert!(steam.is_dir());
+        let home = paths::home();
+        std::fs::write(home.join("notes.txt"), b"kept").unwrap();
+        proton_game(&env, "Home Pointer", &home);
+        core.reload_all().await;
+        assert!(matches!(core.move_prefix("home-pointer").await, Err(Error::Invalid(_))), "a home is no prefix to move");
+        assert!(home.join("notes.txt").is_file());
+        let plain = env.path().join("not-a-prefix");
+        std::fs::create_dir_all(&plain).unwrap();
+        proton_game(&env, "Plain Folder", &plain);
+        core.reload_all().await;
+        assert!(matches!(core.move_prefix("plain-folder").await, Err(Error::Invalid(_))), "no drive_c, no Wine prefix");
+        assert!(plain.is_dir());
     }
 
     #[tokio::test]
