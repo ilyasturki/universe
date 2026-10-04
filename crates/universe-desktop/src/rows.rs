@@ -10,6 +10,15 @@ pub fn plain(row: adw::ActionRow, title: impl AsRef<str>, subtitle: impl AsRef<s
     row
 }
 
+/// The row with its title as written and its subtitle's Markdown drawn (`code`, emphasis, links).
+pub fn marked(row: adw::ActionRow, title: impl AsRef<str>, subtitle: impl AsRef<str>) -> adw::ActionRow {
+    let subtitle = subtitle.as_ref();
+    row.set_use_markup(true);
+    row.set_title(&gtk::glib::markup_escape_text(title.as_ref()));
+    row.set_subtitle(&crate::pages::journal::markup(subtitle).unwrap_or_else(|| gtk::glib::markup_escape_text(subtitle).to_string()));
+    row
+}
+
 /// The expander with its title and subtitle shown as written.
 pub fn plain_expander(row: adw::ExpanderRow, title: impl AsRef<str>, subtitle: impl AsRef<str>) -> adw::ExpanderRow {
     row.set_use_markup(false);

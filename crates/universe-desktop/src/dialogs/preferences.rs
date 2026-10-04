@@ -70,7 +70,7 @@ impl ListPage {
 }
 
 /// A subpage of the dialog around a form: a header bar, the form's page, the view kept alive with the page.
-fn push_form(dialog: &adw::PreferencesDialog, title: &str, view: Rc<FormView>) {
+fn push_form(dialog: &adw::PreferencesDialog, title: &str, view: Rc<FormView>) -> adw::NavigationPage {
     let toolbar = adw::ToolbarView::new();
     toolbar.add_top_bar(&adw::HeaderBar::new());
     toolbar.set_content(Some(&view.page));
@@ -80,6 +80,17 @@ fn push_form(dialog: &adw::PreferencesDialog, title: &str, view: Rc<FormView>) {
         let _ = &view;
     });
     dialog.push_subpage(&page);
+    page
+}
+
+/// A list row that opens a subpage: its state beside the chevron when it is off, the switch on the subpage.
+fn list_row(title: &str, subtitle: &str, enabled: bool) -> adw::ActionRow {
+    let row = crate::rows::marked(adw::ActionRow::builder().activatable(true).build(), title, subtitle);
+    if !enabled {
+        row.add_suffix(&gtk::Label::builder().label(gettext("Off")).valign(gtk::Align::Center).css_classes(["dimmed"]).build());
+    }
+    row.add_suffix(&chevron());
+    row
 }
 
 fn chevron() -> gtk::Image {
@@ -111,11 +122,11 @@ pub fn present(win: &Window, page: &str) {
 
     let stores = ListPage::new("stores", &gettext("Stores"), "system-software-install-symbolic");
     dialog.add(&stores.page);
-    load_stores(&dialog, &stores, &connector);
+    load_stores(&dialog, &stores, &connector, false);
 
     let modules = ListPage::new("modules", &gettext("Modules"), "package-x-generic-symbolic");
     dialog.add(&modules.page);
-    load_modules(&dialog, &modules, &connector);
+    load_modules(&dialog, &modules, &connector, false);
 
     let controller = crate::dialogs::controller::page(&dialog);
     dialog.add(&controller.page);
@@ -363,34 +374,23 @@ fn open_runner(dialog: &adw::PreferencesDialog, runner: &Value, games: &[(String
     push_form(dialog, &text(runner, "name"), view);
 }
 
-fn load_stores(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, connector: &str) {
-    page.loading();
+/// `reload`: the rows rebuilt in one go where they were, the focus kept, no spinner; their switch is on their page.
+fn load_stores(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, connector: &str, reload: bool) {
+    if !reload {
+        page.loading();
+    }
     let (dialog, page, connector) = (dialog.downgrade(), page.clone(), connector.to_string());
     glib::spawn_future_local(async move {
         let sources = backend::pinned(|core| async move { core.sources().await }).await;
         let Some(dialog) = dialog.upgrade() else { return };
+        let focus = crate::components::take_focus(&page.rows.borrow());
         page.clear();
         let group = page.group("", &gettext("Where your games come from: sign in to list them and install them from Store"));
         for source in sources {
-            let id = text(&source, "id");
-            let row = crate::rows::plain(adw::ActionRow::builder().activatable(true).build(), text(&source, "name"), signin::status(&source));
-            let switch = gtk::Switch::builder().valign(gtk::Align::Center).active(source["enabled"].as_bool() == Some(true)).build();
-            switch.set_sensitive(source["available"].as_bool() != Some(false) || switch.is_active());
-            let (weak_dialog, weak_page, sid, conn) = (dialog.downgrade(), Rc::downgrade(&page), id.clone(), connector.clone());
-            switch.connect_active_notify(move |switch| {
-                let on = switch.is_active();
-                let (dialog, page, sid, conn) = (weak_dialog.clone(), weak_page.clone(), sid.clone(), conn.clone());
-                glib::spawn_future_local(async move {
-                    let result = backend::call(move |core| async move { core.enable_source(&sid, on).await }).await;
-                    let (Some(dialog), Some(page)) = (dialog.upgrade(), page.upgrade()) else { return };
-                    if let Err(e) = result {
-                        dialog.add_toast(crate::dialogs::toast(&e.to_string()));
-                    }
-                    load_stores(&dialog, &page, &conn);
-                });
-            });
-            row.add_suffix(&switch);
-            row.add_suffix(&chevron());
+            let enabled = source["enabled"].as_bool() == Some(true);
+            let line = if enabled || source["available"].as_bool() == Some(false) { signin::status(&source) } else { text(&source, "description") };
+            let row = list_row(&text(&source, "name"), &line, enabled);
+            page.keep(&text(&source, "id"), &row);
             let (weak_dialog, weak_page, source, conn) = (dialog.downgrade(), Rc::downgrade(&page), source.clone(), connector.clone());
             row.connect_activated(move |_| {
                 let (Some(dialog), Some(page)) = (weak_dialog.upgrade(), weak_page.upgrade()) else { return };
@@ -398,6 +398,7 @@ fn load_stores(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, connector: 
             });
             group.add(&row);
         }
+        crate::components::refocus(&page.rows.borrow(), focus);
     });
 }
 
@@ -415,72 +416,84 @@ fn open_store(dialog: &adw::PreferencesDialog, stores: &Rc<ListPage>, source: &V
         let (weak, stores, connector_owned) = (dialog.downgrade(), Rc::downgrade(stores), connector.to_string());
         let reload: signin::Say = Rc::new(move |_: &str| {
             if let (Some(dialog), Some(stores)) = (weak.upgrade(), stores.upgrade()) {
-                load_stores(&dialog, &stores, &connector_owned);
+                load_stores(&dialog, &stores, &connector_owned, true);
             }
         });
         view.add_tail(&signin::account_group(source, say, reload));
     }
-    push_form(dialog, &text(source, "name"), view);
+    let (weak, stores, connector) = (dialog.downgrade(), Rc::downgrade(stores), connector.to_string());
+    push_form(dialog, &text(source, "name"), view).connect_hidden(move |_| {
+        if let (Some(dialog), Some(stores)) = (weak.upgrade(), stores.upgrade()) {
+            load_stores(&dialog, &stores, &connector, true);
+        }
+    });
 }
 
+/// What a module's row says: why it does nothing, else what it does. A setting it waits on goes by its label.
 fn module_status(module: &Value) -> String {
     let (enabled, available) = (module["enabled"].as_bool() == Some(true), module["available"].as_bool() != Some(false));
     let missing = list(module, "missing").join(", ");
-    let unset = list(module, "unset");
+    let settings = module["settings"].as_array().cloned().unwrap_or_default();
+    let label = |key: &String| settings.iter().find(|s| text(s, "key") == *key).map(|s| text(s, "label")).filter(|l| !l.is_empty()).unwrap_or(key.clone());
+    let unset: Vec<String> = list(module, "unset").iter().map(label).collect();
     let incompatible = text(module, "incompatible");
     match (enabled, available) {
         (true, false) if !incompatible.is_empty() => gettext("On, but skipped: {}").replace("{}", &incompatible),
         (false, false) if !incompatible.is_empty() => incompatible,
         (true, false) => gettext("On, but skipped: missing {}").replace("{}", &missing),
         (false, false) => gettext("Needs {}").replace("{}", &missing),
-        (true, true) if !unset.is_empty() => gettext("Waiting on {}").replace("{}", &unset.join(", ")),
+        (true, true) if !unset.is_empty() => gettext("Does nothing until it is set: {}").replace("{}", &unset.join(", ")),
         _ => text(module, "description"),
     }
 }
 
-fn load_modules(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, connector: &str) {
-    page.loading();
+/// `reload`: the rows rebuilt in one go where they were, the focus kept, no spinner; their switch is on their page.
+fn load_modules(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, connector: &str, reload: bool) {
+    if !reload {
+        page.loading();
+    }
     let (dialog, page, connector) = (dialog.downgrade(), page.clone(), connector.to_string());
     glib::spawn_future_local(async move {
         let modules = backend::run(async { backend::core().modules().await }).await;
         let Some(dialog) = dialog.upgrade() else { return };
+        let focus = crate::components::take_focus(&page.rows.borrow());
         page.clear();
-        let (on, off) =
-            (page.group("", &gettext("What runs around your games: recording, the journal, screenshots and more")), page.group(&gettext("Off"), ""));
+        let group = page.group("", &gettext("What runs around your games: recording, the journal, screenshots and more"));
         for module in modules {
-            let id = text(&module, "id");
-            let enabled = module["enabled"].as_bool() == Some(true);
-            let row = crate::rows::plain(adw::ActionRow::builder().subtitle_lines(2).activatable(true).build(), text(&module, "name"), module_status(&module));
-            let switch = gtk::Switch::builder().valign(gtk::Align::Center).active(enabled).build();
-            switch.set_sensitive(module["available"].as_bool() != Some(false) || enabled);
-            let (weak_dialog, weak_page, mid, conn) = (dialog.downgrade(), Rc::downgrade(&page), id.clone(), connector.clone());
-            switch.connect_active_notify(move |switch| {
-                let on = switch.is_active();
-                let (dialog, page, mid, conn) = (weak_dialog.clone(), weak_page.clone(), mid.clone(), conn.clone());
-                glib::spawn_future_local(async move {
-                    let result = backend::call(move |core| async move { core.enable_module(&mid, on).await }).await;
-                    let (Some(dialog), Some(page)) = (dialog.upgrade(), page.upgrade()) else { return };
-                    if let Err(e) = result {
-                        dialog.add_toast(crate::dialogs::toast(&e.to_string()));
-                    }
-                    load_modules(&dialog, &page, &conn);
-                });
-            });
-            row.add_suffix(&switch);
-            row.add_suffix(&chevron());
-            let (weak_dialog, module, conn) = (dialog.downgrade(), module.clone(), connector.clone());
+            let row = list_row(&text(&module, "name"), &module_status(&module), module["enabled"].as_bool() == Some(true));
+            page.keep(&text(&module, "id"), &row);
+            let (weak_dialog, weak_page, module, conn) = (dialog.downgrade(), Rc::downgrade(&page), module.clone(), connector.clone());
             row.connect_activated(move |_| {
                 let Some(dialog) = weak_dialog.upgrade() else { return };
                 let view = FormView::new(Form::Module(text(&module, "id")), &dialog, conn.clone());
-                view.page.set_description(&text(&module, "description"));
-                push_form(&dialog, &text(&module, "name"), view);
+                view.page.set_description(&text(&module, "description").replace('`', ""));
+                let (weak_dialog, weak_page, conn) = (dialog.downgrade(), weak_page.clone(), conn.clone());
+                push_form(&dialog, &text(&module, "name"), view).connect_hidden(move |_| {
+                    if let (Some(dialog), Some(page)) = (weak_dialog.upgrade(), weak_page.upgrade()) {
+                        load_modules(&dialog, &page, &conn, true);
+                    }
+                });
             });
-            if enabled {
-                on.add(&row);
-            } else {
-                off.add(&row);
-            }
+            group.add(&row);
         }
-        off.set_visible(off.first_child().is_some());
+        crate::components::refocus(&page.rows.borrow(), focus);
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_module_waiting_on_a_setting_names_it_by_its_label() {
+        let module = serde_json::json!({
+            "id": "journal", "enabled": true, "available": true, "unset": ["provider", "other"], "description": "Writes the `journal`.",
+            "settings": [{"key": "enabled", "label": "Enabled"}, {"key": "provider", "label": "Writing model"}],
+        });
+        let status = module_status(&module);
+        assert!(status.contains("Writing model") && !status.contains("provider"), "{status}");
+        assert!(status.contains("other"), "a key without a label stays as written");
+        let set = serde_json::json!({"enabled": true, "available": true, "unset": [], "description": "Writes the `journal`."});
+        assert_eq!(module_status(&set), "Writes the `journal`.", "the row draws its Markdown");
+    }
 }

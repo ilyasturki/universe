@@ -1403,7 +1403,10 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
 - **The main menu** (`menus.rs`, built once and held by every page's header; the Store's adds Find
   Installed Games on top): Rescan Library and Library Artwork…, Open Big Screen, System Check and
   Storage, then Preferences, Keyboard Shortcuts and About. Preferences keeps Launch, Runners, Stores,
-  Modules and Controller (System too on a Deck); what was not a preference left it for a dialog of
+  Modules and Controller (System too on a Deck). Stores and Modules list each one with its whole
+  description, its Markdown drawn (`rows::marked`), or what keeps it from working (a setting it waits
+  on by its label), Off beside the chevron when it is off: the switch is on its page, and coming back
+  reads the list again in place, the focus kept. What was not a preference left it for a dialog of
   its own, each an `AdwPreferencesDialog` of one page so a toast lands on it: Library Artwork
   (`dialogs/library_artwork.rs`: how many games miss art, Fetch Missing Art, Fetch All Again, the
   running fetch, each game missing some), System Check (`dialogs/system_check.rs`, `universe doctor`'s
