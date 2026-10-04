@@ -715,7 +715,8 @@ size, `detail` the path) and `action` rows: `backup`, `restore`, `export` (a zip
 folder), `move` (only for a prefix `move_prefix` takes), `winecfg`, `winetricks`, `run`, `kill`,
 and `reset` (Universe's own prefix, used by no other game, `danger`). `question(key)` is the
 confirmation a look asks before `act(key)` (`{title, detail, confirm, danger}`, none for the rest);
-`act(key)` runs it on the worker, `runProgram(path)` is `run` with the file the look's folder sheet
+the `move` question of a prefix Universe did not make (`lutris`, `elsewhere`) also says that the other
+launcher keeps pointing at the old path, and carries that path as `stale`; `act(key)` runs it on the worker, `runProgram(path)` is `run` with the file the look's folder sheet
 picked (`files: true`). While one runs, `busy` names it and its row reads "Working…", disabled; it
 ends in `finished(key, ok, message)`, the looks' toast, and the rows are read again.
 

@@ -880,7 +880,7 @@ class FakeCore:
         moved = [ident, *prefix["shared_with"]]
         for gid in moved:
             self._game(gid).setdefault("launch", {})["prefix"] = prefix["target"]
-        return {"from": prefix["path"], "to": prefix["target"], "copied": False, "left": None, "games": moved}
+        return {"from": prefix["path"], "to": prefix["target"], "copied": False, "left": None, "games": moved, "owner": prefix["owner"]}
 
     def reset_prefix(self, ident):
         prefix = self.game_data(ident)["prefix"]

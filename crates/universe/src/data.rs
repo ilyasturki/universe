@@ -326,7 +326,8 @@ impl Core {
             crate::game::set_key(&toml, "launch.prefix", &to.to_string_lossy())?;
             self.reload_game(g).await?;
         }
-        Ok(json!({"from": from, "to": to, "copied": copied, "left": left, "games": moved}))
+        let owner = prefix_owner(&from, &r.game, &config);
+        Ok(json!({"from": from, "to": to, "copied": copied, "left": left, "games": moved, "owner": owner}))
     }
 
     /// The game's saves backed up before its prefix goes: `Ok(None)` when there is nothing to back up, an error when the backup failed.
@@ -552,6 +553,7 @@ mod tests {
         assert_eq!(data["prefix"]["shared_with"], json!(["sample-twin"]));
 
         let moved = core.move_prefix("sample").await.unwrap();
+        assert_eq!(moved["owner"], "elsewhere", "who may still point at the old path");
         let to = prefixes.join("sample");
         assert_eq!(moved["games"], json!(["sample", "sample-twin"]), "every game on the prefix follows it");
         assert_eq!(std::fs::read(to.join("drive_c/users/steamuser/save.dat")).unwrap(), b"slot one");

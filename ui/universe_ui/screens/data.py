@@ -35,6 +35,7 @@ QUESTIONS = {
     "move": ("Move the prefix into Universe's prefixes?", "Every game using it follows. Across drives this copies it, which can take a while.", "Move"),
     "trash": ("Move this to the trash?", "It can be brought back from the trash until it is emptied.", "Move to Trash"),
 }
+KEEPS = {"lutris": "Lutris", "elsewhere": "Any other launcher using it"}
 TOOLS = ("winecfg", "winetricks", "kill")
 
 
@@ -209,7 +210,13 @@ class GameData(QObject):
         if kind not in QUESTIONS:
             return None
         title, detail, confirm = QUESTIONS[kind]
-        return {"title": title, "detail": detail, "confirm": confirm, "danger": kind in ("reset", "restore")}
+        asked = {"title": title, "detail": detail, "confirm": confirm, "danger": kind in ("reset", "restore")}
+        prefix = self._data.get("prefix") or {}
+        who = KEEPS.get(str(prefix.get("owner") or ""))
+        if kind == "move" and who:
+            asked["detail"] = f"{detail} {who} keeps pointing at the old path, {_home(prefix.get('path'))}."
+            asked["stale"] = str(prefix.get("path") or "")
+        return asked
 
     def _run(self, key, start, said):
         if self._busy:

@@ -31,7 +31,9 @@ def test_a_games_data_lists_its_saves_its_prefix_and_its_files_and_runs_their_ac
     assert done[-1][:2] == ("backup", True)
     assert len(fake.core.game_data("the-technomancer")["saves"]["backups"]) == before + 1
 
-    assert store.question("move")["confirm"] and store.act("move") is True
+    asked = store.question("move")
+    assert asked["confirm"] and asked["stale"] == "/mnt/games/gog/the-technomancer", "the confirmation names the path another launcher keeps"
+    assert store.act("move") is True
     until(lambda: len(done) == 2)
     assert done[-1][:2] == ("move", True)
     until(lambda: "reset" in keys(store), "moved into Universe's prefixes, the prefix is Universe's to reset")

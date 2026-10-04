@@ -1178,12 +1178,19 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     print_data(&data);
                 }
                 Some(DataCmd::MovePrefix { yes }) => {
-                    if yes || confirm(&format!("move {id}'s prefix into prefixes_root?")) {
+                    let (game, config) = (core.get(&id).await?.game, core.config.read().await.clone());
+                    let from = launcher::prefix_of(&game, &config);
+                    let keeps = keeps_old_path(crate::data::prefix_owner(&from, &game, &config), &from.to_string_lossy());
+                    let asked = format!("move {id}'s prefix into prefixes_root?{}", keeps.as_ref().map(|k| format!(" {k}")).unwrap_or_default());
+                    if yes || confirm(&asked) {
                         let moved = core.move_prefix(&id).await?;
                         if json {
                             return print_json(&moved);
                         }
                         println!("{} {} → {}", "moved".green(), s(&moved, "from"), s(&moved, "to"));
+                        if let Some(keeps) = keeps {
+                            println!("{}", keeps.yellow());
+                        }
                         if !moved["left"].is_null() {
                             println!("{}", format!("{} could not go to the trash: it is still there", s(&moved, "left")).yellow());
                         }
@@ -2391,6 +2398,15 @@ fn generate(dir: &std::path::Path) -> anyhow::Result<()> {
     std::fs::create_dir_all(&man)?;
     clap_mangen::generate_to(cmd, &man)?;
     Ok(())
+}
+
+fn keeps_old_path(owner: &str, from: &str) -> Option<String> {
+    let who = match owner {
+        "lutris" => "Lutris",
+        "elsewhere" => "Any other launcher using it",
+        _ => return None,
+    };
+    Some(format!("{who} keeps pointing at the old path, {from}."))
 }
 
 fn files_text(n: usize) -> String {

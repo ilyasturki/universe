@@ -270,11 +270,19 @@ fn prefix_row(list: &gtk::ListBox, id: &str, prefix: &Value, reload: Reload) -> 
 
     let moving = gio::SimpleAction::new("move", None);
     let (a, gid, again, target) = (anchor.downgrade(), id.to_string(), reload.clone(), text(prefix, "target"));
+    let keeps = match owner.as_str() {
+        "lutris" => gettext("Lutris keeps pointing at the old path, {}.").replace("{}", &home(&path)),
+        "elsewhere" => gettext("Any other launcher using it keeps pointing at the old path, {}.").replace("{}", &home(&path)),
+        _ => String::new(),
+    };
     moving.connect_activate(move |_, _| {
         let Some(anchor) = a.upgrade() else { return };
         let (gid, again, at) = (gid.clone(), again.clone(), anchor.clone());
-        let body =
+        let mut body =
             gettext("It moves to {}. Every game using it follows, and across drives it is copied, which can take a while.").replace("{}", &home(&target));
+        if !keeps.is_empty() {
+            body = format!("{body} {keeps}");
+        }
         confirm(&anchor, &gettext("Move the Wine Prefix?"), &body, &gettext("_Move"), move || {
             let gid = gid.clone();
             act(
