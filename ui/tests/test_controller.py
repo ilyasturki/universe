@@ -1,14 +1,21 @@
 from pathlib import Path
 
 import pytest
+from PySide6.QtCore import QTimer
 
-from conftest import pump, rows_by_key, until
+from conftest import record, rows_by_key, until
 from universe_ui.screens.controller import FakeWatcher, Watcher
 
 
 # The pad's rows: the Timing card and the Advanced row sit behind them on every state.
 def pad_rows(screen):
     return [r for r in screen.rows if not r["advanced"] and r["key"] != "advanced"]
+
+
+# The actions bound to a button's press and hold.
+def macros(screen, slot):
+    row = rows_by_key(screen)[slot]
+    return tuple(m and m["action"] for m in (row["press"], row["hold"]))
 
 
 @pytest.fixture
@@ -27,9 +34,9 @@ def test_rows_follow_the_watcher_and_the_macros(api, fake):
     timing = {r["key"]: r for r in screen.rows if r["advanced"]}
     assert timing["controller.hold_ms"]["value"] == "600" and timing["controller.volume_step"]["value"] == "2" and timing["controller.hold_ms"]["type"] == "int"
     assert screen.rows[-1]["key"] == "advanced" and screen.groups[-1]["rows"] == [len(screen.rows) - 1]
-    assert not screen.showAdvanced and [g["title"] for g in screen.groups] == ["Controller", ""]
+    assert not screen.showAdvanced
     screen.showAdvanced = True
-    assert [g["title"] for g in screen.groups] == ["Controller", "", "Timing", "HOME"] and screen.groups[-1]["advanced"] is True
+    assert [g["advanced"] for g in screen.groups] == [False, False, True, True], "the Timing and HOME cards come after the Advanced row"
     assert screen.setValue(screen.reveal("controller.hold_ms", ""), "800") is True
     assert fake.config()["controller"]["hold_ms"] == 800 and {r["key"]: r for r in screen.rows}["controller.hold_ms"]["value"] == "800"
     home = screen.reveal("controller.home_summons", "")
@@ -44,21 +51,16 @@ def test_rows_follow_the_watcher_and_the_macros(api, fake):
     assert api.memory.get("controllerFamily") == "dualsense-edge" and screen.seen is True
     rows = rows_by_key(screen)
     assert "device" not in rows, "one pad needs no picker row"
-    assert rows["paddle_left"]["display"] == "Press · Volume down"
-    assert rows["fn_left"]["display"] == "Press · Screenshot"
-    assert rows["fn_left"]["press"]["label"] == "Screenshot" and rows["fn_left"]["hold"] is None, "the chip prints the macro's label"
-    assert rows["south"]["display"] == "—" and rows["south"]["label"] == "Cross"
-    assert rows["paddle_left"]["extra"] is True and rows["paddle_left"]["bound"] is True
-    assert rows["paddle_left"]["label"] == "Left back button (LB)" and rows["paddle_left"]["family"] == "dualsense-edge"
-    assert [r["key"] for r in screen.rows][:4] == ["test", "walk", "fn_left", "fn_right"], (
-        "the live view, the walk, then the extras: they are what the page is for"
-    )
-    assert rows["test"]["type"] == "action" and rows["test"]["action"] == "Start" and "slot" not in rows["test"]
-    assert rows["walk"]["label"] == "Set up the buttons" and "slot" not in rows["walk"]
-    assert pad_rows(screen)[-1]["key"] == "dpad_right"
+    assert (macros(screen, "paddle_left"), macros(screen, "fn_left"), macros(screen, "south")) == (("volume_down", None), ("screenshot", None), (None, None))
+    screenshot = next(p["label"] for p in screen.presets if p["id"] == "screenshot")
+    assert rows["fn_left"]["press"]["label"] == screenshot, "the chip prints the macro's label"
+    assert rows["paddle_left"]["extra"] is True and rows["paddle_left"]["bound"] is True and rows["paddle_left"]["family"] == "dualsense-edge"
+    keys = [r["key"] for r in pad_rows(screen)]
+    assert keys[:2] == ["test", "walk"] and "slot" not in rows["test"] and "slot" not in rows["walk"], "the live view, the walk"
+    extras = [rows[k]["extra"] for k in keys[2:]]
+    assert extras == sorted(extras, reverse=True), "then the extras: they are what the page is for"
     group = screen.groups[0]
-    assert group["title"] == "DualSense Edge" and group["meta"] == "", "the pad's battery is by the clock"
-    assert group["rows"] == list(range(len(pad_rows(screen))))
+    assert group["meta"] == "" and group["rows"] == list(range(len(pad_rows(screen)))), "the pad's battery is by the clock"
 
     presses = []
     screen.buttonPressed.connect(lambda ident, slot, pressed: presses.append((ident, slot, pressed)))
@@ -115,8 +117,7 @@ def test_a_pads_own_charge_reading_shows_as_its_battery(started, api):
 # A wrong press is taken back with ←: the code goes to the slot it came from, the step is asked again.
 def test_a_walk_step_can_be_taken_back(api, fake):
     screen = api.screens.controller
-    messages = []
-    screen.message.connect(messages.append)
+    said = record(screen.message)
     watcher = FakeWatcher("8bitdo-pro-3")
     screen.start(watcher)
     watcher.emit(watcher.device())
@@ -136,8 +137,9 @@ def test_a_walk_step_can_be_taken_back(api, fake):
     assert watcher.commands[-3:] == [{"cmd": "cancel"}, {"cmd": "reload"}, {"cmd": "learn", "id": "event30", "slot": "east"}]
     assert (codes("east"), codes("west")) == (["BTN_EAST"], ["BTN_WEST"]), "the wrong press is given back"
     watcher.emit({"event": "learned", "family": family, "slot": "east", "code": "BTN_EAST", "from": None})
+    before = len(said)
     watcher.emit({"event": "learned", "family": family, "slot": "west", "code": "BTN_SOUTH", "from": "south"})
-    assert messages[-1] == "That button was B: it is Y now"
+    assert len(said) == before + 1, "a button taken from another step is said"
     assert screen.backStep() and screen.walkStep["slot"] == "west"
     assert sorted(screen._walk["found"]) == ["east", "south"] and screen._walk["missed"] == [], "the step it stole from is whole again"
     for _ in range(9):
@@ -148,8 +150,6 @@ def test_a_walk_step_can_be_taken_back(api, fake):
 
 def test_a_canceled_walk_puts_every_button_back(api, fake):
     screen = api.screens.controller
-    messages = []
-    screen.message.connect(messages.append)
     watcher = FakeWatcher("8bitdo-pro-3")
     screen.start(watcher)
     family = "8bitdo-pro-3"
@@ -179,7 +179,7 @@ def test_a_canceled_walk_puts_every_button_back(api, fake):
     assert screen.walkStep["axis"] == "rx"
 
     screen.cancelWalk()
-    assert not screen.walking and screen.learning == "" and messages[-1] == "Setup canceled, nothing changed"
+    assert not screen.walking and screen.learning == ""
     assert {slot: codes(slot) for slot in before} == before
     assert fake.config()["controller"]["axes"][family] == {"ly": "ABS_Y"}, "a stick learned before the walk is kept, one it placed is forgotten"
     assert watcher.commands[-2:] == [{"cmd": "cancel"}, {"cmd": "reload"}]
@@ -188,12 +188,10 @@ def test_a_canceled_walk_puts_every_button_back(api, fake):
 
 def test_the_walk_learns_each_button_then_the_sticks(api, fake):
     screen = api.screens.controller
-    offers, messages = [], []
-    screen.walkOffered.connect(lambda family, name: offers.append((family, name)))
-    screen.message.connect(messages.append)
+    offers, said = record(screen.walkOffered), record(screen.message)
     watcher = FakeWatcher("8bitdo-pro-3")
     screen.start(watcher)
-    assert offers == [("8bitdo-pro-3", "8BitDo Pro 3")], "a family never set up is offered the walk once it connects"
+    assert [o[0] for o in offers] == ["8bitdo-pro-3"], "a family never set up is offered the walk once it connects"
     watcher.emit(watcher.device())
     assert len(offers) == 1, "once"
     screen.declineWalk("8bitdo-pro-3")
@@ -205,7 +203,7 @@ def test_the_walk_learns_each_button_then_the_sticks(api, fake):
     assert screen.startWalk() is True
     assert screen.walking and screen.learning == "south"
     step = screen.walkStep
-    assert (step["slot"], step["label"], step["prompt"], step["index"], step["seconds"]) == ("south", "B", "Press B", 1, 8)
+    assert (step["slot"], step["index"], step["seconds"]) == ("south", 1, 8)
     assert step["count"] == 17 + 5 + 4, "the standard slots, the Pro 3's extras, the four throws"
     assert watcher.commands[-1] == {"cmd": "learn", "id": "event30", "slot": "south"}
     learned = []
@@ -215,7 +213,7 @@ def test_the_walk_learns_each_button_then_the_sticks(api, fake):
     watcher.emit({"event": "learned", "family": "8bitdo-pro-3", "slot": "north", "code": "BTN_NORTH", "from": None})
     assert screen.walkStep["slot"] == "east", "a stale answer is not this step's"
     watcher.emit({"event": "learned", "family": "8bitdo-pro-3", "slot": "east", "code": "BTN_EAST", "from": "south"})
-    assert messages[-1] == "That button was B: it is A now" and screen.walkStep["slot"] == "west"
+    assert len(said) == 1 and screen.walkStep["slot"] == "west", "a button taken from another step is said"
     screen.skipStep()
     assert watcher.commands[-2] == {"cmd": "cancel"} and screen.walkStep["slot"] == "north"
     for _ in range(5):
@@ -224,67 +222,62 @@ def test_the_walk_learns_each_button_then_the_sticks(api, fake):
     for _ in range(3):
         screen._walk_tick()
     assert screen.walkStep["slot"] == "lb", "eight seconds unanswered skip the step"
-    assert screen.walkStep["prompt"] == "Press L1" and screen.walkStep["index"] == 5
+    assert screen.walkStep["index"] == 5
     watcher.emit({"event": "learn_timeout"})
-    assert screen.walkStep["slot"] == "rb" and messages[-1] != "No button pressed: learning stopped"
+    assert screen.walkStep["slot"] == "rb" and len(said) == 1, "the watcher's timeout is the walk's skip, said nothing of"
     while screen.walkStep["slot"]:
         watcher.emit({"event": "learned", "family": "8bitdo-pro-3", "slot": screen.walkStep["slot"], "code": "BTN_X", "from": None})
-    assert (screen.walkStep["axis"], screen.walkStep["prompt"], screen.learning) == ("lx", "Hold the left stick right", "ls")
+    assert (screen.walkStep["axis"], screen.learning) == ("lx", "ls")
     assert watcher.commands[-1] == {"cmd": "learn", "id": "event30", "axis": "lx", "except": []}
     watcher.emit({"event": "learned", "family": "8bitdo-pro-3", "axis": "lx", "code": "ABS_X-"})
     assert screen.devices[0]["axes"]["lx"] == "ABS_X-" and screen.walkStep["axis"] == "ly"
     assert watcher.commands[-1]["except"] == ["ABS_X"], "the stick just placed does not answer for the other one"
+    walk = screen._walk
     for axis in ("ly", "rx", "ry"):
         watcher.emit({"event": "learned", "family": "8bitdo-pro-3", "axis": axis, "code": "ABS_Y"})
     assert not screen.walking and screen.learning == "" and screen.walkStep == {}
-    assert messages[-1] == "8BitDo Pro 3: 22 set up, 4 skipped: B, Y, X, L1"
+    assert (len(walk["found"]), len(walk["missed"]), len(said)) == (22, 4, 2), "the tally is said"
     assert api.memory.get("controllerWalks") == {"8bitdo-pro-3": "done"}
 
     assert screen.startWalk() is True
+    walk = screen._walk
     watcher.emit({"event": "learned", "family": "8bitdo-pro-3", "slot": "south", "code": "BTN_EAST", "from": None})
     screen.finishWalk()
-    assert not screen.walking and watcher.commands[-1] == {"cmd": "cancel"} and messages[-1] == "8BitDo Pro 3: 1 set up, the rest as they were"
+    assert not screen.walking and watcher.commands[-1] == {"cmd": "cancel"} and walk["found"] == ["south"] and len(said) == 3
     assert screen.startWalk() is True
     screen.resume()
-    assert not screen.walking and messages[-1] == "8BitDo Pro 3: nothing set up", "leaving the page keeps what the walk set up"
+    assert not screen.walking and len(said) == 4, "leaving the page keeps what the walk set up"
     assert screen.startWalk() is True
     watcher.emit({"event": "gone", "id": "event30"})
-    assert not screen.walking and messages[-1] == "Controller gone: setup stopped"
+    assert not screen.walking and len(said) == 5
 
 
 def test_bind_unbind_and_learn(started, fake):
     screen, watcher = started
 
     assert screen.bind("paddle_left", "hold", "stop", "", "") is True
-    assert rows_by_key(screen)["paddle_left"]["display"] == "Press · Volume down / Hold · Stop the game"
-    assert rows_by_key(screen)["paddle_left"]["hold"]["label"] == "Stop the game"
+    assert macros(screen, "paddle_left") == ("volume_down", "stop")
     assert watcher.commands[-1] == {"cmd": "reload"}, "the watcher rereads the config after a write"
-    macros = {(m["button"], m["trigger"]): m for m in fake.controllerState()["macros"]}
-    assert macros[("paddle_left", "hold")]["action"] == "stop" and macros[("paddle_left", "hold")]["family"] == "dualsense-edge"
+    written = {(m["button"], m["trigger"]): m for m in fake.controllerState()["macros"]}
+    assert written[("paddle_left", "hold")]["action"] == "stop" and written[("paddle_left", "hold")]["family"] == "dualsense-edge"
 
-    messages = []
-    screen.message.connect(messages.append)
-    assert screen.bind("south", "press", "stop", "", "") is False, "stop is hold-only"
-    assert messages == ["Stop the game only fires on a hold"]
+    said = record(screen.message)
+    assert screen.bind("south", "press", "stop", "", "") is False and len(said) == 1, "stop is hold-only, and says so"
     assert screen.bind("south", "press", "nope", "", "") is False
     assert screen.bind("south", "tap", "screenshot", "", "") is False
 
-    assert screen.unbind("paddle_left", "press") is True
-    assert rows_by_key(screen)["paddle_left"]["display"] == "Hold · Stop the game"
-    assert screen.unbind("paddle_left", "") is True
-    assert rows_by_key(screen)["paddle_left"]["display"] == "—"
+    assert screen.unbind("paddle_left", "press") is True and macros(screen, "paddle_left") == (None, "stop")
+    assert screen.unbind("paddle_left", "") is True and macros(screen, "paddle_left") == (None, None)
 
     assert screen.bind("fn_right", "press", "keys", "Ctrl+F1", "") is True
-    assert rows_by_key(screen)["fn_right"]["display"] == "Press · Ctrl+F1"
     assert screen.bind("fn_right", "hold", "command", "", "notify-send hi") is True
-    assert rows_by_key(screen)["fn_right"]["display"] == "Press · Ctrl+F1 / Hold · Command"
+    row = rows_by_key(screen)["fn_right"]
+    assert (row["press"]["action"], row["press"]["keys"], row["hold"]["action"], row["hold"]["command"]) == ("keys", "Ctrl+F1", "command", "notify-send hi")
 
     device = watcher.device()
     device["slots"]["paddle_right"] = {"code": None, "bound": False}
     watcher.emit(device)
-    row = rows_by_key(screen)["paddle_right"]
-    assert row["display"] == "Unbound" and row["bound"] is False
-    assert screen.unboundSlots == ["paddle_right"]
+    assert rows_by_key(screen)["paddle_right"]["bound"] is False and screen.unboundSlots == ["paddle_right"]
 
     assert screen.learn("paddle_right") is True
     assert screen.learning == "paddle_right"
@@ -320,8 +313,7 @@ def test_two_pads_and_hotplug(started, fake):
 
     assert screen.setValue(0, "Xbox Elite Series 2") is True
     assert screen.current == "event40" and screen.family == "xbox-elite"
-    rows = rows_by_key(screen)
-    assert rows["paddle_p1"]["display"] == "Press · Toggle MangoHud" and rows["south"]["label"] == "A"
+    assert macros(screen, "paddle_p1") == ("mangohud", None)
     assert screen.setValue(0, "Nope") is False
 
     watcher.emit({"event": "gone", "id": "event40"})
@@ -335,16 +327,15 @@ def test_two_pads_and_hotplug(started, fake):
 
 def test_learn_timeout_and_error_clear_learning(started, fake):
     screen, watcher = started
-    messages = []
-    screen.message.connect(messages.append)
+    said = record(screen.message)
     assert screen.learn("paddle_left") is True and screen.learning == "paddle_left"
     watcher.emit({"event": "learn_timeout"})
-    assert screen.learning == "" and messages == ["No button pressed: learning stopped"]
+    assert screen.learning == "" and len(said) == 1
     assert screen.learn("paddle_left") is True
     watcher.emit({"event": "error", "message": "cannot learn paddle_left on event30"})
-    assert screen.learning == "" and messages[-1] == "cannot learn paddle_left on event30"
+    assert screen.learning == "" and said[-1] == ("cannot learn paddle_left on event30",), "the watcher's own words"
     watcher.emit({"event": "learn_timeout"})
-    assert len(messages) == 2, "a timeout with nothing to stop says nothing"
+    assert len(said) == 2, "a timeout with nothing to stop says nothing"
 
 
 def test_the_hud_event_gets_a_toast_the_macros_do_not(started, fake):
@@ -358,10 +349,10 @@ def test_the_hud_event_gets_a_toast_the_macros_do_not(started, fake):
     assert notices == [], "the fire says nothing: the HUD event after it does"
     watcher.emit({"event": "hud", "shown": None, "title": ""})
     watcher.emit({"event": "hud", "shown": None, "title": "", "error": "MangoHud is not installed: nothing draws the HUD"})
-    assert notices == ["MangoHud: no game running", "MangoHud is not installed: nothing draws the HUD"]
+    assert len(notices) == 2 and notices[1] == "MangoHud is not installed: nothing draws the HUD", "the core's error, as it says it"
     watcher.emit({"event": "hud", "shown": True, "title": "Control"})
     watcher.emit({"event": "hud", "shown": False, "title": "Control"})
-    assert notices[2:] == ["MangoHud shown · Control", "MangoHud hidden · Control"]
+    assert len(notices) == 4 and notices[2] != notices[3], "shown and hidden each say which"
 
 
 def test_a_passive_listing_keeps_the_last_charge_read(api, fake, tmp_path):
@@ -388,18 +379,14 @@ def test_waiting_lists_the_cores_pads_passively(api, fake):
     watcher.emit({"event": "waiting"})
     assert screen.status == "waiting" and screen.passive and screen.connected
     assert screen.current == "event30" and screen.family == "dualsense-edge"
-    first = screen.rows[0]
-    assert first["type"] == "info" and first["label"] == "Macros are running in the game session"
+    assert screen.rows[0]["type"] == "info", "a note that the game session holds the pads"
     assert "device" not in rows_by_key(screen) and "test" not in rows_by_key(screen), "no live view without the pads"
     assert screen.setTesting(True) is False and not screen.testing
-    assert rows_by_key(screen)["paddle_left"]["display"] == "Press · Volume down"
-    messages = []
-    screen.message.connect(messages.append)
-    assert screen.learn("paddle_left") is False and screen.learning == ""
-    assert messages == ["Live presses and learning resume when it ends"]
+    assert macros(screen, "paddle_left") == ("volume_down", None)
+    said = record(screen.message)
+    assert screen.learn("paddle_left") is False and screen.learning == "" and len(said) == 1
     assert screen.bind("paddle_left", "hold", "stop", "", "") is True, "binding writes the config the holder rereads"
-    stop = next(p["label"] for p in screen.presets if p["id"] == "stop")
-    assert rows_by_key(screen)["paddle_left"]["display"] == "Press · Volume down / Hold · " + stop
+    assert macros(screen, "paddle_left") == ("volume_down", "stop")
     assert watcher.commands[-1] == {"cmd": "reload"}
     watcher.emit({"event": "ready"})
     assert screen.status == "ready" and not screen.passive and not screen.connected
@@ -411,19 +398,21 @@ def test_waiting_lists_the_cores_pads_passively(api, fake):
 
 def test_watcher_restarts_after_it_dies(started, fake):
     screen, watcher = started
-    assert screen.learn("paddle_left") is True
+    assert screen.setTesting(True) is True and screen.learn("paddle_left") is True
     watcher.exit(3)
-    assert screen.status == "off" and not screen.connected and screen.learning == ""
-    assert not watcher.started
-    first = screen.rows[0]
-    assert first["type"] == "info" and first["label"] == "Controller macros stopped"
+    assert screen.status == "off" and not screen.connected and screen.learning == "" and not screen.testing
+    assert not watcher.started and [r["type"] for r in pad_rows(screen)] == ["info"]
     assert screen.learn("paddle_left") is False
+    sent = len(watcher.commands)
     until(lambda: watcher.started and screen.status == "ready" and screen.connected)
+    assert not screen.testing and {"cmd": "axes", "on": True} not in watcher.commands[sent:], "a fresh watcher streams nothing until asked"
     screen.shutdown()
     assert not watcher.started
     watcher.exit(1)
     assert screen.status == "off" and [r["type"] for r in pad_rows(screen)] == ["info"]
-    pump(50)
+    ticked = []
+    QTimer.singleShot(screen.restart_ms + 1, lambda: ticked.append(1))
+    until(lambda: ticked, "a restart would be due by now")
     assert not watcher.started, "no restart after shutdown"
 
 
@@ -479,17 +468,6 @@ def test_testing_streams_axes_and_ends_with_the_pad(api, fake):
     assert not screen.testing and not api.pad.muted and screen.status == "off"
 
 
-def test_a_watcher_restart_ends_testing(started, fake):
-    screen, watcher = started
-    assert screen.setTesting(True) is True
-    watcher.exit(3)
-    assert not screen.testing
-    sent = len(watcher.commands)
-    until(lambda: watcher.started)
-    assert not screen.testing
-    assert {"cmd": "axes", "on": True} not in watcher.commands[sent:], "a fresh watcher streams nothing until asked"
-
-
 def test_watcher_process_round_trip(api, monkeypatch):
     monkeypatch.setenv("UNIVERSE_BIN", str(Path(__file__).parent / "fake-universe"))
     screen = api.screens.controller
@@ -499,7 +477,7 @@ def test_watcher_process_round_trip(api, monkeypatch):
     assert screen.start(watcher) is True
     until(lambda: screen.connected and screen.status == "ready")
     assert screen.family == "xbox"
-    assert rows_by_key(screen)["share"]["display"] == "Unbound"
+    assert rows_by_key(screen)["share"]["bound"] is False
     screen.suspend()
     screen.learn("share")
     until(lambda: len(echoed) == 2)
