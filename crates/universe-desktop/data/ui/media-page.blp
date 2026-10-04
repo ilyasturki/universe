@@ -38,30 +38,13 @@ template $UniverseMediaPage: Adw.Bin {
       };
 
       [end]
-      MenuButton {
+      MenuButton menu_button {
         icon-name: "open-menu-symbolic";
         tooltip-text: _("Main Menu");
         primary: true;
-        menu-model: media_menu;
       }
     }
 
     content: $UniverseMediaGrid grid {};
   };
-}
-
-menu media_menu {
-  section {
-    item {
-      label: _("Open _Big Screen");
-      action: "app.big-screen";
-      hidden-when: "action-missing";
-    }
-  }
-
-  section {
-    item (_("_Preferences"), "app.preferences")
-    item (_("_Keyboard Shortcuts"), "app.shortcuts")
-    item (_("_About Universe Desktop"), "app.about")
-  }
 }

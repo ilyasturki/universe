@@ -20,6 +20,8 @@ mod imp {
         #[template_child]
         pub search: TemplateChild<gtk::SearchEntry>,
         #[template_child]
+        pub menu_button: TemplateChild<gtk::MenuButton>,
+        #[template_child]
         pub stack: TemplateChild<adw::ViewStack>,
         #[template_child]
         pub grid: TemplateChild<gtk::GridView>,
@@ -39,6 +41,7 @@ mod imp {
             LibraryPage {
                 sidebar_button: TemplateChild::default(),
                 search: TemplateChild::default(),
+                menu_button: TemplateChild::default(),
                 stack: TemplateChild::default(),
                 grid: TemplateChild::default(),
                 view: RefCell::new(View::All),
@@ -73,6 +76,7 @@ mod imp {
         fn constructed(&self) {
             self.parent_constructed();
             let obj = self.obj();
+            self.menu_button.set_menu_model(Some(&crate::menus::main(None)));
             let page = obj.downgrade();
             self.search.connect_search_changed(move |entry| {
                 let Some(page) = page.upgrade() else { return };

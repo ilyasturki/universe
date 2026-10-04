@@ -130,6 +130,8 @@ mod imp {
         #[template_child]
         pub search: TemplateChild<gtk::SearchEntry>,
         #[template_child]
+        pub menu_button: TemplateChild<gtk::MenuButton>,
+        #[template_child]
         pub refresh_stack: TemplateChild<gtk::Stack>,
         #[template_child]
         pub refresh: TemplateChild<gtk::Button>,
@@ -206,6 +208,7 @@ mod imp {
         fn constructed(&self) {
             self.parent_constructed();
             let obj = self.obj();
+            self.menu_button.set_menu_model(Some(&crate::menus::store()));
             obj.setup_actions();
             let page = obj.downgrade();
             self.search.connect_search_changed(move |entry| {

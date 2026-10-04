@@ -11,6 +11,7 @@ mod game;
 mod jobs;
 mod library;
 mod media;
+mod menus;
 mod pages;
 mod play;
 mod qr;

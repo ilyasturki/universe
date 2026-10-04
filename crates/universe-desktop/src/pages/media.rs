@@ -17,6 +17,8 @@ mod imp {
         #[template_child]
         pub kinds: TemplateChild<adw::ToggleGroup>,
         #[template_child]
+        pub menu_button: TemplateChild<gtk::MenuButton>,
+        #[template_child]
         pub grid: TemplateChild<MediaGrid>,
     }
 
@@ -39,6 +41,7 @@ mod imp {
     impl ObjectImpl for MediaPage {
         fn constructed(&self) {
             self.parent_constructed();
+            self.menu_button.set_menu_model(Some(&crate::menus::main(None)));
             let grid = self.grid.get();
             self.kinds.connect_active_name_notify(move |kinds| {
                 grid.set_kinds(match kinds.active_name().as_deref() {

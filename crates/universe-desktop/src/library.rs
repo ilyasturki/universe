@@ -243,9 +243,13 @@ pub fn source_name(kind: &str) -> String {
     }
 }
 
+/// The kind of machine: a computer, a handheld, an arcade cabinet, else a console's pad.
 pub fn platform_icon(platform: &str) -> &'static str {
+    const HANDHELDS: [&str; 9] = ["Switch", "DS", "Game Boy", "Portable", "Vita", "Game Gear", "Pocket", "WonderSwan", "Lynx"];
     match platform {
         "windows" | "linux" | "MS-DOS" | "ScummVM" => "computer-symbolic",
+        "Arcade" => "platform-arcade-symbolic",
+        p if HANDHELDS.iter().any(|h| p.contains(h)) => "platform-handheld-symbolic",
         _ => "input-gaming-symbolic",
     }
 }
@@ -257,7 +261,7 @@ pub fn source_icon(kind: &str) -> &'static str {
         "itch" => "source-itch-symbolic",
         "steam" => "source-steam-symbolic",
         "lutris" => "source-lutris-symbolic",
-        _ => "folder-new-symbolic",
+        _ => "list-add-symbolic",
     }
 }
 
@@ -303,6 +307,19 @@ mod tests {
         assert_eq!(rank(&rows, &search_words("mar kart")), ["mario kart 8 deluxe"]);
         assert_eq!(rank(&rows, &search_words("monolith")), ["xenoblade chronicles x"], "the developer counts, last");
         assert!(rank(&rows, &[]).is_empty());
+    }
+
+    #[test]
+    fn the_sidebar_tells_computers_handhelds_arcades_and_consoles_apart() {
+        let icons = |platforms: &[&str]| platforms.iter().map(|p| platform_icon(p)).collect::<Vec<_>>();
+        assert_eq!(icons(&["windows", "MS-DOS"]), ["computer-symbolic"; 2]);
+        assert_eq!(
+            icons(&["Nintendo Switch", "Nintendo 3DS", "Nintendo DS", "Nintendo Game Boy Advance", "Sony PlayStation Portable", "Sony PlayStation Vita"]),
+            ["platform-handheld-symbolic"; 6]
+        );
+        assert_eq!(icons(&["Arcade"]), ["platform-arcade-symbolic"]);
+        assert_eq!(icons(&["Nintendo GameCube", "Sony PlayStation 2", "Sega Dreamcast", "Nintendo SNES"]), ["input-gaming-symbolic"; 4]);
+        assert_ne!(source_icon("manual"), "folder-new-symbolic", "Added names where the games came from, not a new folder");
     }
 
     #[test]

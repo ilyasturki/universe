@@ -23,29 +23,24 @@ template $UniverseLibraryPage: Adw.Bin {
         maximum-size: 420;
         tightening-threshold: 420;
 
-        child: CenterBox {
+        child: SearchEntry search {
           hexpand: true;
-
-          center-widget: SearchEntry search {
-            hexpand: true;
-            placeholder-text: _("Search Games");
-          };
-
-          end-widget: MenuButton {
-            icon-name: "view-sort-descending-symbolic";
-            tooltip-text: _("Sort and Filter");
-            margin-start: 6;
-            menu-model: sort_menu;
-          };
+          placeholder-text: _("Search Games");
         };
       };
 
       [end]
-      MenuButton {
+      MenuButton menu_button {
         icon-name: "open-menu-symbolic";
         tooltip-text: _("Main Menu");
         primary: true;
-        menu-model: main_menu;
+      }
+
+      [end]
+      MenuButton {
+        icon-name: "view-sort-descending-symbolic";
+        tooltip-text: _("View Options");
+        menu-model: sort_menu;
       }
     }
 
@@ -145,26 +140,6 @@ template $UniverseLibraryPage: Adw.Bin {
       }
     };
   };
-}
-
-menu main_menu {
-  section {
-    item (_("_Rescan Library"), "win.rescan")
-  }
-
-  section {
-    item {
-      label: _("Open _Big Screen");
-      action: "app.big-screen";
-      hidden-when: "action-missing";
-    }
-  }
-
-  section {
-    item (_("_Preferences"), "app.preferences")
-    item (_("_Keyboard Shortcuts"), "app.shortcuts")
-    item (_("_About Universe Desktop"), "app.about")
-  }
 }
 
 menu sort_menu {
