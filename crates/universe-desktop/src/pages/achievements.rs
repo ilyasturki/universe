@@ -41,13 +41,10 @@ fn order(items: &mut Vec<Value>) -> usize {
     before - items.len()
 }
 
-/// The ordered list cut where the unlocked ones end.
 fn split(items: &[Value]) -> (&[Value], &[Value]) {
-    let at = items.iter().position(|v| text(v, "unlocked_at").is_empty()).unwrap_or(items.len());
-    items.split_at(at)
+    items.split_at(items.partition_point(|v| !text(v, "unlocked_at").is_empty()))
 }
 
-/// The icon a row leads with, room above and under it.
 fn icon(path: String, locked: bool) -> Cover {
     let icon = Cover::new(48, 48);
     icon.set_placeholder("trophy-symbolic");
@@ -151,6 +148,7 @@ pub fn open(win: &Window, game: &str) {
                     let ago = format::ago(fetched.timestamp(), chrono::Local::now());
                     button.set_tooltip_text(Some(&gettext("Ask the Store Again · updated {}").replace("{}", &ago)));
                 }
+                column.append(&head);
                 let hidden = order(&mut items);
                 let (unlocked_items, locked_items) = split(&items);
                 let unlocked_group = adw::PreferencesGroup::builder().title(gettext("Unlocked")).visible(!unlocked_items.is_empty()).build();
@@ -179,7 +177,6 @@ pub fn open(win: &Window, game: &str) {
                     });
                     head.append(&shown);
                 }
-                column.append(&head);
                 column.append(&unlocked_group);
                 column.append(&locked_group);
                 stack.set_visible_child_name("list");

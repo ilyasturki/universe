@@ -10,8 +10,6 @@ use crate::dialogs::preferences::ListPage;
 use crate::jobs::{Job, Kind};
 use crate::window::Window;
 
-/// The library's art off the main menu: how many games miss some, a fetch for what is missing or for everything again,
-/// each game to fix.
 pub fn present(win: &Window) {
     let dialog = adw::PreferencesDialog::builder().title(gettext("Library Artwork")).content_height(720).build();
     let page = ListPage::new("artwork", &gettext("Library Artwork"), "image-x-generic-symbolic");
@@ -103,39 +101,19 @@ fn load(page: &Rc<ListPage>, win: &Window) {
     });
 }
 
-/// The running art fetch: how far along, and a way to stop it after the game in hand.
 fn job_row(job: &Job) -> adw::ActionRow {
     let row = crate::rows::plain(adw::ActionRow::builder().build(), job.label(), "");
-    let bar = gtk::ProgressBar::builder().valign(gtk::Align::Center).width_request(120).build();
-    let stop = gtk::Button::builder().label(gettext("_Stop")).use_underline(true).valign(gtk::Align::Center).build();
-    row.add_suffix(&bar);
-    row.add_suffix(&stop);
-    let weak = job.downgrade();
-    stop.connect_clicked(move |button| {
-        if let Some(job) = weak.upgrade() {
-            job.cancel();
-            button.set_sensitive(false);
+    crate::components::follow(&row, job, |job| {
+        if job.cancelled() {
+            return gettext("Stopping after this game…");
         }
-    });
-    let (weak_row, weak_bar) = (row.downgrade(), bar.downgrade());
-    let sync = move |job: &Job| {
-        let (Some(row), Some(bar)) = (weak_row.upgrade(), weak_bar.upgrade()) else { return };
-        bar.set_fraction(job.fraction());
         let mut line = vec![job.message()];
         if job.total() > 0 {
             line.push(gettext("{} of {}").replacen("{}", &(job.done() + 1).to_string(), 1).replacen("{}", &job.total().to_string(), 1));
         }
-        if job.cancelled() {
-            line = vec![gettext("Stopping after this game…")];
-        }
         line.retain(|part| !part.is_empty());
-        row.set_subtitle(&line.join(" · "));
-    };
-    sync(job);
-    for name in ["message", "done", "total", "cancelled"] {
-        let sync = sync.clone();
-        job.connect_notify_local(Some(name), move |job, _| sync(job));
-    }
+        line.join(" · ")
+    });
     row
 }
 

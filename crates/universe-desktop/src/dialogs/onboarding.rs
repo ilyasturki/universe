@@ -267,7 +267,6 @@ pub fn present(win: &Window) {
     dialog.present(Some(win));
 }
 
-/// Closing before anything came in and before the last page asks first: the setup does not come back by itself.
 fn asks_to_skip(added: bool, done: bool) -> bool {
     !added && !done
 }
@@ -280,9 +279,7 @@ fn confirm_skip(dialog: &adw::Dialog) {
     ask.set_close_response("keep");
     let weak = dialog.downgrade();
     ask.connect_response(Some("skip"), move |_, _| {
-        weak.upgrade().inspect(|dialog| {
-            dialog.force_close();
-        });
+        weak.upgrade().inspect(|dialog| dialog.force_close());
     });
     ask.present(Some(dialog));
 }

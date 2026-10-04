@@ -1392,8 +1392,7 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
   card's text wraps inside its picture's width, so a journal excerpt leaves the grid even.
 - **Narrow windows**: under 730 px the sidebar folds away; the library's search names the view it
   searches ("Search Nintendo Switch"), so the header says where you are with the sidebar hidden.
-  Under 600 px of content the cards shrink to 140×210 (`game_card::cover_size`, two columns on a
-  360 px screen); under 550 px Media's toggles turn to icons, named on hover. The running game sits in
+  Under 600 px of content the cards shrink (`game_card::cover_size`, two columns on a 360 px screen); under 550 px Media's toggles turn to icons, named on hover. The running game sits in
   a bar under every page (`playing_bar`, the window's own `NowPlaying`) whenever the sidebar's foot is
   out of sight: folded, hidden with F9, or under a page pushed over the home.
 - **Game page** (`pages/game.rs`): the library's row draws the hero at once, the runner in its facts
@@ -1401,14 +1400,12 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
   store's pictures, the achievement count) land next, whether the source lists achievements after
   them (`sources()` may ask the stores), and the backdrop fades in on its own once decoded. The
   header names the game once its title scrolls away, and every page over it (Achievements, Journal,
-  Sessions and Logs, Screenshots, Recordings) has the game under its title. A debug build decodes the
-  art optimised (`[profile.dev.package]` in the root `Cargo.toml`). The Journal lists the entries,
+  Sessions and Logs, Screenshots, Recordings) has the game under its title. The Journal lists the entries,
   newest first, then folds the played sessions without one into a single "N sessions without an
   entry" expander, each with Write; an entry shows only the pictures still on disk, from the text's
   edge. A picture that is missing shows what it stands for — a pad for a game, a page for an entry, a
   camera for a shot — not the app's mark. Sessions and Logs says in words how each session ended
-  (the game quit, stopped from Universe, crashed with its exit code, killed by the system) and what it
-  left (Recorded, Journal entry), a warning only on a crash or a kill. Achievements puts the unlocked
+  and what it left, a warning only on a crash or a kill. Achievements puts the unlocked
   and the locked under headings of their own, an All · Unlocked · Locked toggle showing one.
 - **Game data**: the game page's "Saves and Storage" group (`pages/game_data.rs`) is loaded on a task of
   its own, not in the details' chain, since sizes walk the folders and the saves ask ludusavi: the
@@ -1419,22 +1416,17 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
   menu (`pages/storage.rs`, a `StorageView` page), lists the roots with their free space, the games by
   size (a row opens the game's page) and the leftovers, each with Move to Trash behind a question.
 - **The main menu** (`menus.rs`, built once and held by every page's header; the Store's adds Find
-  Installed Games on top): Rescan Library and Library Artwork…, Open Big Screen, System Check and
-  Storage, then Preferences, Keyboard Shortcuts and About. Preferences keeps Launch, Runners, Stores,
-  Modules and Controller (System too on a Deck). Stores and Modules list each one with its whole
+  Installed Games on top). Preferences keeps Launch, Runners, Stores, Modules and Controller (System
+  too on a Deck). Stores and Modules list each one with its whole
   description, its Markdown drawn (`rows::marked`), or what keeps it from working (a setting it waits
   on by its label), Off beside the chevron when it is off: the switch is on its page, and coming back
   reads the list again in place, the focus kept. What was not a preference left it for a dialog of
   its own, each an `AdwPreferencesDialog` of one page so a toast lands on it: Library Artwork
-  (`dialogs/library_artwork.rs`: how many games miss art, Fetch Missing Art, Fetch All Again, the
-  running fetch, each game missing some), System Check (`dialogs/system_check.rs`, `universe doctor`'s
-  checks: the failing ones first with what to do, then the passing ones by area; on GNOME the Shell
-  extension's sits in a System Setup group of its own, with Set Up, and nowhere else) and Storage.
-  `app.preferences-page` with `storage`, `artwork` or `doctor` opens those dialogs. About lists
-  System Check among its Details links (`activate-link` catches `universe-desktop:system-check`), and
-  its Troubleshooting holds the debugging information: the build, GTK and libadwaita, the
-  distribution, the desktop, a Deck, the config and data folders, then every failing check with its
-  fix once the checks land.
+  (`dialogs/library_artwork.rs`), System Check (`dialogs/system_check.rs`, `universe doctor`'s checks;
+  on GNOME the Shell extension's sits in a System Setup group of its own, and nowhere else) and
+  Storage. `app.preferences-page` with `storage`, `artwork` or `doctor` opens those dialogs. About
+  lists System Check among its Details links, and its Troubleshooting holds the debugging information
+  (`debug_facts`, then every failing check with its fix once the checks land).
 - **Big Screen**: *Open Big Screen*, in the main menu when `universe-ui` is on PATH, runs it and
   leaves the window open; not while a game runs, nor twice.
 - **Steam Deck**: on a Deck (`deck::model()`), Preferences › System sets what `system_controls()`

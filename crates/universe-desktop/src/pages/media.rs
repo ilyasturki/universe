@@ -41,7 +41,7 @@ mod imp {
     impl ObjectImpl for MediaPage {
         fn constructed(&self) {
             self.parent_constructed();
-            self.menu_button.set_menu_model(Some(&crate::menus::main(None)));
+            self.menu_button.set_menu_model(Some(&crate::menus::main()));
             let grid = self.grid.get();
             self.kinds.connect_active_name_notify(move |kinds| {
                 grid.set_kinds(match kinds.active_name().as_deref() {

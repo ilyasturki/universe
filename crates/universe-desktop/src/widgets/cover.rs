@@ -132,7 +132,6 @@ mod imp {
 }
 
 glib::wrapper! {
-    /// A game's box art at a fixed 2:3 size, a pad while it has none.
     pub struct Cover(ObjectSubclass<imp::Cover>)
         @extends gtk::Widget,
         @implements gtk::Accessible, gtk::Buildable, gtk::ConstraintTarget;
@@ -143,12 +142,10 @@ impl Cover {
         glib::Object::builder().property("art-width", width).property("art-height", height).build()
     }
 
-    /// What shows while there is no picture, a pad unless told otherwise.
     pub fn set_placeholder(&self, icon: &str) {
         self.imp().placeholder.set_icon_name(Some(icon));
     }
 
-    /// Another size, the picture decoded again for it.
     pub fn set_size(&self, width: i32, height: i32) {
         if (self.art_width(), self.art_height()) == (width, height) {
             return;

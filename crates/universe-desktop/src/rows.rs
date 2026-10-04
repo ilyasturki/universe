@@ -10,7 +10,6 @@ pub fn plain(row: adw::ActionRow, title: impl AsRef<str>, subtitle: impl AsRef<s
     row
 }
 
-/// The row with its title as written and its subtitle's Markdown drawn (`code`, emphasis, links).
 pub fn marked(row: adw::ActionRow, title: impl AsRef<str>, subtitle: impl AsRef<str>) -> adw::ActionRow {
     let subtitle = subtitle.as_ref();
     row.set_use_markup(true);

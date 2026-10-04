@@ -53,13 +53,13 @@ pub fn sync_game(group: &gio::SimpleActionGroup, game: Option<&GameObject>) {
     }
 }
 
-/// A right click or a long press on `widget` opens `menu` where it landed, its actions read from `widget` up; `ready` says
-/// whether there is a game to act on, and brings its actions up to date.
-pub fn context_menu(widget: &impl IsA<gtk::Widget>, menu: gio::MenuModel, ready: impl Fn() -> bool + 'static) {
-    let weak = widget.upcast_ref::<gtk::Widget>().downgrade();
+pub fn game_menu(widget: &impl IsA<gtk::Widget>, game: impl Fn() -> Option<GameObject> + Clone + 'static) -> gio::SimpleActionGroup {
+    let group = install_game(widget, game.clone());
+    let (weak, held) = (widget.upcast_ref::<gtk::Widget>().downgrade(), group.clone());
     let open = std::rc::Rc::new(move |x: f64, y: f64| {
-        let Some(widget) = weak.upgrade().filter(|_| ready()) else { return };
-        let popover = gtk::PopoverMenu::from_model(Some(&menu));
+        let (Some(widget), Some(game)) = (weak.upgrade(), game()) else { return };
+        sync_game(&held, Some(&game));
+        let popover = gtk::PopoverMenu::from_model(Some(&crate::menus::game()));
         popover.set_parent(&widget);
         popover.set_has_arrow(false);
         popover.set_halign(gtk::Align::Start);
@@ -84,6 +84,7 @@ pub fn context_menu(widget: &impl IsA<gtk::Widget>, menu: gio::MenuModel, ready:
         open(x, y);
     });
     widget.add_controller(press);
+    group
 }
 
 /// Keeps `sync_game` current while `game` is bound; the handlers go with `unbind`.

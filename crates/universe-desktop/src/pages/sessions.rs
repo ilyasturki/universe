@@ -15,7 +15,6 @@ use crate::window::Window;
 // The lines a log page shows: a crash's last words, not a whole evening of gamescope.
 const TAIL: usize = 400;
 
-/// How the session ended, said whole: who ended it, and how.
 fn end_text(row: &SessionRow) -> String {
     match universe::sessions::end_of(&row.session) {
         "quit" => gettext("The game quit"),
@@ -26,7 +25,6 @@ fn end_text(row: &SessionRow) -> String {
     }
 }
 
-/// A session row's line: how long, how it ended, then what it left, a recording and a journal entry.
 fn line(row: &SessionRow) -> String {
     let mut parts = vec![format::duration(row.session.duration_s), end_text(row)];
     if row.recording.as_ref().is_some_and(|r| r.exists) {
@@ -35,7 +33,6 @@ fn line(row: &SessionRow) -> String {
     if row.journal.is_some() {
         parts.push(gettext("Journal entry"));
     }
-    parts.retain(|p| !p.is_empty());
     parts.join(" · ")
 }
 

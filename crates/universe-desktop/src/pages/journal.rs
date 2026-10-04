@@ -191,7 +191,6 @@ impl Journal {
         self.session(session).and_then(player::Recording::of_session)
     }
 
-    /// The entries, then the played sessions still without one, each newest first; `gone`, what waits on its Undo, in neither.
     fn split(&self, gone: impl Fn(&str) -> bool) -> (Vec<&Entry>, Vec<&SessionRow>) {
         let mut entries: Vec<&Entry> = self.entries.iter().filter(|e| !gone(&e.session)).collect();
         entries.sort_by(|a, b| b.session.cmp(&a.session));
@@ -450,7 +449,7 @@ pub fn open_entry(win: &Window, game: &str, session: &str) {
     win.push_page(&page);
 }
 
-/// The pictures an entry was written from that are still on disk, from the text column's edge, each opening the viewer.
+/// The pictures an entry was written from, in a row that opens the viewer.
 fn pictures(win: &Window, entry: &Entry, title: &str) -> Option<gtk::Widget> {
     let images: Vec<&String> = entry.images.iter().filter(|path| std::path::Path::new(path).is_file()).collect();
     if images.is_empty() {
@@ -487,7 +486,6 @@ fn pictures(win: &Window, entry: &Entry, title: &str) -> Option<gtk::Widget> {
     Some(flow.upcast())
 }
 
-/// An entry in the list: its title, when, how long and how far along, its first picture; it opens the entry.
 fn entry_row(win: &Window, game: &str, entry: &Entry) -> adw::ActionRow {
     let when = if entry.started_at.is_empty() { &entry.written_at } else { &entry.started_at };
     let mut line = vec![media::moment(when)];
@@ -516,7 +514,6 @@ fn entry_row(win: &Window, game: &str, entry: &Entry) -> adw::ActionRow {
     row
 }
 
-/// A played session without an entry, in the expander: when, how long, and Write.
 fn unwritten_row(win: &Window, game: &str, row: &SessionRow) -> adw::ActionRow {
     let length = if row.session.duration_s > 0 { format::duration(row.session.duration_s) } else { String::new() };
     let item = crate::rows::plain(adw::ActionRow::builder().build(), media::moment(&row.session.started_at), length);
@@ -531,8 +528,7 @@ fn unwritten_row(win: &Window, game: &str, row: &SessionRow) -> adw::ActionRow {
     item
 }
 
-/// A game's journal: every entry, the ones being written and put off among them, then the sessions still without one,
-/// folded into one row.
+/// A game's journal: every entry, the ones being written and put off among them, and the sessions still without one.
 pub fn open_list(win: &Window, game: &str) {
     let (page, column, stack) = page(&gettext("Journal"), &format!("journal:{game}"), &crate::pages::game_header(win, &gettext("Journal"), game));
     let game = game.to_string();

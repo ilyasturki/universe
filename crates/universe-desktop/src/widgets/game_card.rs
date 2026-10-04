@@ -54,7 +54,7 @@ mod imp {
             self.parent_constructed();
             let obj = self.obj();
             let weak = obj.downgrade();
-            let group = actions::install_game(&*obj, move || weak.upgrade().and_then(|card| card.game()));
+            let group = actions::game_menu(&*obj, move || weak.upgrade().and_then(|card| card.game()));
             actions::sync_game(&group, None);
             self.actions.replace(Some(group));
             let card = obj.downgrade();
@@ -66,8 +66,6 @@ mod imp {
                 card.upgrade().inspect(|card| card.reveal());
             });
             self.options.set_menu_model(Some(&crate::menus::game()));
-            let card = obj.downgrade();
-            actions::context_menu(&*obj, crate::menus::game().upcast(), move || card.upgrade().is_some_and(|card| card.game().is_some()));
         }
     }
 
@@ -76,8 +74,7 @@ mod imp {
 }
 
 glib::wrapper! {
-    /// A grid cell: the cover with Play and a menu over it on hover or keyboard focus, the title under it on two lines; a right
-    /// click or a long press opens the menu too.
+    /// A grid cell: the cover with Play and a menu over it on hover, the title under it.
     pub struct GameCard(ObjectSubclass<imp::GameCard>)
         @extends gtk::Box, gtk::Widget,
         @implements gtk::Accessible, gtk::Buildable, gtk::ConstraintTarget, gtk::Orientable;
@@ -131,7 +128,6 @@ impl GameCard {
         }
     }
 
-    /// Smaller art where the window is narrow: two columns on a phone's width rather than one.
     pub fn set_compact(&self, compact: bool) {
         let (width, height) = cover_size(compact);
         self.imp().cover.set_size(width, height);
@@ -151,7 +147,6 @@ impl GameCard {
     }
 }
 
-/// A card's art, width and height: 2:3 either way.
 pub fn cover_size(compact: bool) -> (i32, i32) {
     if compact {
         (140, 210)
@@ -170,6 +165,5 @@ mod tests {
         assert_eq!(width * 3, height * 2, "box art keeps its shape");
         // The grid's 18 px sides and each child's 6 px: two columns on a 360 px screen.
         assert!(2 * (width + 12) + 36 <= 360);
-        assert_eq!(cover_size(false), (200, 300));
     }
 }

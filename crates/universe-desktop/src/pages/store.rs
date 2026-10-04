@@ -62,20 +62,6 @@ fn button(label: &str, action: &str, id: &str) -> gtk::Button {
     gtk::Button::builder().label(label).use_underline(true).valign(gtk::Align::Center).action_name(action).action_target(&id.to_variant()).build()
 }
 
-/// The verb a listed game shows on its row, `(label, action, target)`: Play once it is installed and in the library, Resume a
-/// paused download, Install one owned.
-fn verb(entry: &Entry, in_library: bool) -> Option<(String, &'static str, String)> {
-    if entry.installed {
-        in_library.then(|| (gettext("_Play"), "win.play-game", entry.game_id.clone()))
-    } else if entry.partial {
-        Some((gettext("_Resume"), "store.resume", entry.id.clone()))
-    } else if entry.owned != Some(false) {
-        Some((gettext("_Install"), "store.install", entry.id.clone()))
-    } else {
-        None
-    }
-}
-
 /// What a store lists of one game, as the page shows it.
 #[derive(Debug, Clone, Default)]
 struct Entry {
@@ -415,12 +401,10 @@ impl StorePage {
         let same = ids(&imp.stores.borrow()) == ids(&stores);
         let index = stores.iter().position(|s| text(s, "id") == source);
         let names: Vec<String> = stores.iter().map(|s| text(s, "name")).collect();
-        // With one store the picker hides: the search names the store it asks.
-        let hint = match index.and_then(|i| names.get(i)) {
+        imp.search.set_placeholder_text(Some(&match index.and_then(|i| names.get(i)) {
             Some(name) => gettext("Search {}").replace("{}", name),
             None => gettext("Search the Store"),
-        };
-        imp.search.set_placeholder_text(Some(&hint));
+        }));
         imp.sources.set_visible(stores.len() > 1);
         imp.stores.replace(stores);
         imp.source.replace(source.to_string());
@@ -512,21 +496,9 @@ impl StorePage {
         row.add_prefix(&art);
         if self.in_library(entry) {
             let id = entry.game_id.clone();
-            let game = move || gio::Application::default().and_downcast::<Application>().and_then(|app| app.library().get(&id));
-            let group = crate::actions::install_game(&row, game.clone());
-            crate::actions::context_menu(&row, crate::menus::game().upcast(), move || {
-                let game = game();
-                crate::actions::sync_game(&group, game.as_ref());
-                game.is_some()
-            });
+            crate::actions::game_menu(&row, move || gio::Application::default().and_downcast::<Application>().and_then(|app| app.library().get(&id)));
         }
         row
-    }
-
-    fn add_verb(&self, row: &adw::ActionRow, entry: &Entry) {
-        if let Some((label, action, target)) = verb(entry, self.in_library(entry)) {
-            row.add_suffix(&button(&label, action, &target));
-        }
     }
 
     fn add(&self, group: &adw::PreferencesGroup, row: &adw::ActionRow) {
@@ -574,7 +546,7 @@ impl StorePage {
         paused.sort_by(by_title);
         for entry in &paused {
             let row = self.row(entry, &entry.paused());
-            self.add_verb(&row, entry);
+            row.add_suffix(&button(&gettext("_Resume"), "store.resume", &entry.id));
             self.add(&imp.job_group, &row);
         }
         imp.job_row.set_visible(job.is_some());
@@ -615,7 +587,9 @@ impl StorePage {
                 line.push(size(entry.disk));
             }
             let row = self.row(entry, &line.join(" · "));
-            self.add_verb(&row, entry);
+            if self.in_library(entry) {
+                row.add_suffix(&button(&gettext("_Play"), "win.play-game", &entry.game_id));
+            }
             let more = gtk::MenuButton::builder()
                 .icon_name("view-more-symbolic")
                 .tooltip_text(gettext("More"))
@@ -644,7 +618,7 @@ impl StorePage {
         owned.sort_by(by_title);
         for entry in &owned {
             let row = self.row(entry, &entry.cost());
-            self.add_verb(&row, entry);
+            row.add_suffix(&button(&gettext("_Install"), "store.install", &entry.id));
             if entry.download == 0 && entry.disk == 0 {
                 let motion = gtk::EventControllerMotion::new();
                 let (page, id) = (self.downgrade(), entry.id.clone());
@@ -955,28 +929,5 @@ impl StorePage {
         if !targets.is_empty() {
             self.start(Kind::Update, targets);
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn an_installed_game_plays_from_its_row_the_others_install_or_resume() {
-        let entry = |installed: bool, partial: bool, owned: Option<bool>| Entry {
-            id: "1207658924".into(),
-            game_id: "witcher".into(),
-            installed,
-            partial,
-            owned,
-            ..Entry::default()
-        };
-        let act = |e: Entry, in_library: bool| verb(&e, in_library).map(|(_, action, target)| (action, target));
-        assert_eq!(act(entry(true, false, Some(true)), true), Some(("win.play-game", "witcher".into())), "the library's id, not the store's");
-        assert_eq!(act(entry(true, false, Some(true)), false), None, "not in the library yet: nothing to play");
-        assert_eq!(act(entry(false, true, Some(true)), true), Some(("store.resume", "1207658924".into())));
-        assert_eq!(act(entry(false, false, None), false), Some(("store.install", "1207658924".into())));
-        assert_eq!(act(entry(false, false, Some(false)), false), None);
     }
 }

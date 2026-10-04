@@ -124,8 +124,6 @@ pub struct Action {
     pub label: String,
 }
 
-/// What a runner's row in the list does itself, `(component, action)`: the update waiting, or the install a game or a newer
-/// build waits on; the rest is in the menus on the runner's page.
 pub fn quick(own: &[Value]) -> Option<(&Value, Action)> {
     own.iter().filter(|c| wants(c)).find_map(|c| actions(c).into_iter().next().filter(|a| a.id == "update" || a.id == "install").map(|a| (c, a)))
 }
@@ -415,7 +413,13 @@ fn running(id: &str) -> Option<Job> {
 pub fn row(c: &Value, changed: Rc<dyn Fn()>) -> adw::ActionRow {
     let row = crate::rows::plain(adw::ActionRow::new(), text(c, "name"), state(c));
     if let Some(job) = running(&text(c, "id")) {
-        follow(&row, &job);
+        follow(&row, &job, |job| {
+            let mut line = vec![if job.cancelled() { gettext("Stopping…") } else { job.label() }];
+            if job.total() > 0 && !job.cancelled() {
+                line.push(gettext("{} of {}").replacen("{}", &size(job.done()), 1).replacen("{}", &size(job.total()), 1));
+            }
+            line.join(" · ")
+        });
         return row;
     }
     let tag = tag(c);
@@ -465,7 +469,7 @@ pub fn row(c: &Value, changed: Rc<dyn Fn()>) -> adw::ActionRow {
     row
 }
 
-fn follow(row: &adw::ActionRow, job: &Job) {
+pub fn follow(row: &adw::ActionRow, job: &Job, line: impl Fn(&Job) -> String + Clone + 'static) {
     let bar = gtk::ProgressBar::builder().valign(gtk::Align::Center).width_request(120).build();
     let stop = gtk::Button::builder().label(gettext("_Stop")).use_underline(true).valign(gtk::Align::Center).build();
     row.add_suffix(&bar);
@@ -481,11 +485,7 @@ fn follow(row: &adw::ActionRow, job: &Job) {
     let sync = move |job: &Job| {
         let (Some(row), Some(bar)) = (weak_row.upgrade(), weak_bar.upgrade()) else { return };
         bar.set_fraction(job.fraction());
-        let mut line = vec![if job.cancelled() { gettext("Stopping…") } else { job.label() }];
-        if job.total() > 0 && !job.cancelled() {
-            line.push(gettext("{} of {}").replacen("{}", &size(job.done()), 1).replacen("{}", &size(job.total()), 1));
-        }
-        row.set_subtitle(&line.join(" · "));
+        row.set_subtitle(&line(job));
     };
     sync(job);
     for name in ["message", "done", "total", "cancelled"] {

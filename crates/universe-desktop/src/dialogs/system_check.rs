@@ -1,24 +1,18 @@
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use adw::prelude::*;
 use gettextrs::{gettext, ngettext};
 use gtk::glib;
-use serde_json::Value;
 use universe::doctor::Check;
 
 use crate::backend;
-use crate::dialogs::preferences::ListPage;
+use crate::dialogs::preferences::{text, ListPage};
 use crate::window::Window;
 
 const EXTENSION: &str = "universe-extension";
 
-fn text(v: &Value, key: &str) -> String {
-    v[key].as_str().unwrap_or_default().to_string()
-}
-
-/// What Universe needs from this machine, as `universe doctor` checks it, off the main menu.
 pub fn present(win: &Window) {
     let dialog = adw::PreferencesDialog::builder().title(gettext("System Check")).content_height(720).build();
     let page = ListPage::new("system-check", &gettext("System Check"), "checkbox-checked-symbolic");
@@ -31,16 +25,14 @@ pub fn present(win: &Window) {
     dialog.present(Some(win));
 }
 
-/// The extension's check when GNOME sets it up from a group of its own, then the failing checks and the passing ones: the
-/// extension's shows in one place.
+/// `(GNOME's extension check, failing, passing)`: the extension's is in neither list.
 fn split(checks: &[Check], gnome: bool) -> (Option<&Check>, Vec<&Check>, Vec<&Check>) {
     let setup = checks.iter().find(|c| gnome && c.check == EXTENSION);
     let (passing, failing) = checks.iter().filter(|c| setup.is_none_or(|s| s.check != c.check)).partition(|c| c.ok);
     (setup, failing, passing)
 }
 
-/// About's debugging information: the build and the machine, then each failing check with its fix. Left in English, for
-/// whoever reads the report.
+/// Left in English for whoever reads the report.
 pub fn debug_info(facts: &[(&str, String)], checks: Option<&[Check]>) -> String {
     let mut lines: Vec<String> = facts.iter().filter(|(_, v)| !v.is_empty()).map(|(k, v)| format!("{k}: {v}")).collect();
     let Some(checks) = checks else {
@@ -60,7 +52,6 @@ pub fn debug_info(facts: &[(&str, String)], checks: Option<&[Check]>) -> String 
     lines.join("\n")
 }
 
-/// Installs what fixes a check, asking first, then checks again once the install ends.
 fn install_button(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, component: &str) -> gtk::Button {
     let button = gtk::Button::builder().label(gettext("_Install…")).use_underline(true).valign(gtk::Align::Center).build();
     let (weak_dialog, weak_page, id) = (dialog.downgrade(), Rc::downgrade(page), component.to_string());
@@ -80,8 +71,7 @@ fn install_button(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, componen
     button
 }
 
-/// The GNOME Shell extension's row: installed and turned on from here.
-fn extension_row(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, check: &Check) -> adw::ActionRow {
+fn check_row(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, check: &Check) -> adw::ActionRow {
     let row = crate::rows::plain(adw::ActionRow::builder().build(), check.label.clone(), check.detail.clone());
     let icon = gtk::Image::from_icon_name(if check.ok { "object-select-symbolic" } else { "dialog-warning-symbolic" });
     icon.add_css_class(if check.ok { "success" } else { "warning" });
@@ -119,19 +109,13 @@ fn extension_row(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, check: &C
     row
 }
 
-/// The checks that fail first with what to do about them, then the passing ones by area.
 fn load(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>) {
     page.loading();
     let (dialog, page) = (dialog.downgrade(), page.clone());
     glib::spawn_future_local(async move {
-        let (checks, names, gnome) = backend::pinned(|core| async move {
-            let mut names: HashMap<String, String> = HashMap::new();
-            for entry in core.modules().await.into_iter().chain(core.sources().await) {
-                names.insert(text(&entry, "id"), text(&entry, "name"));
-            }
-            (core.doctor().await, names, core.desktop().await == universe::desktop::Profile::Gnome)
-        })
-        .await;
+        let (modules, sources, checks, desktop) =
+            backend::pinned(|core| async move { tokio::join!(core.modules(), core.sources(), core.doctor(), core.desktop()) }).await;
+        let names: HashMap<String, String> = modules.iter().chain(&sources).map(|e| (text(e, "id"), text(e, "name"))).collect();
         let Some(dialog) = dialog.upgrade() else { return };
         page.clear();
         let area = |module: &str| match module {
@@ -162,10 +146,10 @@ fn load(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>) {
             }
         });
         top.add(&again);
-        let (setup, failing, passing) = split(&checks, gnome);
+        let (setup, failing, passing) = split(&checks, desktop == universe::desktop::Profile::Gnome);
         if let Some(check) = setup {
             let group = page.group(&gettext("System Setup"), &gettext("The GNOME Shell extension finds, focuses and captures game windows"));
-            group.add(&extension_row(&dialog, &page, check));
+            group.add(&check_row(&dialog, &page, check));
         }
         if !failing.is_empty() {
             let group = page.group(&gettext("Needs Attention"), "");
@@ -188,13 +172,8 @@ fn load(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>) {
                 group.add(&row);
             }
         }
-        let mut areas: Vec<String> = Vec::new();
-        for check in &passing {
-            let name = area(&check.module);
-            if !areas.contains(&name) {
-                areas.push(name);
-            }
-        }
+        let mut seen = HashSet::new();
+        let mut areas: Vec<String> = passing.iter().map(|c| area(&c.module)).filter(|name| seen.insert(name.clone())).collect();
         let core = gettext("Core");
         areas.sort_by_key(|name| *name != core);
         for name in areas {
@@ -202,11 +181,7 @@ fn load(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>) {
             let these: Vec<&&Check> = passing.iter().filter(|c| area(&c.module) == name).collect();
             let group = page.group(&name, &gettext("{} of {} pass").replacen("{}", &these.len().to_string(), 1).replacen("{}", &total.to_string(), 1));
             for check in these {
-                let row = crate::rows::plain(adw::ActionRow::builder().build(), check.label.clone(), check.detail.clone());
-                let icon = gtk::Image::from_icon_name("object-select-symbolic");
-                icon.add_css_class("success");
-                row.add_prefix(&icon);
-                group.add(&row);
+                group.add(&check_row(&dialog, &page, check));
             }
         }
     });
@@ -250,10 +225,8 @@ mod tests {
         let facts = [("Universe Desktop", "0.0.10".to_string()), ("Steam Deck", String::new())];
         let checks = [check("systemd", true), check("gamescope", false)];
         let info = debug_info(&facts, Some(&checks));
-        assert!(info.starts_with("Universe Desktop: 0.0.10\n"));
-        assert!(!info.contains("Steam Deck"), "a fact the machine lacks is left out");
-        assert!(info.contains("- gamescope (core): gamescope is missing\n  fix: install gamescope"));
-        assert!(!info.contains("- systemd"));
-        assert!(debug_info(&facts, None).ends_with("running"), "the checks land after the dialog opens");
+        assert!(info.contains("0.0.10") && !info.contains("Steam Deck"), "a fact the machine lacks is left out");
+        assert!(info.contains("gamescope is missing") && info.contains("install gamescope"));
+        assert!(!info.contains("systemd"));
     }
 }

@@ -13,7 +13,7 @@ use crate::dialogs::signin;
 use crate::form_view::FormView;
 use crate::window::Window;
 
-fn text(v: &Value, key: &str) -> String {
+pub(crate) fn text(v: &Value, key: &str) -> String {
     v[key].as_str().unwrap_or_default().to_string()
 }
 
@@ -83,7 +83,6 @@ fn push_form(dialog: &adw::PreferencesDialog, title: &str, view: Rc<FormView>) -
     page
 }
 
-/// A list row that opens a subpage: its state beside the chevron when it is off, the switch on the subpage.
 fn list_row(title: &str, subtitle: &str, enabled: bool) -> adw::ActionRow {
     let row = crate::rows::marked(adw::ActionRow::builder().activatable(true).build(), title, subtitle);
     if !enabled {
@@ -97,8 +96,7 @@ fn chevron() -> gtk::Image {
     gtk::Image::from_icon_name("go-next-symbolic")
 }
 
-/// `page`: `launch`, `runners`, `stores`, `modules`, `controller` or `system` (a Steam Deck's); empty for the first. `storage`,
-/// `artwork` and `doctor` open the dialogs those pages became.
+/// `page`: `launch`, `runners`, `stores`, `modules`, `controller` or `system` (a Steam Deck's); empty for the first.
 pub fn present(win: &Window, page: &str) {
     match page {
         "storage" => return crate::pages::storage::present(win),
@@ -122,11 +120,11 @@ pub fn present(win: &Window, page: &str) {
 
     let stores = ListPage::new("stores", &gettext("Stores"), "system-software-install-symbolic");
     dialog.add(&stores.page);
-    load_stores(&dialog, &stores, &connector, false);
+    load_list(&dialog, &stores, &connector, Listed::Stores);
 
     let modules = ListPage::new("modules", &gettext("Modules"), "package-x-generic-symbolic");
     dialog.add(&modules.page);
-    load_modules(&dialog, &modules, &connector, false);
+    load_list(&dialog, &modules, &connector, Listed::Modules);
 
     let controller = crate::dialogs::controller::page(&dialog);
     dialog.add(&controller.page);
@@ -381,27 +379,56 @@ fn open_runner(dialog: &adw::PreferencesDialog, runner: &Value, games: &[(String
     push_form(dialog, &text(runner, "name"), view);
 }
 
-/// `reload`: the rows rebuilt in one go where they were, the focus kept, no spinner; their switch is on their page.
-fn load_stores(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, connector: &str, reload: bool) {
-    if !reload {
+#[derive(Clone, Copy)]
+enum Listed {
+    Stores,
+    Modules,
+}
+
+/// A spinner only while the page is empty: a reload rebuilds the rows where they were, the focus kept.
+fn load_list(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, connector: &str, listed: Listed) {
+    if page.groups.borrow().is_empty() {
         page.loading();
     }
     let (dialog, page, connector) = (dialog.downgrade(), page.clone(), connector.to_string());
     glib::spawn_future_local(async move {
-        let sources = backend::pinned(|core| async move { core.sources().await }).await;
+        let entries = match listed {
+            Listed::Stores => backend::pinned(|core| async move { core.sources().await }).await,
+            Listed::Modules => backend::run(async { backend::core().modules().await }).await,
+        };
         let Some(dialog) = dialog.upgrade() else { return };
         let focus = crate::components::take_focus(&page.rows.borrow());
         page.clear();
-        let group = page.group("", &gettext("Where your games come from: sign in to list them and install them from Store"));
-        for source in sources {
-            let enabled = source["enabled"].as_bool() == Some(true);
-            let line = if enabled || source["available"].as_bool() == Some(false) { signin::status(&source) } else { text(&source, "description") };
-            let row = list_row(&text(&source, "name"), &line, enabled);
-            page.keep(&text(&source, "id"), &row);
-            let (weak_dialog, weak_page, source, conn) = (dialog.downgrade(), Rc::downgrade(&page), source.clone(), connector.clone());
+        let group = page.group(
+            "",
+            &match listed {
+                Listed::Stores => gettext("Where your games come from: sign in to list them and install them from Store"),
+                Listed::Modules => gettext("What runs around your games: recording, the journal, screenshots and more"),
+            },
+        );
+        for entry in entries {
+            let enabled = entry["enabled"].as_bool() == Some(true);
+            let line = match listed {
+                Listed::Stores if enabled || entry["available"].as_bool() == Some(false) => signin::status(&entry),
+                Listed::Stores => text(&entry, "description"),
+                Listed::Modules => module_status(&entry),
+            };
+            let row = list_row(&text(&entry, "name"), &line, enabled);
+            page.keep(&text(&entry, "id"), &row);
+            let (weak_dialog, weak_page, conn) = (dialog.downgrade(), Rc::downgrade(&page), connector.clone());
             row.connect_activated(move |_| {
                 let (Some(dialog), Some(page)) = (weak_dialog.upgrade(), weak_page.upgrade()) else { return };
-                open_store(&dialog, &page, &source, &conn);
+                let (weak_dialog, weak_page, again) = (dialog.downgrade(), Rc::downgrade(&page), conn.clone());
+                let reload: signin::Say = Rc::new(move |_: &str| {
+                    if let (Some(dialog), Some(page)) = (weak_dialog.upgrade(), weak_page.upgrade()) {
+                        load_list(&dialog, &page, &again, listed);
+                    }
+                });
+                let subpage = match listed {
+                    Listed::Stores => open_store(&dialog, &entry, &conn, reload.clone()),
+                    Listed::Modules => open_module(&dialog, &entry, &conn),
+                };
+                subpage.connect_hidden(move |_| reload(""));
             });
             group.add(&row);
         }
@@ -409,9 +436,9 @@ fn load_stores(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, connector: 
     });
 }
 
-fn open_store(dialog: &adw::PreferencesDialog, stores: &Rc<ListPage>, source: &Value, connector: &str) {
-    let id = text(source, "id");
-    let view = FormView::new(Form::Source(id.clone()), dialog, connector.to_string());
+/// `reload` also hears a sign-in that lands after the page is gone.
+fn open_store(dialog: &adw::PreferencesDialog, source: &Value, connector: &str, reload: signin::Say) -> adw::NavigationPage {
+    let view = FormView::new(Form::Source(text(source, "id")), dialog, connector.to_string());
     view.page.set_description(&text(source, "description"));
     if source["enabled"].as_bool() == Some(true) {
         let weak = dialog.downgrade();
@@ -420,27 +447,22 @@ fn open_store(dialog: &adw::PreferencesDialog, stores: &Rc<ListPage>, source: &V
                 dialog.add_toast(crate::dialogs::toast(text));
             }
         });
-        let (weak, stores, connector_owned) = (dialog.downgrade(), Rc::downgrade(stores), connector.to_string());
-        let reload: signin::Say = Rc::new(move |_: &str| {
-            if let (Some(dialog), Some(stores)) = (weak.upgrade(), stores.upgrade()) {
-                load_stores(&dialog, &stores, &connector_owned, true);
-            }
-        });
         view.add_tail(&signin::account_group(source, say, reload));
     }
-    let (weak, stores, connector) = (dialog.downgrade(), Rc::downgrade(stores), connector.to_string());
-    push_form(dialog, &text(source, "name"), view).connect_hidden(move |_| {
-        if let (Some(dialog), Some(stores)) = (weak.upgrade(), stores.upgrade()) {
-            load_stores(&dialog, &stores, &connector, true);
-        }
-    });
+    push_form(dialog, &text(source, "name"), view)
 }
 
-/// What a module's row says: why it does nothing, else what it does. A setting it waits on goes by its label.
+fn open_module(dialog: &adw::PreferencesDialog, module: &Value, connector: &str) -> adw::NavigationPage {
+    let view = FormView::new(Form::Module(text(module, "id")), dialog, connector.to_string());
+    view.page.set_description(&text(module, "description").replace('`', ""));
+    push_form(dialog, &text(module, "name"), view)
+}
+
+/// A setting the module waits on goes by its label.
 fn module_status(module: &Value) -> String {
     let (enabled, available) = (module["enabled"].as_bool() == Some(true), module["available"].as_bool() != Some(false));
     let missing = list(module, "missing").join(", ");
-    let settings = module["settings"].as_array().cloned().unwrap_or_default();
+    let settings = module["settings"].as_array().map(Vec::as_slice).unwrap_or_default();
     let label = |key: &String| settings.iter().find(|s| text(s, "key") == *key).map(|s| text(s, "label")).filter(|l| !l.is_empty()).unwrap_or(key.clone());
     let unset: Vec<String> = list(module, "unset").iter().map(label).collect();
     let incompatible = text(module, "incompatible");
@@ -452,39 +474,6 @@ fn module_status(module: &Value) -> String {
         (true, true) if !unset.is_empty() => gettext("Does nothing until it is set: {}").replace("{}", &unset.join(", ")),
         _ => text(module, "description"),
     }
-}
-
-/// `reload`: the rows rebuilt in one go where they were, the focus kept, no spinner; their switch is on their page.
-fn load_modules(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, connector: &str, reload: bool) {
-    if !reload {
-        page.loading();
-    }
-    let (dialog, page, connector) = (dialog.downgrade(), page.clone(), connector.to_string());
-    glib::spawn_future_local(async move {
-        let modules = backend::run(async { backend::core().modules().await }).await;
-        let Some(dialog) = dialog.upgrade() else { return };
-        let focus = crate::components::take_focus(&page.rows.borrow());
-        page.clear();
-        let group = page.group("", &gettext("What runs around your games: recording, the journal, screenshots and more"));
-        for module in modules {
-            let row = list_row(&text(&module, "name"), &module_status(&module), module["enabled"].as_bool() == Some(true));
-            page.keep(&text(&module, "id"), &row);
-            let (weak_dialog, weak_page, module, conn) = (dialog.downgrade(), Rc::downgrade(&page), module.clone(), connector.clone());
-            row.connect_activated(move |_| {
-                let Some(dialog) = weak_dialog.upgrade() else { return };
-                let view = FormView::new(Form::Module(text(&module, "id")), &dialog, conn.clone());
-                view.page.set_description(&text(&module, "description").replace('`', ""));
-                let (weak_dialog, weak_page, conn) = (dialog.downgrade(), weak_page.clone(), conn.clone());
-                push_form(&dialog, &text(&module, "name"), view).connect_hidden(move |_| {
-                    if let (Some(dialog), Some(page)) = (weak_dialog.upgrade(), weak_page.upgrade()) {
-                        load_modules(&dialog, &page, &conn, true);
-                    }
-                });
-            });
-            group.add(&row);
-        }
-        crate::components::refocus(&page.rows.borrow(), focus);
-    });
 }
 
 #[cfg(test)]

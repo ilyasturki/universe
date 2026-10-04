@@ -82,13 +82,7 @@ mod imp {
             text.append(&self.excerpt);
             obj.append(&adw::Clamp::builder().maximum_size(WIDTH).tightening_threshold(WIDTH).child(&text).build());
             let card = obj.downgrade();
-            let group = actions::install_game(&*obj, move || card.upgrade().and_then(|card| card.game()));
-            let (card, held) = (obj.downgrade(), group);
-            actions::context_menu(&*obj, crate::menus::game().upcast(), move || {
-                let game = card.upgrade().and_then(|card| card.game());
-                actions::sync_game(&held, game.as_ref());
-                game.is_some()
-            });
+            actions::game_menu(&*obj, move || card.upgrade().and_then(|card| card.game()));
         }
     }
 
@@ -110,7 +104,6 @@ impl Default for MediaCard {
 }
 
 impl MediaCard {
-    /// The game the shot, recording or entry is of, while it is in the library.
     fn game(&self) -> Option<GameObject> {
         let id = self.imp().item.borrow().as_ref().map(|(item, _)| item.row().game.clone())?;
         gio::Application::default().and_downcast::<crate::app::Application>()?.library().get(&id)

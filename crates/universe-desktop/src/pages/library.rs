@@ -28,7 +28,6 @@ mod imp {
         #[template_child]
         pub compact: TemplateChild<adw::Breakpoint>,
         pub is_compact: Cell<bool>,
-        /// The cards the grid made, to resize when the breakpoint flips.
         pub cards: RefCell<Vec<glib::WeakRef<GameCard>>>,
         pub view: RefCell<View>,
         pub sort: Cell<Sort>,
@@ -84,7 +83,7 @@ mod imp {
         fn constructed(&self) {
             self.parent_constructed();
             let obj = self.obj();
-            self.menu_button.set_menu_model(Some(&crate::menus::main(None)));
+            self.menu_button.set_menu_model(Some(&crate::menus::main()));
             let page = obj.downgrade();
             self.search.connect_search_changed(move |entry| {
                 let Some(page) = page.upgrade() else { return };

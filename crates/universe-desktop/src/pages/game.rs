@@ -17,8 +17,7 @@ use crate::window::Window;
 
 type Opener = fn(&Window, &str);
 
-/// What the page shows past the library row, read once it opens: the library's at once, the screenshots' count and whether
-/// the source lists achievements after.
+/// What the page shows past the library row, read once it opens.
 #[derive(Debug, Clone, Default)]
 pub struct Details {
     description: String,
@@ -36,8 +35,7 @@ pub struct Details {
 }
 
 impl Details {
-    /// `known`: what the page had, kept for the parts read after.
-    fn of(r: &universe::library::Resolved, known: &Details) -> Details {
+    fn of(r: &universe::library::Resolved, shots: usize, achievable: bool) -> Details {
         let m = &r.game.metadata;
         Details {
             description: if m.description.trim().is_empty() { m.summary.trim().to_string() } else { m.description.trim().to_string() },
@@ -46,8 +44,8 @@ impl Details {
             genres: m.genres.clone(),
             screenshots: r.screenshots.clone(),
             achievements: (r.achievements.unlocked, r.achievements.total),
-            achievable: known.achievable,
-            shots: known.shots,
+            achievable,
+            shots,
             recordings: r.sessions.iter().filter(|s| s.recording.as_deref().is_some_and(|p| !p.is_empty())).count(),
             journal: r.journal_count,
             sessions: r.sessions.iter().filter(|s| !s.unit.is_empty()).count(),
@@ -310,8 +308,6 @@ impl GamePage {
         self.insert_action_group("page", Some(&group));
     }
 
-    /// Each part shows the moment it lands: the library's details and the screenshots' count, then whether the source lists
-    /// achievements (`sources()` may ask the stores), and apart from both the backdrop, faded in once decoded.
     fn load_details(&self) {
         let Some(game) = self.game() else { return };
         let (id, backdrop) = (game.id(), {
@@ -344,11 +340,11 @@ impl GamePage {
             .await;
             let Ok((r, shots)) = resolved else { return };
             let Some(this) = page.upgrade() else { return };
-            let mut known = this.imp().details.borrow().clone();
-            known.shots = shots;
-            this.imp().details.replace(Details::of(&r, &known));
+            let achievable = this.imp().details.borrow().achievable;
+            this.imp().details.replace(Details::of(&r, shots, achievable));
             this.show_details();
             this.refresh();
+            // `sources()` may ask the stores: the details show before it answers.
             let source = (r.game.source.id.clone(), r.game.source.kind.clone());
             let achievable = backend::pinned(move |core| async move {
                 !source.0.is_empty()
@@ -360,16 +356,15 @@ impl GamePage {
             })
             .await;
             let Some(this) = page.upgrade() else { return };
-            this.imp().details.borrow_mut().achievable = achievable;
-            this.show_details();
+            if std::mem::replace(&mut this.imp().details.borrow_mut().achievable, achievable) != achievable {
+                this.show_details();
+            }
         });
     }
 
-    /// The header names the game once its title has scrolled away under it.
     fn follow_scroll(&self) {
-        let imp = self.imp();
         let page = self.downgrade();
-        imp.scroller.vadjustment().connect_value_changed(move |adjustment| {
+        self.imp().scroller.vadjustment().connect_value_changed(move |adjustment| {
             let Some(page) = page.upgrade() else { return };
             let imp = page.imp();
             let Some(content) = imp.scroller.child().and_downcast::<gtk::Viewport>().and_then(|v| v.child()) else { return };
@@ -421,7 +416,6 @@ impl GamePage {
     }
 }
 
-/// The line under the byline: the machine, the runner, when last played, the hours, then the achievements once read.
 fn facts(row: &crate::game::Row, achievements: (usize, usize), playing: bool, now: chrono::DateTime<chrono::Local>) -> Vec<String> {
     let mut facts = vec![library::platform_name(&row.platform)];
     if !facts.contains(&row.runner_name) {

@@ -19,9 +19,6 @@ template $UniverseWindow: Adw.ApplicationWindow {
       reveal-bottom-bars: false;
       bottom-bar-style: raised;
 
-      [bottom]
-      $UniverseNowPlaying bottom_playing {}
-
       content: Adw.NavigationView navigation {
         Adw.NavigationPage {
           title: _("Universe");
@@ -35,7 +32,7 @@ template $UniverseWindow: Adw.ApplicationWindow {
             sidebar: Adw.NavigationPage {
               title: _("Universe");
 
-              child: Adw.ToolbarView {
+              child: Adw.ToolbarView sidebar_toolbar {
                 [top]
                 Adw.HeaderBar {
                   [start]

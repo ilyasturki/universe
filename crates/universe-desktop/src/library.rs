@@ -243,7 +243,6 @@ pub fn source_name(kind: &str) -> String {
     }
 }
 
-/// The kind of machine: a computer, a handheld, an arcade cabinet, else a console's pad.
 pub fn platform_icon(platform: &str) -> &'static str {
     const HANDHELDS: [&str; 9] = ["Switch", "DS", "Game Boy", "Portable", "Vita", "Game Gear", "Pocket", "WonderSwan", "Lynx"];
     match platform {

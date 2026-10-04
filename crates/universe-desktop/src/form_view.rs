@@ -153,15 +153,9 @@ fn first_clause(description: &str) -> String {
     }
 }
 
-/// The Advanced row's line: the titles of the cards its page holds, each once.
 fn advanced_line(titles: &[String]) -> String {
-    let mut seen: Vec<&str> = Vec::new();
-    for title in titles.iter().map(|t| t.trim()).filter(|t| !t.is_empty()) {
-        if !seen.contains(&title) {
-            seen.push(title);
-        }
-    }
-    seen.join(", ")
+    let mut seen = std::collections::HashSet::new();
+    titles.iter().map(|t| t.trim()).filter(|t| !t.is_empty() && seen.insert(*t)).collect::<Vec<_>>().join(", ")
 }
 
 /// Folders are picked as folders, the rest as files.

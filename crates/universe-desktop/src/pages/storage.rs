@@ -14,7 +14,6 @@ fn text(v: &Value, key: &str) -> String {
     v[key].as_str().unwrap_or_default().to_string()
 }
 
-/// Storage off the main menu: a dialog around the page.
 pub fn present(win: &Window) {
     let dialog = adw::PreferencesDialog::builder().title(gettext("Storage")).content_height(720).build();
     let view = StorageView::new(win);
