@@ -14,7 +14,7 @@ def link(root, name, state="up", wlan=False, device=True):
         (d / "device").write_text("")
 
 
-def test_wifi_reads_its_arcs_and_a_cable_wins(tmp_path):
+def test_wifi_reads_its_arcs_a_cable_wins_and_no_link_up_is_offline(tmp_path):
     root = tmp_path / "net"
     wireless = tmp_path / "wireless"
     link(root, "lo", state="unknown", device=False)
@@ -26,12 +26,8 @@ def test_wifi_reads_its_arcs_and_a_cable_wins(tmp_path):
     assert read_link(str(root), str(wireless)) == {"kind": "wifi", "bars": 3}
     link(root, "eth0")
     assert read_link(str(root), str(wireless)) == {"kind": "wired", "bars": 0}
-
-
-def test_offline_when_no_physical_link_is_up(tmp_path):
-    root = tmp_path / "net"
-    link(root, "lo", state="unknown", device=False)
-    link(root, "wlan0", state="down", wlan=True)
+    for name in ("wlan0", "eth0"):
+        (root / name / "operstate").write_text("down\n")
     assert read_link(str(root), str(tmp_path / "missing")) == {"kind": "", "bars": 0}
 
 

@@ -19,13 +19,8 @@ def test_the_rows_are_the_physical_keyboards():
     assert values(us, "AD") == "qwertyuiop[]" and values(us, "AE") == "1234567890-=" and shifts(us, "AE") == "!@#$%^&*()_+"
     bepo = keyboard.rows("fr", "bepo")
     assert bepo["name"] == "fr:bepo" and values(bepo, "AD") == "bépoèvdljzw"
-
-
-def test_an_unknown_layout_shows_qwerty():
-    from universe_ui import keyboard
-
-    rows = keyboard.rows("nope")
-    assert rows["name"] == "nope" and values(rows, "AD") == "qwertyuiop[]" and shifts(rows, "AB") == "ZXCVBNM<>?"
+    unknown = keyboard.rows("nope")
+    assert unknown["name"] == "nope" and values(unknown, "AD") == "qwertyuiop[]" and shifts(unknown, "AB") == "ZXCVBNM<>?", "an unknown layout shows qwerty"
 
 
 def test_the_keys_carry_the_sessions_layout(fake, tmp_path, monkeypatch):
