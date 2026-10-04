@@ -1,4 +1,5 @@
 import inspect
+import os
 import sys
 import traceback
 
@@ -54,8 +55,20 @@ def app(xdg):
     return application
 
 
+# A FakeCore paints the fixture's art into the cache when it finds none: once here rather than in the first test's 2 s.
+@pytest.fixture(scope="session")
+def fixture_art(xdg):
+    import json
+
+    from universe_ui.fake_core import FIXTURE
+    from universe_ui.fixtures.art import paint_library
+
+    with open(FIXTURE) as f:
+        paint_library(json.load(f)["games"], os.path.join(os.environ["XDG_CACHE_HOME"], "universe", "fake-art"))
+
+
 @pytest.fixture
-def fake(app, xdg, tmp_path):
+def fake(app, xdg, fixture_art, tmp_path):
     from universe_ui.fake_core import FIXTURE, FakeCore
     from universe_ui.universe_client import CoreClient
 

@@ -287,7 +287,16 @@
         ps.qrcode
         ps.xkbcommon
       ];
-      pyEnv = extra: pkgs.python3.withPackages (ps: [ ps.pytest ] ++ extra ps);
+      pyEnv =
+        extra:
+        pkgs.python3.withPackages (
+          ps:
+          [
+            ps.pytest
+            ps.pytest-timeout
+          ]
+          ++ extra ps
+        );
 
       ui = pkgs.python3Packages.buildPythonApplication {
         pname = "universe-ui";

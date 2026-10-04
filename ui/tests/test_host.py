@@ -236,6 +236,9 @@ class Stale(QThread):
 
 stale = Stale()
 QTimer.singleShot(0, stale.start)
+# The app's loop wakes for every frame; an idle one would see the dead socket again only at the next timer.
+tick = QTimer()
+tick.start(20)
 QTimer.singleShot(5000, lambda: (print("still here", flush=True), app.quit()))
 app.exec()
 """

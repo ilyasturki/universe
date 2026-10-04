@@ -141,6 +141,7 @@ def test_the_welcome_hub_s_latest_recording_without_a_frame_shows_its_game_s_art
     assert hub.property("latestImage") != ""
 
 
+@pytest.mark.slow
 def test_back_from_a_game_the_home_builds_itself_up_again(api, fake):
     api.theme.set("ps5")
     api.theme.takeLanding()

@@ -77,6 +77,7 @@ def lit(window, ground, above):
     until(lambda: lit_fraction(window.grabWindow(), ground) > above, f"less than {above:.0%} of the window drawn")
 
 
+@pytest.mark.slow
 def test_the_scene_holds_still_behind_the_game(api, fake, monkeypatch):
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
     _engine, window = render(api)
@@ -332,6 +333,7 @@ def test_a_session_running_at_startup_is_home_with_the_game_pinned(api, fake):
     window.close()
 
 
+@pytest.mark.slow
 def test_the_cursor_follows_the_game_through_its_session(api, fake):
     from PySide6.QtCore import Q_ARG, QMetaObject, QObject
 
@@ -786,6 +788,7 @@ def test_the_switch2_artwork_page_opens_a_slot_with_what_shows_first(api, fake):
     window.close()
 
 
+@pytest.mark.slow
 def test_b_held_opens_the_power_menu_in_both_looks(api):
     from PySide6.QtCore import QObject, Qt
     from PySide6.QtTest import QTest
