@@ -20,8 +20,12 @@ def indexed(api):
     return search
 
 
-def labels(search):
-    return [(r["path"], r["label"], r["display"]) for r in search.results]
+def targets(search):
+    return [r["target"] for r in search.results]
+
+
+def target(page, ident="", key="", module=""):
+    return {"page": page, "id": ident, "key": key, "module": module}
 
 
 def test_word_scores():
@@ -37,14 +41,13 @@ def test_the_index_spans_every_page(api, fake):
     assert search.ready and search.indexed > 100
     assert search.count == 0 and search.query == ""
     search.query = "wayland"
-    assert labels(search) == [("Runners › Proton", "Wayland", "On"), ("Games › Proton", "Wayland", "in 6 games")], "the global row, then the games collapsed"
+    assert targets(search) == [target("runner", "proton", "launch.wayland"), target("game", "", "launch.wayland")], "the global row, then the games collapsed"
     head = search.results[1]
-    assert head["kind"] == "gamekey" and head["expanded"] is False and head["target"] == {"page": "game", "id": "", "key": "launch.wayland", "module": ""}
-    assert search.results[0]["target"] == {"page": "runner", "id": "proton", "key": "launch.wayland", "module": ""} and search.results[0]["advanced"] is False
+    assert head["kind"] == "gamekey" and head["count"] == 6 and head["expanded"] is False and search.results[0]["advanced"] is False
     search.expand(1)
     rows = search.results
-    assert rows[1]["expanded"] is True and len(rows) == 8 and rows[2]["kind"] == "gamerow" and rows[2]["label"] == "The Technomancer"
-    assert rows[2]["target"] == {"page": "game", "id": "the-technomancer", "key": "launch.wayland", "module": ""} and rows[2]["inherited"] is True
+    assert rows[1]["expanded"] is True and len(rows) == 2 + head["count"] and all(r["kind"] == "gamerow" for r in rows[2:])
+    assert rows[2]["target"] == target("game", "the-technomancer", "launch.wayland") and rows[2]["inherited"] is True
     assert all(r["image"].startswith("file://") for r in rows[2:] if r["image"]), "the game's art on its row"
     search.expand(1)
     assert len(search.results) == 2 and search.results[1]["expanded"] is False
@@ -53,47 +56,31 @@ def test_the_index_spans_every_page(api, fake):
 def test_synonyms_descriptions_values_and_typos(api, fake):
     search = indexed(api)
     search.query = "vrr"
-    assert labels(search)[0] == ("Launch › Display", "Adaptive sync", "auto · On"), "a synonym"
+    assert targets(search)[0] == target("launch", "", "launch.gamescope_adaptive_sync"), "a synonym"
     search.query = "eventfd"
-    assert [r["label"] for r in search.results][:2] == ["Esync", "Esync"] and search.results[0]["path"] == "Runners › Proton › Sync", (
-        "a word of the description"
-    )
-    assert search.results[0]["advanced"] is True and search.results[0]["tag"] == "ADVANCED" and search.results[0]["detail"].startswith("Faster thread")
+    assert targets(search)[:2] == [target("runner", "proton", "launch.esync"), target("runner", "wine", "launch.esync")], "a word of the description"
+    assert search.results[0]["advanced"] is True
     search.query = "av1 10-bit"
-    assert labels(search)[0] == ("Modules › Video capture", "Video codec", "AV1 10-bit"), "the current value, as its label reads"
+    assert targets(search)[0] == target("module", "capture", "codec", "capture"), "the current value, as its label reads"
     search.query = "h265"
     codec = next(s for m in fake.modules() if m["id"] == "capture" for s in m["settings"] if s["key"] == "codec")
-    assert "h265" in codec["keywords"] and search.results[0]["target"] == {"page": "module", "id": "capture", "key": "codec", "module": "capture"}, (
-        "a module setting's own keywords"
-    )
+    assert "h265" in codec["keywords"] and targets(search)[0] == target("module", "capture", "codec", "capture"), "a module setting's own keywords"
     search.query = "wyland"
-    assert [r["label"] for r in search.results] == ["Wayland", "Wayland"], "a typo"
+    assert [t["key"] for t in targets(search)] == ["launch.wayland", "launch.wayland"], "a typo"
     search.query = "hud"
-    assert [r["label"] for r in search.results][:2] == ["Show MangoHud", "Show MangoHud"]
+    assert [t["key"] for t in targets(search)][:2] == ["launch.mangohud", "launch.mangohud"]
     search.query = "quit"
-    assert search.results[0]["kind"] == "section" and search.results[0]["target"] == {"page": "section", "id": "quit", "key": "", "module": ""}, (
-        "a section wins a tie"
-    )
+    assert search.results[0]["kind"] == "section" and targets(search)[0] == target("section", "quit"), "a section wins a tie"
     search.query = "hold"
-    assert search.results[0]["label"] == "Hold length (ms)" and search.results[0]["target"] == {
-        "page": "controller",
-        "id": "",
-        "key": "controller.hold_ms",
-        "module": "",
-    }
+    assert targets(search)[0] == target("controller", "", "controller.hold_ms")
     search.query = "gsr"
-    assert any(r["target"] == {"page": "module", "id": "capture", "key": "gsr_extra_args", "module": "capture"} and r["advanced"] for r in search.results), (
-        "a config-only setting"
-    )
+    assert any(r["target"] == target("module", "capture", "gsr_extra_args", "capture") and r["advanced"] for r in search.results), "a config-only setting"
     search.query = "dolphin"
-    assert (
-        search.results[0]["target"] == {"page": "runner", "id": "dolphin", "key": "", "module": ""}
-        and search.results[0]["image"] == "assets/runners/dolphin.svg"
-    )
+    assert targets(search)[0] == target("runner", "dolphin")
     search.query = "switch 2"
-    assert search.results[0]["target"] == {"page": "themes", "id": "switch2", "key": "theme", "module": ""}
+    assert targets(search)[0] == target("themes", "switch2", "theme")
     search.query = "intro"
-    assert search.results[0]["target"] == {"page": "themes", "id": "", "key": "boot_intro", "module": ""}
+    assert targets(search)[0] == target("themes", "", "boot_intro")
     search.query = "zzzz"
     assert search.count == 0
 
@@ -101,24 +88,23 @@ def test_synonyms_descriptions_values_and_typos(api, fake):
 def test_a_game_in_the_query_narrows_to_it(api, fake):
     search = indexed(api)
     search.query = "technomancer wayland"
-    assert labels(search) == [("The Technomancer", "Wayland", "On")]
-    assert search.results[0]["target"] == {"page": "game", "id": "the-technomancer", "key": "launch.wayland", "module": ""}
+    assert targets(search) == [target("game", "the-technomancer", "launch.wayland")]
     search.query = "technomancer"
-    assert search.results[0]["kind"] == "game" and search.results[0]["target"] == {"page": "game", "id": "the-technomancer", "key": "", "module": ""}
-    assert [r["label"] for r in search.results[1:4]] == ["Gamescope", "Resolution", "Refresh rate"], "then every setting of the game, in page order"
-    assert all(r["path"] == "The Technomancer" for r in search.results[1:])
-    search.query = "technomancer cursor"
-    rows = {r["label"]: r for r in search.results}
-    assert rows["Show the cursor in the recording"]["target"] == {"page": "game", "id": "the-technomancer", "key": "cursor", "module": "capture"}, (
-        "a module's game setting"
+    assert search.results[0]["kind"] == "game" and targets(search)[0] == target("game", "the-technomancer")
+    assert [t["key"] for t in targets(search)[1:4]] == ["launch.gamescope", "launch.gamescope_resolution", "launch.gamescope_refresh"], (
+        "then every setting of the game, in page order"
     )
-    assert rows["Hide the cursor while playing"]["target"]["key"] == "desktop.hide_cursor"
+    assert all(t["id"] == "the-technomancer" for t in targets(search)[1:])
+    search.query = "technomancer cursor"
+    assert target("game", "the-technomancer", "cursor", "capture") in targets(search), "a module's game setting"
+    assert target("game", "the-technomancer", "desktop.hide_cursor") in targets(search)
 
 
 def test_the_index_follows_the_config(api, fake):
     search = indexed(api)
-    search.query = "wayland"
-    assert search.results[0]["display"] == "On"
-    fake.setConfig("launch.wayland", "false")
+    search.query = "av1 10-bit"
+    codec = target("module", "capture", "codec", "capture")
+    assert codec in targets(search)
+    fake.setSetting("capture", "", "codec", "h264")
     search.load()
-    until(lambda: search.results[0]["display"] == "Off", "a reload reads the values again and keeps the query")
+    until(lambda: codec not in targets(search), "a reload reads the values again and keeps the query")

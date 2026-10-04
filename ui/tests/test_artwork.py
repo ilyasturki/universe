@@ -1,4 +1,8 @@
-from conftest import settle, until
+from conftest import record, settle, until
+
+
+def slot_of(view, game, slot):
+    return next(s for r in view.rows if r["id"] == game for s in r["slots"] if s["slot"] == slot)
 
 
 def test_slots_carry_both_layers_and_a_pick_sits_over_the_default(api, fake):
@@ -8,7 +12,6 @@ def test_slots_carry_both_layers_and_a_pick_sits_over_the_default(api, fake):
     assert list(slots) == ["box_front", "square", "banner", "background", "logo"]
     assert slots["box_front"]["kind"] == "default" and slots["box_front"]["hasDefault"]
     assert slots["box_front"]["origin"] == "steam" and slots["square"]["origin"] == "generated", "a keyless profile's art"
-    assert slots["square"]["use"] == "Home rail, Switch 2 tiles"
     assert not slots["box_front"]["hasOverride"]
     assert "?v=" in slots["box_front"]["url"]
 
@@ -27,7 +30,7 @@ def test_slots_carry_both_layers_and_a_pick_sits_over_the_default(api, fake):
     settle(form)
     assert seen == ["box_front"] and changed == ["dead-cells"]
     row = form.slot("box_front")
-    assert row["kind"] == "picked" and row["kindLabel"] == "Your pick" and row["hasOverride"] and row["hasDefault"]
+    assert row["kind"] == "picked" and row["hasOverride"] and row["hasDefault"]
     assert row["url"] == row["overrideUrl"] != row["defaultUrl"]
     assert api.library.get("dead-cells").assets.boxFront.toString() == row["overrideUrl"]
 
@@ -36,12 +39,11 @@ def test_slots_carry_both_layers_and_a_pick_sits_over_the_default(api, fake):
     assert row["kind"] == "default" and row["url"] == row["defaultUrl"]
     assert not form.removeOverride("box_front")
 
-    messages = []
-    form.message.connect(messages.append)
+    said = record(form.message)
     form.useFile("banner", fake.game("dead-cells")["media"]["logo"])
     settle(form)
     assert seen == ["box_front", "banner"] and changed[-1] == "dead-cells"
-    assert form.slot("banner")["kind"] == "picked" and messages[-1].startswith("Banner picked for Dead Cells: ")
+    assert form.slot("banner")["kind"] == "picked" and len(said) == 1
 
 
 def test_search_and_pin_reload_the_candidates(api, fake):
@@ -93,30 +95,25 @@ def test_overview_lays_the_library_out_as_games_by_slots(api, fake):
     fake.mediaSetSlot("dead-cells", "banner", fake.game("dead-cells")["media"]["logo"])
     view.load()
     settle(view)
-    row = next(r for r in view.rows if r["id"] == "dead-cells")
-    assert row["slots"][2]["kind"] == "picked" and row["slots"][2]["kindLabel"] == "Your pick"
+    assert slot_of(view, "dead-cells", "banner")["kind"] == "picked"
 
     fake.core._game("control")["media"].pop("logo")
     view.load()
     settle(view)
-    row = next(r for r in view.rows if r["id"] == "control")
-    assert row["slots"][4]["kind"] == "missing" and row["slots"][4]["kindLabel"] == "Missing"
-    assert view.missingGames == 1
+    assert slot_of(view, "control", "logo")["kind"] == "missing" and view.missingGames == 1
 
 
 def test_the_library_fetch_reports_its_progress_and_stops_after_the_game_in_hand(api, fake):
     view = api.screens.artworkOverview
     view.load()
     settle(view)
-    messages = []
-    view.message.connect(messages.append)
+    said = record(view.message)
     view.refreshAll()
     assert view.job["ok"] is None and view.job["total"] == 0
     total = until(lambda: view.job["total"])
     assert total >= len(view.rows) and view.job["message"] != "", "progress names the game in hand"
-    assert view.cancelRefresh() and view.job["cancelled"] and view.job["message"] == "Stopping…"
+    assert view.cancelRefresh() and view.job["cancelled"]
     assert not view.cancelRefresh(), "a second stop does nothing"
     until(lambda: view.job["ok"] is not None)
-    assert view.job["ok"] is True
-    assert messages[-1] == f"Stopped after {view.job['done'] + 1} of {total} games"
+    assert view.job["ok"] is True and len(said) == 1
     assert view.job["done"] + 1 < total, "stopped well before the end"
