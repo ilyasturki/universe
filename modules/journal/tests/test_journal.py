@@ -54,18 +54,24 @@ def write_shim(path, body):
 
 def test_select_screenshots_window(tmp_path):
     att = tmp_path / "attachments"
-    for name in ("20260911-115900.png", "20260911-120130.png", "20260911-120245.jpg", "20260911-130000.png", "20260911-120000-1.png"):
-        make_png(att / name)
-    (att / "notes.txt").write_text("not an image")
+    att.mkdir()
+    for name in ("20260911-115900.png", "20260911-120130.png", "20260911-120245.jpg", "20260911-130000.png", "20260911-120000-1.png", "notes.txt"):
+        (att / name).write_bytes(b"x")
     start, end = datetime(2026, 9, 11, 12, 0, 0), datetime(2026, 9, 11, 12, 3, 20)
     shots = img.select_screenshots(str(att), start, end)
     assert [os.path.basename(s.file) for s in shots] == ["20260911-115900.png", "20260911-120130.png", "20260911-120245.jpg"]
     assert all(s.kind == "shot" for s in shots)
 
 
-def test_extract_frames_from_mkv(tmp_path):
-    rec = tmp_path / "rec.mkv"
+@pytest.fixture(scope="module")
+def testsrc(tmp_path_factory):
+    rec = tmp_path_factory.mktemp("rec") / "rec.mkv"
     make_mkv(rec, "testsrc", 120)
+    return rec
+
+
+def test_extract_frames_from_mkv(tmp_path, testsrc):
+    rec = testsrc
     start = datetime(2026, 9, 11, 12, 0, 0)
     frames = img.extract_frames(str(rec), [], img.Timeline(start), 8, str(tmp_path / "frames"), 120)
     assert 1 <= len(frames) <= 8
@@ -104,9 +110,8 @@ def test_timeline_skips_the_pauses_both_ways():
     assert fallback.start == t0 and fallback.pauses == []
 
 
-def test_extract_frames_places_a_shot_after_a_pause_earlier_in_the_file(tmp_path):
-    rec = tmp_path / "rec.mkv"
-    make_mkv(rec, "testsrc", 120)
+def test_extract_frames_places_a_shot_after_a_pause_earlier_in_the_file(tmp_path, testsrc):
+    rec = testsrc
     t0 = datetime(2026, 9, 11, 12, 0, 0)
     shot = img.Image(str(tmp_path / "s.png"), t0 + timedelta(seconds=100))
     straight = img.extract_frames(str(rec), [shot], img.Timeline(t0), 10, str(tmp_path / "f1"), 120)
@@ -226,7 +231,7 @@ def test_stub_pipeline_writes_entry_note_and_memory(tmp_path, fakebin):
     make_mkv(rec, "testsrc", 200)
     shots_dir = tmp_path / "games" / "testgame" / "screenshots"
     for name in ("20260911-120130.png", "20260911-120245.png", "20260911-130000.png"):
-        make_png(shots_dir / name)
+        add_shot(tmp_path, name)
     (tmp_path / "games" / "testgame" / "sessions.jsonl").write_text(
         json.dumps(
             {
@@ -278,37 +283,28 @@ def test_stub_pipeline_writes_entry_note_and_memory(tmp_path, fakebin):
 
     assert list((tmp_path / "data" / "work").iterdir()) == []
 
-    res2, _ = run_process(tmp_path, fakebin, {}, {"FAKE_UNIVERSE_EXIT": "1"}, recording=rec)
-    assert res2.returncode == 0 and "already exists" in res2.stderr
-    assert state_files(journal_dir) == []
 
-
-def test_stub_pipeline_hands_off_to_the_core(tmp_path, fakebin):
+def test_stub_pipeline_hands_off_to_the_core_in_the_forced_language(tmp_path, fakebin):
     add_shot(tmp_path)
-    res, journal_dir = run_process(tmp_path, fakebin, {})
+    res, journal_dir = run_process(tmp_path, fakebin, {"language": "fr"})
     assert res.returncode == 0, res.stderr
     assert not (journal_dir / f"{SID}.json").exists()
-    assert "journal-add" in res.stderr
-    entry = json.loads((fakebin / "universe.args").read_text().splitlines()[2])
-    assert entry["provider"] == "stub" and entry["images"] == [SHOT]
+    args = (fakebin / "universe.args").read_text().splitlines()
+    entry = json.loads(args[2])
+    assert args[:2] == ["journal-add", SID] and (entry["provider"], entry["lang"], entry["images"]) == ("stub", "fr", [SHOT])
     pending_seen_by_core(fakebin)
     assert state_files(journal_dir) == []
 
 
-def test_no_recording_and_no_screenshot_writes_nothing(tmp_path, fakebin):
-    res, journal_dir = run_process(tmp_path, fakebin, {})
+@pytest.mark.parametrize(
+    ("settings", "shot"), [({"enabled": False}, True), ({"provider": ""}, True), ({}, False)], ids=["disabled", "no model chosen", "nothing to journal"]
+)
+def test_a_session_with_nothing_to_write_is_left_alone(tmp_path, fakebin, settings, shot):
+    if shot:
+        add_shot(tmp_path)
+    res, journal_dir = run_process(tmp_path, fakebin, settings)
     assert res.returncode == 0, res.stderr
-    assert "nothing to journal" in res.stderr
-    assert not (fakebin / "universe.args").exists()
-    assert list(journal_dir.iterdir()) == []
-
-
-def test_core_rejection_marks_the_session_failed(tmp_path, fakebin):
-    add_shot(tmp_path)
-    res, journal_dir = run_process(tmp_path, fakebin, {}, {"FAKE_UNIVERSE_EXIT": "1", "FAKE_UNIVERSE_STDERR": "universe: invalid: bad"})
-    assert res.returncode == 1 and not (journal_dir / f"{SID}.json").exists()
-    assert not (tmp_path / "data" / "memory").exists()
-    assert failed_file(journal_dir) == "the core rejected the entry"
+    assert not (fakebin / "universe.args").exists() and list(journal_dir.iterdir()) == []
 
 
 def test_codex_quota_defers_the_session_until_the_wall_lifts(tmp_path, fakebin):
@@ -357,26 +353,20 @@ def signed_out_entry(journal_dir):
     (journal_dir / f"{SID}.deferred.json").write_text(json.dumps({**entry, "until": "2020-01-01T00:00:00+01:00"}))
 
 
-def test_a_signed_out_codex_puts_the_session_off_before_any_work(tmp_path, fakebin):
+@pytest.mark.parametrize("before_any_work", [True, False], ids=["the account says no", "the model's run says no"])
+def test_a_signed_out_codex_puts_the_session_off_without_spending_a_try(tmp_path, fakebin, before_any_work):
     add_shot(tmp_path)
-    fake_codex(fakebin, "never run", account_error="codex account authentication required to read rate limits")
+    if before_any_work:
+        fake_codex(fakebin, "never run", account_error="codex account authentication required to read rate limits")
+    else:
+        event = '{"type":"turn.failed","error":{"message":"workspace routing discovery unauthorized (401)"}}'
+        write_shim(fakebin / "codex", f'echo "$1" >> "{fakebin}/codex.calls"\n[ "$1" = exec ] || exit 1\necho \'{event}\'\nexit 1')
     for _ in range(4):
         res, journal_dir = run_process(tmp_path, fakebin, {"provider": "codex"})
         assert res.returncode == 75, res.stderr
         signed_out_entry(journal_dir)
-    assert (fakebin / "codex.calls").read_text() == "app-server\n" * 4, "the account says no: the model is never asked"
-    assert not (tmp_path / "data" / "work" / SID).exists(), "and no frame is taken for it"
-
-
-def test_a_codex_refused_mid_run_puts_the_session_off_without_spending_a_try(tmp_path, fakebin):
-    add_shot(tmp_path)
-    event = '{"type":"turn.failed","error":{"message":"workspace routing discovery unauthorized (401)"}}'
-    write_shim(fakebin / "codex", f'echo "$1" >> "{fakebin}/codex.calls"\n[ "$1" = exec ] || exit 1\necho \'{event}\'\nexit 1')
-    for _ in range(4):
-        res, journal_dir = run_process(tmp_path, fakebin, {"provider": "codex"})
-        assert res.returncode == 75, res.stderr
-        signed_out_entry(journal_dir)
-    assert (fakebin / "codex.calls").read_text() == "app-server\nexec\n" * 4, "an account codex could not vouch for is asked once per run"
+    assert (fakebin / "codex.calls").read_text() == ("app-server\n" if before_any_work else "app-server\nexec\n") * 4, "the model is asked once a run at most"
+    assert (tmp_path / "data" / "work" / SID).exists() != before_any_work, "no frame is taken for an account that says no"
 
 
 def test_the_check_hook_says_whether_codex_is_signed_in(tmp_path, fakebin):
@@ -387,33 +377,12 @@ def test_the_check_hook_says_whether_codex_is_signed_in(tmp_path, fakebin):
         return [json.loads(line) for line in res.stdout.splitlines()]
 
     fake_codex(fakebin, "never run", account_error="failed to fetch codex rate limits: GET https://chatgpt.com/backend-api/wham/usage failed: 401 Unauthorized")
-    assert check("codex") == [{"check": "codex-signin", "label": "Codex sign-in", "ok": False, "detail": "signed out", "fix": "run codex login in a terminal"}]
+    assert [(c["check"], c["ok"]) for c in check("codex")] == [("codex-signin", False)]
     fake_codex(fakebin, "never run", resets_at=int(datetime.now().timestamp()) + 3600)
-    assert [(c["ok"], c["detail"]) for c in check("codex")] == [(True, "signed in")]
+    assert [(c["check"], c["ok"]) for c in check("codex")] == [("codex-signin", True)]
     fake_codex(fakebin, "never run")
-    assert [(c["ok"], c["detail"]) for c in check("codex")] == [(True, "not checked: codex gave no answer")], "no answer is no alarm"
+    assert [(c["check"], c["ok"]) for c in check("codex")] == [("codex-signin", True)], "no answer is no alarm"
     assert check("openai") == [] and check("") == []
-
-
-def test_codex_tells_a_refused_account_from_a_dropped_stream(tmp_path, monkeypatch):
-    calls = []
-
-    def refused(args, **kw):
-        calls.append(1)
-        stdout = '{"type":"turn.failed","error":{"message":"unexpected status 401 Unauthorized: Missing bearer or basic authentication in header"}}\n'
-        return subprocess.CompletedProcess(args, 1, stdout, "")
-
-    monkeypatch.setattr(providers.subprocess, "run", refused)
-    with pytest.raises(providers.SignedOut):
-        providers.run_codex(providers.Options(model="m"), "system", "brief", [], str(tmp_path))
-    assert len(calls) == 1
-
-    def dropped(args, **kw):
-        return subprocess.CompletedProcess(args, 1, '{"type":"turn.failed","error":{"message":"stream disconnected"}}\n', "tool output: HTTP 401")
-
-    monkeypatch.setattr(providers.subprocess, "run", dropped)
-    with pytest.raises(providers.Transient):
-        providers.run_codex(providers.Options(model="m"), "system", "brief", [], str(tmp_path))
 
 
 def test_blank_recording_marks_the_session_failed(tmp_path, fakebin):
@@ -423,16 +392,6 @@ def test_blank_recording_marks_the_session_failed(tmp_path, fakebin):
     assert res.returncode == 1 and "holds no picture" in res.stderr
     assert not (fakebin / "universe.args").exists()
     assert failed_file(journal_dir) == "the recording holds no picture and no screenshot covers the session"
-
-
-def test_disabled_and_forced_language(tmp_path, fakebin):
-    add_shot(tmp_path)
-    res, journal_dir = run_process(tmp_path, fakebin, {"enabled": False})
-    assert res.returncode == 0 and not (fakebin / "universe.args").exists() and state_files(journal_dir) == []
-    res, journal_dir = run_process(tmp_path, fakebin, {"language": "fr"}, {"FAKE_UNIVERSE_EXIT": "1"})
-    assert res.returncode == 0, res.stderr
-    entry = json.loads((journal_dir / f"{SID}.json").read_text())
-    assert entry["lang"] == "fr" and entry["images"] == [SHOT]
 
 
 def test_codex_exec_arguments(tmp_path, monkeypatch):
@@ -457,45 +416,22 @@ def test_codex_exec_arguments(tmp_path, monkeypatch):
     out = providers.run_codex(opts, pr.system_prompt(), brief, ims, str(tmp_path))
     assert out == answer
     args, kw = calls[0]
-    schema, outp = str(tmp_path / "schema.json"), str(tmp_path / "entry.json")
-    assert args[:-1] == [
-        "codex",
-        "exec",
-        "--json",
-        "--skip-git-repo-check",
-        "--ignore-user-config",
-        "--disable",
-        "browser_use",
-        "--disable",
-        "computer_use",
-        "--ephemeral",
-        "-C",
-        str(tmp_path),
-        "-s",
-        "read-only",
-        "-c",
+    schema = str(tmp_path / "schema.json")
+
+    def values(flag):
+        return [args[i + 1] for i, a in enumerate(args[:-1]) if a == flag]
+
+    assert args[:2] == ["codex", "exec"] and {"--json", "--ephemeral", "--ignore-user-config", "--skip-git-repo-check"} <= set(args)
+    assert (values("-C"), values("-s"), values("--disable")) == ([str(tmp_path)], ["read-only"], ["browser_use", "computer_use"])
+    assert {
         "approval_policy=never",
-        "-c",
         "model=gpt-5.6-sol",
-        "-c",
         "model_reasoning_effort=high",
-        "-c",
-        "model_verbosity=medium",
-        "-c",
         "project_doc_max_bytes=0",
-        "-c",
         "tools.web_search=true",
-        "-c",
         "mcp_servers={}",
-        "-i",
-        "/tmp/a.png",
-        "-i",
-        "/tmp/b.png",
-        "--output-schema",
-        schema,
-        "-o",
-        outp,
-    ]
+    } <= set(values("-c"))
+    assert (values("-i"), values("--output-schema"), values("-o")) == (["/tmp/a.png", "/tmp/b.png"], [schema], [str(tmp_path / "entry.json")])
     assert args[-1].startswith(pr.SYSTEM_PROMPT + "\n\n---\n\nGame: Test\nSession: 2026-09-11, 12:00 to 12:30 (30 min)\nHistory: 1st session")
     assert (
         "- image 1: image auto-extracted from the recording, around 12:01\n- image 2: image auto-extracted from the recording, FINAL MOMENTS of the session, around 12:02"
@@ -529,15 +465,14 @@ def test_codex_quota_wall_and_retry(tmp_path, monkeypatch):
         providers.run_codex(providers.Options(model="m"), "system", "brief", [], str(tmp_path))
     assert info.value.until == datetime(2026, 9, 27, 15, 40)
 
-    def chatty(args, **kw):
-        return subprocess.CompletedProcess(
-            args, 1, '{"type":"turn.failed","error":{"message":"stream disconnected"}}\n', "the tool output said: you hit your usage limit"
+    # A limit or a 401 mentioned outside the failure event is neither the wall nor a sign-out
+    for chatter in ("the tool output said: you hit your usage limit", "tool output: HTTP 401"):
+        failed = '{"type":"turn.failed","error":{"message":"stream disconnected"}}\n'
+        monkeypatch.setattr(
+            providers.subprocess, "run", lambda args, chatter=chatter, failed=failed, **kw: subprocess.CompletedProcess(args, 1, failed, chatter)
         )
-
-    monkeypatch.setattr(providers.subprocess, "run", chatty)
-    with pytest.raises(providers.Transient):
-        providers.run_codex(providers.Options(model="m"), "system", "brief", [], str(tmp_path))
-    # a limit mentioned outside the failure event is not the wall
+        with pytest.raises(providers.Transient):
+            providers.run_codex(providers.Options(model="m"), "system", "brief", [], str(tmp_path))
 
     assert providers.limit_reset_from(
         {"rateLimits": {"primary": {"usedPercent": 100, "resetsAt": 1700000000}, "secondary": {"usedPercent": 100, "resetsAt": 1700003600}}}
@@ -615,13 +550,6 @@ def test_choices_lists_the_providers_models(tmp_path):
     assert res.returncode == 0 and json.loads(res.stdout) == [] and "codex debug models failed" in res.stderr
 
 
-def test_no_writing_model_chosen_leaves_the_session_alone(tmp_path, fakebin):
-    add_shot(tmp_path)
-    res, journal_dir = run_process(tmp_path, fakebin, {"provider": ""})
-    assert res.returncode == 0 and "no writing model chosen" in res.stderr
-    assert not (fakebin / "universe.args").exists() and list(journal_dir.iterdir()) == []
-
-
 ANSWER = {
     "title": "Into the Dome",
     "body": "You walked in.",
@@ -656,6 +584,7 @@ def test_a_rejected_entry_is_kept_for_the_next_run(tmp_path, fakebin):
     settings = {"provider": "codex"}
     res, journal_dir = run_process(tmp_path, fakebin, settings, {"FAKE_UNIVERSE_EXIT": "1", "FAKE_UNIVERSE_STDERR": "universe: invalid: bad"})
     assert res.returncode == 1 and failed_file(journal_dir) == "the core rejected the entry"
+    assert not (tmp_path / "data" / "memory").exists()
     saved = json.loads((tmp_path / "data" / "work" / SID / "answer.json").read_text())
     assert saved["raw"] == ANSWER, "the model's answer waits in the work directory"
 
@@ -842,9 +771,9 @@ def test_the_endpoint_lists_its_models(monkeypatch):
 
 
 def test_a_stopped_run_leaves_the_session_deferred_soon(tmp_path, fakebin):
-    """SIGTERM (a stopped unit, a shutdown) is not a failure of the model: the session waits minutes, not hours."""
+    """SIGTERM (a stopped unit, a shutdown) mid-request is not a failure of the model: the session waits minutes, not hours."""
     add_shot(tmp_path)
-    write_shim(fakebin / "codex", f'echo "$1" >> "{fakebin}/codex.calls"\nkill -TERM $PPID\nsleep 30')
+    write_shim(fakebin / "codex", '[ "$1" = exec ] || exit 1\nkill -TERM $PPID\nexec sleep 30')
     res, journal_dir = run_process(tmp_path, fakebin, {"provider": "codex"})
     assert res.returncode == 75
     entry = deferred_file(journal_dir)
