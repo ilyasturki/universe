@@ -45,12 +45,18 @@ def _paint(path, size, ident, title, kind):
         margin = w // 12
         rect = QRectF(margin, margin, w - margin * 2, h - margin * 2)
         longest = max(title.split(), key=len, default="")
-        while font.pointSize() > 12 and QFontMetricsF(font).horizontalAdvance(longest) > rect.width():
+        align = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom if kind == "logo" else Qt.AlignmentFlag.AlignCenter
+        flags = int(align | Qt.TextFlag.TextWordWrap)
+
+        def overflows():
+            metrics = QFontMetricsF(font)
+            return metrics.horizontalAdvance(longest) > rect.width() or metrics.boundingRect(rect, flags, title).height() > rect.height()
+
+        while font.pointSize() > 12 and overflows():
             font.setPointSize(font.pointSize() - 1)
         p.setFont(font)
         p.setPen(QColor(255, 255, 255, 235))
-        align = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom if kind == "logo" else Qt.AlignmentFlag.AlignCenter
-        p.drawText(rect, int(align | Qt.TextFlag.TextWordWrap), title)
+        p.drawText(rect, flags, title)
     if kind == "screenshot":
         p.setBrush(QColor(0, 0, 0, 90))
         p.setPen(Qt.PenStyle.NoPen)
