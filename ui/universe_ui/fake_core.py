@@ -1335,6 +1335,7 @@ class FakeCore:
         self._write_game(own)
 
     def set_system_all(self, game, ident, value):
+        self._control(ident)
         own = self._game(game)
         (own.get("system") or {}).pop(ident, None)
         self._write_game(own)

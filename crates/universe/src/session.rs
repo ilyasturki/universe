@@ -935,6 +935,8 @@ pub(crate) mod tests {
         assert_eq!(watts(), "12000000", "then comes on with its end");
 
         let sid = core.launch("sample", "", "").await.unwrap();
+        assert!(core.set_system_all("sample", "tdp", "fast").await.is_err());
+        assert_eq!(core.get("sample").await.unwrap().game.system["tdp"], "9", "a refused value leaves the game's own");
         core.set_system_all("sample", "tdp", "10").await.unwrap();
         assert_eq!(watts(), "10000000", "every game's value is on at once");
         assert!(core.get("sample").await.unwrap().game.system.is_empty(), "the game lets its own go");

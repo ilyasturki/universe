@@ -926,12 +926,18 @@ impl Core {
         self.reload_game(game).await
     }
 
-    /// The machine's own value, which `game` then follows: its `[system]` lets the control go.
+    /// The machine's own value, which `game` then follows: its `[system]` lets the control go, and keeps it on a refusal.
     pub async fn set_system_all(&self, game: &str, id: &str, value: &str) -> Result<()> {
         let r = self.get(game).await?;
-        crate::game::set_key(&r.game.toml_path(), &format!("system.{id}"), "")?;
+        let key = format!("system.{id}");
+        crate::game::set_key(&r.game.toml_path(), &key, "")?;
         self.reload_game(game).await?;
-        self.set_system(id, value).await
+        if let Err(e) = self.set_system(id, value).await {
+            crate::game::set_key(&r.game.toml_path(), &key, r.game.system.get(id).map_or("", String::as_str))?;
+            self.reload_game(game).await?;
+            return Err(e);
+        }
+        Ok(())
     }
 
     /// `[system]` put back: the power limit and the clocks do not outlive a reboot; a running game's own over it.
