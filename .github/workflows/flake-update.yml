@@ -25,3 +25,5 @@ jobs:
           commit-message: "build(nix): update flake.lock"
           title: "build(nix): update flake.lock"
           body: "Weekly `nix flake update`. The packages and `nix flake check` passed in the run that opened this."
+  nixpkgs:
+    uses: ./.github/workflows/nixpkgs.yml
