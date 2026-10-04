@@ -886,10 +886,28 @@ impl Core {
         }
     }
 
+    /// The machine's control `id` as it reads now, `value` checked against it before anything changes.
+    async fn system_control(&self, id: &str, value: &str) -> Result<crate::hardware::Control> {
+        self.steam_owns("The system's controls")?;
+        if !crate::hardware::CONTROLS.contains(&id) {
+            return Err(Error::Invalid(format!("no system control '{id}'")));
+        }
+        let control = self.system_controls().await.into_iter().find(|c| c.id == id);
+        let control = control.ok_or_else(|| Error::Unavailable(format!("this machine has no {id} control")))?;
+        control.check(value)?;
+        Ok(control)
+    }
+
+    async fn put_system_back(&self, was: &crate::hardware::Control) {
+        if let Err(e) = self.apply_system_one(was.id, &was.value).await {
+            tracing::warn!("system.{} back to {}: {e}", was.id, was.value);
+        }
+    }
+
     /// The machine's own value: kept in `[system]` to be put back at the next start, but for the backlight, which the
     /// system keeps; applied now unless the running game holds its own, and what that session's end puts back.
     pub async fn set_system(&self, id: &str, value: &str) -> Result<()> {
-        self.steam_owns("The system's controls")?;
+        let was = self.system_control(id, value).await?;
         let running = self.current().await;
         let held = match &running {
             Some(c) => self.get(&c.id).await.is_ok_and(|r| r.game.system.get(id).is_some_and(|v| !v.is_empty())),
@@ -898,31 +916,38 @@ impl Core {
         if !held {
             self.apply_system_one(id, value).await?;
         }
+        if id != "brightness" {
+            if let Err(e) = Config::set_key(&paths::config_file(), &format!("system.{id}"), value) {
+                if !held {
+                    self.put_system_back(&was).await;
+                }
+                return Err(e);
+            }
+            self.reload_config().await?;
+        }
         if running.is_some() {
             crate::session::system_ends_at(id, value)?;
         }
-        if id == "brightness" {
-            return Ok(());
-        }
-        Config::set_key(&paths::config_file(), &format!("system.{id}"), value)?;
-        self.reload_config().await
+        Ok(())
     }
 
     /// Kept in `game.toml [system]`, put on by its launches and taken off by their ends; applied now when `game` runs.
     pub async fn set_system_for(&self, game: &str, id: &str, value: &str) -> Result<()> {
-        self.steam_owns("The system's controls")?;
-        if !crate::hardware::CONTROLS.contains(&id) {
-            return Err(Error::Invalid(format!("no system control '{id}'")));
-        }
+        let was = self.system_control(id, value).await?;
         let r = self.get(game).await?;
-        if self.current().await.is_some_and(|c| c.id == game) {
-            let before = self.system_controls().await.into_iter().find(|c| c.id == id).map(|c| c.value);
+        let running = self.current().await.is_some_and(|c| c.id == game);
+        if running {
             self.apply_system_one(id, value).await?;
-            if let Some(before) = before {
-                crate::session::system_before(id, &before)?;
-            }
         }
-        crate::game::set_key(&r.game.toml_path(), &format!("system.{id}"), value)?;
+        if let Err(e) = crate::game::set_key(&r.game.toml_path(), &format!("system.{id}"), value) {
+            if running {
+                self.put_system_back(&was).await;
+            }
+            return Err(e);
+        }
+        if running {
+            crate::session::system_before(id, &was.value)?;
+        }
         self.reload_game(game).await
     }
 

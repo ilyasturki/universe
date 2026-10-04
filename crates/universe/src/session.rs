@@ -947,6 +947,40 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
+    async fn a_deck_control_that_cannot_be_kept_leaves_the_machine_as_it_was() {
+        let _sb = sandbox();
+        let deck = crate::hardware::tests::deck();
+        let (host, memory) = Host::memory();
+        let host = Host { machine: crate::hardware::Machine::at(deck.path()), ..host };
+        let core = Core::open_with(crate::config::Config::load().unwrap(), host).await.unwrap();
+        let cap = deck.path().join("sys/class/hwmon/hwmon5/power1_cap");
+        let watts = || std::fs::read_to_string(&cap).unwrap().trim().to_string();
+        // A directory where the file was: no write lands, whoever the tests run as.
+        let unwritable = |file: &Path| {
+            std::fs::remove_file(file).unwrap();
+            std::fs::create_dir(file).unwrap();
+        };
+        let sid = core.launch("sample", "", "").await.unwrap();
+
+        let game_toml = core.get("sample").await.unwrap().game.toml_path();
+        let text = std::fs::read_to_string(&game_toml).unwrap();
+        unwritable(&game_toml);
+        assert!(core.set_system_for("sample", "tdp", "9").await.is_err());
+        assert_eq!(watts(), "15000000", "a game's value it cannot keep is not left on the machine");
+        std::fs::remove_dir(&game_toml).unwrap();
+        std::fs::write(&game_toml, text).unwrap();
+
+        core.set_system_for("sample", "tdp", "9").await.unwrap();
+        unwritable(&paths::config_file());
+        assert!(core.set_system_all("sample", "tdp", "10").await.is_err());
+        assert_eq!(watts(), "9000000", "nor is every game's");
+        assert_eq!(core.get("sample").await.unwrap().game.system["tdp"], "9", "and the game keeps its own");
+        memory.finish(&format!("universe-game-sample-{sid}.service"), 0);
+        core.session_end("sample", &sid, None, None).await.unwrap();
+        assert_eq!(watts(), "15000000", "its end puts back the machine's own from before");
+    }
+
+    #[tokio::test]
     async fn reconcile_drops_a_marker_it_cannot_read() {
         let _sb = sandbox();
         std::fs::write(paths::current_session_file(), "{\"session_id\": 1").unwrap();

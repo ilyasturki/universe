@@ -30,6 +30,19 @@ impl Control {
     pub fn range(id: &'static str, label: &'static str, detail: &'static str, value: u32, (min, max, step): (u32, u32, u32), unit: &'static str) -> Control {
         Control { id, label, detail, kind: "range", value: value.to_string(), min, max, step, unit, choices: vec![] }
     }
+
+    /// A range takes any whole number, clamped when it is set.
+    pub fn check(&self, value: &str) -> Result<()> {
+        let fits = match self.kind {
+            "range" => value.parse::<u32>().is_ok(),
+            "choice" => self.choices.iter().any(|c| c == value),
+            _ => value == "on" || value == "off",
+        };
+        if fits {
+            return Ok(());
+        }
+        Err(Error::Invalid(format!("{}: not '{value}'", self.id)))
+    }
 }
 
 /// The sysfs the controls read and write, `/` on the machine and a tempdir in tests.
