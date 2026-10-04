@@ -83,7 +83,8 @@ FocusScope {
             return;
         }
         Sound.play("ok");
-        var earned = t.unlocked ? "Earned " + Trophy.earned(t.unlockedAt).toLowerCase() : "Not earned yet";
+        var when = Trophy.earned(t.unlockedAt, t.dateText);
+        var earned = !t.unlocked ? "Not earned yet" : when === "" ? "Earned" : "Earned " + when.charAt(0).toLowerCase() + when.slice(1);
         shell.dialogAsk({
             message: t.name,
             detail: [t.description, [earned, Trophy.rarity(t.rarity)].filter(Boolean).join("  ·  ")].filter(Boolean).join("\n\n"),

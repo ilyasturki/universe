@@ -1340,7 +1340,7 @@ FocusScope {
                                 objectName: "trophyEarned"
                                 anchors.right: parent.right
                                 visible: modelData.unlocked
-                                text: Trophy.earned(modelData.unlockedAt)
+                                text: Trophy.earned(modelData.unlockedAt, modelData.dateText)
                                 color: Theme.textSecondary
                                 font.pixelSize: Theme.dp(Theme.fontSmall)
                             }

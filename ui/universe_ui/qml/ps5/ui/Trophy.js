@@ -13,8 +13,9 @@ function rarity(r) {
     return grade(r) + "  ·  " + (r < 10 ? r.toFixed(1) : Math.round(r)) + "%";
 }
 
-// When it was earned, as the console says it: "Today", "3 days ago". `unlockedAt` is the row's ISO time.
-function earned(unlockedAt) {
+// When it was earned, as the console says it: "Today", "3 days ago". `unlockedAt` is the row's time as the store gave
+// it, not always ISO: one JS cannot read falls back to the row's `dateText`.
+function earned(unlockedAt, dateText) {
     var at = new Date(unlockedAt || "");
-    return isNaN(at.getTime()) ? "" : Format.lastPlayed(at);
+    return isNaN(at.getTime()) || at.getFullYear() <= 1971 ? dateText || "" : Format.lastPlayed(at);
 }

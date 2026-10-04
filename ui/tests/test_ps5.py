@@ -250,7 +250,7 @@ def test_the_power_menu_s_way_out_asks_first_while_a_game_runs(ps5, api):
     until(lambda: quits, "then Universe quits")
 
 
-def test_a_trophy_s_unlock_date_is_relative_and_an_unknown_one_is_blank(app):
+def test_a_trophy_s_unlock_date_is_relative_and_falls_back_to_the_store_s(app):
     from pathlib import Path
 
     from PySide6.QtCore import QUrl
@@ -262,13 +262,15 @@ def test_a_trophy_s_unlock_date_is_relative_and_an_unknown_one_is_blank(app):
     qml = (
         f'import QtQuick\nimport "{(qml_dir / "ps5/ui/Trophy.js").as_uri()}" as Trophy\nimport "{(qml_dir / "core/Format.js").as_uri()}" as Format\n'
         "QtObject { property var out: [Trophy.earned(new Date(Date.now() - 3 * 86400000).toISOString()), "
-        "Format.lastPlayed(new Date(Date.now() - 3 * 86400000)), Trophy.earned(''), Trophy.rarity(-1)] }\n"
+        "Format.lastPlayed(new Date(Date.now() - 3 * 86400000)), Trophy.earned(''), Trophy.rarity(-1), "
+        "Trophy.earned('1727432880', 'shown'), Trophy.earned('1970-01-01T00:00:00Z', 'shown')] }\n"
     )
     component.setData(qml.encode(), QUrl("file:///trophy.qml"))
     obj = component.create()
     assert obj is not None, [e.toString() for e in component.errors()]
-    earned, played, unknown, rarity = obj.property("out").toVariant()
+    earned, played, unknown, rarity, unreadable, placeholder = obj.property("out").toVariant()
     assert earned == played and unknown == "" and rarity == ""
+    assert unreadable == "shown" and placeholder == "shown", "a time JS cannot read, or a placeholder, shows the store's own date"
 
 
 def tabs_of(item):

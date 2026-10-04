@@ -74,7 +74,7 @@ Item {
             objectName: "trophyEarned"
             anchors.right: parent.right
             visible: card.unlocked
-            text: Trophy.earned(card.trophy.unlockedAt)
+            text: Trophy.earned(card.trophy.unlockedAt, card.trophy.dateText)
             font.pixelSize: Theme.dp(Theme.fontTiny)
         }
 
