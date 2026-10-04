@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import zlib
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -311,6 +312,13 @@ class FakeCore:
         self._installing, self._cancel = "", ""
         self._media_stop = False
         self.library_calls = []
+        self._backups = {}
+        self.prefix_tools, self.restored, self.trashed = [], [], []
+        self._leftovers = [
+            {"kind": "prefix", "path": "/mnt/games/prefixes/cyberpunk-2077-bak", "id": "cyberpunk-2077-bak", "title": "", "bytes": 9_100_000_000},
+            {"kind": "recordings", "path": os.path.expanduser("~/Videos/universe/.archive/hades"), "id": "hades", "title": "Hades", "bytes": 3_400_000_000},
+            {"kind": "game", "path": str(self._root / "data" / "games" / "hades"), "id": "hades", "title": "Hades", "bytes": 48_000_000},
+        ]
         self.last_splash = ""
         self.game_shown = False
         self.window_misses = 0
@@ -731,6 +739,180 @@ class FakeCore:
         for entry in entries:
             entry["installed"] = False
             entry["dir"] = None
+
+    # The data page's sizes: steady per game and part, so the shots stay the same run to run.
+    @staticmethod
+    def _bytes(ident, part, scale):
+        return (zlib.crc32(f"{ident}:{part}".encode()) % 900 + 100) * scale
+
+    def _path(self, key, fallback):
+        return os.path.expanduser(str(self._config.get("paths", {}).get(key) or fallback))
+
+    def game_data(self, ident):
+        game, r = self._game(ident), self.get(ident)
+        effective = r["effective"]
+        kind, exe = effective["runner_kind"], str(r["launch"].get("exe") or "")
+        prefixes, saves_root = self._path("prefixes_root", "~/.local/share/universe/prefixes"), self._path("saves_root", "~/.local/share/universe/saves")
+        install = None
+        if exe and kind != "emulator":
+            install = {
+                "path": os.path.dirname(exe),
+                "bytes": self._bytes(ident, "install", 40_000_000),
+                "exists": True,
+                "owner": self.uninstall_via(ident) or "universe",
+            }
+        prefix = None
+        if effective["prefix"]:
+            path = effective["prefix"]
+            source = str(game.get("source") or "")
+            owner = "universe" if path.startswith(prefixes) else "lutris" if source == "lutris" else "elsewhere"
+            target = os.path.join(prefixes, ident)
+            shared = [g["id"] for g in self._data["games"] if g["id"] != ident and not g.get("removed") and self.get(g["id"])["effective"]["prefix"] == path]
+            prefix = {
+                "path": path,
+                "bytes": self._bytes(ident, "prefix", 1_000_000),
+                "exists": True,
+                "owner": owner,
+                "shared_with": shared,
+                "movable": owner != "universe",
+                "target": target,
+            }
+        backups = self._backups.setdefault(
+            ident,
+            [
+                {
+                    "id": f"backup-2026090{n}T200000Z",
+                    "name": game["title"],
+                    "when": f"2026-09-0{n}T20:00:00Z",
+                    "bytes": self._bytes(ident, f"backup{n}", 9_000),
+                    "path": "",
+                }
+                for n in (8, 6)
+            ],
+        )
+        if kind == "emulator" and effective["runner"] == "eden":
+            saves = {"engine": "", "folder": os.path.expanduser("~/.local/share/eden/nand/user/save"), "title_id": "", "files": [], "bytes": 0, "error": ""}
+            backups = []
+        elif kind == "emulator":
+            folder = os.path.expanduser("~/.local/share/dolphin-emu/Wii/title/00010000")
+            files = [
+                {"path": os.path.join(folder, "524c4245/data/banner.bin"), "bytes": 24_576},
+                {"path": os.path.join(folder, "524c4245/data/save.dat"), "bytes": 61_440},
+            ]
+            saves = {"engine": "emulator", "folder": folder, "title_id": "RLBE", "files": files, "bytes": sum(f["bytes"] for f in files), "error": ""}
+        else:
+            base = os.path.join(effective["prefix"] or "~", "drive_c/users/steamuser/Saved Games", game["title"])
+            files = [{"path": os.path.join(base, f"slot{n}.sav"), "bytes": self._bytes(ident, f"slot{n}", 4_000)} for n in (1, 2, 3)]
+            saves = {"engine": "ludusavi", "folder": "", "title_id": "", "files": files, "bytes": sum(f["bytes"] for f in files), "error": ""}
+        saves.update(name=game["title"], dir=os.path.join(saves_root, ident), backups=backups, backups_bytes=sum(b["bytes"] for b in backups))
+        saves.update(auto=bool(self._config.get("saves", {}).get("auto_backup", True)), keep=int(self._config.get("saves", {}).get("keep", 5)))
+        parts = {
+            "media": self._bytes(ident, "media", 30_000),
+            "screenshots": self._bytes(ident, "shots", 40_000),
+            "journal": self._bytes(ident, "journal", 2_000),
+            "sessions": 4_096,
+        }
+        recordings = sum(self._data.get("recordings", {}).get(ident, {}).values())
+        data = {
+            "id": ident,
+            "title": game["title"],
+            "runner_kind": kind,
+            "install": install,
+            "prefix": prefix,
+            "saves": saves,
+            "universe": {"path": str(self._game_dir(ident)), "bytes": sum(parts.values()), "parts": parts},
+            "recordings": {"path": str(self._root / "recordings" / ident), "bytes": recordings, "exists": recordings > 0, "archived": False},
+            "logs": {"path": str(self._root / "state" / "logs" / ident), "bytes": 0, "exists": False},
+        }
+        data["total"] = sum((data[k] or {}).get("bytes", 0) for k in ("install", "prefix", "universe", "recordings", "logs")) + saves["backups_bytes"]
+        return data
+
+    def storage(self):
+        roots = [
+            ("games", self._path("games_root", "~/Games"), 412_000_000_000, 1_200_000_000_000),
+            ("prefixes", self._path("prefixes_root", "~/.local/share/universe/prefixes"), 28_000_000_000, 1_200_000_000_000),
+            ("saves", self._path("saves_root", "~/.local/share/universe/saves"), 310_000_000, 380_000_000_000),
+            ("recordings", self._path("recordings_root", "~/Videos/universe"), 96_000_000_000, 380_000_000_000),
+            ("library", str(self._root / "data" / "games"), 1_400_000_000, 380_000_000_000),
+            ("components", str(self._root / "data" / "components"), 6_800_000_000, 380_000_000_000),
+            ("logs", str(self._root / "state" / "logs"), 12_000_000, 380_000_000_000),
+        ]
+        games = []
+        for g in self._data["games"]:
+            if g.get("removed"):
+                continue
+            d = self.game_data(g["id"])
+            part = lambda k, d=d: (d[k] or {}).get("bytes", 0)
+            games.append(
+                {
+                    "id": g["id"],
+                    "title": g["title"],
+                    "bytes": d["total"],
+                    "install": part("install"),
+                    "prefix": part("prefix"),
+                    "universe": part("universe"),
+                    "recordings": part("recordings"),
+                    "saves": d["saves"]["backups_bytes"],
+                    "logs": 0,
+                }
+            )
+        games.sort(key=lambda g: -g["bytes"])
+        return {
+            "roots": [{"id": i, "path": p, "bytes": used, "free": free, "size": used + free, "exists": True} for i, p, used, free in roots],
+            "games": games,
+            "leftovers": copy.deepcopy(self._leftovers),
+            "leftover_bytes": sum(item["bytes"] for item in self._leftovers),
+        }
+
+    def trash_leftover(self, path):
+        if not any(item["path"] == path for item in self._leftovers):
+            raise UniverseError("Invalid", f"{path} is no leftover: only what the Storage view lists goes to the trash")
+        self._leftovers = [item for item in self._leftovers if item["path"] != path]
+        self.trashed.append(path)
+
+    def move_prefix(self, ident):
+        prefix = self.game_data(ident)["prefix"]
+        if not prefix or not prefix["movable"]:
+            raise UniverseError("Invalid", f"{ident}'s prefix stays where it is")
+        moved = [ident, *prefix["shared_with"]]
+        for gid in moved:
+            self._game(gid).setdefault("launch", {})["prefix"] = prefix["target"]
+        return {"from": prefix["path"], "to": prefix["target"], "copied": False, "left": None, "games": moved}
+
+    def reset_prefix(self, ident):
+        prefix = self.game_data(ident)["prefix"]
+        if not prefix or prefix["owner"] != "universe" or prefix["shared_with"]:
+            raise UniverseError("Invalid", f"{ident}'s prefix is not Universe's alone")
+        return {"trashed": prefix["path"], "backup": self.saves_backup(ident)}
+
+    def prefix_tool(self, ident, tool, args=()):
+        if not self.game_data(ident)["prefix"]:
+            raise UniverseError("Invalid", f"{ident} keeps no Wine prefix")
+        self.prefix_tools.append((ident, tool, list(args)))
+        return f"universe-prefix-{ident}-{tool}-20260911-120000"
+
+    def saves_backup(self, ident):
+        data = self.game_data(ident)
+        if not data["saves"]["engine"]:
+            raise UniverseError("Unavailable", "Eden keeps no saves of one game apart")
+        stamp = datetime.now(UTC)
+        self._backups[ident].insert(
+            0, {"id": f"backup-{stamp:%Y%m%dT%H%M%SZ}", "name": data["title"], "when": stamp.isoformat(), "bytes": data["saves"]["bytes"], "path": ""}
+        )
+        del self._backups[ident][data["saves"]["keep"] :]
+        return {"change": "different", "files": data["saves"]["files"], "bytes": data["saves"]["bytes"]}
+
+    def saves_restore(self, ident, backup=""):
+        data = self.game_data(ident)
+        if not any(b["id"] == backup or not backup for b in data["saves"]["backups"]):
+            raise UniverseError("NotFound", f"{ident} has no backup {backup}".strip())
+        self.restored.append((ident, backup))
+        return {"change": "same", "files": data["saves"]["files"], "bytes": data["saves"]["bytes"]}
+
+    def saves_export(self, ident, to):
+        if not self.game_data(ident)["saves"]["backups"]:
+            raise UniverseError("NotFound", f"{ident} has no backup to export")
+        return os.path.join(os.path.expanduser(to), f"{ident}-saves-20260911-120000.zip")
 
     def reload(self):
         return None

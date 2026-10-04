@@ -102,6 +102,12 @@ FocusScope {
                 page: "pages/PlayLogPage.qml"
             },
             {
+                key: "data",
+                label: "Data Management",
+                type: "action",
+                page: "pages/DataPage.qml"
+            },
+            {
                 key: "artwork",
                 label: "Artwork",
                 type: "action",

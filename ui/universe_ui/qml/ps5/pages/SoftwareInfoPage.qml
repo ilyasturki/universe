@@ -176,6 +176,10 @@ FocusScope {
             glyph: "clock",
             act: "log"
         }, {
+            label: "Saved Data and Storage",
+            glyph: "storage",
+            act: "data"
+        }, {
             label: "Artwork",
             glyph: "image",
             act: "artwork"
@@ -185,6 +189,7 @@ FocusScope {
             settings: "pages/GameSettingsPage.qml",
             gallery: "pages/MediaGalleryPage.qml",
             log: "pages/PlayLogPage.qml",
+            data: "pages/DataPage.qml",
             artwork: "pages/ArtworkPage.qml"
         };
         var id = game.id;

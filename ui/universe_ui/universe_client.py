@@ -412,6 +412,39 @@ class CoreClient(QObject):
     def sessionLogAsync(self, ident, session, tail, on_reply, on_error=None):
         self._call_async(lambda: self._core.session_log(ident, session, tail), on_reply, on_error)
 
+    # Sizes come from walking the folders, a saves lookup runs ludusavi: both on the worker.
+    def gameDataAsync(self, ident, on_reply, on_error=None):
+        self._call_async(lambda: self._core.game_data(ident), on_reply, on_error)
+
+    def storageAsync(self, on_reply, on_error=None):
+        self._call_async(self._core.storage, on_reply, on_error)
+
+    def trashLeftoverAsync(self, path, on_reply, on_error=None):
+        self._call_async(lambda: self._core.trash_leftover(path), on_reply, on_error)
+
+    # Across filesystems the move copies the whole prefix.
+    def movePrefixAsync(self, ident, on_reply, on_error=None):
+        def moved(reply):
+            self.libraryChanged.emit(list(reply.get("games") or [ident]))
+            on_reply(reply)
+
+        self._call_async(lambda: self._core.move_prefix(ident), moved, on_error)
+
+    def resetPrefixAsync(self, ident, on_reply, on_error=None):
+        self._call_async(lambda: self._core.reset_prefix(ident), on_reply, on_error)
+
+    def prefixToolAsync(self, ident, tool, args, on_reply, on_error=None):
+        self._call_async(lambda: self._core.prefix_tool(ident, tool, list(args)), on_reply, on_error)
+
+    def savesBackupAsync(self, ident, on_reply, on_error=None):
+        self._call_async(lambda: self._core.saves_backup(ident), on_reply, on_error)
+
+    def savesRestoreAsync(self, ident, backup, on_reply, on_error=None):
+        self._call_async(lambda: self._core.saves_restore(ident, backup), on_reply, on_error)
+
+    def savesExportAsync(self, ident, to, on_reply, on_error=None):
+        self._call_async(lambda: self._core.saves_export(ident, to), on_reply, on_error)
+
     @Slot(str, result="QVariant")
     def media(self, ident):
         return self._guarded([], self._core.media, ident)

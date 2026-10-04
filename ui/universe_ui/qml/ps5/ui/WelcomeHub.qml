@@ -213,7 +213,7 @@ FocusScope {
         else if (cell === "controller")
             hub.opened("controllers", "");
         else if (cell === "storage")
-            hub.opened("store", "");
+            hub.opened("storage", "");
         else
             hub.opened("playlog", weekTop);
     }

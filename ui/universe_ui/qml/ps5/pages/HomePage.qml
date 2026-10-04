@@ -625,6 +625,18 @@ FocusScope {
                             gameId: game.id
                         }
                     }
+                },
+                {
+                    badge: "storage",
+                    caption: "Saves, backups and the prefix",
+                    title: "Saved Data and Storage",
+                    width: 400,
+                    open: {
+                        page: "pages/DataPage.qml",
+                        args: {
+                            gameId: game.id
+                        }
+                    }
                 }
             ]
         });
@@ -914,6 +926,10 @@ FocusScope {
             glyph: "clock",
             act: "log"
         }, {
+            label: "Saved Data and Storage",
+            glyph: "storage",
+            act: "data"
+        }, {
             label: "Artwork",
             glyph: "image",
             act: "artwork"
@@ -937,6 +953,7 @@ FocusScope {
             gallery: "pages/MediaGalleryPage.qml",
             journal: "pages/NewsPage.qml",
             log: "pages/PlayLogPage.qml",
+            data: "pages/DataPage.qml",
             artwork: "pages/ArtworkPage.qml"
         };
         shell.showMenu({
@@ -1378,6 +1395,8 @@ FocusScope {
                     page.shell.push("pages/ControllersPage.qml", {});
                 else if (what === "store")
                     page.shell.push("pages/InstallPage.qml", {});
+                else if (what === "storage")
+                    page.shell.push("pages/StoragePage.qml", {});
                 else if (what === "gallery")
                     page.shell.push("pages/MediaGalleryPage.qml", {});
                 else if (what === "trophies" && gameId !== "")

@@ -91,6 +91,13 @@ FocusScope {
             detail: "Brightness, refresh, power limit, GPU clock and fan"
         },
         {
+            id: "data",
+            label: "Data Management",
+            group: 4,
+            groupLabel: "System",
+            detail: "Saves, prefixes and every folder Universe writes to"
+        },
+        {
             id: "doctor",
             label: "Doctor",
             group: 4,
@@ -387,6 +394,16 @@ FocusScope {
                 }
             ];
         }
+        if (sectionId === "data")
+            return [
+                {
+                    key: "storage",
+                    label: "Data Management",
+                    type: "action",
+                    display: api.screens.storage.free !== "" ? api.screens.storage.free + " free" : "",
+                    detail: "Each folder's size and free space, the games by size, and what no game uses any more. Save backups are set in Launch › Saves."
+                }
+            ];
         if (sectionId === "controllers")
             return [
                 {
@@ -602,6 +619,9 @@ FocusScope {
         } else if (sectionId === "controllers") {
             Sound.play("ok");
             shell.push("pages/ControllersPage.qml", {});
+        } else if (sectionId === "data") {
+            Sound.play("ok");
+            shell.push("pages/StoragePage.qml", {});
         } else if (row.action === "system") {
             if (row.type === "bool") {
                 Sound.play("select");
