@@ -213,7 +213,7 @@
             pkgs.appimageTools.defaultFhsEnvArgs.targetPkgs p
             ++ [
               p.libpng
-              p.glibmm_2_4
+              p.glibmm
               p.libxv
             ];
           runScript = pkgs.writeShellScript "universe-fhs-run" ''exec "$@"'';
