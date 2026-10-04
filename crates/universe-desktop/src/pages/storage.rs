@@ -14,6 +14,18 @@ fn text(v: &Value, key: &str) -> String {
     v[key].as_str().unwrap_or_default().to_string()
 }
 
+/// Storage off the main menu: a dialog around the page.
+pub fn present(win: &Window) {
+    let dialog = adw::PreferencesDialog::builder().title(gettext("Storage")).content_height(720).build();
+    let view = StorageView::new(win);
+    dialog.add(&view.page);
+    let held = RefCell::new(Some(view));
+    dialog.connect_closed(move |_| {
+        held.take();
+    });
+    dialog.present(Some(win));
+}
+
 /// A page of its own, so it can sit in Preferences or in a dialog of its own alike.
 pub struct StorageView {
     pub page: adw::PreferencesPage,

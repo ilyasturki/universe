@@ -16,7 +16,7 @@ use universe::session::Current;
 
 use crate::backend;
 use crate::config;
-use crate::dialogs::whats_new;
+use crate::dialogs::{system_check, whats_new};
 use crate::jobs::{self, Job, Kind, Outcome};
 use crate::library::Library;
 use crate::script::{self, Step};
@@ -32,6 +32,9 @@ pub struct Unlocks {
 }
 
 const BIG_SCREEN: &str = "universe-ui";
+
+// About's link to the System Check: `activate-link` catches it before anything opens it.
+const SYSTEM_CHECK_URI: &str = "universe-desktop:system-check";
 
 // Started by the shell for a search, the app stays up between keystrokes rather than open the core for each.
 const SEARCH_LINGER_MS: u32 = 60_000;
@@ -816,7 +819,17 @@ impl Application {
                 let _ = WidgetExt::activate_action(&win, "win.open-journal-entry", param);
             })
             .build();
+        let dialogs = [("system-check", "doctor"), ("storage", "storage"), ("artwork", "artwork")].map(|(name, page)| {
+            gio::ActionEntry::builder(name)
+                .activate(move |app: &Self, _, _| {
+                    if let Some(win) = app.active_window().and_downcast::<Window>() {
+                        crate::dialogs::preferences::present(&win, page);
+                    }
+                })
+                .build()
+        });
         self.add_action_entries([quit, about, preferences, preferences_page, entry]);
+        self.add_action_entries(dialogs);
         if glib::find_program_in_path(BIG_SCREEN).is_some() {
             self.add_action_entries([gio::ActionEntry::builder("big-screen").activate(|app: &Self, _, _| app.big_screen()).build()]);
         }
@@ -878,6 +891,49 @@ impl Application {
             about.set_release_notes_version(universe::VERSION);
             about.set_release_notes(&notes);
         }
+        about.add_link(&gettext("_System Check"), SYSTEM_CHECK_URI);
+        let app = self.downgrade();
+        about.connect_activate_link(move |about, uri| {
+            if uri != SYSTEM_CHECK_URI {
+                return false;
+            }
+            about.close();
+            if let Some(win) = app.upgrade().and_then(|app| app.active_window()).and_downcast::<Window>() {
+                crate::dialogs::system_check::present(&win);
+            }
+            true
+        });
+        let facts = debug_facts();
+        about.set_debug_info(&system_check::debug_info(&facts, None));
+        about.set_debug_info_filename("universe-desktop-debug.txt");
+        let weak = about.downgrade();
+        glib::spawn_future_local(async move {
+            let checks = backend::pinned(|core| async move { core.doctor().await }).await;
+            if let Some(about) = weak.upgrade() {
+                about.set_debug_info(&system_check::debug_info(&facts, Some(&checks)));
+            }
+        });
         about.present(self.active_window().as_ref());
     }
+}
+
+/// What About's debugging information says of the build and the machine.
+fn debug_facts() -> Vec<(&'static str, String)> {
+    let env = |var: &str| std::env::var(var).unwrap_or_default();
+    let distro = std::fs::read_to_string("/etc/os-release")
+        .unwrap_or_default()
+        .lines()
+        .find_map(|l| l.strip_prefix("PRETTY_NAME="))
+        .map(|v| v.trim_matches('"').to_string())
+        .unwrap_or_default();
+    vec![
+        ("Universe Desktop", format!("{} ({})", universe::VERSION, universe::BUILD)),
+        ("GTK", format!("{}.{}.{}", gtk::major_version(), gtk::minor_version(), gtk::micro_version())),
+        ("libadwaita", format!("{}.{}.{}", adw::major_version(), adw::minor_version(), adw::micro_version())),
+        ("Distribution", distro),
+        ("Desktop", [env("XDG_CURRENT_DESKTOP"), env("XDG_SESSION_TYPE")].iter().filter(|s| !s.is_empty()).cloned().collect::<Vec<_>>().join(" · ")),
+        ("Steam Deck", universe::deck::model().map(|m| format!("{m:?}")).unwrap_or_default()),
+        ("Config", universe::paths::config_file().display().to_string()),
+        ("Data", universe::paths::data_home().display().to_string()),
+    ]
 }

@@ -20,8 +20,9 @@ pub fn main(own: Option<&gio::Menu>) -> gio::Menu {
     if let Some(own) = own {
         menu.append_section(None, own);
     }
-    menu.append_section(None, &section(&[(gettext("_Rescan Library"), "win.rescan")]));
+    menu.append_section(None, &section(&[(gettext("_Rescan Library"), "win.rescan"), (gettext("Library _Artwork…"), "app.artwork")]));
     menu.append_section(None, &section(&[(gettext("Open _Big Screen"), "app.big-screen")]));
+    menu.append_section(None, &section(&[(gettext("System _Check"), "app.system-check"), (gettext("_Storage"), "app.storage")]));
     menu.append_section(
         None,
         &section(&[
@@ -58,7 +59,7 @@ mod tests {
     #[test]
     fn every_page_holds_the_same_main_menu_under_its_own_verbs() {
         let shared = actions(&main(None));
-        assert_eq!(shared, ["win.rescan", "app.big-screen", "app.preferences", "app.shortcuts", "app.about"]);
+        assert_eq!(shared, ["win.rescan", "app.artwork", "app.big-screen", "app.system-check", "app.storage", "app.preferences", "app.shortcuts", "app.about"]);
         assert_eq!(actions(&store()), [&["store.scan".to_string()][..], &shared].concat(), "the store's refresh is its header button");
     }
 }

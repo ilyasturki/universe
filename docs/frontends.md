@@ -1348,8 +1348,8 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
   `AdwAlertDialog`, an install showing its notice and size. While its job runs the row shows the
   progress and Stop, and both pages read the listing again when a component's job starts or ends
   (`components::on_jobs`; a store's or a scan leaves them be): the rows are rebuilt in one go where
-  they stood, no spinner, the scroll and the focused row kept (`take_focus`, `refocus`). A Doctor check
-  that an install fixes gets an Install button that runs the same flow.
+  they stood, no spinner, the scroll and the focused row kept (`take_focus`, `refocus`). A System
+  Check that an install fixes gets an Install button that runs the same flow.
 - **Settings forms** (`form_view.rs`, every page over `Core::form`): a change applies at once, to
   the page's own scope. On a game's or a runner's page every row names where its value comes from
   in a caption (This Game, Runner, Global, Default, Found), and a list shows its value bare, its
@@ -1384,11 +1384,24 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
   saves with Back Up, the backups in an expander (Restore each, asking first; Export to the home
   folder), the prefix with its size and a menu (Open Folder, Move Into Universe's Prefixes, Wine
   Configuration, Winetricks, Run a Program, Stop the Prefix's Programs, Reset), then the install
-  folder, Universe's files and the recordings, each with Open Folder. Preferences › Storage
-  (`pages/storage.rs`, a `StorageView` whose page could sit in a dialog of its own) lists the roots
-  with their free space, the games by size (a row opens the game's page) and the leftovers, each with
-  Move to Trash behind a question.
-- **Big Screen**: *Open Big Screen*, in the main menus when `universe-ui` is on PATH, runs it and
+  folder, Universe's files and the recordings, each with Open Folder. Storage, a dialog off the main
+  menu (`pages/storage.rs`, a `StorageView` page), lists the roots with their free space, the games by
+  size (a row opens the game's page) and the leftovers, each with Move to Trash behind a question.
+- **The main menu** (`menus.rs`, built once and held by every page's header; the Store's adds Find
+  Installed Games on top): Rescan Library and Library Artwork…, Open Big Screen, System Check and
+  Storage, then Preferences, Keyboard Shortcuts and About. Preferences keeps Launch, Runners, Stores,
+  Modules and Controller (System too on a Deck); what was not a preference left it for a dialog of
+  its own, each an `AdwPreferencesDialog` of one page so a toast lands on it: Library Artwork
+  (`dialogs/library_artwork.rs`: how many games miss art, Fetch Missing Art, Fetch All Again, the
+  running fetch, each game missing some), System Check (`dialogs/system_check.rs`, `universe doctor`'s
+  checks: the failing ones first with what to do, then the passing ones by area; on GNOME the Shell
+  extension's sits in a System Setup group of its own, with Set Up, and nowhere else) and Storage.
+  `app.preferences-page` with `storage`, `artwork` or `doctor` opens those dialogs. About lists
+  System Check among its Details links (`activate-link` catches `universe-desktop:system-check`), and
+  its Troubleshooting holds the debugging information: the build, GTK and libadwaita, the
+  distribution, the desktop, a Deck, the config and data folders, then every failing check with its
+  fix once the checks land.
+- **Big Screen**: *Open Big Screen*, in the main menu when `universe-ui` is on PATH, runs it and
   leaves the window open; not while a game runs, nor twice.
 - **Steam Deck**: on a Deck (`deck::model()`), Preferences › System sets what `system_controls()`
   lists but the backlight, which the desktop sets, through `set_system`; like `universe-ui`, the app
@@ -1420,7 +1433,7 @@ What cost time:
 `just desktop` runs it against `.dev/`. `just desktop-shot DIR [steps…]` runs it in a headless
 weston and saves shots: `size:WxH`, `wait:MS`, `action:NAME[::TARGET]` (`~` for a space, looked up
 on the widgets on screen, so a page's own group answers: `win.open-game::<id>` opens a game's page,
-`app.preferences-page::storage` a Preferences page) and `shot:NAME.png`, with
+`app.preferences-page::stores` a Preferences page, `app.system-check` a dialog) and `shot:NAME.png`, with
 `GDK_DISABLE=offload,dmabuf` so a playing video is part of the window's render node. A scripted run
 is `NON_UNIQUE`, adopts no scope, sweeps no journal, checks no updates and saves no state; it cannot
 open a popover or answer a dialog. `man universe-desktop` has the options and keys.

@@ -364,7 +364,7 @@ impl Artwork {
                     if hit.verified {
                         row.add_suffix(
                             &gtk::Image::builder()
-                                .icon_name("emblem-ok-symbolic")
+                                .icon_name("checkbox-checked-symbolic")
                                 .tooltip_text(gettext("Verified by SteamGridDB"))
                                 .css_classes(["dimmed"])
                                 .build(),

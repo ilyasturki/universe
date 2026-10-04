@@ -11,7 +11,6 @@ use universe::forms::Form;
 use crate::backend;
 use crate::dialogs::signin;
 use crate::form_view::FormView;
-use crate::jobs::{Job, Kind};
 use crate::window::Window;
 
 fn text(v: &Value, key: &str) -> String {
@@ -23,14 +22,14 @@ fn list(v: &Value, key: &str) -> Vec<String> {
 }
 
 /// A page of rows read from the core, cleared and filled again whenever it changes.
-struct ListPage {
-    page: adw::PreferencesPage,
+pub struct ListPage {
+    pub page: adw::PreferencesPage,
     groups: RefCell<Vec<adw::PreferencesGroup>>,
     rows: RefCell<Vec<crate::components::Keyed>>,
 }
 
 impl ListPage {
-    fn new(name: &str, title: &str, icon: &str) -> Rc<ListPage> {
+    pub fn new(name: &str, title: &str, icon: &str) -> Rc<ListPage> {
         Rc::new(ListPage {
             page: adw::PreferencesPage::builder().name(name).title(title).icon_name(icon).build(),
             groups: RefCell::default(),
@@ -38,7 +37,7 @@ impl ListPage {
         })
     }
 
-    fn clear(&self) {
+    pub fn clear(&self) {
         self.rows.take();
         for group in self.groups.take() {
             self.page.remove(&group);
@@ -50,7 +49,7 @@ impl ListPage {
         self.rows.borrow_mut().push((key.to_string(), row.clone().upcast()));
     }
 
-    fn group(&self, title: &str, description: &str) -> adw::PreferencesGroup {
+    pub fn group(&self, title: &str, description: &str) -> adw::PreferencesGroup {
         let group = adw::PreferencesGroup::new();
         if !title.is_empty() {
             group.set_title(title);
@@ -63,7 +62,7 @@ impl ListPage {
         group
     }
 
-    fn loading(&self) {
+    pub fn loading(&self) {
         self.clear();
         let group = self.group("", "");
         group.add(&adw::Spinner::builder().height_request(48).margin_top(24).build());
@@ -87,10 +86,16 @@ fn chevron() -> gtk::Image {
     gtk::Image::from_icon_name("go-next-symbolic")
 }
 
-/// `page`: `launch`, `runners`, `stores`, `modules`, `controller`, `system` (a Steam Deck's), `storage`, `artwork` or `doctor`; empty
-/// for the first.
+/// `page`: `launch`, `runners`, `stores`, `modules`, `controller` or `system` (a Steam Deck's); empty for the first. `storage`,
+/// `artwork` and `doctor` open the dialogs those pages became.
 pub fn present(win: &Window, page: &str) {
-    let dialog = adw::PreferencesDialog::builder().search_enabled(true).content_height(720).build();
+    match page {
+        "storage" => return crate::pages::storage::present(win),
+        "artwork" => return crate::dialogs::library_artwork::present(win),
+        "doctor" => return crate::dialogs::system_check::present(win),
+        _ => {}
+    }
+    let dialog = adw::PreferencesDialog::builder().search_enabled(true).content_width(800).content_height(720).build();
     let connector = win.connector();
 
     let launch = FormView::new(Form::Launch, &dialog, connector.clone());
@@ -122,23 +127,6 @@ pub fn present(win: &Window, page: &str) {
         page
     });
 
-    let storage = crate::pages::storage::StorageView::new(win);
-    dialog.add(&storage.page);
-
-    let artwork = ListPage::new("artwork", &gettext("Artwork"), "image-x-generic-symbolic");
-    dialog.add(&artwork.page);
-    load_artwork(&artwork, win);
-
-    let doctor = ListPage::new("doctor", &gettext("Doctor"), "emblem-ok-symbolic");
-    dialog.add(&doctor.page);
-    load_doctor(&dialog, &doctor);
-    let (weak_page, weak_win) = (Rc::downgrade(&artwork), win.downgrade());
-    let job = win.app().connect_local("job-changed", false, move |_| {
-        if let (Some(page), Some(win)) = (weak_page.upgrade(), weak_win.upgrade()) {
-            load_artwork(&page, &win);
-        }
-        None
-    });
     let (weak_dialog, weak_runners, weak_win, runners_connector) = (dialog.downgrade(), Rc::downgrade(&runners), win.downgrade(), connector.clone());
     let component_job = crate::components::on_jobs(&win.app(), move || {
         if let (Some(dialog), Some(runners), Some(win)) = (weak_dialog.upgrade(), weak_runners.upgrade(), weak_win.upgrade()) {
@@ -146,13 +134,11 @@ pub fn present(win: &Window, page: &str) {
         }
     });
 
-    let (app, jobs) = (win.app().downgrade(), RefCell::new(vec![job, component_job]));
+    let (app, job) = (win.app().downgrade(), RefCell::new(Some(component_job)));
     dialog.connect_closed(move |_| {
-        let _ = (&launch, &runners, &stores, &modules, &controller, &system, &storage, &artwork, &doctor);
-        if let Some(app) = app.upgrade() {
-            for handler in jobs.take() {
-                app.disconnect(handler);
-            }
+        let _ = (&launch, &runners, &stores, &modules, &controller, &system);
+        if let (Some(app), Some(handler)) = (app.upgrade(), job.take()) {
+            app.disconnect(handler);
         }
     });
     if !page.is_empty() {
@@ -496,283 +482,5 @@ fn load_modules(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, connector:
             }
         }
         off.set_visible(off.first_child().is_some());
-    });
-}
-
-/// The library's art: how many games miss some, a fetch for what is missing or for everything again, each game to fix.
-fn load_artwork(page: &Rc<ListPage>, win: &Window) {
-    page.loading();
-    let (page, win) = (page.clone(), win.downgrade());
-    glib::spawn_future_local(async move {
-        let status = backend::pinned(|core| async move { core.media_status("").await }).await;
-        let Some(win) = win.upgrade() else { return };
-        page.clear();
-        let app = win.app();
-        let library = app.library();
-        let slots = crate::dialogs::artwork::slots();
-        let mut missing: Vec<(String, String, Vec<String>)> = status
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|game| library.get(&game.id).is_some_and(|g| !g.hidden()))
-            .filter_map(|game| {
-                let gaps: Vec<String> = slots
-                    .iter()
-                    .filter(|(slot, ..)| game.slots.iter().find(|s| s.slot == *slot).is_none_or(|s| s.kind == "missing"))
-                    .map(|(_, label, ..)| label.clone())
-                    .collect();
-                (!gaps.is_empty()).then_some((game.id, game.title, gaps))
-            })
-            .collect();
-        missing.sort_by_key(|(_, title, _)| crate::library::fold(title));
-        let about = if missing.is_empty() {
-            gettext("Every game has its art")
-        } else {
-            ngettext("{} game misses some art", "{} games miss some art", missing.len() as u32).replace("{}", &missing.len().to_string())
-        };
-        let library_group = page.group(&gettext("Library"), &about);
-        match app.job().filter(|j| j.kind() == Kind::Artwork) {
-            Some(job) => library_group.add(&job_row(&job)),
-            None => {
-                let fetch = adw::ButtonRow::builder().title(gettext("Fetch Missing Art")).start_icon_name("folder-download-symbolic").build();
-                let weak = app.downgrade();
-                fetch.connect_activated(move |_| {
-                    if let Some(app) = weak.upgrade() {
-                        app.start_job(Kind::Artwork, "", Vec::new(), false);
-                    }
-                });
-                library_group.add(&fetch);
-                let again = adw::ButtonRow::builder().title(gettext("Fetch All Again…")).start_icon_name("view-refresh-symbolic").build();
-                let weak = win.downgrade();
-                again.connect_activated(move |_| {
-                    if let Some(win) = weak.upgrade() {
-                        confirm_fetch_all(&win);
-                    }
-                });
-                library_group.add(&again);
-            }
-        }
-        if !missing.is_empty() {
-            let games = page.group(&gettext("Missing Art"), "");
-            for (id, title, gaps) in missing {
-                let row = crate::rows::plain(adw::ActionRow::builder().activatable(true).build(), title, gettext("No {}").replace("{}", &gaps.join(", ")));
-                row.add_suffix(&chevron());
-                let weak = win.downgrade();
-                row.connect_activated(move |_| {
-                    if let Some(win) = weak.upgrade() {
-                        if let Some(game) = win.app().library().get(&id) {
-                            crate::dialogs::artwork::present(&win, &game);
-                        }
-                    }
-                });
-                games.add(&row);
-            }
-        }
-    });
-}
-
-/// The running art fetch: how far along, and a way to stop it after the game in hand.
-fn job_row(job: &Job) -> adw::ActionRow {
-    let row = crate::rows::plain(adw::ActionRow::builder().build(), job.label(), "");
-    let bar = gtk::ProgressBar::builder().valign(gtk::Align::Center).width_request(120).build();
-    let stop = gtk::Button::builder().label(gettext("_Stop")).use_underline(true).valign(gtk::Align::Center).build();
-    row.add_suffix(&bar);
-    row.add_suffix(&stop);
-    let weak = job.downgrade();
-    stop.connect_clicked(move |button| {
-        if let Some(job) = weak.upgrade() {
-            job.cancel();
-            button.set_sensitive(false);
-        }
-    });
-    let (weak_row, weak_bar) = (row.downgrade(), bar.downgrade());
-    let sync = move |job: &Job| {
-        let (Some(row), Some(bar)) = (weak_row.upgrade(), weak_bar.upgrade()) else { return };
-        bar.set_fraction(job.fraction());
-        let mut line = vec![job.message()];
-        if job.total() > 0 {
-            line.push(gettext("{} of {}").replacen("{}", &(job.done() + 1).to_string(), 1).replacen("{}", &job.total().to_string(), 1));
-        }
-        if job.cancelled() {
-            line = vec![gettext("Stopping after this game…")];
-        }
-        line.retain(|part| !part.is_empty());
-        row.set_subtitle(&line.join(" · "));
-    };
-    sync(job);
-    for name in ["message", "done", "total", "cancelled"] {
-        let sync = sync.clone();
-        job.connect_notify_local(Some(name), move |job, _| sync(job));
-    }
-    row
-}
-
-fn confirm_fetch_all(win: &Window) {
-    let dialog = adw::AlertDialog::new(
-        Some(&gettext("Fetch All the Art Again?")),
-        Some(&gettext("Every fetched picture and description is fetched again from the stores, GOG GamesDB and libretro, and SteamGridDB with your key. The pictures you picked stay.")),
-    );
-    dialog.add_responses(&[("cancel", &gettext("_Cancel")), ("fetch", &gettext("_Fetch All"))]);
-    dialog.set_response_appearance("fetch", adw::ResponseAppearance::Suggested);
-    dialog.set_default_response(Some("cancel"));
-    dialog.set_close_response("cancel");
-    let weak = win.app().downgrade();
-    dialog.connect_response(Some("fetch"), move |_, _| {
-        if let Some(app) = weak.upgrade() {
-            app.start_job(Kind::Artwork, "", Vec::new(), true);
-        }
-    });
-    dialog.present(Some(win));
-}
-
-/// Installs what fixes a check, asking first, then checks again once the install ends.
-fn install_button(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, component: &str) -> gtk::Button {
-    let button = gtk::Button::builder().label(gettext("_Install…")).use_underline(true).valign(gtk::Align::Center).css_classes(["suggested-action"]).build();
-    let (weak_dialog, weak_page, id) = (dialog.downgrade(), Rc::downgrade(page), component.to_string());
-    button.connect_clicked(move |button| {
-        let (weak_dialog, weak_page, weak_button, id) = (weak_dialog.clone(), weak_page.clone(), button.downgrade(), id.clone());
-        glib::spawn_future_local(async move {
-            let listed = crate::components::listing(false).await.unwrap_or_default();
-            let (Some(button), Some(c)) = (weak_button.upgrade(), listed.iter().find(|c| text(c, "id") == id)) else { return };
-            let checked: Rc<dyn Fn()> = Rc::new(move || {
-                if let (Some(dialog), Some(page)) = (weak_dialog.upgrade(), weak_page.upgrade()) {
-                    load_doctor(&dialog, &page);
-                }
-            });
-            crate::components::act(&button, c, "install", checked);
-        });
-    });
-    button
-}
-
-/// What Universe needs from this machine, the checks that fail first with what to do about them.
-fn load_doctor(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>) {
-    page.loading();
-    let (dialog, page) = (dialog.downgrade(), page.clone());
-    glib::spawn_future_local(async move {
-        let (checks, names, gnome) = backend::pinned(|core| async move {
-            let mut names: HashMap<String, String> = HashMap::new();
-            for entry in core.modules().await.into_iter().chain(core.sources().await) {
-                names.insert(text(&entry, "id"), text(&entry, "name"));
-            }
-            (core.doctor().await, names, core.desktop().await == universe::desktop::Profile::Gnome)
-        })
-        .await;
-        let Some(dialog) = dialog.upgrade() else { return };
-        page.clear();
-        let area = |module: &str| match module {
-            "" | "core" => gettext("Core"),
-            "runners" => gettext("Runners"),
-            "media" => gettext("Media"),
-            "controller" => gettext("Controller"),
-            other => names.get(other).cloned().unwrap_or_else(|| other.to_string()),
-        };
-        let failing: Vec<&universe::doctor::Check> = checks.iter().filter(|c| !c.ok).collect();
-        let top = page.group(
-            "",
-            &if failing.is_empty() {
-                gettext("Every check passes")
-            } else {
-                ngettext("{} of {} checks fails", "{} of {} checks fail", failing.len() as u32).replacen("{}", &failing.len().to_string(), 1).replacen(
-                    "{}",
-                    &checks.len().to_string(),
-                    1,
-                )
-            },
-        );
-        let again = adw::ButtonRow::builder().title(gettext("Check Again")).start_icon_name("view-refresh-symbolic").build();
-        let (weak_dialog, weak_page) = (dialog.downgrade(), Rc::downgrade(&page));
-        again.connect_activated(move |_| {
-            if let (Some(dialog), Some(page)) = (weak_dialog.upgrade(), weak_page.upgrade()) {
-                load_doctor(&dialog, &page);
-            }
-        });
-        top.add(&again);
-        if gnome {
-            if let Some(check) = checks.iter().find(|c| c.check == "universe-extension") {
-                let group = page.group(&gettext("System Setup"), &gettext("The GNOME Shell extension finds, focuses and captures game windows"));
-                let row = crate::rows::plain(adw::ActionRow::builder().build(), check.label.clone(), check.detail.clone());
-                row.add_prefix(&gtk::Image::from_icon_name(if check.ok { "object-select-symbolic" } else { "dialog-warning-symbolic" }));
-                if !check.ok && (check.detail.starts_with("not installed") || check.detail.contains("not enabled")) {
-                    let install = gtk::Button::builder()
-                        .label(gettext("_Set Up"))
-                        .use_underline(true)
-                        .valign(gtk::Align::Center)
-                        .css_classes(["suggested-action"])
-                        .build();
-                    let (weak_dialog, weak_page) = (dialog.downgrade(), Rc::downgrade(&page));
-                    install.connect_clicked(move |button| {
-                        button.set_sensitive(false);
-                        let (weak_dialog, weak_page) = (weak_dialog.clone(), weak_page.clone());
-                        glib::spawn_future_local(async move {
-                            let result = backend::run(async {
-                                use universe::desktop::gnome::{self, ExtensionCopy};
-                                let copied = match gnome::install_extension() {
-                                    Ok(ExtensionCopy::Written(_)) => gettext("Installed"),
-                                    Ok(ExtensionCopy::Current) => gettext("Up to date"),
-                                    Ok(ExtensionCopy::System) => gettext("Provided by the system"),
-                                    Err(e) => return Err(e.to_string()),
-                                };
-                                gnome::enable_extension().await.map(|_| copied)
-                            })
-                            .await;
-                            let (Some(dialog), Some(page)) = (weak_dialog.upgrade(), weak_page.upgrade()) else { return };
-                            let line = match result {
-                                Ok(copied) => gettext("{}: the extension loads at the next login").replace("{}", &copied),
-                                Err(e) => e,
-                            };
-                            dialog.add_toast(crate::dialogs::toast(&line));
-                            load_doctor(&dialog, &page);
-                        });
-                    });
-                    row.add_suffix(&install);
-                }
-                group.add(&row);
-            }
-        }
-        if !failing.is_empty() {
-            let group = page.group(&gettext("Needs Attention"), "");
-            for check in &failing {
-                let row = crate::rows::plain_expander(
-                    adw::ExpanderRow::builder().build(),
-                    check.label.clone(),
-                    format!("{} · {}", area(&check.module), check.detail),
-                );
-                let icon = gtk::Image::from_icon_name("dialog-warning-symbolic");
-                icon.add_css_class("warning");
-                row.add_prefix(&icon);
-                if !check.fix.is_empty() {
-                    let fix = crate::rows::plain(adw::ActionRow::builder().subtitle_selectable(true).build(), gettext("What to do"), &check.fix);
-                    row.add_row(&fix);
-                }
-                if !check.component.is_empty() {
-                    row.add_suffix(&install_button(&dialog, &page, &check.component));
-                }
-                group.add(&row);
-            }
-        }
-        let mut areas: Vec<String> = Vec::new();
-        for check in &checks {
-            let name = area(&check.module);
-            if !areas.contains(&name) {
-                areas.push(name);
-            }
-        }
-        let core = gettext("Core");
-        areas.sort_by_key(|name| *name != core);
-        for name in areas {
-            let passing: Vec<&universe::doctor::Check> = checks.iter().filter(|c| c.ok && area(&c.module) == name).collect();
-            if passing.is_empty() {
-                continue;
-            }
-            let total = checks.iter().filter(|c| area(&c.module) == name).count();
-            let group = page.group(&name, &gettext("{} of {} pass").replacen("{}", &passing.len().to_string(), 1).replacen("{}", &total.to_string(), 1));
-            for check in passing {
-                let row = crate::rows::plain(adw::ActionRow::builder().build(), check.label.clone(), check.detail.clone());
-                let icon = gtk::Image::from_icon_name("object-select-symbolic");
-                icon.add_css_class("success");
-                row.add_prefix(&icon);
-                group.add(&row);
-            }
-        }
     });
 }
