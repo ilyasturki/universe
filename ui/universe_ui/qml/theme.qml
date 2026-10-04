@@ -122,7 +122,7 @@ FocusScope {
     property string focusOwner: "page"
 
     // Repeater.itemAt() is not a binding source; the active loader publishes itself.
-    property var activePage: null
+    property Item activePage: null
     readonly property var focusTarget: searchOpen && searchLoader.item ? searchLoader.item : activePage
     readonly property var focusedGame: subOpen ? (subArgs.game || null) : detailOpen ? detailGame : (activePage ? activePage.currentGame : null)
     readonly property bool menuOpen: gameMenu.open
