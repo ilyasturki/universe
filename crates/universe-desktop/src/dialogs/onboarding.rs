@@ -254,7 +254,7 @@ pub fn present(win: &Window) {
     dialog.set_can_close(false);
     let weak = Rc::downgrade(&this);
     dialog.connect_close_attempt(move |dialog| match weak.upgrade() {
-        Some(this) if asks_to_skip(this.added(), this.done.borrow().is_some()) => confirm_skip(dialog),
+        Some(this) if asks_to_skip(this.added(), this.nav.visible_page().and_then(|p| p.tag()).as_deref() == Some("done")) => confirm_skip(dialog),
         _ => dialog.force_close(),
     });
     let (weak, held) = (win.downgrade(), RefCell::new(Some(this)));
@@ -905,6 +905,7 @@ fn done_page(this: &Rc<Onboarding>) -> adw::NavigationPage {
     });
     this.done_rows.take();
     this.done.replace(Some((step.heading.clone(), step.body.clone(), group)));
+    step.page.set_tag(Some("done"));
     this.refresh_done();
     step.page
 }
