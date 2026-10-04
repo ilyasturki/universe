@@ -1,9 +1,9 @@
 import pytest
-from PySide6.QtCore import QCoreApplication, QEvent, QUrl
-from PySide6.QtQml import QQmlComponent, QQmlEngine, QQmlExpression
-from PySide6.QtQuick import QQuickItem  # noqa: F401  (down-casts created objects, for childItems)
+from looks import invoke, read
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, QUrl
+from PySide6.QtQml import QQmlComponent, QQmlEngine
 
-from conftest import pump, until
+from conftest import record, until
 from universe_ui import host
 
 FAMILIES = ["steam-deck", "dualsense-edge", "dualsense", "dualshock4", "xbox-elite", "xbox", "switch-pro", "8bitdo-pro-3", "generic"]
@@ -32,21 +32,6 @@ def create(engine, name, **props):
     return item
 
 
-def call(engine, item, expression):
-    result = QQmlExpression(engine.rootContext(), item, expression).evaluate()
-    return result[0] if isinstance(result, tuple) else result
-
-
-def descendant(item, prop):
-    for child in item.childItems():
-        if child.property(prop) is not None:
-            return child
-        found = descendant(child, prop)
-        if found is not None:
-            return found
-    return None
-
-
 def slots_of(fake, family):
     return [s["id"] for f in fake.controllerState()["families"] if f["id"] == family for s in f["slots"]]
 
@@ -54,7 +39,7 @@ def slots_of(fake, family):
 @pytest.mark.parametrize("family", FAMILIES)
 def test_pad_art_has_a_button_per_slot(engine, fake, family):
     art = create(engine, "PadArt.qml", family=family, width=900, height=600)
-    drawn = {c.property("slot") for c in art.childItems() if c.property("slot") is not None}
+    drawn = {b["slot"] for b in read(art, "geo")["buttons"]}
     expected = set(slots_of(fake, family))
     missing = expected - drawn
     assert not missing, f"{family} draws no {sorted(missing)}"
@@ -88,31 +73,26 @@ def test_hint_glyphs_follow_the_pad(engine, fake):
 
 def test_live_view_names_a_pulled_trigger(engine, fake):
     art = create(engine, "ControllerArt.qml", family="dualsense-edge", connected=True, width=1200, height=800)
-    pad = descendant(art, "geo")
+    pad = art.findChild(QObject, "padArt")
     before = until(pad.height)
-    call(engine, art, "axis('rt', 0.4)")
+    invoke(art, "axis", "rt", 0.4)
     assert art.property("lastSlot") == "", "a trigger logs once it passes half"
-    call(engine, art, "axis('rt', 0.6)")
+    invoke(art, "axis", "rt", 0.6)
     assert art.property("lastSlot") == "rt" and abs(art.property("lastPull") - 0.6) < 1e-6
-    call(engine, art, "axis('rt', 0.9)")
-    call(engine, art, "press('south', true)")
-    call(engine, art, "press('south', false)")
-    call(engine, art, "axis('ly', -0.4)")
-    call(engine, art, "axis('lx', 0.7)")
-    call(engine, art, "axis('lx', 0)")
-    call(engine, art, "axis('ly', 0)")
-    call(engine, art, "axis('ly', 0.6)")
-    call(engine, art, "axis('lx', -0.6)")
-    entries = art.property("entries").toVariant()
+    invoke(art, "axis", "rt", 0.9)
+    invoke(art, "press", "south", True)
+    invoke(art, "press", "south", False)
+    for name, value in [("ly", -0.4), ("lx", 0.7), ("lx", 0), ("ly", 0), ("ly", 0.6), ("lx", -0.6)]:
+        invoke(art, "axis", name, value)
+    entries = read(art, "entries")
     assert [e["slot"] for e in entries] == ["ls", "ls", "south", "rt"], "newest first; a release and a held axis log nothing new"
     assert entries[0]["label"].endswith("down-left") and entries[1]["label"].endswith("up-right"), "an entry follows its push's peak"
     assert entries[3]["label"].endswith("90 %")
     assert entries[3]["dt"] is None and all(e["dt"] is not None for e in entries[:3])
     assert art.property("lastSlot") == "ls" and art.property("lastPull") == 0
-    pump(50)
     assert pad.height() == before, "the history column has its own room: a press does not resize the pad"
-    call(engine, art, "clear()")
-    assert art.property("lastSlot") == "" and art.property("entries").toVariant() == []
+    invoke(art, "clear")
+    assert art.property("lastSlot") == "" and read(art, "entries") == []
 
 
 def test_cards_land_on_the_first_row_and_leave_left(engine, fake):
@@ -122,13 +102,11 @@ def test_cards_land_on_the_first_row_and_leave_left(engine, fake):
     ]
     groups = [{"title": "Installed", "rows": [0]}, {"title": "Owned", "rows": [1]}]
     cards = create(engine, "SettingsCards.qml", rows=rows, groups=groups, columns=1, width=1200, height=800)
-    call(engine, cards, "reset()")
+    invoke(cards, "reset")
     assert cards.property("index") == 0
-    layout = cards.property("layout").toVariant()
-    assert {c["col"] for c in layout["cards"]} == {0}, "one column: every card in it"
-    left = []
-    cards.escapedLeft.connect(lambda: left.append(True))
-    call(engine, cards, "cross(-1)")
-    assert left == [True]
-    call(engine, cards, "step(1)")
+    assert {c["col"] for c in read(cards, "layout")["cards"]} == {0}, "one column: every card in it"
+    left = record(cards.escapedLeft)
+    invoke(cards, "cross", -1)
+    assert left == [()]
+    invoke(cards, "step", 1)
     assert cards.property("index") == 1

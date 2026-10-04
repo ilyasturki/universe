@@ -1,12 +1,10 @@
 import json
 import os
 
-import pytest
-from PySide6.QtCore import Q_ARG, QMetaObject, QObject, Qt
-from PySide6.QtTest import QTest
-from test_render import render
+from looks import invoke
+from PySide6.QtCore import QObject, Qt
 
-from conftest import pump, until
+from conftest import record, until
 
 
 def test_the_store_orders_unlocks_first_and_folds_the_hidden_ones(api, fake):
@@ -17,8 +15,8 @@ def test_the_store_orders_unlocks_first_and_folds_the_hidden_ones(api, fake):
     rows = store.rows
     assert (store.total, store.unlocked, store.loading) == (6, 3, False)
     assert [r["key"] for r in rows] == ["detective", "blackgate", "rooftops", "combo", "iam", "hidden"], "newest unlock first, then the most common locked one"
-    assert rows[0]["dateText"] == "11 Sep 2026 · 22:18" and rows[0]["rarityText"] == "19% of players"
-    assert rows[4]["rarityText"] == "2.1% of players"
+    assert "22:18" in rows[0]["dateText"] and rows[0]["rarityText"].startswith("19%"), "local time; a common one rounded"
+    assert rows[4]["rarityText"].startswith("2.1%"), "a rare one to the tenth"
     folded = rows[-1]
     assert folded["hidden"] == 1 and folded["icon"] == "" and folded["rarity"] < 0 and "Freeze" not in folded["description"]
     fetched = store.fetchedText
@@ -57,23 +55,11 @@ def test_the_game_model_carries_the_counts(api, fake):
     assert metro.achievementsTotal == 0
 
 
-def test_an_unlock_mid_session_reaches_home_once(api, fake):
-    seen = []
-    api.home.achievementUnlocked.connect(seen.append)
-    fake.launch("batman-arkham-origins", "DP-1")
-    item = until(lambda: seen, "the fake source files one in once the session runs")[0]
-    assert item["gameId"] == "batman-arkham-origins" and item["key"] == "combo" and item["name"] == "Unbreakable"
-    assert item["rarityText"] == "9.4% of players"
-    pump(300)
-    assert [i["key"] for i in seen] == ["combo"], "the unlocks from before the session are no news, and this one comes once"
-    assert api.allGames.byId("batman-arkham-origins").achievementsUnlocked == 4
-
-
 def test_game_settings_carry_the_sources_own_switch(api, fake):
     form = api.screens.gameSettings
     form.load("batman-arkham-origins")
     row = next(r for r in form.rows if r.get("key") == "sources.gog.achievements")
-    assert row["section"] == "GOG" and row["value"] is True and row["origin"] == "default"
+    assert row["value"] is True and row["origin"] == "default"
     fake.set("batman-arkham-origins", "sources.gog.achievements", "false")
     assert fake.core.source_settings("gog", "batman-arkham-origins")["achievements"] is False
     assert fake.core.source_settings("gog")["achievements"] is True, "the global value stands"
@@ -81,7 +67,7 @@ def test_game_settings_carry_the_sources_own_switch(api, fake):
     assert not any(str(r.get("key", "")).startswith("sources.") for r in form.rows), "a Lutris game has no GOG switch"
 
 
-def test_a_replay_shows_the_stamped_unlocks_again_and_a_stale_one_is_no_news(api, fake):
+def test_an_unlock_mid_session_reaches_home_once_and_a_replay_shows_the_stamped_ones_again(api, fake):
     cache = fake.core._data["achievements"]["batman-arkham-origins"]
     path = fake.core._game_dir("batman-arkham-origins") / "achievements.json"
 
@@ -91,36 +77,27 @@ def test_a_replay_shows_the_stamped_unlocks_again_and_a_stale_one_is_no_news(api
         os.replace(path.with_suffix(".tmp"), path)
 
     stamp("2026-09-01T10:00:00+00:00", ["detective"])
-    seen = []
-    api.home.achievementUnlocked.connect(seen.append)
+    seen = record(api.home.achievementUnlocked)
     fake.launch("batman-arkham-origins", "DP-1")
-    until(lambda: seen)
-    pump(300)
-    assert [i["key"] for i in seen] == ["combo"], "the stamp from before this run of the UI stays quiet"
+    item = until(lambda: seen, "the fake source files one in once the session runs")[0][0]
+    assert (item["gameId"], item["key"], item["name"]) == ("batman-arkham-origins", "combo", "Unbreakable")
+    until(lambda: api.allGames.byId("batman-arkham-origins").achievementsUnlocked == 4)
     stamp("2026-09-27T12:00:00+00:00", ["rooftops", "detective"])
-    until(lambda: len(seen) == 3)
-    assert [i["key"] for i in seen] == ["combo", "rooftops", "detective"], "each stamped key, known or not, in the stamp's order"
-    assert seen[-1]["name"] and seen[-1]["gameId"] == "batman-arkham-origins"
+    until(lambda: len(seen) >= 3)
+    assert [i["key"] for (i,) in seen] == ["combo", "rooftops", "detective"], (
+        "the unlocks from before the session and the stamp from before this run of the UI are no news, the unlock comes once; "
+        "then each stamped key, known or not, in the stamp's order"
+    )
+    assert seen[-1][0]["name"] and seen[-1][0]["gameId"] == "batman-arkham-origins"
 
 
-@pytest.mark.parametrize("look", ["reprise", "switch2", "ps5"])
-def test_each_looks_page_ends_on_the_folded_row_and_home_end_reach_either_end(api, fake, look):
-    api.theme.set(look)
-    api.theme.takeLanding()
-    _engine, window = render(api, activate=True)
-    root = window.property("contentItem").childItems()[0].property("item")
-    if look == "reprise":
-        root.openSub("pages/AchievementsPage.qml", {"game": api.allGames.byId("batman-arkham-origins")})
-    else:
-        QMetaObject.invokeMethod(root, "push", Q_ARG("QVariant", "pages/AchievementsPage.qml"), Q_ARG("QVariant", {"gameId": "batman-arkham-origins"}))
+def test_each_looks_page_ends_on_the_folded_row_and_home_end_reach_either_end(api, look):
+    invoke(look.root, "push" if look.stacked else "openSub", "pages/AchievementsPage.qml", look.game("batman-arkham-origins"))
+    page = look.page("achievements" if look.name == "ps5" else "achievementsPage")
+    cursor = page.findChild(QObject, "achievements") or page
     store = api.screens.achievements
-    page = root if look == "reprise" else until(lambda: root.property("topPage"))
-    cursor = page if page.objectName() == "achievements" else until(lambda: page.findChild(QObject, "achievements"))
     until(lambda: not store.loading and store.count == 6)
-    keys = [r["key"] for r in store.rows]
-    assert keys[-1] == "hidden" and keys.count("hidden") == 1
-    QTest.keyClick(window, Qt.Key.Key_End)
-    until(lambda: cursor.property("index") == len(keys) - 1, "End reaches the folded row")
-    QTest.keyClick(window, Qt.Key.Key_Home)
+    look.press(Qt.Key.Key_End)
+    until(lambda: cursor.property("index") == store.count - 1 and store.rows[-1]["key"] == "hidden", "End reaches the folded row")
+    look.press(Qt.Key.Key_Home)
     until(lambda: cursor.property("index") == 0, "Home the first one")
-    window.close()

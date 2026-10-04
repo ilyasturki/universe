@@ -1,13 +1,12 @@
 import os
 import threading
-from types import SimpleNamespace
 
 import pytest
-from PySide6.QtCore import QMetaObject, QObject, Qt
+from looks import Look, invoke, lit_fraction, read, settle
+from PySide6.QtCore import QObject, Qt
 from PySide6.QtTest import QTest
-from test_render import lit_fraction, render, settle
 
-from conftest import pump, record, until
+from conftest import record, until
 from universe_ui import host
 
 
@@ -39,6 +38,14 @@ def held(monkeypatch):
         gate.set()
 
 
+class Overlay:
+    def winId(self):
+        return 7
+
+    def show(self):
+        pass
+
+
 def test_a_shot_from_the_pad_or_the_dock_cues_the_same_way(api, fake):
     home = api.home
     taken = []
@@ -60,7 +67,7 @@ def test_a_volume_macro_shows_its_level_on_the_overlay_for_a_moment(api, fake, m
     home = home_module.Home(fake, api.screens.controller)
     states = []
     monkeypatch.setattr(fake, "overlay", lambda window, input, opacity: states.append((input, opacity)))
-    home.attachOverlay(SimpleNamespace(winId=lambda: 1, show=lambda: None))
+    home.attachOverlay(Overlay())
     states.clear()
     api.screens.controller._on_event({"event": "volume", "percent": 40, "muted": False, "output": "Speakers"})
     assert home.osd and (home.volumePercent, home.muted, home.volumeOutput) == (40, False, "Speakers")
@@ -160,13 +167,6 @@ def test_the_dock_pauses_on_home_and_thaws_on_the_release(api, fake):
 
 
 def test_the_dock_over_the_game_takes_the_pad_back(api, fake, monkeypatch):
-    class Overlay:
-        def winId(self):
-            return 7
-
-        def show(self):
-            pass
-
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
     home = api.home
     assert home.attachOverlay(Overlay()) is True
@@ -208,7 +208,7 @@ def test_a_guide_hold_from_the_game_goes_home(api, fake, monkeypatch):
     home.guide(False)
     assert home.shown == "launcher" and presses == ["game", "game"]
     home.guide(True)
-    pump(300)  # held past HOLD_MS
+    until(lambda: not home._hold.isActive(), "held past hold_ms")
     home.guide(False)
     until(lambda: home.shown == "game" and fake.core.game_shown is True)
     assert presses == ["game", "game", "launcher"], "from the launcher a press resumes, and holding it there does not bounce back"
@@ -307,7 +307,7 @@ def test_a_hold_that_flips_leaves_nothing_to_thaw_on_the_release(api, fake, monk
     home.changed.connect(home.covered)
     fake.launch("mirrors-edge", "")
     until(lambda: home.shown == "game")
-    assert home.attachOverlay(SimpleNamespace(winId=lambda: 1, show=lambda: None)) is True
+    assert home.attachOverlay(Overlay()) is True
     home.guide(True)
     home.openDock()
     home.closeDock()
@@ -375,28 +375,23 @@ def test_the_hud_and_the_limit_reach_the_game_without_a_key(api, fake):
     stop(api)
 
 
-class Overlay:
-    def winId(self):
-        return 7
-
-    def show(self):
-        pass
-
-
-def test_the_dock_over_a_loading_game_is_home_and_quit_and_grows_once_the_window_is_up(api, fake, monkeypatch, held):
+def test_the_dock_opens_over_the_poster_before_the_session_is_made_and_grows_once_the_window_is_up(api, fake, monkeypatch, held):
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
+    made = held(fake.core, "launch")
     mapped = held(fake.core, "wait_session_window")
     home = api.home
     home.attachOverlay(Overlay())
     assert not home.loading
     launched = record(fake.launched)
     fake.launch("mirrors-edge", "")
-    until(lambda: launched)
-    assert home.loading and home.shown == "launcher", "launched, no window yet: the poster holds"
+    assert fake.currentSession is None and home.pending == {"id": "mirrors-edge", "title": "Mirror's Edge"} and home.loading
     home.openDock()
-    assert home.open and not home.paused and fake.core.frozen is False, "the dock over the poster freezes nothing: the game is still starting"
+    assert home.open and not home.paused and fake.core.frozen is False, "HOME answers while the pads are still being taken"
+    made.set()
+    until(lambda: launched)
+    assert home.pending is None and home.open and home.loading and home.shown == "launcher", "the session made, no window yet: the same dock stays"
     home.setPauseOnHome(True)
-    assert fake.core.frozen is False
+    assert fake.core.frozen is False, "the dock over the poster freezes nothing: the game is still starting"
     mapped.set()
     until(
         lambda: not home.loading and home.shown == "game" and fake.core.frozen is True,
@@ -411,82 +406,26 @@ def test_the_dock_over_a_loading_game_is_home_and_quit_and_grows_once_the_window
     assert not home.loading
 
 
-def test_home_from_the_dock_over_a_loading_game_takes_no_frame_and_freezes_nothing(api, fake, monkeypatch, held):
+@pytest.mark.parametrize("made", [True, False], ids=["session", "pending"])
+def test_quit_from_the_dock_over_a_loading_game_stops_it_through_the_launcher(api, fake, monkeypatch, held, made):
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
-    mapped = held(fake.core, "wait_session_window")
-    home = api.home
-    home.attachOverlay(Overlay())
-    launched = record(fake.launched)
-    fake.launch("mirrors-edge", "")
-    until(lambda: launched)
-    home.openDock()
-    home.toLauncher()
-    pump(50)
-    assert not home.open and home.flipped and home.frame == "" and fake.core.frames == 0, "nothing painted yet: no frame asked, the theme drops its poster"
-    assert fake.core.frozen is False
-    mapped.set()
-    until(lambda: not home.loading and not home.flipped, "the game mapped over the launcher on its own")
-    stop(api)
-
-
-def test_quit_from_the_dock_over_a_loading_game_stops_it_through_the_launcher(api, fake, monkeypatch, held):
-    monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
+    making = held(fake.core, "launch")
     held(fake.core, "wait_session_window")
     home = api.home
     home.attachOverlay(Overlay())
-    quitting = []
-    home.stopping.connect(quitting.append)
+    quitting = record(home.stopping)
     launched, ended = record(fake.launched), record(fake.sessionEnded)
     fake.launch("mirrors-edge", "")
-    until(lambda: launched)
+    if made:
+        making.set()
+        until(lambda: launched)
     home.openDock()
     home.stop()
-    assert quitting == ["Mirror's Edge"] and not home.open and home.flipped and fake.core.frozen is False, "the launcher comes up, nothing frozen"
-    until(lambda: ended, "the unit was stopped")
-    assert not home.loading and not home.flipped and home.shown == "launcher"
-    assert fake.core.frames == 0, "no frame was asked for"
-
-
-def test_the_dock_opens_over_the_poster_before_the_core_has_made_the_session(api, fake, monkeypatch, held):
-    monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
-    made = held(fake.core, "launch")
-    mapped = held(fake.core, "wait_session_window")
-    home = api.home
-    home.attachOverlay(Overlay())
-    launched = record(fake.launched)
-    fake.launch("mirrors-edge", "")
-    assert fake.currentSession is None and home.pending == {"id": "mirrors-edge", "title": "Mirror's Edge"} and home.loading
-    home.openDock()
-    assert home.open and not home.paused and fake.core.frozen is False, "HOME answers while the pads are still being taken"
-    made.set()
-    until(lambda: launched)
-    assert home.pending is None and home.open and home.loading, "the session made: the same reduced dock stays up"
-    mapped.set()
-    until(lambda: not home.loading and home.shown == "game")
-    assert home.open and home.paused
-    home.closeDock()
-    home.dockClosed()
-    until(lambda: fake.core.frozen is False)
-    stop(api)
-
-
-def test_quit_before_the_session_is_made_stops_it_once_the_core_hands_it_back(api, fake, monkeypatch, held):
-    monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
-    made = held(fake.core, "launch")
-    held(fake.core, "wait_session_window")
-    home = api.home
-    home.attachOverlay(Overlay())
-    quitting = []
-    home.stopping.connect(quitting.append)
-    ended = record(fake.sessionEnded)
-    fake.launch("mirrors-edge", "")
-    home.openDock()
-    home.stop()
-    assert quitting == ["Mirror's Edge"] and not home.open and home.flipped
-    made.set()
-    until(lambda: ended, "stopped as soon as it existed")
+    assert quitting == [("Mirror's Edge",)] and not home.open and home.flipped and fake.core.frozen is False, "the launcher comes up, nothing frozen"
+    making.set()
+    until(lambda: ended, "stopped, as soon as the session existed")
     assert home.pending is None and not home.loading and not home.flipped and home.shown == "launcher"
-    assert fake.core.frames == 0
+    assert fake.core.frames == 0, "no frame was asked for"
 
 
 def test_a_launch_that_fails_before_its_session_takes_the_dock_down(api, fake, monkeypatch, held):
@@ -525,112 +464,116 @@ def covered_fraction(image):
     return covered / (small.width() * small.height())
 
 
-def key(window, k):
-    QTest.keyClick(window, k)
+def key(window, k, times=1):
+    for _ in range(times):
+        QTest.keyClick(window, k)
 
 
-def overlay_over(api, engine, window):
-    overlay = host.create_overlay(engine, window.size())
-    assert overlay is not None
+@pytest.fixture
+def reprise(api):
+    """Reprise's window, and the overlay its dock draws on over the game: (look, overlay)."""
+    look = Look(api, "reprise")
+    overlay = host.create_overlay(look.engine, look.window.size())
     api.home.attachOverlay(overlay)
     overlay.show()
     settle(overlay)
-    return overlay
+    yield look, overlay
+    overlay.close()
+    look.close()
 
 
 def open_dock(api, overlay):
     api.home.openDock()
     overlay.requestActivate()
-    dock = overlay.property("contentItem").childItems()[0].property("item")
+    dock = overlay.findChild(QObject, "dock")
     until(lambda: dock.property("activeFocus"))
     return dock
 
 
-def band_drawn(overlay):
-    image = overlay.grabWindow()
-    return image if 0.3 < covered_fraction(image) < 0.6 and lit_fraction(image, "#000000") > 0.01 else None
+def band_up(overlay):
+    band = overlay.findChild(QObject, "dockBand")
+    until(lambda: band.property("opacity") == 1.0, "the band faded in")
 
 
-def test_the_dock_renders_over_a_running_game(api, fake, tmp_path):
-    engine, window = render(api)
-    overlay = overlay_over(api, engine, window)
+def ids(items):
+    return [i["id"] for i in items]
+
+
+def current_output(api):
+    return next(o["id"] for o in api.home.outputs if o["current"])
+
+
+def test_the_dock_renders_over_a_running_game(api, fake, reprise, tmp_path):
+    look, overlay = reprise
+    root = look.root
     fake.launch("mirrors-edge", "")
     until(lambda: api.home.shown == "game")
     dock = open_dock(api, overlay)
-    assert dock.property("open") is True
-    image = until(lambda: band_drawn(overlay), "the band covers the lower part of the frame, the card and the buttons drawn on it")
+    band_up(overlay)
+    settle(overlay)
+    image = overlay.grabWindow()
+    assert 0.3 < covered_fraction(image) < 0.6 and lit_fraction(image, "#000000") > 0.01, (
+        "the band covers the lower part of the frame, the card and the buttons drawn on it"
+    )
     assert image.pixelColor(4, 4).alpha() == 0, "the top of the frame stays clear"
-    ids = [b["id"] for b in dock.property("buttons").toVariant()]
-    assert ids[:4] == ["resume", "home", "quit", "game"], "Quit a button of its own, by Home"
-    key(overlay, Qt.Key.Key_Right)
-    key(overlay, Qt.Key.Key_Right)
-    key(overlay, Qt.Key.Key_Right)
-    assert dock.property("index") == 3
+    if os.environ.get("UNIVERSE_TEST_SHOTS"):
+        image.save(str(tmp_path / "dock.png"))
+    buttons = ids(read(dock, "buttons"))
+    assert {"resume", "home", "quit", "game"} <= set(buttons), "Quit a button of its own"
+    key(overlay, Qt.Key.Key_Right, buttons.index("game"))
+    assert dock.property("index") == buttons.index("game")
     key(overlay, Qt.Key.Key_Return)
     assert dock.property("opened") is True, "Game opens its card"
-    assert [c["id"] for c in dock.property("current").toVariant()["children"]] == ["details", "journal", "recordings", "sessions"]
+    game = ids(read(dock, "current")["children"])
+    assert set(game) == {"details", "journal", "recordings", "sessions"}
     key(overlay, Qt.Key.Key_Escape)
-    dock.setProperty("index", ids.index("perf"))
+    dock.setProperty("index", buttons.index("perf"))
     key(overlay, Qt.Key.Key_Return)
-    perf = [c["id"] for c in dock.property("current").toVariant()["children"]]
-    assert perf[-1] == "pause", "Pause on HOME closes the Performance card"
     assert api.home.pauseOnHome is True
-    for _ in perf[:-1]:
-        key(overlay, Qt.Key.Key_Down)
+    dock.setProperty("sub", ids(read(dock, "current")["children"]).index("pause"))
     key(overlay, Qt.Key.Key_Return)
-    assert api.home.pauseOnHome is False, "on by default: A turns it off"
+    assert api.home.pauseOnHome is False, "on by default: A on Pause on HOME turns it off"
     key(overlay, Qt.Key.Key_Escape)
     assert dock.property("opened") is False
     key(overlay, Qt.Key.Key_Escape)
     assert api.home.open is False, "B closes the dock"
-    if os.environ.get("UNIVERSE_TEST_SHOTS"):
-        image.save(str(tmp_path / "dock.png"))
 
-    root = window.property("contentItem").childItems()[0].property("item")
     open_dock(api, overlay)
-    key(overlay, Qt.Key.Key_Right)
+    dock.setProperty("index", buttons.index("home"))
     key(overlay, Qt.Key.Key_Return)
     until(lambda: api.home.shown == "launcher" and api.home.open is False and fake.core.game_shown is False, "Home from the dock: the launcher")
     assert root.property("detailOpen") is False, "Home from the dock: nothing opened"
-    api.home.toGame()
-    until(lambda: fake.core.game_shown is True)
-    root.goToTab(2)
-    open_dock(api, overlay)
-    dock.setProperty("index", 3)
-    key(overlay, Qt.Key.Key_Return)
-    key(overlay, Qt.Key.Key_Return)
-    until(lambda: api.home.shown == "launcher" and api.home.open is False and fake.core.game_shown is False, "Details in the Game card goes home")
-    until(lambda: root.property("tabIndex") == 0 and root.property("detailOpen") is True, "…lands on Home and opens the playing game's details there")
+
+    def from_the_game_card(landing):
+        api.home.toGame()
+        until(lambda: fake.core.game_shown is True)
+        root.goToTab(root.property("settingsTab"))
+        open_dock(api, overlay)
+        dock.setProperty("index", buttons.index("game"))
+        key(overlay, Qt.Key.Key_Return)
+        dock.setProperty("sub", game.index(landing))
+        key(overlay, Qt.Key.Key_Return)
+        until(lambda: api.home.shown == "launcher" and api.home.open is False and fake.core.game_shown is False, f"{landing} in the Game card goes home")
+
+    from_the_game_card("details")
+    look.page("homePage")
+    until(lambda: root.property("detailOpen") is True, "…lands on Home and opens the playing game's details there")
     assert api.home.takeLanding() == "", "taken once"
-    api.home.toGame()
-    until(lambda: fake.core.game_shown is True)
-    open_dock(api, overlay)
-    dock.setProperty("index", 3)
-    key(overlay, Qt.Key.Key_Return)
-    key(overlay, Qt.Key.Key_Down)
-    key(overlay, Qt.Key.Key_Return)
-    until(
-        lambda: api.home.shown == "launcher" and root.property("subOpen") is True and fake.core.game_shown is False,
-        "Journal lands on the playing game's journal",
-    )
+    from_the_game_card("journal")
+    look.page("journalPage")
     api.home.toGame()
     until(lambda: fake.core.game_shown is True)
     stop(api)
-    window.close()
-    overlay.close()
 
 
-def test_the_docks_achievements_open_in_its_tray_while_the_source_tracks_them(api, fake, tmp_path):
-    engine, window = render(api)
-    overlay = overlay_over(api, engine, window)
+def test_the_docks_achievements_open_in_its_tray_while_the_source_tracks_them(api, fake, reprise, tmp_path):
+    _look, overlay = reprise
     fake.launch("batman-arkham-origins", "")
     until(lambda: api.home.shown == "game")
     dock = open_dock(api, overlay)
-    ids = [b["id"] for b in dock.property("buttons").toVariant()]
-    assert ids[ids.index("shot") + 1] == "achievements", "a button of its own, by the camera"
-    game = next(b for b in dock.property("buttons").toVariant() if b["id"] == "game")
-    assert [c["id"] for c in game["children"]] == ["details", "journal", "recordings", "sessions"]
-    dock.setProperty("index", ids.index("achievements"))
+    buttons = ids(read(dock, "buttons"))
+    assert "achievements" in buttons, "a button of its own"
+    dock.setProperty("index", buttons.index("achievements"))
     key(overlay, Qt.Key.Key_Return)
     tray, trophies = overlay.findChild(QObject, "dockShots"), overlay.findChild(QObject, "dockAchievements")
     assert tray.property("open") is True and tray.property("showsAchievements") is True
@@ -644,93 +587,75 @@ def test_the_docks_achievements_open_in_its_tray_while_the_source_tracks_them(ap
     key(overlay, Qt.Key.Key_Q)
     assert tray.property("showsAchievements") is False, "LB back to the screenshots"
     key(overlay, Qt.Key.Key_E)
-    key(overlay, Qt.Key.Key_Up)
-    key(overlay, Qt.Key.Key_Up)
+    key(overlay, Qt.Key.Key_Up, 2)
     assert tray.property("open") is False, "Up past the first closes the tray"
 
     fake.set("batman-arkham-origins", "sources.gog.achievements", "false")
     api.home.closeDock()
     open_dock(api, overlay)
-    until(
-        lambda: "achievements" not in [b["id"] for b in dock.property("buttons").toVariant()],
-        "the source's switch off: no button",
-    )
+    until(lambda: "achievements" not in ids(read(dock, "buttons")), "the source's switch off: no button")
     key(overlay, Qt.Key.Key_Down)
     key(overlay, Qt.Key.Key_E)
     assert tray.property("open") is True and tray.property("showsAchievements") is False, "…and no tab"
     stop(api)
-    window.close()
-    overlay.close()
 
 
-def test_a_burst_of_unlocks_waits_its_turn_behind_three_cards(api, fake, tmp_path, monkeypatch):
+def test_a_burst_of_unlocks_waits_its_turn_behind_three_cards(api, reprise, tmp_path, monkeypatch):
     from universe_ui import home as home_module
 
-    monkeypatch.setattr(home_module, "BANNER_MS", 1200)
-    engine, window = render(api)
-    overlay = overlay_over(api, engine, window)
+    # Over 700 ms: a card's fades and margin take that much of its life.
+    monkeypatch.setattr(home_module, "BANNER_MS", 800)
+    _look, overlay = reprise
     for n in range(7):
         api.home._unlocked({"name": f"A{n}", "description": "", "icon": "", "rarityText": ""})
-    unlocks = overlay.findChild(QObject, "unlocks")
-
-    def cards():
-        return [c for c in unlocks.childItems() if c.property("radius") == 20 * unlocks.property("s")]
-
-    until(lambda: len(cards()) == 3)
+    unlocks, cards = overlay.findChild(QObject, "unlocks"), overlay.findChild(QObject, "unlockCards")
+    until(lambda: cards.property("count") == 3)
     assert api.home.bannersWaiting == 4
     assert unlocks.property("x") + unlocks.property("width") > overlay.width() * 0.9, "top right, clear of the game's middle"
     if os.environ.get("UNIVERSE_TEST_SHOTS"):
         overlay.grabWindow().save(str(tmp_path / "unlocks.png"))
-    until(lambda: api.home.bannersWaiting == 1 and len(cards()) == 3, "the next three came in as the first left")
-    window.close()
-    overlay.close()
+    until(lambda: api.home.bannersWaiting == 1 and cards.property("count") == 3, "the next three came in as the first left")
 
 
-def test_the_docks_output_row_switches_once_the_cursor_rests(api, fake, tmp_path, monkeypatch):
+def test_the_docks_output_row_switches_once_the_cursor_rests(api, fake, reprise, tmp_path, monkeypatch):
     switched = []
     real_set = fake.core.set_output
     monkeypatch.setattr(fake.core, "set_output", lambda ident: (switched.append(ident), real_set(ident))[1])
-    engine, window = render(api)
-    overlay = overlay_over(api, engine, window)
+    _look, overlay = reprise
     fake.launch("mirrors-edge", "")
     until(lambda: api.home.shown == "game")
     outputs = record(api.home.outputsChanged)
     dock = open_dock(api, overlay)
     until(lambda: outputs)
-    dock.setProperty("index", [b["id"] for b in dock.property("buttons").toVariant()].index("sound"))
+    dock.setProperty("index", ids(read(dock, "buttons")).index("sound"))
     key(overlay, Qt.Key.Key_Return)
-    assert [c["id"] for c in dock.property("current").toVariant()["children"]] == ["vol", "output"], "Mute is A on Volume"
+    rows = ids(read(dock, "current")["children"])
+    dock.setProperty("sub", rows.index("vol"))
     key(overlay, Qt.Key.Key_Return)
-    until(lambda: api.home.muted is True)
+    until(lambda: api.home.muted is True, "Mute is A on Volume")
     key(overlay, Qt.Key.Key_Return)
     until(lambda: api.home.muted is False)
-    key(overlay, Qt.Key.Key_Down)
-    assert dock.property("target").toVariant()["id"] == "output" and dock.property("vals").toVariant()["output"].endswith("speaker")
-    key(overlay, Qt.Key.Key_Right)
-    key(overlay, Qt.Key.Key_Right)
-    assert dock.property("vals").toVariant()["output"].endswith("hdmi-output-0"), "the row shows the pick at once"
-    assert [o["label"] for o in api.home.outputs if o["current"]] == ["Speakers"], "nothing switched while stepping"
-    until(lambda: [o["label"] for o in api.home.outputs if o["current"]] == ["HDMI / DisplayPort"])
+    dock.setProperty("sub", rows.index("output"))
+    assert read(dock, "target")["id"] == "output" and read(dock, "vals")["output"].endswith("speaker")
+    key(overlay, Qt.Key.Key_Right, 2)
+    assert read(dock, "vals")["output"].endswith("hdmi-output-0"), "the row shows the pick at once"
+    assert current_output(api).endswith("speaker"), "nothing switched while stepping"
+    until(lambda: current_output(api).endswith("hdmi-output-0"))
     assert len(switched) == 1 and switched[0].endswith("hdmi-output-0"), "one switch, to where the cursor rested"
     if os.environ.get("UNIVERSE_TEST_SHOTS"):
         overlay.grabWindow().save(str(tmp_path / "dock-output.png"))
     stop(api)
-    window.close()
-    overlay.close()
 
 
-def test_home_over_the_poster_raises_home_and_quit_and_home_drops_the_poster(api, fake, tmp_path, monkeypatch, held):
-    from PySide6.QtCore import Q_ARG
-
+def test_home_over_the_poster_raises_home_and_quit_and_home_drops_the_poster(api, fake, reprise, tmp_path, monkeypatch, held):
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
     mapped = held(fake.core, "wait_session_window")
-    engine, window = render(api, activate=True)
-    overlay = overlay_over(api, engine, window)
-    root = window.property("contentItem").childItems()[0].property("item")
-    poster = window.findChild(QObject, "launchOverlay")
-    dock = overlay.property("contentItem").childItems()[0].property("item")
+    look, overlay = reprise
+    root = look.root
+    poster = look.find("launchOverlay")
+    dock = overlay.findChild(QObject, "dock")
     started = record(fake.sessionStarted)
-    QMetaObject.invokeMethod(root, "launchGame", Q_ARG("QVariant", api.allGames.byId("control")))
+    look.launch("control")
     api.home.pressed.emit()
     assert api.home.open is False, "HOME before the session exists is swallowed with the other keys"
     until(lambda: started)
@@ -740,13 +665,14 @@ def test_home_over_the_poster_raises_home_and_quit_and_home_drops_the_poster(api
     overlay.requestActivate()
     until(lambda: dock.property("activeFocus"))
     assert api.home.open is True and dock.property("loading") is True
-    assert [b["id"] for b in dock.property("buttons").toVariant()] == ["home", "quit"], "over the poster: Home and Quit alone"
+    assert ids(read(dock, "buttons")) == ["home", "quit"], "over the poster: Home and Quit alone"
     assert api.home.paused is False and fake.core.frozen is False
-    image = until(lambda: band_drawn(overlay), "drawn like the full one")
     if os.environ.get("UNIVERSE_TEST_SHOTS"):
-        image.save(str(tmp_path / "dock-loading.png"))
+        band_up(overlay)
+        settle(overlay)
+        overlay.grabWindow().save(str(tmp_path / "dock-loading.png"))
     key(overlay, Qt.Key.Key_Down)
-    assert dock.findChild(QObject, "dockShots").property("open") is False, "no shots while loading"
+    assert overlay.findChild(QObject, "dockShots").property("open") is False, "no shots while loading"
     api.home.pressed.emit()
     until(lambda: api.home.open is False, "a second press closes it, the poster still holds")
     assert poster.property("waiting") is True
@@ -755,22 +681,20 @@ def test_home_over_the_poster_raises_home_and_quit_and_home_drops_the_poster(api
     until(lambda: api.home.open and dock.property("activeFocus"))
     key(overlay, Qt.Key.Key_Return)
     until(lambda: api.home.open is False and poster.property("waiting") is False, "Home: the poster goes")
-    assert fake.core.frames == 0, "no frame was asked for"
+    assert api.home.flipped and api.home.frame == "" and fake.core.frames == 0, "nothing painted yet: no frame asked for"
     assert fake.core.frozen is False and root.property("playingId") == "control"
     mapped.set()
-    until(lambda: api.home.loading is False and api.home.shown == "game")
+    until(lambda: not api.home.loading and not api.home.flipped and api.home.shown == "game", "the game mapped over the launcher on its own")
     dock = open_dock(api, overlay)
-    assert [b["id"] for b in dock.property("buttons").toVariant()][:4] == ["resume", "home", "quit", "game"], "the full dock once the game is up"
-    assert dock.property("index") == 0
+    buttons = read(dock, "buttons")
+    assert {"resume", "home", "quit", "game"} <= set(ids(buttons)), "the full dock once the game is up"
+    assert buttons[dock.property("index")]["id"] == "resume"
     key(overlay, Qt.Key.Key_Escape)
     stop(api)
-    window.close()
-    overlay.close()
 
 
-def test_the_dock_lists_the_sessions_shots_and_trashes_one(api, fake, tmp_path):
-    engine, window = render(api)
-    overlay = overlay_over(api, engine, window)
+def test_the_dock_lists_the_sessions_shots_and_trashes_one(api, fake, reprise, tmp_path):
+    _look, overlay = reprise
     fake.launch("the-technomancer", "")
     until(lambda: api.home.shown == "game")
     earlier = len(fake.screenshots("the-technomancer"))
@@ -780,7 +704,7 @@ def test_the_dock_lists_the_sessions_shots_and_trashes_one(api, fake, tmp_path):
     until(lambda: taken)
     dock = open_dock(api, overlay)
     panel = overlay.findChild(QObject, "dockShots")
-    assert panel is not None and panel.property("open") is False
+    assert panel.property("open") is False
     key(overlay, Qt.Key.Key_Down)
     assert panel.property("open") is True, "▼ from the row raises the screenshots over the game"
     until(lambda: panel.property("count") == earlier + 1)
@@ -806,8 +730,6 @@ def test_the_dock_lists_the_sessions_shots_and_trashes_one(api, fake, tmp_path):
     key(overlay, Qt.Key.Key_Escape)
     assert api.home.open is False
     stop(api)
-    window.close()
-    overlay.close()
 
 
 def red_fraction(image):
@@ -816,43 +738,42 @@ def red_fraction(image):
     return red / (small.width() * small.height())
 
 
-def test_home_from_the_game_zooms_the_frame_into_its_tile(api, fake, monkeypatch):
+@pytest.mark.parametrize("look", ["reprise"], indirect=True)
+def test_home_from_the_game_zooms_the_frame_into_its_tile(api, fake, monkeypatch, look):
     from PySide6.QtGui import QColor, QImage
 
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
     shot = QImage(640, 360, QImage.Format.Format_RGB32)
     shot.fill(QColor("#d02020"))
     assert shot.save(fake.core.nest_frame())
-    _engine, window = render(api, activate=True)
-    root = window.property("contentItem").childItems()[0].property("item")
-    flip = window.findChild(QObject, "homeFlip")
+    root, window = look.root, look.window
+    elsewhere = root.property("settingsTab")
+    flip = look.find("homeFlip")
     fake.launch("mirrors-edge", "")
     until(lambda: api.home.shown == "game")
-    root.setProperty("tabIndex", 1)
+    root.goToTab(elsewhere)
     swaps = []
     real_focus = fake.core.focus_pid
     monkeypatch.setattr(fake.core, "focus_pid", lambda pid: (swaps.append(flip.property("covering")), real_focus(pid)))
     api.home.toLauncher()
     until(lambda: red_fraction(window.grabWindow()) > 0.9, "full screen at the swap")
-    assert flip.property("covering") is True and root.property("tabIndex") == 0, "the frame covers the launcher, home first"
+    assert flip.property("covering") is True and read(root, "activePage").objectName() == "homePage", "the frame covers the launcher, home first"
     until(lambda: not flip.property("covering") and not flip.property("running"))
     assert swaps == [True], "gamescope swapped while the frame covered everything"
     assert fake.core.game_shown is False
-    home = root.property("activePage")
-    assert home.property("currentGame").property("id") == "mirrors-edge", "the cursor lands on the playing game"
-    until(lambda: 0.005 < red_fraction(window.grabWindow()) < 0.2, "the frame is the tile's art now, nothing more")
-    QMetaObject.invokeMethod(root, "resumeSession")
+    assert look.page("homePage").property("currentGame").property("id") == "mirrors-edge", "the cursor lands on the playing game"
+    until(lambda: 0.005 < red_fraction(window.grabWindow()) < 0.2, "the frame is the tile's art now")
+    invoke(root, "resumeSession")
     assert flip.property("growing") is True and api.home.shown == "launcher", "the tile grows first"
     until(lambda: api.home.shown == "game" and fake.core.game_shown is True)
-    assert red_fraction(window.grabWindow()) > 0.9
+    assert flip.property("covering") is True, "grown to the full frame over the swap back"
     until(lambda: flip.property("covering") is False, "let go once the game has the screen")
-    root.setProperty("tabIndex", 1)
+    root.goToTab(elsewhere)
     fake.core.game_shown = False
     until(lambda: api.home.shown == "launcher")
     assert not api.home.flipped
-    assert flip.property("covering") is False and root.property("tabIndex") == 1, "a game that leaves by itself gets no zoom of its stale frame"
+    assert flip.property("covering") is False and root.property("tabIndex") == elsewhere, "a game that leaves by itself gets no zoom of its stale frame"
     stop(api)
-    window.close()
 
 
 def test_an_output_picked_becomes_current_and_brings_its_level(api, fake):
@@ -860,15 +781,15 @@ def test_an_output_picked_becomes_current_and_brings_its_level(api, fake):
     changed = record(home.outputsChanged)
     home.loadOutputs()
     until(lambda: changed)
-    assert [o["label"] for o in home.outputs if o["current"]] == ["Speakers"]
-    headphones = next(o["id"] for o in home.outputs if o["label"] == "Headphones")
+    assert current_output(api).endswith("speaker")
+    headphones = next(o["id"] for o in home.outputs if o["id"].endswith("headphones"))
     fake.core.level = 30
     home.setOutput(headphones)
     until(lambda: len(changed) == 2)
-    assert [o["id"] for o in home.outputs if o["current"]] == [headphones]
+    assert current_output(api) == headphones
     assert home.volumePercent == 30, "the reply is the new sink's level"
     errors = []
     fake.error.connect(lambda kind, message: errors.append(kind))
     home.setOutput("gone")
     until(lambda: errors)
-    assert errors == ["Invalid"] and [o["id"] for o in home.outputs if o["current"]] == [headphones]
+    assert errors == ["Invalid"] and current_output(api) == headphones

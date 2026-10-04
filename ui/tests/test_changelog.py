@@ -1,9 +1,8 @@
 import pytest
-from test_render import page_as, render
+from looks import Look, invoke, read
+from PySide6.QtCore import Qt
 
 from conftest import until
-
-LOOKS = ["reprise", "switch2", "ps5"]
 
 
 @pytest.fixture
@@ -19,11 +18,6 @@ def upgraded(app, xdg, tmp_path):
     client = CoreClient(core)
     yield client
     client.shutdown()
-
-
-def value(item, name):
-    v = item.property(name)
-    return v.toVariant() if hasattr(v, "toVariant") else v
 
 
 def versions(releases):
@@ -52,55 +46,31 @@ def test_the_launch_page_turns_whats_new_on(api, fake):
     assert row["value"] is False and not row["advanced"], "off by default, shown without Advanced"
 
 
-def changelog_page(root, theme):
-    from PySide6.QtCore import QObject
-
-    if theme == "reprise":
-        shown = root.property("subOpen") is True and root.property("subSource") == "pages/ChangelogPage.qml"
-        return shown and root.findChild(QObject, "changelogPage")
-    top = root.property("topPage")
-    return top is not None and top.objectName() == "changelogPage" and top
-
-
-def open_about(root, theme):
-    from PySide6.QtCore import Q_ARG, QMetaObject
-
-    if theme == "reprise":
-        root.goToTab(root.property("settingsTab"))
-        page = page_as(root, "SettingsPage")
-        QMetaObject.invokeMethod(page, "land", Q_ARG("QVariant", "about"))
-    else:
-        QMetaObject.invokeMethod(root, "push", Q_ARG("QVariant", "pages/SettingsPage.qml"), Q_ARG("QVariant", {"section": "about"}))
-        page = until(lambda: (top := root.property("topPage")) is not None and top.objectName() != "changelogPage" and top)
-    until(lambda: page.property("sectionId") == "about")
-    return page
-
-
-@pytest.mark.parametrize("theme", LOOKS)
-def test_an_update_opens_whats_new_once_and_about_opens_the_changelog(upgraded, tmp_path, theme):
-    from PySide6.QtCore import Q_ARG, QMetaObject, Qt
-    from PySide6.QtTest import QTest
-
+@pytest.fixture
+def look(request, upgraded, tmp_path):
+    """A look started on the upgraded core."""
     from universe_ui.api import Api
     from universe_ui.screens.power import FAKE
 
     api = Api(upgraded, memory_path=str(tmp_path / "memory.json"), power_root=FAKE)
-    api.theme.set(theme)
-    api.theme.takeLanding()
-    engine, window = render(api, activate=True)
-    root = window.property("contentItem").childItems()[0].property("item")
-    page = until(lambda: (p := changelog_page(root, theme)) and p.property("fresh") is True and p, "the start opens what's new")
-    assert versions(value(page, "releases")) == ["0.0.3", "0.0.2"]
-    QTest.keyClick(window, Qt.Key.Key_Escape)
-    until(lambda: not changelog_page(root, theme) and api.screens.changelog.pending == [], "B closes it, seen")
+    shown = Look(api, request.param)
+    yield shown
+    shown.close()
+    api.shutdown()
 
-    about = open_about(root, theme)
-    content = value(about, "content")
+
+def test_an_update_opens_whats_new_once_and_about_opens_the_changelog(look):
+    changelog = look.api.screens.changelog
+    page = look.page("changelogPage")
+    assert page.property("fresh") is True and versions(read(page, "releases")) == ["0.0.3", "0.0.2"], "the start opens what's new"
+    look.press(Qt.Key.Key_Escape)
+    until(lambda: changelog.pending == [], "B closes it, seen")
+
+    about = look.settings("about")
+    until(lambda: about.property("sectionId") == "about")
+    content = read(about, "content")
     rows = content["rows"] if isinstance(content, dict) else content
     row = next(r for r in rows if r.get("key") == "changelog")
-    QMetaObject.invokeMethod(about, "activate", Q_ARG("QVariant", rows.index(row)), Q_ARG("QVariant", row))
-    page = until(lambda: (p := changelog_page(root, theme)) and p.property("fresh") is False and p, "About › Changelog opens it")
-    assert versions(value(page, "releases")) == ["0.0.3", "0.0.2", "0.0.1"]
-    window.close()
-    del engine
-    api.shutdown()
+    invoke(about, "activate", rows.index(row), row)
+    page = until(lambda: (p := look.page("changelogPage")).property("fresh") is False and p, "About › Changelog opens it")
+    assert versions(read(page, "releases")) == ["0.0.3", "0.0.2", "0.0.1"]

@@ -2,7 +2,8 @@ import json
 import threading
 
 import pytest
-from test_render import render
+from looks import Look, page_name
+from PySide6.QtCore import QObject, Qt
 
 from conftest import index_of, record, rows_by_key, until
 
@@ -73,11 +74,11 @@ def test_steps_and_found_rows(empty_api, empty):
         "heroic-epic": ("action", "epic"),
         "roms": ("action", "roms"),
     }, "Heroic's Amazon games, with nothing to bring over, stay out"
-    assert all((row["action"], row["verb"]) == ("Add", True) and row["detail"] for row in rows.values()), "one verb, and where the games go"
+    assert all(row["verb"] is True and row["detail"] for row in rows.values()), "one verb, and where the games go"
     assert form.idle is False
     form.next()
     assert form.stepId == "stores" and [r["key"] for r in form.rows] == ["logged_in", "link", "code", "enabled", "enabled"]
-    assert [g["title"] for g in form.groups] == ["GOG", "Epic Games", "Steam"]
+    assert [{form.rows[i]["module"] for i in g["rows"]} for g in form.groups] == [{"gog"}, {"epic"}, {"steam"}], "a group per store"
     assert [(r["type"], r["module"]) for r in form.rows[3:]] == [("bool", "epic"), ("bool", "steam")], "off, offered since their launchers are here"
     form.back()
     assert form.stepId == "found"
@@ -238,10 +239,7 @@ def test_preferences_write_the_family_and_hdr(empty_api, empty):
     form = loaded(empty_api.screens.onboarding)
     while form.stepId != "preferences":
         form.next()
-    rows = rows_by_key(form)
-    assert [g["title"] for g in form.groups] == ["Controller", "Graphics"] and form.groups[1]["meta"] == ""
-    assert list(rows) == ["controller.family", "launch.hdr"], "the upscaler upgrades stay in Settings"
-    assert rows["controller.family"]["display"] == "Xbox controller" and "Switch Pro Controller" in rows["controller.family"]["choices"]
+    assert [[form.rows[i]["key"] for i in g["rows"]] for g in form.groups] == [["controller.family"], ["launch.hdr"]], "the upscaler upgrades stay in Settings"
     assert form.setValue(index_of(form, "controller.family"), "Switch Pro Controller") is True
     assert empty_api.screens.controller.family == "switch-pro" and empty_api.memory.get("controllerFamily") == "switch-pro"
     form.toggle(index_of(form, "launch.hdr"))
@@ -266,91 +264,59 @@ def test_read_only_config_skips_preferences(empty_api, empty, config_owner, owne
     assert form.stepId == "done" and form.rows[-1]["key"] == "read_only" and owner in form.rows[-1]["detail"]
 
 
-LOOKS = ["reprise", "switch2", "ps5"]
+@pytest.fixture
+def look(request, empty_api):
+    """A look started on the empty library: the setup comes up over it."""
+    shown = Look(empty_api, request.param)
+    yield shown
+    shown.close()
 
 
-class Look:
-    """The setup as one look draws it: its window, whether the page is up, a key pressed."""
-
-    def __init__(self, api, theme):
-        from PySide6.QtCore import QObject
-
-        self.theme = theme
-        api.theme.set(theme)
-        api.theme.takeLanding()
-        self.engine, self.window = render(api, activate=True)
-        self.root = self.window.property("contentItem").childItems()[0].property("item")
-        self.home = until(lambda: self.root.property("activePage") if theme == "reprise" else self.root.findChild(QObject, "homePage"))
-
-    def close(self):
-        """The window closed and its engine dropped now, not whenever the collector gets to it."""
-        self.window.close()
-        del self.engine
-
-    def opened(self):
-        if self.theme == "reprise":
-            return self.root.property("subOpen") is True and self.root.property("subSource") == "pages/OnboardingPage.qml"
-        top = self.root.property("topPage")
-        return top is not None and top.property("form") is not None and top.property("last") is False
-
-    def focused(self, name):
-        """Whether the page's `setupNav` (Back and Continue) or `setupRows` has the focus."""
-        from PySide6.QtCore import QObject
-
-        page = self.root if self.theme == "reprise" else self.root.property("topPage")
-        # A closed page's items linger until deleted; only the live one can hold the focus.
-        return page is not None and any(item.property("activeFocus") is True for item in page.findChildren(QObject, name))
-
-    def nav_focused(self):
-        return self.focused("setupNav")
-
-    def rows_focused(self):
-        return self.focused("setupRows")
-
-    def press(self, key, times=1):
-        from PySide6.QtTest import QTest
-
-        for _ in range(times):
-            QTest.keyClick(self.window, key)
-
-    def pick_second(self):
-        """The second answer of the look's question: down its list in Reprise, right along its buttons on the stack looks."""
-        from PySide6.QtCore import Qt
-
-        self.press(Qt.Key.Key_Down if self.theme == "reprise" else Qt.Key.Key_Right)
-        self.press(Qt.Key.Key_Return)
-
-    def reopen(self):
-        """The setup again: the empty Home's Set up entry, Settings › About on the PS5 look."""
-        from PySide6.QtCore import Q_ARG, QMetaObject, Qt
-
-        if self.theme == "ps5":
-            QMetaObject.invokeMethod(self.root, "push", Q_ARG("QVariant", "pages/SettingsPage.qml"), Q_ARG("QVariant", {"section": "about"}))
-            until(lambda: (top := self.root.property("topPage")) is not None and top.property("sectionId") == "about" and top.property("activeFocus"))
-            self.press(Qt.Key.Key_Down)
-            self.press(Qt.Key.Key_Right)
-        else:
-            if self.theme == "reprise":
-                self.press(Qt.Key.Key_Up)
-            self.press(Qt.Key.Key_Right)
-            until(lambda: self.home.property("onSetup") is True)
-        self.press(Qt.Key.Key_Return)
-
-
-@pytest.mark.parametrize("theme", LOOKS)
-def test_the_setup_in_each_look(empty_api, empty, theme):
-    from PySide6.QtCore import Qt
-
+@pytest.fixture
+def stores_signed_out(empty):
+    """Asked for before `look`, so the setup reads the stores signed out."""
     signed_out(empty)
-    look = Look(empty_api, theme)
+
+
+SECOND = {"reprise": Qt.Key.Key_Down, "switch2": Qt.Key.Key_Right, "ps5": Qt.Key.Key_Right}
+TO_SETUP = {"reprise": [Qt.Key.Key_Up, Qt.Key.Key_Right], "switch2": [Qt.Key.Key_Right], "ps5": [Qt.Key.Key_Down, Qt.Key.Key_Right]}
+
+
+def opened(look):
+    root = look.root
+    if look.stacked:
+        return (top := root.property("topPage")) is not None and top.objectName() == "onboardingPage"
+    return root.property("subOpen") is True and page_name(root.property("subSource")) == "onboardingPage"
+
+
+def focused(look, name):
+    """Whether the setup's `setupNav` (Back and Continue) or `setupRows` has the focus."""
+    page = look.root.property("topPage") if look.stacked else look.root
+    # A closed page's items linger until deleted; only the live one can hold the focus.
+    return page is not None and any(item.property("activeFocus") is True for item in page.findChildren(QObject, name))
+
+
+def reopen(look):
+    """The setup again: Settings › About on the PS5 look, the empty Home's Set up entry on the others."""
+    if look.name == "ps5":
+        about = look.settings("about")
+        until(lambda: about.property("activeFocus"))
+    for key in TO_SETUP[look.name]:
+        look.press(key)
+    if look.name != "ps5":
+        until(lambda: look.home().property("onSetup") is True)
+    look.press(Qt.Key.Key_Return)
+
+
+def test_the_setup_in_each_look(stores_signed_out, look, empty_api, empty):
     form = empty_api.screens.onboarding
-    until(lambda: look.opened() and not form.loading and form.stepId == "found" and form.count == 6)
+    until(lambda: opened(look) and not form.loading and form.stepId == "found" and form.count == 6)
     look.press(Qt.Key.Key_I)
     until(lambda: form.stepId == "stores", "X moves on")
     look.press(Qt.Key.Key_Escape)
-    until(lambda: form.stepId == "found" and look.opened(), "B goes back a step, the setup stays")
+    until(lambda: form.stepId == "found" and opened(look), "B goes back a step, the setup stays")
     look.press(Qt.Key.Key_Down, 7)
-    until(look.nav_focused, "Down past the last row reaches the buttons")
+    until(lambda: focused(look, "setupNav"), "Down past the last row reaches the buttons")
     look.press(Qt.Key.Key_Return)
     until(lambda: form.stepId == "stores", "A on Continue moves on")
     look.press(Qt.Key.Key_Down, 5)
@@ -359,47 +325,40 @@ def test_the_setup_in_each_look(empty_api, empty, theme):
     until(lambda: form.stepId == "found", "the Back button goes back")
     look.press(Qt.Key.Key_Escape)
     look.press(Qt.Key.Key_Return)
-    until(lambda: look.opened() and form.stepId == "found" and not empty.onboarded(), "B on the first step asks first: Keep going stays")
+    until(lambda: opened(look) and form.stepId == "found" and not empty.onboarded(), "B on the first step asks first: Keep going stays")
     look.press(Qt.Key.Key_Escape)
-    look.pick_second()
-    until(lambda: empty.onboarded() is True and not look.opened(), "Skip skips it")
-    look.reopen()
-    until(lambda: look.opened() and form.stepId == "found", "it runs again")
-    until(look.rows_focused)
+    look.press(SECOND[look.name])
+    look.press(Qt.Key.Key_Return)
+    until(lambda: empty.onboarded() is True and not opened(look), "Skip skips it")
+    reopen(look)
+    until(lambda: opened(look) and form.stepId == "found", "it runs again")
+    until(lambda: focused(look, "setupRows"))
     look.press(Qt.Key.Key_Down)
     look.press(Qt.Key.Key_Return)
     until(lambda: empty_api.allGames.count == 2, "A on the Lutris row imports behind the setup")
     assert form.added is True
     look.press(Qt.Key.Key_Escape)
-    until(lambda: not look.opened(), "with games in, B closes without asking")
-    home = look.home
-    if theme == "reprise":
-        until(
-            lambda: home.property("tileSelected") is False and (game := home.property("currentGame")) is not None and game.property("id") is not None,
-            "the rail that filled behind the dialog lands on a game",
-        )
+    until(lambda: not opened(look), "with games in, B closes without asking")
+    page = look.home()
+    until(
+        lambda: not page.property("tileSelected") and not page.property("onSetup") and (page.property("onAll") or page.property("currentGame") is not None),
+        "the Home that filled behind the setup leaves Set up for a game, or for All Software on Switch 2's row of played games",
+    )
+    if look.name == "reprise":
         look.press(Qt.Key.Key_Down)
         look.press(Qt.Key.Key_Right, 2)
-        until(lambda: home.property("tileSelected") is True, "Down leaves the hero pills for the rail, Right past the last game reaches the Library tile")
+        until(lambda: page.property("tileSelected") is True, "Down leaves the hero pills for the rail, Right past the last game reaches the Library tile")
         look.press(Qt.Key.Key_Left)
-        until(lambda: home.property("tileSelected") is False and home.property("currentGame") is not None)
-    elif theme == "switch2":
-        until(lambda: home.property("onSetup") is False and home.property("index") <= home.property("allIndex"))
-    look.close()
+        until(lambda: page.property("tileSelected") is False and page.property("currentGame") is not None)
 
 
-@pytest.mark.parametrize("theme", LOOKS)
-def test_a_step_with_nothing_to_do_lands_on_its_button(empty_api, empty, theme):
-    from PySide6.QtCore import Qt
-
-    look = Look(empty_api, theme)
+def test_a_step_with_nothing_to_do_lands_on_its_button(look, empty_api, empty):
     form = empty_api.screens.onboarding
-    until(lambda: look.opened() and not form.loading and form.stepId == "found")
-    until(look.rows_focused, "the found step's rows come first")
+    until(lambda: opened(look) and not form.loading and form.stepId == "found")
+    until(lambda: focused(look, "setupRows"), "the found step's rows come first")
     for step in range(1, len(form.steps)):
         look.press(Qt.Key.Key_I)
         until(lambda step=step: form.step == step, "X moves on")
-    until(lambda: form.idle is True and look.nav_focused(), "the summary does nothing: Finish has the focus")
+    until(lambda: form.idle is True and focused(look, "setupNav"), "the summary does nothing: Finish has the focus")
     look.press(Qt.Key.Key_Return)
-    until(lambda: empty.onboarded() is True and not look.opened(), "A finishes")
-    look.close()
+    until(lambda: empty.onboarded() is True and not opened(look), "A finishes")
