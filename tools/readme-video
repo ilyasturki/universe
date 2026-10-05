@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+    cat <<'USAGE'
+usage: tools/readme-video record TAKE.mp4
+       tools/readme-video encode TAKE.mp4 [DIR]
+
+record: one take of the README's footage on the .dev-showcase profile, through
+tools/ui-record in its gamescope mode: the home row, a search for Dead Cells, its
+launch, then HOME over the running game (the dock, MangoHud on from Performance,
+the volume level). TAKE.marks holds where each part starts.
+
+encode: DIR/home.avif (the home row to the launch, then the game) and
+DIR/home-over-game.avif (HOME over the game) from TAKE and its marks, DIR
+docs/images by default. Animated AVIF at 1080p60, which a README's <img> loops
+without sound.
+
+  UNIVERSE_AVIF_CRF the encode's quality, lower is larger (default 24)
+USAGE
+}
+
+# Wait:N is N gaps of UNIVERSE_UI_GAP (400 ms here). The game's title screen is up
+# well within the 50 s after its launch.
+KEYS=(
+    Wait:4 Mark:hero
+    Right Wait Right Wait Right Wait:2
+    Up Wait Up Wait Left Wait:2 Expect: Return
+    Wait:3 Type:de Type:ad Type:_c Type:el Type:ls Wait:3
+    Up Wait Up Wait:2 Expect:dead-cells Return
+    Wait:5 Mark:launched
+    Wait:125 Mark:game
+    Wait:6 Mark:overlay
+    Wait:3 Guide Wait:3
+    Right Right Right Right Right Right Wait:2
+    Return Wait:2 Return Wait:4
+    Guide Wait:4
+    Volume:up Wait Volume:up Wait Volume:up Wait:5
+    Mark:end
+)
+# The hero holds this long on the game once the launch fades into it.
+GAME_S=3
+FADE_S=0.4
+
+mark() {
+    local at
+    at=$(awk -v name="$1" '$1 == name { print $2 }' "$2")
+    [ -n "$at" ] || { echo "readme-video: no $1 mark in $2" >&2; exit 1; }
+    echo "$at"
+}
+
+avif() {
+    local out=$1
+    shift
+    ffmpeg -hide_banner -loglevel error -y "$@" \
+        -c:v libsvtav1 -crf "${UNIVERSE_AVIF_CRF:-24}" -preset 4 \
+        -svtav1-params tune=0:color-primaries=1:transfer-characteristics=1:matrix-coefficients=1:color-range=0 \
+        -colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv -loop 0 -an "$out"
+    echo "$out: $(du -h "$out" | cut -f1)"
+}
+
+[ $# -ge 2 ] || { usage >&2; exit 2; }
+case "$1" in
+    record)
+        root=$(dirname "${UNIVERSE_CONFIG_HOME:?run through just}")
+        [ "${root##*/}" = .dev-showcase ] ||
+            { echo "readme-video: footage comes from .dev-showcase (UNIVERSE_DEV=.dev-showcase), not $root" >&2; exit 1; }
+        UNIVERSE_RECORD_GAMESCOPE=1 UNIVERSE_UI_ARGS=--no-gamepad UNIVERSE_UI_GAP=400 \
+            "$(dirname "$0")/ui-record" "$2" "${KEYS[@]}"
+        grep -qs '^end ' "${2%.*}.marks" ||
+            { echo "readme-video: the take stopped before its end (an Expect: above says why)" >&2; exit 1; }
+        ;;
+    encode)
+        take=$2
+        dir=${3:-docs/images}
+        marks=${take%.*}.marks
+        [ -f "$marks" ] || { echo "readme-video: no $marks next to $take" >&2; exit 1; }
+        hero=$(mark hero "$marks")
+        launched=$(mark launched "$marks")
+        game=$(mark game "$marks")
+        overlay=$(mark overlay "$marks")
+        end=$(mark end "$marks")
+        mkdir -p "$dir"
+        avif "$dir/home.avif" -i "$take" -filter_complex "
+            [0:v]trim=start=$hero:end=$launched,setpts=PTS-STARTPTS[home];
+            [0:v]trim=start=$game:duration=$GAME_S,setpts=PTS-STARTPTS[game];
+            [home][game]xfade=transition=fade:duration=$FADE_S:offset=$(awk -v a="$launched" -v b="$hero" -v f="$FADE_S" 'BEGIN { print a - b - f }')[v];
+            [v]fps=60,format=yuv420p[out]" -map "[out]"
+        avif "$dir/home-over-game.avif" -ss "$overlay" -to "$end" -i "$take" -vf fps=60,format=yuv420p
+        ;;
+    *)
+        usage >&2
+        exit 2
+        ;;
+esac
