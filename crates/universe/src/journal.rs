@@ -56,7 +56,7 @@ impl Entry {
         if self.session.is_empty() {
             return Err(crate::Error::Invalid("entry.session missing".into()));
         }
-        if self.session.starts_with('.') || self.session.contains(['/', '\0']) {
+        if self.session.contains(['.', '/', '\0']) {
             return Err(crate::Error::Invalid(format!("entry.session must be a plain file name: {}", self.session)));
         }
         if self.title.is_empty() && self.paragraphs.is_empty() {
@@ -520,7 +520,7 @@ mod tests {
         assert!(!crate::screenshots::is_shot_name("attachments/20260301-210000-1.png"));
         let bad = Entry { images: vec!["/etc/passwd".into()], ..e.clone() };
         assert!(write(&journal_dir, &bad).is_err());
-        for session in ["../x", "a/b", "..", ".hidden"] {
+        for session in ["../x", "a/b", "..", ".hidden", "20260910-214000.pending"] {
             let bad = Entry { session: session.into(), ..e.clone() };
             assert!(matches!(write(&journal_dir, &bad), Err(crate::Error::Invalid(_))), "{session}");
         }
