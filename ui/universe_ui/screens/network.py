@@ -1,9 +1,10 @@
 import contextlib
 import os
 
-from PySide6.QtCore import QObject, QTimer, Signal
+from PySide6.QtCore import QObject, QTimer, Signal, Slot
 
 from ..qt import Property
+from .stream import Streamed
 
 SYSFS = "/sys/class/net"
 WIRELESS = "/proc/net/wireless"
@@ -35,6 +36,11 @@ def read_quality(path):
 def bars(quality):
     share = quality / QUALITY_MAX
     return 3 if share >= 0.6 else 2 if share >= 0.35 else 1
+
+
+# NetworkManager's signal is a percent.
+def strength_bars(strength):
+    return bars(strength * QUALITY_MAX / 100)
 
 
 # The link the machine is online through: a cable wins over Wi-Fi; virtual links (lo, VPNs, bridges) have no device.
@@ -74,12 +80,134 @@ class Network(QObject):
         self._timer.start()
 
     def refresh(self):
-        link = read_link(self._root, self._wireless)
+        self._set(read_link(self._root, self._wireless))
+
+    def _set(self, link):
         if link != self._link:
             self._link = link
             self.changed.emit()
+
+    # NetworkManager's link, once it answers: the sysfs poll stops for it.
+    def follow(self, kind, strength):
+        self._timer.stop()
+        self._set({"kind": kind, "bars": strength_bars(strength) if kind == "wifi" else 0})
 
     # "wifi" | "wired" | "" offline
     kind = Property(str, lambda self: self._link["kind"], notify=changed)
     # Wi-Fi signal, 1-3 arcs; 0 on a cable or offline
     bars = Property(int, lambda self: self._link["bars"], notify=changed)
+
+
+SECURED = ("psk", "sae", "wep", "enterprise")
+JOINABLE = ("open", "owe", "psk", "sae")
+
+
+def network_row(n):
+    security = str(n.get("security") or "")
+    strength = int(n.get("strength") or 0)
+    return {
+        "ssid": str(n.get("ssid") or ""),
+        "strength": strength,
+        "bars": strength_bars(strength),
+        "security": security,
+        "secured": security in SECURED,
+        "joinable": security in JOINABLE,
+        "saved": bool(n.get("saved")),
+        "active": bool(n.get("active")),
+    }
+
+
+class WifiScreen(Streamed):
+    """Wi-Fi through `universe network watch`: the networks in range, joining one, forgetting one. The link it reads drives `status`."""
+
+    changed = Signal()
+    # (ssid, connectivity) once a join is up; (ssid, reason, message) when a join or a forget fails, reason as the core gives it.
+    joined = Signal(str, str)
+    failed = Signal(str, str, str)
+
+    def __init__(self, client, status, parent=None):
+        super().__init__(client, "network", parent)
+        self._status = status
+        self._state = {}
+        self._connecting = ""
+        self._error = {}
+        client.networkAsync(self._apply)
+
+    def _apply(self, state):
+        state = {k: v for k, v in (state or {}).items() if k != "event"}
+        if state.get("available"):
+            self._status.follow(str(state.get("link") or ""), int(state.get("strength") or 0))
+        if state != self._state:
+            self._state = state
+            self.changed.emit()
+
+    def on_line(self, line):
+        event, action, ssid = line.get("event"), line.get("action"), str(line.get("ssid") or "")
+        reason, message = str(line.get("reason") or "failed"), str(line.get("message") or "")
+        if event == "state":
+            self._apply(line)
+        elif event == "connecting":
+            self._connecting, self._error = ssid, {}
+            self.changed.emit()
+        elif event == "done" and action == "connect":
+            self._connecting = ""
+            self.changed.emit()
+            self.joined.emit(ssid, str(line.get("connectivity") or ""))
+        elif event == "failed" and action in ("connect", "forget"):
+            if action == "connect":
+                self._connecting = ""
+                self._error = {"ssid": ssid, "reason": reason, "message": message}
+                self.changed.emit()
+            self.failed.emit(ssid, reason, message)
+        elif event == "off" and self._connecting:
+            self._connecting = ""
+            self.changed.emit()
+
+    # Whether joining `ssid` takes a password typed first: a secured network not saved yet.
+    @Slot(str, result=bool)
+    def needsPassword(self, ssid):
+        n = next((network_row(n) for n in self._get("networks", []) if n.get("ssid") == ssid), None)
+        return n is not None and n["secured"] and not n["saved"]
+
+    @Slot(str, str, result=bool)
+    def join(self, ssid, password=""):
+        command = {"cmd": "connect", "ssid": ssid}
+        if password:
+            command["password"] = password
+        if not self.send(command):
+            return False
+        self._connecting, self._error = ssid, {}
+        self.changed.emit()
+        return True
+
+    @Slot(str, result=bool)
+    def forget(self, ssid):
+        return self.send({"cmd": "forget", "ssid": ssid})
+
+    @Slot(bool, result=bool)
+    def setEnabled(self, on):
+        return self.send({"cmd": "wifi", "on": bool(on)})
+
+    @Slot()
+    def clearError(self):
+        if self._error:
+            self._error = {}
+            self.changed.emit()
+
+    def _get(self, key, default):
+        return self._state.get(key, default)
+
+    # NetworkManager answers and lists a Wi-Fi card: the Network pages show.
+    available = Property(bool, lambda self: bool(self._get("available", False)) and bool(self._get("device", "")), notify=changed)
+    enabled = Property(bool, lambda self: bool(self._get("enabled", False)), notify=changed)
+    # "wifi" | "wired" | "" offline
+    link = Property(str, lambda self: str(self._get("link", "")), notify=changed)
+    ssid = Property(str, lambda self: str(self._get("ssid", "")), notify=changed)
+    # "full" | "limited" | "portal" | "none" | "unknown", as NetworkManager last checked
+    connectivity = Property(str, lambda self: str(self._get("connectivity", "")), notify=changed)
+    # {ssid, strength, bars, security, secured, joinable, saved, active}: the joined one first, then by signal.
+    networks = Property("QVariantList", lambda self: [network_row(n) for n in self._get("networks", [])], notify=changed)
+    # The network a join is under way to, "" when none.
+    connecting = Property(str, lambda self: self._connecting, notify=changed)
+    # The last join's failure, {ssid, reason, message}, empty once another starts.
+    error = Property("QVariantMap", lambda self: dict(self._error), notify=changed)

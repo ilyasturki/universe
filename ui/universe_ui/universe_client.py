@@ -398,6 +398,21 @@ class CoreClient(QObject):
     def applySystemAsync(self, on_done):
         self._call_async(self._core.apply_system, lambda _: on_done(), on_error=lambda e: on_done())
 
+    def networkAsync(self, on_reply):
+        self._call_async(self._core.network, lambda state: on_reply(dict(state or {})), on_error=lambda e: on_reply({}))
+
+    def bluetoothAsync(self, on_reply):
+        self._call_async(self._core.bluetooth, lambda state: on_reply(dict(state or {})), on_error=lambda e: on_reply({}))
+
+    # `universe <kind> watch --json`: the core's child process, or the fake core's play of it.
+    def stream(self, kind):
+        from .screens.stream import FakeStream, Stream
+
+        watch = getattr(self._core, "watch", None)
+        if watch is not None:
+            return FakeStream(lambda emit: watch(kind, emit), self)
+        return Stream((kind, "watch", "--json"), self)
+
     def powerActionsAsync(self, on_reply):
         self._call_async(self._core.power_actions, lambda ids: on_reply(list(ids or [])), on_error=lambda e: on_reply([]))
 

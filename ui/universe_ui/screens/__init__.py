@@ -7,12 +7,14 @@ from .achievements import AchievementsList
 from .add import AddGameForm
 from .addons import AddonsForm
 from .artwork import ArtworkForm, ArtworkOverview
+from .bluetooth import BluetoothScreen
 from .changelog import Changelog
 from .components import ComponentsForm
 from .controller import ControllerScreen
 from .data import GameData, Storage
 from .launch import LaunchForm
 from .media import JournalList, MediaTimeline, PendingJournals, RecordingsList, ScreenshotsList, Thumbs
+from .network import Network, WifiScreen
 from .onboarding import Onboarding
 from .paths import PathBrowser
 from .runners import RunnerForm, RunnersForm
@@ -23,8 +25,21 @@ from .sources import LoginFlow, SourcesBrowser
 
 
 class Screens(QObject):
-    def __init__(self, client, memory, screen_mode: Callable[[], dict], games, power, themes: Callable[[], list] = list, parent=None):
+    def __init__(
+        self,
+        client,
+        memory,
+        screen_mode: Callable[[], dict],
+        games,
+        power,
+        themes: Callable[[], list] = list,
+        network=None,
+        busy: Callable[[], bool] = lambda: False,
+        parent=None,
+    ):
         super().__init__(parent)
+        self._network = WifiScreen(client, network if network is not None else Network(parent=self), self)
+        self._bluetooth = BluetoothScreen(client, busy, self)
         self._gameSettings = GameSettingsForm(client, screen_mode, self)
         self._addons = AddonsForm(client, self)
         self._modules = ModulesForm(client, self, self._addons)
@@ -65,6 +80,8 @@ class Screens(QObject):
         self._pendingJournals.shutdown()
         self._controller.shutdown()
         self._components.shutdown()
+        self._network.shutdown()
+        self._bluetooth.shutdown()
 
     gameSettings = Property(QObject, lambda self: self._gameSettings, constant=True)
     addons = Property(QObject, lambda self: self._addons, constant=True)
@@ -99,3 +116,5 @@ class Screens(QObject):
     gameData = Property(QObject, lambda self: self._gameData, constant=True)
     storage = Property(QObject, lambda self: self._storage, constant=True)
     changelog = Property(QObject, lambda self: self._changelog, constant=True)
+    network = Property(QObject, lambda self: self._network, constant=True)
+    bluetooth = Property(QObject, lambda self: self._bluetooth, constant=True)

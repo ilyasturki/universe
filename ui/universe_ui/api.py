@@ -433,6 +433,7 @@ class System(QObject):
         self._session = bool(client.session)
         self._deck = str(client.deck)
         self._controls = []
+        self._radios = (False, False)
         client.powerActionsAsync(self._set_actions)
         # What `[system]` kept goes back first: the power limit and the clocks do not outlive a reboot.
         client.applySystemAsync(self.reload)
@@ -490,6 +491,17 @@ class System(QObject):
     def control(self, ident):
         return next((c for c in self._controls if c["id"] == ident), None)
 
+    def setRadios(self, network, bluetooth):
+        radios = (network and not self._steam, bluetooth and not self._steam)
+        if radios != self._radios:
+            self._radios = radios
+            self.radiosChanged.emit()
+
+    radiosChanged = Signal()
+    # NetworkManager lists a Wi-Fi card, BlueZ an adapter, and Steam's Game Mode, which has its own, is not around: the pages show.
+    network = Property(bool, lambda self: self._radios[0], notify=radiosChanged)
+    bluetooth = Property(bool, lambda self: self._radios[1], notify=radiosChanged)
+
     controlsChanged = Signal()
     controlFailed = Signal(str, str)
     actions = Property("QStringList", lambda self: self._actions, notify=changed)
@@ -519,7 +531,20 @@ class Api(QObject):
         self._system = System(client, self)
         self._library = Library(client, self)
         self._modes = {}
-        self._screens = Screens(client, self._memory, self.screenMode, self._library.allGames, self._power, self._theme_list, self)
+        self._screens = Screens(
+            client,
+            self._memory,
+            self.screenMode,
+            self._library.allGames,
+            self._power,
+            self._theme_list,
+            network=self._network,
+            busy=lambda: self._home.shown == "game",
+            parent=self,
+        )
+        radios = (self._screens.network, self._screens.bluetooth)
+        for radio in radios:
+            radio.changed.connect(lambda: self._system.setRadios(*(r.available for r in radios)))
         controller = self._screens.controller
         controller.testingChanged.connect(lambda: self._pad.setMuted(controller.testing or controller.walking))
         controller.walkChanged.connect(lambda: self._pad.setMuted(controller.testing or controller.walking))
@@ -540,6 +565,23 @@ class Api(QObject):
         self._keys.watch(window)
         self._boot.watch(window)
         window.screenChanged.connect(lambda screen: self._modes.clear())
+
+    # The network watch follows the link for the status icons from the start; in the Universe session the Bluetooth one does too,
+    # as the default agent a Sony pad plugged in by cable asks. Elsewhere it starts with a page. Steam's Game Mode keeps both.
+    def startRadios(self):
+        if self._client.underSteam:
+            return
+        network, bluetooth = self._screens.network, self._screens.bluetooth
+
+        def start():
+            if network.available:
+                network.start()
+            if bluetooth.available and self._client.session:
+                bluetooth.start()
+
+        network.changed.connect(start)
+        bluetooth.changed.connect(start)
+        start()
 
     def shutdown(self):
         self._focus.shutdown()

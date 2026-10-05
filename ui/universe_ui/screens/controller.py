@@ -1,13 +1,12 @@
 import json
 import logging
-import os
-import shutil
 
-from PySide6.QtCore import QObject, QProcess, QTimer, Signal, Slot
+from PySide6.QtCore import QObject, QTimer, Signal, Slot
 
 from ..gamepad import mapping_fields
 from ..qt import QVARIANT, Property
 from .settings import AdvancedRows, _add, _dig, _group, _row
+from .stream import Stream
 
 log = logging.getLogger("universe.controller")
 
@@ -53,51 +52,9 @@ TIMING_DEFAULTS = {"controller.hold_ms": 600, "controller.volume_step": 2}
 HOME_SUMMONS = ("controller.home_summons", "HOME opens Universe", "HOME pressed in another app brings Universe to the front; off, it does nothing there.")
 
 
-class Watcher(QObject):
-    received = Signal(object)
-
+class Watcher(Stream):
     def __init__(self, parent=None):
-        super().__init__(parent)
-        self._process = None
-        self._buffer = b""
-
-    def start(self, families=None):
-        program = os.environ.get("UNIVERSE_BIN") or shutil.which("universe")
-        if not program:
-            log.warning("no universe binary: controller macros are off")
-            return False
-        self._process = QProcess(self)
-        self._process.setProcessChannelMode(QProcess.ProcessChannelMode.ForwardedErrorChannel)
-        self._process.readyReadStandardOutput.connect(self._read)
-        self._process.finished.connect(self._finished)
-        self._process.start(program, ["controller", "watch", "--json", "--wait"])
-        return True
-
-    def _finished(self, code, status):
-        log.info("controller watcher ended (%s)", code)
-        if self._process is not None:
-            self._process.deleteLater()
-            self._process = None
-        self.received.emit({"event": "off", "code": code})
-
-    def _read(self):
-        if self._process is None:
-            return
-        self._buffer += bytes(self._process.readAllStandardOutput().data())
-        while b"\n" in self._buffer:
-            line, self._buffer = self._buffer.split(b"\n", 1)
-            try:
-                payload = json.loads(line)
-            except ValueError:
-                continue
-            if isinstance(payload, dict):
-                self.received.emit(payload)
-
-    def send(self, command):
-        if self._process is None or self._process.state() == QProcess.ProcessState.NotRunning:
-            return False
-        self._process.write((json.dumps(command) + "\n").encode())
-        return True
+        super().__init__(("controller", "watch", "--json", "--wait"), parent)
 
     # `--keys`' Press, Unpress and Axis: a line as if the child had read it.
     def press(self, slot, down=True):
@@ -105,17 +62,6 @@ class Watcher(QObject):
 
     def axis(self, name, value):
         self.received.emit({"event": "axis", "id": "script", "axis": name, "value": float(value)})
-
-    def stop(self):
-        if self._process is None:
-            return
-        process, self._process = self._process, None
-        process.finished.disconnect(self._finished)
-        process.closeWriteChannel()
-        process.terminate()
-        if not process.waitForFinished(2000):
-            process.kill()
-            process.waitForFinished(1000)
 
 
 class FakeWatcher(QObject):

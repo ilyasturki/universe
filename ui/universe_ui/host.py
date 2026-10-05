@@ -456,6 +456,7 @@ def run(argv=None):
         else:
             watcher = Watcher(app)
         api.screens.controller.start(watcher)
+    api.startRadios()
 
     if args.keys:
         from .gamepad import KeyScript
