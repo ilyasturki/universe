@@ -257,7 +257,7 @@ impl Core {
         self.run(py, |c| async move { c.extension_remove(&id).await })
     }
     fn themes(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        py_of(py, &universe::extensions::themes())
+        py_of(py, &py.detach(universe::extensions::themes))
     }
 
     fn current(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {

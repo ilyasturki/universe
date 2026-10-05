@@ -297,13 +297,6 @@ fn held_ids(kind: &str) -> std::collections::BTreeSet<String> {
     crate::modules::read_manifests::<Header>(shipped.into_iter().chain([user]), &format!("{kind}.toml"), |m| &m.id).into_keys().collect()
 }
 
-/// Every id another kind holds, shipped, the user's own or installed: kinds never share one.
-fn other_ids(kind: &str, installed: &[Installed]) -> std::collections::BTreeSet<String> {
-    let mut ids: std::collections::BTreeSet<String> = KINDS.into_iter().filter(|k| *k != kind).flat_map(held_ids).collect();
-    ids.extend(installed.iter().filter(|i| i.kind != kind).map(|i| i.id.clone()));
-    ids
-}
-
 fn other_kind_holds(kind: &str, id: &str) -> Option<String> {
     let mine = installed();
     let holder = KINDS.into_iter().filter(|k| *k != kind).find(|k| held_ids(k).contains(id) || mine.iter().any(|i| i.kind == *k && i.id == id))?;
@@ -450,34 +443,38 @@ pub fn origin_of(kind: &str, dir: &Path) -> String {
 
 /// By kind, then id; a folder without its sidecar reads as unlisted, from nowhere.
 pub fn installed() -> Vec<Installed> {
-    let mut out = Vec::new();
-    for kind in KINDS {
-        let home = paths::extensions_dir(kind);
-        for (id, (dir, header)) in crate::modules::read_manifests::<Header>(std::iter::once(home.clone()), &format!("{kind}.toml"), |m| &m.id) {
+    KINDS.into_iter().flat_map(installed_of).collect()
+}
+
+/// By id.
+pub fn installed_of(kind: &str) -> Vec<Installed> {
+    let home = paths::extensions_dir(kind);
+    let found = crate::modules::read_manifests::<Header>(std::iter::once(home.clone()), &format!("{kind}.toml"), |m| &m.id);
+    found
+        .into_iter()
+        .map(|(id, (dir, header))| {
             let sidecar = std::fs::read_to_string(home.join(format!("{id}.json"))).ok().and_then(|s| serde_json::from_str::<Installed>(&s).ok());
             let mut i = sidecar.unwrap_or_else(|| Installed { origin: "unlisted".into(), ..Installed::default() });
             i.name = if header.name.is_empty() { id.clone() } else { header.name };
             (i.id, i.kind, i.version, i.api, i.description) = (id, kind.into(), header.version, header.api, header.description);
             (i.author, i.license, i.screenshot, i.dir) = (header.author, header.license, header.screenshot, dir);
-            out.push(i);
-        }
-    }
-    out
+            i
+        })
+        .collect()
 }
 
 /// A file inside `dir` that `rel` names, `None` when it leaves the folder or is not there.
 fn within(dir: &Path, rel: &str) -> Option<PathBuf> {
+    use std::path::Component;
     let rel = Path::new(rel);
-    let inside = !rel.as_os_str().is_empty() && rel.components().all(|c| matches!(c, std::path::Component::Normal(_)));
+    let inside = !rel.as_os_str().is_empty() && rel.components().all(|c| matches!(c, Component::Normal(_) | Component::CurDir));
     Some(dir.join(rel)).filter(|p| inside && p.is_file())
 }
 
-/// The installed themes, by id: what universe-ui lists beside its built-in looks, read off the disk alone.
 pub fn themes() -> Vec<serde_json::Value> {
     let path = |p: Option<PathBuf>| p.map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
-    installed()
+    installed_of("theme")
         .into_iter()
-        .filter(|i| i.kind == "theme")
         .map(|i| {
             serde_json::json!({
                 "id": i.id, "name": i.name, "version": i.version, "description": i.description, "author": i.author,
@@ -540,10 +537,9 @@ impl Core {
             _ => false,
         };
         let mine = installed();
-        let taken: std::collections::BTreeMap<&str, std::collections::BTreeSet<String>> =
-            KINDS.into_iter().map(|k| (k, held_ids(k).into_iter().chain(other_ids(k, &mine)).collect())).collect();
-        let shown: Vec<&Listed> =
-            index.extensions.iter().filter(|l| valid_id(&l.id) && taken.get(l.kind.as_str()).is_some_and(|ids| !ids.contains(&l.id))).collect();
+        let held: std::collections::BTreeSet<String> = KINDS.into_iter().flat_map(held_ids).collect();
+        let taken = |l: &Listed| held.contains(&l.id) || mine.iter().any(|i| i.kind != l.kind && i.id == l.id);
+        let shown: Vec<&Listed> = index.extensions.iter().filter(|l| valid_id(&l.id) && KINDS.contains(&l.kind.as_str()) && !taken(l)).collect();
         let mut rows: Vec<serde_json::Value> =
             shown.iter().map(|l| row(Some(l), mine.iter().find(|i| i.kind == l.kind && i.id == l.id), enabled(&l.kind, &l.id))).collect();
         for i in mine.iter().filter(|i| !shown.iter().any(|l| l.kind == i.kind && l.id == i.id)) {
@@ -589,6 +585,7 @@ impl Core {
         }
         let url = index_url(&config);
         let index = if targets.iter().any(|t| t.origin == "registry") { Some(fetch_index(&url).await) } else { None };
+        let runs_code = targets.iter().any(|t| t.kind != "theme");
         let mut out = Vec::new();
         for t in targets {
             let origin = match t.origin.as_str() {
@@ -625,8 +622,10 @@ impl Core {
                 }
             }
         }
-        self.reload_modules().await;
-        self.reload_all().await;
+        if runs_code {
+            self.reload_modules().await;
+            self.reload_all().await;
+        }
         Ok(out)
     }
 
@@ -883,6 +882,17 @@ mod tests {
         std::fs::write(dir.join(THEME_ENTRY), "import QtQuick\nItem {}\n").unwrap();
         std::fs::write(dir.join("screenshot.png"), b"png").unwrap();
         dir
+    }
+
+    #[test]
+    fn within_names_a_file_of_the_folder_and_nothing_outside() {
+        let env = paths::test_env();
+        let dir = theme_tree(env.path(), "dusk", API, "");
+        assert_eq!(within(&dir, "./screenshot.png"), Some(dir.join("screenshot.png")));
+        assert_eq!(within(&dir, "screenshot.png"), Some(dir.join("screenshot.png")));
+        for outside in ["", ".", "../dusk/screenshot.png", "/etc/hostname", "missing.png"] {
+            assert_eq!(within(&dir, outside), None, "{outside}");
+        }
     }
 
     #[tokio::test]

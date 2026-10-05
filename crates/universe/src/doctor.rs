@@ -498,7 +498,7 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
         "a key from steamgriddb.com/profile/preferences/api in keys.sgdb adds its community art".into(),
         "media",
     );
-    let themes: Vec<_> = crate::extensions::installed().into_iter().filter(|i| i.kind == "theme").collect();
+    let themes = crate::extensions::installed_of("theme");
     let apis = modules
         .iter()
         .map(|m| (m.id(), &m.manifest.name, m.manifest.api, "module"))
