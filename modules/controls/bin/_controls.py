@@ -64,12 +64,22 @@ def axis(pad, a):
     return pad.bindings.get((BIND_AXIS, a))
 
 
+def first_pad(ctx: Context):
+    if not ctx.pads:
+        raise Skip("no pad held: controls left as they are")
+    return ctx.pads[0]
+
+
 def shoulders(ctx: Context, lb, rb, lt, rt):
     return (lt, rt, lb, rb) if ctx.shoulders == "swapped" else (lb, rb, lt, rt)
 
 
+def held_shoulders(pad):
+    return button(pad, LEFT_SHOULDER), button(pad, RIGHT_SHOULDER), axis(pad, TRIGGER_LEFT), axis(pad, TRIGGER_RIGHT)
+
+
 def pad_shoulders(ctx: Context, pad):
-    return shoulders(ctx, button(pad, LEFT_SHOULDER), button(pad, RIGHT_SHOULDER), axis(pad, TRIGGER_LEFT), axis(pad, TRIGGER_RIGHT))
+    return shoulders(ctx, *held_shoulders(pad))
 
 
 def swap_names(ctx: Context, values, lb, rb, lt, rt):

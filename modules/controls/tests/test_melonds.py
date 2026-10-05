@@ -24,7 +24,7 @@ def test_the_dpad_also_reads_the_left_stick_and_l_r_read_the_bumper_and_the_trig
 
 
 def test_a_trigger_joins_the_bumper_only_as_an_axis():
-    assert _melonds.values_for(Context([EDGE], shoulders="swapped"))["L"] == 9 | TRIGGER | 4 << 24
+    assert _melonds.values_for(Context([EDGE]))["L"] == 9 | TRIGGER | 4 << 24
     assert _melonds.values_for(Context([SWITCH_PRO_DIGITAL]))["L"] == 9
 
 

@@ -1,3 +1,4 @@
+import contextlib
 import importlib
 import json
 import re
@@ -140,7 +141,6 @@ WRITERS = {
         },
         kept=("WindowCount = 1", "[Instance0.Keyboard]", "HK_FastForward = 86048777"),
         layout=both_ways((("A", "B"), ("X", "Y"))),
-        shoulders=dict.fromkeys(("L", "R")),
         taken=lambda text: [v for v in ini_section(text, "Instance0.Joystick").values() if int(v) >= 0 and int(v) & 0xFFFF in UNIVERSE],
     ),
     "mgba": Writer(
@@ -150,7 +150,6 @@ WRITERS = {
         },
         kept=("tiltAxisX=2", "fullscreen=1", "saveState=3"),
         layout=both_ways((("keyA", "keyB"),)),
-        shoulders=dict.fromkeys(("keyL", "keyR")),
         taken=bound(rf"^(?!hat|axis)[\w.]+=({RAW})$"),
     ),
     "snes9x": Writer(
@@ -203,8 +202,6 @@ WRITERS = {
     "ppsspp": Writer(
         seed={"ppsspp/PSP/SYSTEM/controls.ini": "﻿[ControlMapping]\nPause = 1-111,10-109\nFast-forward = 1-61,1-59:10-198\n\n[Other]\nKeep = 10-189\n"},
         kept=("﻿[ControlMapping]", "Pause = 1-111", "Keep = 10-189"),
-        # L and R each read the bumper and the trigger already: the swap has nothing to exchange.
-        shoulders={},
         # HOME (code 4) goes to the PSP's Home: left unbound, it opens PPSSPP's menu.
         taken=bound(r"\b1\d-(19[89]|20[0-3])\b"),
     ),
@@ -280,6 +277,12 @@ def test_a_setting_moves_only_the_bindings_it_names(seeded, setting):
 @pytest.mark.parametrize("seeded", [name for name, w in WRITERS.items() if w.taken], indirect=True)
 def test_universes_buttons_are_never_bound(seeded):
     assert [hit for text in plan(seeded, [EDGE]).values() for hit in WRITERS[seeded].taken(text)] == []
+
+
+@pytest.mark.parametrize("seeded", WRITERS, indirect=True)
+def test_with_no_pad_held_a_writer_skips_or_plans(seeded):
+    with contextlib.suppress(Skip):
+        plan(seeded, [])
 
 
 @pytest.mark.parametrize("name", WRITERS)

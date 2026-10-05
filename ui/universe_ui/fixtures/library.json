@@ -515,7 +515,7 @@
           "scope": "game",
           "choices": ["standard", "swapped"],
           "choice_labels": {"standard": "As on the console", "swapped": "Swapped"},
-          "runners": ["eden", "ryujinx", "dolphin", "cemu", "azahar", "melonds", "mgba", "snes9x", "mupen64plus", "rpcs3", "pcsx2", "duckstation", "ppsspp"]
+          "runners": ["eden", "ryujinx", "dolphin", "cemu", "azahar", "snes9x", "mupen64plus", "rpcs3", "pcsx2", "duckstation"]
         },
         {
           "key": "guide",

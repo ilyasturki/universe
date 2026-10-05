@@ -12,9 +12,10 @@ from _controls import (
     axis,
     button,
     config_home,
+    first_pad,
+    held_shoulders,
     ini_rewrite,
     ini_section,
-    pad_shoulders,
     taken_buttons,
 )
 from _gamepads import BIND_AXIS, BIND_BUTTON, BIND_HAT
@@ -41,7 +42,7 @@ def _raw(binding):
 def bindings(pad, ctx: Context):
     keys = {"A": ctx.face["a"], "B": ctx.face["b"], "Select": BACK, "Start": START}
     out = {f"key{k}": _raw(button(pad, b)) for k, b in keys.items()}
-    lb, rb, lt, rt = pad_shoulders(ctx, pad)
+    lb, rb, lt, rt = held_shoulders(pad)
     for key, inputs in (("L", (lb, lt)), ("R", (rb, rt))):
         out[f"key{key}"] = next((b.index for b in inputs if b and b.kind == BIND_BUTTON), -1)
         a = next((b for b in inputs if b and b.kind == BIND_AXIS), None)
@@ -107,12 +108,13 @@ def plan(ctx: Context):
     path = config_dir() / "config.ini"
     if not path.is_file():
         raise Skip("no mgba/config.ini: start mGBA once, then its controls are written")
+    lead = first_pad(ctx)
     text = path.read_text()
     pads = ctx.pads[:PLAYERS]
     devices = {f"device{n}": p.guid.hex() for n, p in enumerate(pads)}
     stale = [k for k in ini_section(text, SDLB) if k.startswith("device") and k not in devices]
     text = ini_rewrite(text, SDLB, {}, drop=stale)
-    text = _replace_bindings(text, SDLB, bindings(pads[0], ctx), devices)
+    text = _replace_bindings(text, SDLB, bindings(lead, ctx), devices)
     seen = set()
     for pad in pads:
         if pad.guid in seen:

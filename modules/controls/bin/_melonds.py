@@ -13,9 +13,10 @@ from _controls import (
     button,
     config_home,
     first_file,
+    first_pad,
+    held_shoulders,
     ini_section,
     ini_set,
-    pad_shoulders,
     taken_buttons,
 )
 from _gamepads import BIND_AXIS, BIND_BUTTON, BIND_HAT
@@ -88,10 +89,10 @@ def _either(first, second):
 
 
 def values_for(ctx: Context):
-    pad = ctx.pads[0]
+    pad = first_pad(ctx)
     values = {k.upper(): encode(button(pad, b)) for k, b in ctx.face.items()}
     values.update({k: encode(button(pad, b)) for k, b in BUTTONS.items()})
-    lb, rb, lt, rt = pad_shoulders(ctx, pad)
+    lb, rb, lt, rt = held_shoulders(pad)
     values.update({"L": _either(lb, lt), "R": _either(rb, rt)})
     values.update({k: _dpad(pad, *spec) for k, spec in DPAD.items()})
     return values
@@ -105,8 +106,9 @@ def cleared(value, taken):
 
 
 def rewrite(text, ctx: Context):
+    pad = first_pad(ctx)
     values = values_for(ctx)
-    taken = taken_buttons(ctx.pads[0], ctx.guide)
+    taken = taken_buttons(pad, ctx.guide)
     for key, raw in ini_section(text, JOYSTICK).items():
         if key.startswith("HK_") and key not in values:
             try:
@@ -115,7 +117,7 @@ def rewrite(text, ctx: Context):
                 continue
             if cleared(value, taken) != value:
                 values[key] = cleared(value, taken)
-    text = ini_set(text, INSTANCE, {"JoystickID": ctx.pads[0].index}, sep=" = ")
+    text = ini_set(text, INSTANCE, {"JoystickID": pad.index}, sep=" = ")
     return ini_set(text, JOYSTICK, values, sep=" = ")
 
 

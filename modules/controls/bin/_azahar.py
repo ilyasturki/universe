@@ -16,6 +16,7 @@ from _controls import (
     button,
     config_home,
     first_file,
+    first_pad,
     ini_rewrite,
     ini_section,
     pad_shoulders,
@@ -72,7 +73,7 @@ def _stick(device, pad, x, y):
 
 
 def values_for(ctx: Context):
-    pad = ctx.pads[0]
+    pad = first_pad(ctx)
     device = {"engine": "sdl", "guid": pad.guid.hex(), "port": 0}
     values = {f"button_{k}": _param(device, button(pad, b)) for k, b in {**ctx.face, **BUTTONS}.items()}
     held = dict(zip(("button_l", "button_r", "button_zl", "button_zr"), pad_shoulders(ctx, pad), strict=True))

@@ -1,4 +1,4 @@
-from _controls import Context, Skip, config_home, edit_section, first_file, key_of, sections, value_of
+from _controls import Context, Skip, config_home, edit_section, first_file, first_pad, key_of, sections, value_of
 from _gamepads import LABEL_B
 
 SECTION = "ControlMapping"
@@ -72,7 +72,7 @@ def plan(ctx: Context):
     text = path.read_text()
     if SECTION not in sections(text):
         raise Skip("controls.ini has no [ControlMapping]: start PPSSPP once, then its controls are written")
-    pad = ctx.pads[0]
+    pad = first_pad(ctx)
     if 10 + pad.index not in PAD_IDS:
         raise Skip(f"{pad.name} is SDL joystick {pad.index}: PPSSPP numbers only the first ten")
     return {path: edit_section(text, SECTION, lambda lines: rebind(lines, 10 + pad.index, pad, ctx.guide))}

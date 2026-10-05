@@ -51,7 +51,7 @@ description = "Swapped exchanges the two. GameCube L and R then sit on the bumpe
 choice_labels = { standard = "As on the console", swapped = "Swapped" }
 scope = "game"
 choices = ["standard", "swapped"]
-runners = ["eden", "ryujinx", "dolphin", "cemu", "azahar", "melonds", "mgba", "snes9x", "mupen64plus", "rpcs3", "pcsx2", "duckstation", "ppsspp"]
+runners = ["eden", "ryujinx", "dolphin", "cemu", "azahar", "snes9x", "mupen64plus", "rpcs3", "pcsx2", "duckstation"]
 
 [[settings]]
 key = "guide"
