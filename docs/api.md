@@ -779,6 +779,9 @@ on the saves it had, and the state says so. A per-game lock makes the next `pre-
 upload still running, until that deadline. `keep-local` is `--force-upload` (refused with no saves
 on the device), `keep-cloud` `--force-download`.
 
+The **steam** source has no `cloud-saves` capability: Steam Cloud is the client's, and Universe
+does not launch through it (see Steam).
+
 The **epic** source drives `legendary sync-saves <app>`, always with the app name (without one it
 syncs every installed game) and `--save-path`. The folder is the game's `CloudSaveFolder` in
 legendary's metadata cache (`<config_path>/metadata/<app>.json`), resolved as legendary resolves it
@@ -905,6 +908,18 @@ one it makes, which Steam's Proton runs as it is. With `shared_prefix` off, a ga
 on gets a prefix of Universe's own and Universe's Proton. Either way Universe backs the saves up
 (see Game data): under `shared_prefix` they live in Steam's compatdata, which stays where Steam keeps
 it.
+
+Steam Cloud syncs around the sessions the client launches: an `AC Launch,down` sync before the game
+starts, which also records the files there are, and an `up,AC Exit` sync once it ends
+(`logs/cloud_log.txt`). A game Universe launches still reaches the client through `steam_api`, which
+tracks its process (`logs/gameprocess_log.txt`), but no sync runs before it, and the one at its exit
+finds no launch record and skips the files the session added or removed ("No launch record found",
+seen with Spacewar). So no cloud save comes down before a Universe session, and a new save file may
+not go up after it. Nothing is lost under `shared_prefix`: the saves stay in Steam's compatdata,
+which the client's next launch of the game syncs, and the ludusavi backup after each session covers
+them meanwhile. With `shared_prefix` off, the saves sit in Universe's own prefix and never reach
+Steam Cloud; the ludusavi backups alone keep them. Launching through `steam://rungameid/` would
+give up the session's unit, hooks and recording, so Universe does not.
 
 The client has to run for a game to reach it. `pre-launch` starts it when `~/.steam/steam.pid`
 names no live Steam: `systemd-run --user --unit=universe-steam … steam -silent` with the launcher's
