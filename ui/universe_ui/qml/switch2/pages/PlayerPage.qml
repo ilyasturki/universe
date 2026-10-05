@@ -246,10 +246,9 @@ FocusScope {
         visible: !page.stopped && !page.failed
     }
 
-    MediaPlayer {
+    Base.RecordingPlayer {
         id: player
         videoOutput: video
-        audioOutput: AudioOutput {}
         onErrorOccurred: function (error, message) {
             page.wake();
         }

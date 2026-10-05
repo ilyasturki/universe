@@ -595,10 +595,9 @@ FocusScope {
             visible: !page.stopped
         }
 
-        MediaPlayer {
+        RecordingPlayer {
             id: player
             videoOutput: video
-            audioOutput: AudioOutput {}
             onErrorOccurred: function (error, message) {
                 page.wake();
             }
