@@ -39,7 +39,6 @@ def test_ids_are_ryujinxs_guid_text_with_a_count_per_model():
     ]
 
 
-# Ryujinx's SDL3Gamepad re-points A/B/X/Y to the buttons SDL labels so: a token names a label, never a position.
 @pytest.mark.parametrize(
     ("pad", "layout", "abxy"),
     [

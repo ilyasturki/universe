@@ -55,7 +55,6 @@ def test_positional_is_what_edens_own_mapping_writes_less_home():
 
 
 def test_a_pro_3_in_d_input_puts_positionals_letters_on_the_printed_ones():
-    # SDL's HIDAPI 8BitDo driver numbers the face buttons by their print: 0 is the A on the right, 1 the B at the bottom.
     for layout, abxy in (("positional", ["0", "1", "2", "3"]), ("xbox", ["1", "0", "3", "2"])):
         got = player(_eden.values_for(Context([PRO3_DINPUT], layout)))
         assert [params(got[f"button_{k}"])["button"] for k in "abxy"] == abxy
