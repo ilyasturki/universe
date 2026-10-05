@@ -21,7 +21,7 @@ black trimmed. KEYs are the `--keys` phases (Wait, Wait:N, Right, Return…).
                             the system.
 
 A game launched in a take stays off the desktop: an X11 one finds no X server
-outside gamescope, and a unit still up when the UI quits is stopped. Each
+outside gamescope, and a gamescope take stops the game it launched. Each
 `Mark:NAME` key lands in OUT's .marks file as NAME and its time in OUT, in seconds.
 USAGE
 }
@@ -59,27 +59,28 @@ done
 script="$script Wait:2"
 gaps=$((gaps + 2))
 
-game_units() {
-    systemctl --user list-units 'universe-game-*' --all --plain --no-legend 2>/dev/null | awk '{ print $1 }' | sort
-}
-
-# Under the home: a Proton game's container sees the take's MangoHud.conf there, not under /tmp.
-mkdir -p "${XDG_CACHE_HOME:-$HOME/.cache}"
-tmp=$(mktemp -d "${XDG_CACHE_HOME:-$HOME/.cache}/universe-record.XXXXXX")
+tmp_root=${TMPDIR:-/tmp}
+if [ -n "$gamescope" ]; then
+    # Under the home: a Proton game's container sees the take's MangoHud.conf there, not under /tmp.
+    tmp_root=${XDG_CACHE_HOME:-$HOME/.cache}
+    mkdir -p "$tmp_root"
+fi
+tmp=$(mktemp -d "$tmp_root/universe-record.XXXXXX")
 sway_pid=
 rec_pid=
 pw_pid=
-units_before=$(game_units)
-stop_new_units() {
+# The game the take launched, read from its copy of the profile; systemctl waits for its session's end.
+stop_take() {
     local unit
-    for unit in $(comm -13 <(printf '%s\n' "$units_before") <(game_units)); do
-        echo "ui-record: stopping $unit" >&2
-        systemctl --user stop "$unit" || true
-    done
+    [ "${UNIVERSE_STATE_HOME:-}" = "$tmp/profile/state" ] || return 0
+    unit=$("$UNIVERSE_BIN" status --json 2>/dev/null | "$VIRTUAL_ENV/bin/python" -c 'import json, sys; print((json.load(sys.stdin)["current"] or {}).get("unit", ""))' 2>/dev/null) || return 0
+    [ -n "$unit" ] || return 0
+    echo "ui-record: stopping $unit" >&2
+    systemctl --user stop "$unit" || true
 }
 cleanup() {
     [ -n "$rec_pid" ] && kill "$rec_pid" 2>/dev/null
-    stop_new_units
+    stop_take
     [ -n "$sway_pid" ] && kill "$sway_pid" 2>/dev/null
     [ -n "$pw_pid" ] && kill "$pw_pid" 2>/dev/null
     rm -rf "$tmp"
@@ -96,7 +97,7 @@ if [ -n "$gamescope" ]; then
     mkdir -p "$profile"
     for part in data config state cache; do
         var=UNIVERSE_${part^^}_HOME
-        [ -d "${!var}" ] && cp -a "${!var}" "$profile/$part"
+        [ -d "${!var}" ] && cp -a --reflink=auto "${!var}" "$profile/$part"
         export "$var=$profile/$part"
     done
     [ -f "$profile/config/config.toml" ] && sed -i "s|$root/|$profile/|g" "$profile/config/config.toml"
@@ -168,14 +169,16 @@ wf-recorder -y -D -o HEADLESS-1 -r 60 -c libx264rgb -x bgr0 -p preset=ultrafast 
 rec_pid=$!
 
 status=0
+quit_after=$((1200 + gap * (gaps + 8)))
+# --quit-after runs in the UI inside gamescope: one that wedges leaves the outer UI waiting on gamescope for good.
 # shellcheck disable=SC2086
-env "${ui_env[@]}" "$ui_bin" ${UNIVERSE_UI_ARGS---fake --no-gamepad} \
-    "${size_args[@]}" --key-gap "$gap" --keys "$script" --quit-after $((1200 + gap * (gaps + 8))) 2> >(tee "$tmp/ui.log" >&2) || status=$?
+env "${ui_env[@]}" timeout --foreground $((quit_after / 1000 + 90)) "$ui_bin" ${UNIVERSE_UI_ARGS---fake --no-gamepad} \
+    "${size_args[@]}" --key-gap "$gap" --keys "$script" --quit-after "$quit_after" 2> >(tee "$tmp/ui.log" >&2) || status=$?
 
 kill -INT "$rec_pid"
 wait "$rec_pid" || true
 rec_pid=
-stop_new_units
+stop_take
 swaymsg exit >/dev/null 2>&1 || true
 wait "$sway_pid" 2>/dev/null || true
 sway_pid=
