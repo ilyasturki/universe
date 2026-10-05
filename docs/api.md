@@ -738,6 +738,42 @@ times by bit; an unlock without one takes the file's time). Rarity is Steam's gl
 (`GetGlobalAchievementPercentagesForApp`, keyless). A game the client has never loaded has no schema
 yet, and lists nothing. Its `post-process` hook refreshes the cache after every session, as Epic's.
 
+### Cloud saves
+
+A source with the `cloud-saves` capability syncs a game's saves with its store: down in `pre-launch`,
+up in `post-process`, while the game-scope `cloud_saves` setting is on (off by default; the global
+switch is `universe source set <id> cloud_saves=true`, a game's own `--game <name>`). Only a Windows
+build run through Proton or Wine syncs. A sync never settles a conflict by itself: when the saves
+changed on both sides since the last sync, the game launches on the saves it has, the state becomes
+`conflict`, and the player keeps one side through the verb's `keep-local` or `keep-cloud`. The
+ludusavi backup (see Saves) is taken before a game's first sync and before `keep-cloud`, and a
+failed backup stops the sync.
+
+`cloud` = `{"enabled": bool, "state": "", "message": "", "at": "RFC 3339", "locations": [{"name", "path"}]}`.
+`enabled` is the setting for the game; `state` is empty before the first sync, else `synced`,
+`conflict`, `offline` (the store was out of reach), `error` (`message` says why) or `unsupported`
+(the store keeps no cloud saves for the game, or the build is not a Windows one); `locations` are
+the folders the last sync resolved.
+
+The **gog** source drives `gogdl save-sync`. The folders are those of the game's Galaxy client in
+GOG's remote config (`remote-config.gog.com/components/galaxy_client/clients/<client id>`, the id
+read from the install's `goggame-<id>.info`; kept in `cloud-locations.json`), Galaxy's
+`__default` folder when the game names none. Their `<?DOCUMENTS?>`, `<?APPLICATION_DATA_LOCAL?>`,
+`<?APPLICATION_DATA_LOCAL_LOW?>`, `<?APPLICATION_DATA_ROAMING?>`, `<?SAVED_GAMES?>` and
+`<?INSTALL?>` resolve in the game's prefix through its `user.reg` shell folders, so the user folder
+is the one Wine or Proton last wrote there (`steamuser` under Proton), with no Wine process. Each
+folder keeps the timestamp gogdl printed after its last sync in `cloud.json`, which is what gogdl
+compares the files against. gogdl's own rules are worked around: a conflict prints a fresh
+timestamp, so a run that logged `Files in conflict` keeps the old one and flags the game; a side
+that is empty makes gogdl copy the other whatever `--skip-*` says, so the upload after a session
+does not run for an empty folder; a download deletes the local files the cloud lacks, so it runs on
+a copy of the folder that replaces the folder only once gogdl finished. `pre-launch` checks that
+`cloudstorage.gog.com` answers (2 s), runs after comet's start, and stops gogdl at 34 s after the
+hook began, under the hook's 40 s `timeout_s`, which would cancel the launch: the game then starts
+on the saves it had, and the state says so. A per-game lock makes the next `pre-launch` wait for an
+upload still running, until that deadline. `keep-local` is `--force-upload` (refused with no saves
+on the device), `keep-cloud` `--force-download`.
+
 ### Epic Games
 
 The **epic** source drives legendary with `LEGENDARY_CONFIG_PATH` set to its `config_path`
@@ -1832,6 +1868,7 @@ One JSON object per line on stdout, human-readable logs on stderr, meaningful ex
 | `scan` | | `{"event":"game", …}` per installation found (`disk_size` measured) and per stopped download (`installed: false`, `partial_dir`, `partial_bytes`), `owned` crossed with the cached library |
 | `achievements` | `<id>` | `{"event":"achievement", …}` per achievement of the game, an `Achievement` (see Achievements); only asked of a source whose `capabilities` names it |
 | `uninstall` | `<id>` | optional `progress` lines, then `done` once the store has removed the game's files and forgotten the install (nothing to do is no error); only asked of a source whose `capabilities` names it, by `uninstall(id)` instead of trashing `source.dir` |
+| `cloud-saves` | `<id> [status\|download\|upload\|keep-local\|keep-cloud]` | one `{"event":"cloud","enabled","state","message","at","locations"}`, the game's sync state once the action ran (see Cloud saves); `status`, the default, reads what the last sync kept and reaches no network; only asked of a source whose `capabilities` names it, with the game's hook environment (`GAME_ID`, `GAME_DIR`, `UNIVERSE_GAME_JSON`) and its game-scope settings |
 
 ```json
 {"event":"game","id":"1434554947","title":"Mini Metro","dir":"/mnt/games/PC/Mini Metro",

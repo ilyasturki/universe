@@ -14,6 +14,7 @@ SHIM_LOG = "{tmp}/gogdl.log"
 "install <id>" = ["1434554947"]
 "update <id>" = ["1434554947"]
 "achievements <id>" = ["1434554947"]
+"cloud-saves <id>" = ["1434554947", "status"]
 
 [http]
 "https://embed.gog.com/userData.json" = { username = "Yasso" }

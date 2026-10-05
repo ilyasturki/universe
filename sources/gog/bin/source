@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import contextlib
+import fcntl
+import getpass
 import json
 import os
 import queue
@@ -26,6 +28,8 @@ CATALOG_URL = "https://catalog.gog.com/v1/catalog"
 BUILDS_URL = "https://content-system.gog.com/products/{id}/os/{platform}/builds?generation=2"
 ACHIEVEMENTS_URL = "https://gameplay.gog.com/clients/{client}/users/{user}/achievements"
 UMU_URL = "https://umu.openwinecomponents.org/umu_api.php?store=gog&codename={id}"
+REMOTE_CONFIG_URL = "https://remote-config.gog.com/components/galaxy_client/clients/{client}?component_version=2.0.45"
+CLOUD_HOST = "cloudstorage.gog.com"
 GALAXY_CLIENT_ID = "46899977096215655"
 USER_AGENT = "universe-gog/0.1"
 HTTP_TIMEOUT_S = 30
@@ -48,11 +52,25 @@ INFO_RE = re.compile(r"^goggame-(\d+)\.info$")
 LOCALE_RE = re.compile(r"^([a-z]{2})_([A-Z]{2})\b")
 RESUME_FILE = ".gogdl-resume"  # gogdl appends a line per finished file, removes it when the download completes
 SCAN_DEPTH = 5  # a .info can sit under a wine prefix: gog/<slug>/drive_c/GOG Games/<Game>/
+ONLINE_TIMEOUT_S = 2
+PRE_LAUNCH_BUDGET_S = 34  # the hook's timeout_s (40) cancels the launch: the sync ends by then, whatever comet took
+SYNC_MIN_S = 5
+CLOUD_SYNC_TIMEOUT_S = 600
+CONFLICT_MARK = "Files in conflict"  # gogdl logs a conflict, then prints a fresh timestamp as if it synced
+SYNC_FLAGS = {"download": "--skip-upload", "upload": "--skip-download", "keep-local": "--force-upload", "keep-cloud": "--force-download"}
+CLOUD_ACTIONS = ("status", *SYNC_FLAGS)
+SHELL_FOLDERS_KEY = r"[Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders]"
+REG_VALUE_RE = re.compile(r'^"([^"]+)"="(.*)"$')
+LOCATION_VAR_RE = re.compile(r"<\?(\w+)\?>")
 
 _child = None
 
 
 class SourceError(Exception):
+    pass
+
+
+class SyncTimeout(SourceError):
     pass
 
 
@@ -78,6 +96,7 @@ def load_settings():
     settings["scan_dirs"] = [os.path.expanduser(d) for d in dirs] or [settings["games_dir"]]
     settings["install_timeout_s"] = int(settings["install_timeout_s"])
     settings["achievements"] = bool(settings.get("achievements", True))
+    settings["cloud_saves"] = bool(settings.get("cloud_saves", False))
     return settings
 
 
@@ -85,10 +104,10 @@ def platform_args(settings):
     return ["--platform", settings["platform"], "--with-dlcs" if settings["with_dlcs"] else "--skip-dlcs"]
 
 
-def fetch(url, token=None, headers=None):
+def fetch(url, token=None, headers=None, timeout=HTTP_TIMEOUT_S):
     request = urllib.request.Request(url, headers=request_headers(token, headers))
     try:
-        with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_S) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             return json.load(response)
     except (OSError, ValueError) as exc:
         raise SourceError(f"GET {url.split('?')[0]}: {exc}") from exc
@@ -881,6 +900,313 @@ def wants_comet(settings):
     return comet
 
 
+def now_iso():
+    return datetime.now(UTC).astimezone().isoformat(timespec="seconds")
+
+
+def game_context():
+    game = json.loads(os.environ.get("UNIVERSE_GAME_JSON") or "{}")
+    effective = game.get("effective") or {}
+    return {"dir": os.environ.get("GAME_DIR", ""), "prefix": effective.get("prefix") or "", "runner": effective.get("runner_kind") or ""}
+
+
+def wine_root(prefix):
+    pfx = Path(prefix) / "pfx"
+    return pfx if (pfx / "drive_c").is_dir() else Path(prefix)
+
+
+# The prefix names its user folder (steamuser under Proton, the login under Wine; a prefix can hold both).
+def shell_folders(root, runner):
+    values, inside = {}, False
+    with contextlib.suppress(OSError):
+        for line in (root / "user.reg").read_text(errors="replace").splitlines():
+            if line.startswith("["):
+                inside = line.startswith(SHELL_FOLDERS_KEY)
+            elif inside and (found := REG_VALUE_RE.match(line)):
+                values[found.group(1)] = found.group(2).replace("\\\\", "\\")
+
+    def unix(name):
+        drive, _, rest = values.get(name, "").partition(":")
+        return root / "drive_c" / Path(*[p for p in rest.split("\\") if p]) if drive.lower() == "c" and rest.strip("\\") else None
+
+    roaming = unix("AppData")
+    profile = roaming.parent.parent if roaming else root / "drive_c" / "users" / ("steamuser" if runner == "proton" else getpass.getuser())
+    return {
+        "DOCUMENTS": unix("Personal") or profile / "Documents",
+        "APPLICATION_DATA_LOCAL": unix("Local AppData") or profile / "AppData" / "Local",
+        "APPLICATION_DATA_LOCAL_LOW": profile / "AppData" / "LocalLow",
+        "APPLICATION_DATA_ROAMING": roaming or profile / "AppData" / "Roaming",
+        "SAVED_GAMES": profile / "Saved Games",
+    }
+
+
+def resolve_location(location, folders):
+    unknown = []
+
+    def folder(found):
+        if found.group(1) not in folders:
+            unknown.append(found.group(1))
+            return ""
+        return str(folders[found.group(1)])
+
+    path = LOCATION_VAR_RE.sub(folder, location).replace("\\", "/")
+    return None if unknown else Path(os.path.normpath(path))
+
+
+def cloud_client_id(settings, game_id, game_dir):
+    with contextlib.suppress(OSError, ValueError, AttributeError):
+        client = read_info(Path(game_dir) / f"goggame-{game_id}.info").get("clientId")
+        if client:
+            return str(client)
+    return game_client(settings, game_id)["client_id"]
+
+
+def locations_path():
+    return data_dir() / "cloud-locations.json"
+
+
+# Galaxy's remote config per client: the folders it syncs, none when the game keeps no cloud saves; kept once asked.
+def cloud_locations(client_id, deadline):
+    cache = load_json(locations_path())
+    cache = cache if isinstance(cache, dict) else {}
+    if client_id not in cache:
+        timeout = max(min(HTTP_TIMEOUT_S, deadline - time.monotonic()), 1)
+        content = fetch(REMOTE_CONFIG_URL.format(client=client_id), timeout=timeout).get("content") or {}
+        storage = (content.get("Windows") or {}).get("cloudStorage") or {}
+        listed = [{"name": loc["name"], "location": loc["location"]} for loc in storage.get("locations") or [] if loc.get("name") and loc.get("location")]
+        default = [{"name": "__default", "location": f"<?APPLICATION_DATA_LOCAL?>/GOG.com/Galaxy/Applications/{client_id}/Storage/Shared/Files"}]
+        cache[client_id] = (listed or default) if storage.get("enabled") else []
+        save_json(locations_path(), cache)
+    return cache[client_id]
+
+
+def cloud_path():
+    return data_dir() / "cloud.json"
+
+
+def cloud_entry(game_id):
+    states = load_json(cloud_path())
+    entry = states.get(game_id) if isinstance(states, dict) else None
+    return entry if isinstance(entry, dict) else {}
+
+
+def update_cloud(game_id, **fields):
+    with open(data_dir() / "cloud.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        states = load_json(cloud_path())
+        states = states if isinstance(states, dict) else {}
+        states[game_id] = {**(states.get(game_id) or {}), **fields}
+        save_json(cloud_path(), states)
+    return states[game_id]
+
+
+@contextlib.contextmanager
+def game_lock(game_id, deadline):
+    with open(data_dir() / f"cloud-{game_id}.lock", "w") as lock:
+        while True:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise SyncTimeout("another sync of this game is still running") from None
+                time.sleep(0.2)
+        yield
+
+
+def reachable(host):
+    with contextlib.suppress(OSError), socket.create_connection((host, 443), timeout=ONLINE_TIMEOUT_S):
+        return True
+    return False
+
+
+def has_files(folder):
+    return folder.is_dir() and any(files for _root, _dirs, files in os.walk(folder))
+
+
+def backup_saves(deadline):
+    try:
+        proc = subprocess.run(
+            [os.environ["UNIVERSE_BIN"], "saves", "backup", os.environ["GAME_ID"], "--json"],
+            capture_output=True,
+            text=True,
+            timeout=max(deadline - time.monotonic(), 1),
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return "the backup did not finish in time"
+    except (OSError, KeyError) as exc:
+        return str(exc)
+    return "" if proc.returncode == 0 else (proc.stderr.strip().splitlines() or [f"exit {proc.returncode}"])[-1]
+
+
+def save_sync(settings, game_id, path, name, ts, flag, deadline):
+    global _child  # noqa: PLW0603
+    command = gogdl_command(settings, "save-sync", str(path), game_id, "--os", "windows", "--ts", ts, "--name", name, flag)
+    try:
+        proc = subprocess.Popen(command, env=gogdl_env(), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, errors="replace", start_new_session=True)
+    except FileNotFoundError:
+        raise SourceError("gogdl is not installed") from None
+    _child = proc
+    try:
+        out, err = proc.communicate(timeout=max(deadline - time.monotonic(), 0.1))
+    except subprocess.TimeoutExpired:
+        kill_group(proc)
+        raise SyncTimeout("gogdl save-sync ran out of time, killed") from None
+    finally:
+        _child = None
+    for line in err.splitlines():
+        log(line)
+    if proc.returncode != 0:
+        raise SourceError(f"gogdl save-sync failed (exit {proc.returncode})")
+    if CONFLICT_MARK in err:
+        return None
+    try:
+        float(out.strip())
+    except ValueError:
+        raise SourceError("gogdl save-sync printed no timestamp") from None
+    return out.strip()
+
+
+def same_file(a, b):
+    with contextlib.suppress(OSError):
+        sa, sb = a.stat(), b.stat()
+        return sa.st_size == sb.st_size and sa.st_mtime_ns == sb.st_mtime_ns
+    return False
+
+
+# A download lands in a copy first: gogdl killed at the deadline leaves the saves whole, and the copy goes in only once it finished.
+def mirror(stage, folder):
+    kept = set()
+    for root, _dirs, files in os.walk(stage):
+        for name in files:
+            src = Path(root) / name
+            rel = src.relative_to(stage)
+            kept.add(rel)
+            dest = folder / rel
+            if not same_file(src, dest):
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                tmp = dest.with_name(f".{dest.name}.universe")
+                shutil.copy2(src, tmp)
+                tmp.replace(dest)
+    for root, _dirs, files in os.walk(folder):
+        for name in files:
+            path = Path(root) / name
+            if path.relative_to(folder) not in kept:
+                path.unlink()
+
+
+def sync_location(settings, game_id, name, path, ts, action, deadline):
+    if action not in ("download", "keep-cloud"):
+        return save_sync(settings, game_id, path, name, ts, SYNC_FLAGS[action], deadline)
+    stage = data_dir() / "staging" / game_id / name
+    shutil.rmtree(stage, ignore_errors=True)
+    try:
+        if path.is_dir():
+            shutil.copytree(path, stage, symlinks=True)
+        else:
+            stage.mkdir(parents=True)
+        stamp = save_sync(settings, game_id, stage, name, ts, SYNC_FLAGS[action], deadline)
+        if stamp is not None:
+            mirror(stage, path)
+        return stamp
+    finally:
+        shutil.rmtree(stage, ignore_errors=True)
+
+
+def run_sync(settings, game_id, action, deadline):
+    ctx = game_context()
+    if ctx["runner"] not in ("proton", "wine"):
+        return update_cloud(game_id, state="unsupported", message="Only a Windows build run through Proton or Wine syncs its saves.", at=now_iso())
+    root = wine_root(ctx["prefix"]) if ctx["prefix"] else None
+    if root is None or not (root / "drive_c").is_dir():
+        log("the prefix is not made yet: the saves sync after the session")
+        return cloud_entry(game_id)
+    if not reachable(CLOUD_HOST):
+        return update_cloud(game_id, state="offline", message="GOG could not be reached.", at=now_iso())
+    locations = cloud_locations(cloud_client_id(settings, game_id, ctx["dir"]), deadline)
+    if not locations:
+        return update_cloud(game_id, state="unsupported", message="GOG keeps no cloud saves for this game.", at=now_iso())
+    folders = {**shell_folders(root, ctx["runner"]), "INSTALL": Path(ctx["dir"])}
+    paths = {}
+    for loc in locations:
+        path = resolve_location(loc["location"], folders)
+        if path is None:
+            raise SourceError(f"{loc['location']} names a folder Universe does not know")
+        paths[loc["name"]] = path
+    places = [{"name": name, "path": str(path)} for name, path in paths.items()]
+    local = any(has_files(p) for p in paths.values())
+    if action == "keep-local" and not local:
+        raise SourceError("there are no saves on this device to keep")
+    entry = cloud_entry(game_id)
+    if local and (action == "keep-cloud" or ("ts" not in entry and action != "keep-local")):
+        why = backup_saves(deadline)
+        if why:
+            raise SourceError(f"the saves could not be backed up, so nothing synced: {why}")
+    ts = dict(entry.get("ts") or {})
+    conflict = False
+    for name, path in paths.items():
+        if action == "upload" and not has_files(path):
+            continue
+        stamp = sync_location(settings, game_id, name, path, ts.get(name, "0"), action, deadline)
+        if stamp is None:
+            conflict = True
+        else:
+            ts[name] = stamp
+    if conflict:
+        message = "The saves changed on this device and in the cloud since they last synced."
+        return update_cloud(game_id, ts=ts, state="conflict", message=message, at=now_iso(), locations=places)
+    return update_cloud(game_id, ts=ts, state="synced", message="", at=now_iso(), locations=places)
+
+
+def cloud_sync(settings, game_id, action, deadline):
+    try:
+        with game_lock(game_id, deadline):
+            return run_sync(settings, game_id, action, deadline)
+    except SyncTimeout as exc:
+        late = "The cloud saves did not come down in time: the game started with the saves on this device."
+        update_cloud(game_id, state="error", message=late if action == "download" else str(exc), at=now_iso())
+        raise
+    except SourceError as exc:
+        update_cloud(game_id, state="error", message=str(exc), at=now_iso())
+        raise
+    except (OSError, subprocess.SubprocessError) as exc:
+        update_cloud(game_id, state="error", message=str(exc), at=now_iso())
+        raise SourceError(str(exc)) from exc
+
+
+def sync_hook(settings, action, deadline):
+    game_id = os.environ.get("SOURCE_GAME_ID", "")
+    if not game_id:
+        return
+    if deadline - time.monotonic() < SYNC_MIN_S:
+        update_cloud(game_id, state="error", message="The launch left no time to bring the cloud saves down.", at=now_iso())
+        return
+    try:
+        cloud_sync(settings, game_id, action, deadline)
+    except SourceError as exc:
+        log(f"cloud saves: {exc}")
+
+
+def cmd_cloud_saves(settings, args):
+    game_id = require_id(args, "cloud-saves")
+    action = args[1] if len(args) > 1 else "status"
+    if action not in CLOUD_ACTIONS:
+        raise SourceError(f"usage: cloud-saves <id> [{'|'.join(CLOUD_ACTIONS)}]")
+    if action != "status":
+        cloud_sync(settings, game_id, action, time.monotonic() + CLOUD_SYNC_TIMEOUT_S)
+    entry = cloud_entry(game_id)
+    emit(
+        "cloud",
+        enabled=settings["cloud_saves"],
+        state=entry.get("state") or "",
+        message=entry.get("message") or "",
+        at=entry.get("at") or "",
+        locations=entry.get("locations") or [],
+    )
+    emit("done")
+
+
 def hook_check(settings):
     """doctor's lines: the login, and comet while achievements are on."""
     auth = settings["auth_path"]
@@ -901,6 +1227,13 @@ def hook_check(settings):
 
 
 def hook_pre_launch(settings):
+    started = time.monotonic()
+    start_session_comet(settings)
+    if settings["cloud_saves"]:
+        sync_hook(settings, "download", started + PRE_LAUNCH_BUDGET_S)
+
+
+def start_session_comet(settings):
     comet = wants_comet(settings)
     if comet is None:
         return
@@ -1001,6 +1334,8 @@ def hook_session_end(settings):
 
 
 def hook_post_process(settings):
+    if settings["cloud_saves"]:
+        sync_hook(settings, "upload", time.monotonic() + CLOUD_SYNC_TIMEOUT_S)
     if not settings["achievements"] or not has_galaxy(os.environ.get("GAME_DIR", "")):
         return
     proc = subprocess.run(
@@ -1020,6 +1355,7 @@ VERBS = {
     "update": cmd_update,
     "scan": cmd_scan,
     "achievements": cmd_achievements,
+    "cloud-saves": cmd_cloud_saves,
 }
 
 # Run by bin/<hook>: a session goes on whatever they meet, so each logs and returns.

@@ -4,7 +4,7 @@ name = "GOG"
 version = "0.0.10"
 description = "Installs and updates the games of your GOG account through gogdl; unlocks their achievements through comet."
 exe = "bin/source"
-capabilities = ["achievements"]
+capabilities = ["achievements", "cloud-saves"]
 
 [requires]
 bins = ["gogdl"]
@@ -34,6 +34,15 @@ type = "bool"
 default = true
 label = "Achievements"
 description = "Comet stands in for GOG Galaxy, so games unlock theirs."
+scope = "game"
+
+[[settings]]
+key = "cloud_saves"
+type = "bool"
+default = false
+label = "Cloud saves"
+description = "Saves come down from GOG before a session and go up after it."
+keywords = ["cloud", "sync", "saves"]
 scope = "game"
 
 [[settings]]

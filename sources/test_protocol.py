@@ -28,8 +28,10 @@ FORMS = {
     "scan": ({"game"}, set()),
     "achievements <id>": ({"achievement"}, set()),
     "uninstall <id>": ({"progress"}, set()),
+    "cloud-saves <id>": ({"cloud"}, {"cloud"}),
 }
-CAPABILITIES = {"achievements", "uninstall"}
+CAPABILITIES = {"achievements", "uninstall", "cloud-saves"}
+CLOUD_STATES = {"", "synced", "conflict", "offline", "error", "unsupported"}
 
 NULL = type(None)
 REQUIRED = {
@@ -50,6 +52,7 @@ REQUIRED = {
         "rarity": (int, float, NULL),
     },
     "window": {"class": str, "title": str},
+    "cloud": {"enabled": bool, "state": str, "message": str, "at": str},
 }
 # Read by the core when present: a value of another type is dropped, or drops the whole line.
 OPTIONAL = {
@@ -163,6 +166,9 @@ def check_event(event):
         assert not event["installed"] or event.get("dir"), "an installed game names its folder"
         assert not os.path.isabs(event.get("exe") or ""), "exe is relative to dir"
         assert "partial_dir" not in event or event["installed"] is False, "a stopped download is not installed"
+    if name == "cloud":
+        assert event["state"] in CLOUD_STATES, f"cloud.state is {event['state']!r}"
+        assert all(isinstance(p, dict) and isinstance(p.get("name"), str) and isinstance(p.get("path"), str) for p in event.get("locations", [])), "cloud.locations"
 
 
 @pytest.mark.parametrize(("folder", "form"), CASES)

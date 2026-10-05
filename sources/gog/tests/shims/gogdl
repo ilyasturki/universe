@@ -13,10 +13,76 @@ if verb == "auth":
     token = f"tok-{args[args.index('--client-id') + 1]}" if "--client-id" in args else "tok"
     print(json.dumps({"access_token": token, "refresh_token": "r", "user_id": "4242", "expires_in": 3600, "loginTime": 1} if ok else {"error": True}))
 elif verb == "info":
-    print(json.dumps({"buildId": "B2", "folder_name": "Mini Metro",
-                      "size": {"*": {"download_size": 700, "disk_size": 1000}, "en-US": {"download_size": 100, "disk_size": 200},
-                               "fr-FR": {"download_size": 50, "disk_size": 60}},
-                      "dlcs": [{"id": "77", "size": {"*": {"download_size": 10, "disk_size": 20}}}]}))
+    print(
+        json.dumps(
+            {
+                "buildId": "B2",
+                "folder_name": "Mini Metro",
+                "size": {
+                    "*": {"download_size": 700, "disk_size": 1000},
+                    "en-US": {"download_size": 100, "disk_size": 200},
+                    "fr-FR": {"download_size": 50, "disk_size": 60},
+                },
+                "dlcs": [{"id": "77", "size": {"*": {"download_size": 10, "disk_size": 20}}}],
+            }
+        )
+    )
+elif verb == "save-sync":
+    # gogdl 1.3.0's saves.py over a folder standing in for the cloud: SHIM_CLOUD/<name>.
+    import shutil
+
+    if os.environ.get("SHIM_SYNC") == "hang":
+        time.sleep(60)
+    if os.environ.get("SHIM_SYNC") == "fail":
+        sys.exit(1)
+    local, ts = Path(args[1]), float(args[args.index("--ts") + 1])
+    cloud = Path(os.environ["SHIM_CLOUD"]) / args[args.index("--name") + 1]
+    prefer = next((a for a in args if a in ("--skip-upload", "--skip-download", "--force-upload", "--force-download")), None)
+    local.mkdir(parents=True, exist_ok=True)
+
+    def files(root):
+        return {str(p.relative_to(root)): p for p in root.rglob("*") if p.is_file()} if root.is_dir() else {}
+
+    def copy(src, dest):
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)
+
+    mine, theirs = files(local), files(cloud)
+    if mine and not theirs:
+        action = "upload_all"
+    elif theirs and not mine:
+        action = "download_all"
+    else:
+        up = [k for k, p in mine.items() if p.stat().st_mtime > ts]
+        down = [k for k, p in theirs.items() if p.stat().st_mtime > ts]
+        action = "download" if down and not up else "upload" if up and not down else "none" if not up and not down else "conflict"
+        if prefer == "--force-upload":
+            action, up = "upload", list(mine)
+        elif prefer == "--force-download":
+            action, down = "download", list(theirs)
+        elif (prefer, action) in (("--skip-download", "download"), ("--skip-upload", "upload")):
+            print("[SAVES] WARNING: Refused, newer files on the other side", file=sys.stderr)
+            print(args[args.index("--ts") + 1])
+            sys.exit(0)
+    if action == "upload_all":
+        for k, p in mine.items():
+            copy(p, cloud / k)
+    elif action == "download_all":
+        for k, p in theirs.items():
+            copy(p, local / k)
+    elif action == "upload":
+        for k in up:
+            copy(mine[k], cloud / k)
+        for k in set(theirs) - set(mine):
+            theirs[k].unlink()
+    elif action == "download":
+        for k in down:
+            copy(theirs[k], local / k)
+        for k in set(mine) - set(theirs):
+            mine[k].unlink()
+    elif action == "conflict":
+        print("[SAVES] WARNING: Files in conflict force downloading or uploading of files", file=sys.stderr)
+    sys.stdout.write(str(time.time()))
 elif verb in ("download", "update"):
     mode = os.environ.get("SHIM_MODE", "ok")
     if mode == "critical":
@@ -35,17 +101,23 @@ elif verb in ("download", "update"):
         time.sleep(60)
         sys.exit(0)
     for pct, done in (("0.00", 0), ("50.00", 500), ("100.00", 1000)):
-        print(f"[PROGRESS] INFO: = Progress: {pct} {done}/1000, Running for: 00:00:01, ETA: 00:00:01",
-              file=sys.stderr, flush=True)
+        print(f"[PROGRESS] INFO: = Progress: {pct} {done}/1000, Running for: 00:00:01, ETA: 00:00:01", file=sys.stderr, flush=True)
     print("(0.001, 'MB') 1000")
     game_id = args[1]
     folder = Path(args[args.index("--path") + 1])
     if verb == "download":
         folder = folder / "Mini Metro"
     folder.mkdir(parents=True, exist_ok=True)
-    (folder / f"goggame-{game_id}.info").write_text(json.dumps({
-        "gameId": game_id, "rootGameId": game_id, "name": "Mini Metro",
-        "buildId": os.environ.get("SHIM_BUILD", "B2"),
-        "playTasks": [{"isPrimary": True, "type": "FileTask", "path": "Mini Metro.exe"}]}))
+    (folder / f"goggame-{game_id}.info").write_text(
+        json.dumps(
+            {
+                "gameId": game_id,
+                "rootGameId": game_id,
+                "name": "Mini Metro",
+                "buildId": os.environ.get("SHIM_BUILD", "B2"),
+                "playTasks": [{"isPrimary": True, "type": "FileTask", "path": "Mini Metro.exe"}],
+            }
+        )
+    )
     (folder / ".gogdl-resume").unlink(missing_ok=True)
     sys.exit(int(os.environ.get("SHIM_EXIT", "0")))
