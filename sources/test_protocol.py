@@ -168,7 +168,9 @@ def check_event(event):
         assert "partial_dir" not in event or event["installed"] is False, "a stopped download is not installed"
     if name == "cloud":
         assert event["state"] in CLOUD_STATES, f"cloud.state is {event['state']!r}"
-        assert all(isinstance(p, dict) and isinstance(p.get("name"), str) and isinstance(p.get("path"), str) for p in event.get("locations", [])), "cloud.locations"
+        assert all(isinstance(p, dict) and isinstance(p.get("name"), str) and isinstance(p.get("path"), str) for p in event.get("locations", [])), (
+            "cloud.locations"
+        )
 
 
 @pytest.mark.parametrize(("folder", "form"), CASES)
