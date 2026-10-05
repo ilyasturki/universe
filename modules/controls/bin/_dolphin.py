@@ -100,7 +100,7 @@ def hints():
 
 
 def devices(pads):
-    return [f"SDL/{n}/{p.name}" for n, p in zip(ordinals([p.name for p in pads]), pads, strict=True)]
+    return [f"SDL/{n}/{p.name}" for n, p in zip(ordinals(pads, lambda p: p.name), pads, strict=True)]
 
 
 def _face(ctx: Context, pad):

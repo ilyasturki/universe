@@ -20,8 +20,7 @@ def ryujinx_guid(g):
 
 
 def ids(pads):
-    keys = [ryujinx_guid(p.guid) for p in pads]
-    return [f"{n}-{g}" for n, g in zip(ordinals(keys), keys, strict=True)]
+    return [f"{n}-{ryujinx_guid(p.guid)}" for n, p in zip(ordinals(pads, lambda p: ryujinx_guid(p.guid)), pads, strict=True)]
 
 
 def _face(pad, button):

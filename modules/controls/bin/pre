@@ -109,6 +109,7 @@ def main():
     if not pads:
         log("no pad held: controls left as they are")
         return 0
+    pads = _gamepads.lead_first(pads, _mapping.active_device())
     ctx = Context(
         pads=pads,
         layout=settings.get("layout") if settings.get("layout") in FACE else "positional",

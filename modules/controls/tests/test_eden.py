@@ -80,6 +80,7 @@ def test_players_follow_the_pads_and_the_rest_are_unplugged():
     pads = [EDGE, XBOX, twin(EDGE)]
     got = _eden.values_for(Context(pads, "positional", False))
     assert _eden.ports(pads) == [0, 0, 1]
+    assert _eden.ports([twin(EDGE), XBOX, EDGE]) == [1, 0, 0], "a twin made player 1 keeps its port"
     assert params(got["player_2_button_a"])["port"] == "1"
     assert params(got["player_1_button_a"])["guid"] == "050000005e0400008e02000030110000"
     assert [got[f"player_{n}_connected"] for n in range(8)] == ["true"] * 3 + ["false"] * 5

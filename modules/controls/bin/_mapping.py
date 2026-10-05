@@ -28,9 +28,20 @@ def lines(pads, guide=False):
     return out
 
 
+def runtime_dir():
+    return Path(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}") / "universe"
+
+
 def path(session_id):
-    runtime = Path(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}")
-    return runtime / "universe" / f"controls-{session_id}.txt"
+    return runtime_dir() / f"controls-{session_id}.txt"
+
+
+def active_device():
+    """The pad a button was last pressed on, as the core's controller watcher records it."""
+    try:
+        return (runtime_dir() / "active-pad").read_text().strip()
+    except OSError:
+        return ""
 
 
 def text(pads, guide=False, databases=()):

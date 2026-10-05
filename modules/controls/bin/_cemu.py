@@ -42,8 +42,7 @@ def hints():
 
 
 def uuids(pads):
-    keys = [p.guid.hex() for p in pads]
-    return [f"{n}_{g}" for n, g in zip(ordinals(keys), keys, strict=True)]
+    return [f"{n}_{p.guid.hex()}" for n, p in zip(ordinals(pads, lambda p: p.guid), pads, strict=True)]
 
 
 def mappings(ctx: Context, pad, kind):

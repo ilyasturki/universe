@@ -1270,7 +1270,11 @@ their writers never bind those buttons. Xenia runs through Proton, whose own SDL
 nothing is done for it.
 
 The emulators with pad identities or player slots in their config get them written, the way the
-emulator's own auto-mapping would, player `n` being the `n`th pad in SDL's order:
+emulator's own auto-mapping would. Player 1 is the pad a button was last pressed on, the one the
+player drives Universe with (`active-pad`, matched to the sysfs device SDL's hidraw or evdev node for
+a pad hangs off); the others follow in SDL's order, the order they connected in, as they all do
+when nothing was pressed yet. Twins (pads of one model) keep the numbers SDL gives them, whichever
+player they are:
 
 | Runner | File | Written |
 |---|---|---|

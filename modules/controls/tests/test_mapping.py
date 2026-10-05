@@ -1,3 +1,4 @@
+import _gamepads
 import _mapping
 from controls_fixtures import EDGE, PRO3_DINPUT, SWITCH_PRO, XBOX, twin
 
@@ -34,3 +35,17 @@ def test_one_line_per_model_after_the_emulators_databases(tmp_path):
     assert lines[0] == "# a comment" and lines[1].endswith(",Old,a:b1,guide:b5,platform:Linux,")
     assert [line.split(",", 1)[0] for line in lines[2:]] == [p.guid.hex() for p in (EDGE, XBOX, SWITCH_PRO)]
     assert "guide" not in lines[-1] and "misc1" not in lines[-1]
+
+
+def test_a_pads_device_is_the_sysfs_device_its_hidraw_or_evdev_node_hangs_off(tmp_path):
+    hid = tmp_path / "devices/virtual/misc/uhid/0005:2DC8:6009.000E"
+    (hid / "input/input37/event257").mkdir(parents=True)
+    (hid / "hidraw/hidraw11").mkdir(parents=True)
+    for cls, node, target in (("input", "event257", hid / "input/input37/event257"), ("hidraw", "hidraw11", hid / "hidraw/hidraw11")):
+        (tmp_path / "class" / cls).mkdir(parents=True, exist_ok=True)
+        (tmp_path / "class" / cls / node).symlink_to(target)
+    (hid / "input/input37/event257/device").symlink_to(hid / "input/input37")
+    (hid / "input/input37/device").symlink_to(hid)
+    (hid / "hidraw/hidraw11/device").symlink_to(hid)
+    assert _gamepads.device_of("/dev/input/event257", tmp_path) == _gamepads.device_of("/dev/hidraw11", tmp_path) == str(hid)
+    assert _gamepads.device_of("/dev/input/event9", tmp_path) == _gamepads.device_of("", tmp_path) == ""

@@ -72,7 +72,7 @@ def eden_guid(guid):
 
 def ports(pads):
     """Eden numbers pads sharing a GUID in the order SDL adds them."""
-    return ordinals([eden_guid(p.guid) for p in pads])
+    return ordinals(pads, lambda p: eden_guid(p.guid))
 
 
 def _param(head, binding):

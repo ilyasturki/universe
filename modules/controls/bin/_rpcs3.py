@@ -57,7 +57,7 @@ def databases():
 
 
 def devices(pads):
-    return [f"{p.name} {n + 1}" for n, p in zip(ordinals([p.name for p in pads]), pads, strict=True)]
+    return [f"{p.name} {n + 1}" for n, p in zip(ordinals(pads, lambda p: p.name), pads, strict=True)]
 
 
 def _unquote(value):

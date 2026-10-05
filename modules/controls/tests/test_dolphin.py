@@ -71,6 +71,9 @@ def test_devices_count_pads_of_the_same_name():
         "SDL/0/Xbox Wireless Controller",
         "SDL/1/DualSense Edge Wireless Controller",
     ]
+    assert _dolphin.devices([twin(EDGE), XBOX, EDGE])[::2] == ["SDL/1/DualSense Edge Wireless Controller", "SDL/0/DualSense Edge Wireless Controller"], (
+        "a twin made player 1 keeps the number SDL gave it"
+    )
 
 
 def test_gamecube_follows_the_layout_and_keeps_the_users_settings(dolphin):

@@ -39,6 +39,7 @@ EDGE = Pad(
     player_index=0,
     axes=6,
     labels=(5, 6, 7, 8),
+    device="/sys/devices/virtual/misc/uhid/0005:054C:0DF2.0003",
     mapping="0500e0274c050000f20d000000006800,*,a:b0,b:b1,back:b4,dpdown:h0.4,dpleft:h0.8,dpright:h0.2,dpup:h0.1,guide:b5,"
     "leftshoulder:b9,leftstick:b7,lefttrigger:a4,leftx:a0,lefty:a1,rightshoulder:b10,rightstick:b8,righttrigger:a5,rightx:a2,righty:a3,"
     "start:b6,x:b2,y:b3,touchpad:b11,misc1:b12,paddle1:b16,paddle2:b15,paddle3:b14,paddle4:b13,crc:27e0,platform:Linux,",
@@ -123,6 +124,7 @@ PRO3_DINPUT = Pad(
     player_index=3,
     axes=6,
     labels=(2, 1, 4, 3),
+    device="/sys/devices/virtual/misc/uhid/0005:2DC8:6009.000E",
     mapping="0500546cc82d00000960000000006800,*,a:b1,b:b0,back:b4,dpdown:h0.4,dpleft:h0.8,dpright:h0.2,dpup:h0.1,guide:b5,"
     "leftshoulder:b9,leftstick:b7,lefttrigger:a4,leftx:a0,lefty:a1,rightshoulder:b10,rightstick:b8,righttrigger:a5,rightx:a2,righty:a3,"
     "start:b6,x:b3,y:b2,hint:!SDL_GAMECONTROLLER_USE_BUTTON_LABELS:=1,paddle1:b12,paddle2:b11,paddle3:b14,paddle4:b13,crc:6c54,platform:Linux,",
@@ -156,7 +158,7 @@ PRO3_XINPUT = Pad(
 
 
 def twin(pad):
-    return Pad(**{**vars(pad), "index": pad.index + 10, "player_index": pad.player_index + 10})
+    return Pad(**{**vars(pad), "index": pad.index + 10, "player_index": pad.player_index + 10, "device": pad.device + "-twin"})
 
 
 def script(name):

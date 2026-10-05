@@ -43,6 +43,7 @@ _SIGNATURES = {
     "SDL_GetJoysticks": (ctypes.POINTER(ctypes.c_uint32), [ctypes.POINTER(ctypes.c_int)]),
     "SDL_GetJoystickGUIDForID": (_GUID, [ctypes.c_uint32]),
     "SDL_GetJoystickNameForID": (ctypes.c_char_p, [ctypes.c_uint32]),
+    "SDL_GetJoystickPathForID": (ctypes.c_char_p, [ctypes.c_uint32]),
     "SDL_GetJoystickPlayerIndexForID": (ctypes.c_int, [ctypes.c_uint32]),
     "SDL_GetJoystickTypeForID": (ctypes.c_int, [ctypes.c_uint32]),
     "SDL_IsGamepad": (ctypes.c_bool, [ctypes.c_uint32]),
@@ -74,6 +75,19 @@ class Pad:
     # The labels printed on SOUTH, EAST, WEST, NORTH.
     labels: tuple = (LABEL_A, LABEL_B, LABEL_X, LABEL_Y)
     mapping: str = ""
+    # The sysfs device SDL's node for the pad (hidraw or evdev) hangs off, as the controller watcher names the pad last pressed.
+    device: str = ""
+
+
+def device_of(path, sysfs="/sys"):
+    name = os.path.basename(path or "")
+    link = os.path.join(sysfs, "class/hidraw", name, "device") if name.startswith("hidraw") else os.path.join(sysfs, "class/input", name, "device/device")
+    return os.path.realpath(link) if name and os.path.exists(link) else ""
+
+
+def lead_first(pads, device):
+    """Player 1 is the pad last pressed; the others keep SDL's order, the order they connected in."""
+    return sorted(pads, key=lambda p: not device or p.device != device)
 
 
 def load():
@@ -134,6 +148,7 @@ def _pad(sdl, jid, index, handle):
         axes=sdl.SDL_GetNumJoystickAxes(joystick) if joystick else 0,
         labels=tuple(sdl.SDL_GetGamepadButtonLabel(handle, b) for b in range(4)),
         mapping=_string(sdl, sdl.SDL_GetGamepadMapping(handle)),
+        device=device_of((sdl.SDL_GetJoystickPathForID(jid) or b"").decode(errors="replace")),
     )
 
 

@@ -48,8 +48,9 @@ def data_home():
     return Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share")
 
 
-def ordinals(keys):
-    return [keys[:i].count(k) for i, k in enumerate(keys)]
+def ordinals(pads, key):
+    """How many pads sharing a pad's `key` SDL lists before it: emulators number twins in SDL's order, not the players'."""
+    return [sum(1 for q in pads if key(q) == key(p) and q.index < p.index) for p in pads]
 
 
 def first_file(*candidates):

@@ -2,7 +2,7 @@ import json
 
 import pytest
 from _controls import ini_section
-from controls_fixtures import EDGE, script
+from controls_fixtures import EDGE, PRO3_DINPUT, script
 
 INI = """[Controls]
 player_0_button_a\\default=true
@@ -103,3 +103,13 @@ def test_the_shoulders_setting_reaches_the_writer(hook, monkeypatch):
     monkeypatch.setenv("MODULE_SETTINGS_JSON", json.dumps({"shoulders": "swapped"}))
     assert hook(EDEN) == 0
     assert ",axis:4," in ini_section(hook.ini.read_text(), "Controls")["player_0_button_l"]
+
+
+def test_the_pad_last_pressed_is_player_one_and_the_rest_keep_sdls_order(hook, monkeypatch, tmp_path):
+    monkeypatch.setattr(hook.pre._gamepads, "pads", lambda _hints: [EDGE, PRO3_DINPUT])
+    guid = lambda n: ini_section(hook.ini.read_text(), "Controls")[f"player_{n}_button_a"].split("guid:")[1].split(",")[0]
+    assert hook(EDEN) == 0
+    assert [guid(0)[8:12], guid(1)[8:12]] == ["4c05", "c82d"], "nothing pressed yet: SDL's order"
+    (tmp_path / "run" / "universe" / "active-pad").write_text(PRO3_DINPUT.device + "\n")
+    assert hook(EDEN) == 0
+    assert [guid(0)[8:12], guid(1)[8:12]] == ["c82d", "4c05"]
