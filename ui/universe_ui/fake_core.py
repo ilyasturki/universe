@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from .errors import UniverseError
+from .fake_radios import FakeBluetooth, FakeWifi
 
 FIXTURE = Path(__file__).parent / "fixtures" / "library.json"
 LAUNCH_KEYS = Path(__file__).parent / "fixtures" / "launch_keys.json"
@@ -453,6 +454,8 @@ class FakeCore:
             {"id": "alsa_card.pci-0000_00_1f.3/analog-output-headphones", "label": "Headphones", "device": "Built-in Audio", "current": False},
             {"id": "alsa_card.pci-0000_01_00.1/hdmi-output-0", "label": "HDMI / DisplayPort", "device": "TV", "current": False},
         ]
+        self.wifi = FakeWifi(self._later, lambda: STEP_S)
+        self.bt = FakeBluetooth(self._later, lambda: STEP_S, self.session)
         self.power_list = ["suspend", "reboot", "power_off"]
         self.powered = []
         self.power_error = ""
@@ -1461,6 +1464,16 @@ class FakeCore:
         for o in self.outputs_list:
             o["current"] = o["id"] == id
         return self.volume("get")
+
+    def network(self):
+        return self.wifi.state()
+
+    def bluetooth(self):
+        return self.bt.state()
+
+    # `universe network|bluetooth watch --json` as the fixture plays them: each line to `emit`, commands to the handle's `send`.
+    def watch(self, kind, emit):
+        return (self.wifi if kind == "network" else self.bt).watch(emit)
 
     def power_actions(self):
         return [] if self.under_steam() else list(self.power_list)

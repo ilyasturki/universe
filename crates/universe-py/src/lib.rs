@@ -351,6 +351,12 @@ impl Core {
     fn set_output(&self, py: Python<'_>, id: String) -> PyResult<Py<PyAny>> {
         self.value(py, |c| async move { c.set_output(&id).await })
     }
+    fn network(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.value_infallible(py, |_| universe::network::state())
+    }
+    fn bluetooth(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.value_infallible(py, |_| universe::bluetooth::state())
+    }
     fn power_actions(&self, py: Python<'_>) -> Vec<&'static str> {
         self.run_infallible(py, |c| c.power_actions())
     }

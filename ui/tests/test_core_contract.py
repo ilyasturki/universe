@@ -63,6 +63,8 @@ READS = {
     "gpu": ("gpu",),
     "screen_mode": ("screen_mode", "DP-1"),
     "changelog": ("changelog",),
+    "network": ("network",),
+    "bluetooth": ("bluetooth",),
     "form-launch": ("form", "launch", "", SCREEN),
     "form-game": ("form", "game", "the-technomancer", SCREEN),
     "form-runner": ("form", "runner", "dolphin"),
