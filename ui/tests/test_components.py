@@ -149,11 +149,12 @@ def test_the_daily_update_runs_quietly_and_says_what_it_updated(api, fake):
     assert asked == [""], "turned off: nothing runs"
 
 
-def test_a_system_tool_installs_from_the_distribution_through_packagekit(api, fake):
+def test_a_system_tool_installs_from_the_distribution_through_packagekit(universe_session, api, fake):
     form = loaded(api)
     assert row_of(form, "gpu-screen-recorder")["accent"] is True and acts(form.actions("gpu-screen-recorder")) == ["install"]
     assert form.actions("gamescope") == [], "installed by the distribution: nothing for Universe to do"
-    assert form.confirm("gpu-screen-recorder", "install"), "it asks for the password: say so first"
+    asked = form.confirm("gpu-screen-recorder", "install")
+    assert ("password" in asked["detail"]) is not universe_session, "a desktop's polkit agent asks; the session's helper does not"
     finished = record(fake.jobFinished)
     assert form.act("gpu-screen-recorder", "install") is True
     until(lambda: finished)

@@ -266,7 +266,9 @@ class ComponentsForm(AsyncScreen):
             return None
         if action == "install" and c["kind"] == "system":
             packages = ", ".join(c.get("packages") or [])
-            return _ask(f"Install {c['name']}?", f"{packages} from your distribution's packages. It asks for your password.", "Install")
+            # In the session the core installs through its polkit helper, with no prompt.
+            prompt = "" if self._client.session else " It asks for your password."
+            return _ask(f"Install {c['name']}?", f"{packages} from your distribution's packages.{prompt}", "Install")
         if action == "install" or action.startswith("install:"):
             version = action.partition(":")[2] or _latest(c).get("version", "")
             build = next((a for a in c.get("available") or [] if a["version"] == version), {})
