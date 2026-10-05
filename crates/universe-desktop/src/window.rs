@@ -810,4 +810,12 @@ mod tests {
         assert!(playing_bar(true, false, true), "a game's page covers the sidebar");
         assert!(!playing_bar(false, false, false));
     }
+
+    #[test]
+    fn the_window_waits_on_a_spinner_until_the_core_answers() {
+        let ui = include_str!(concat!(env!("OUT_DIR"), "/ui/window.ui"));
+        let stack = &ui[ui.find(r#"id="stack""#).expect("the window's stack")..];
+        let first = stack.split(r#"<property name="name">"#).nth(1).and_then(|rest| rest.split('<').next());
+        assert_eq!(first, Some("loading"), "the stack's first page shows before core-ready or core-failed picks one");
+    }
 }

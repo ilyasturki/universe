@@ -58,6 +58,24 @@ template $UniverseWindow: Adw.ApplicationWindow {
                 enable-transitions: true;
 
                 Adw.ViewStackPage {
+                  name: "loading";
+
+                  child: Adw.ToolbarView {
+                    [top]
+                    Adw.HeaderBar {
+                      show-title: false;
+                    }
+
+                    content: Adw.Spinner {
+                      width-request: 32;
+                      height-request: 32;
+                      halign: center;
+                      valign: center;
+                    };
+                  };
+                }
+
+                Adw.ViewStackPage {
                   name: "failed";
 
                   child: Adw.ToolbarView {
