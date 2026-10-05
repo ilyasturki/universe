@@ -60,7 +60,7 @@ def test_a_game_decodes_every_shape_the_core_sends(app):
             "title": "Y",
             "release_year": 2017,
             "source": {"kind": "lutris", "lutris_slug": "y", "gog_id": ""},
-            "metadata": {"developers": ["N"], "metacritic": 97, "players": 0, "gamesdb_id": 0, "sgdb_id": 12, "age_rating": 16},
+            "metadata": {"developers": ["N"], "metacritic": 97, "players": 0, "gamesdb_id": 0, "sgdb_id": 12},
         },
         None,
     )
@@ -68,7 +68,7 @@ def test_a_game_decodes_every_shape_the_core_sends(app):
     assert game.releaseYear == 2017
     assert game.developerList == ["N"]
     assert game.players == 1
-    assert game.extra == {"metacritic": [97], "age-rating": [16]}
+    assert game.extra == {"metacritic": [97]}
 
 
 def test_library_excludes_hidden_and_groups_by_source(api):
