@@ -109,18 +109,27 @@ fn journal_add_files_an_entry_the_journal_lists_and_calls_only_a_refusal_invalid
     );
 
     // modules/journal gives up on "invalid:"; on anything else it retries, then writes the file itself.
-    for (case, entry, refused) in [
-        ("not JSON", "{".to_string(), true),
-        ("another session's", serde_json::json!({"session": "20261004-130000", "game": id, "title": "t"}).to_string(), true),
-        ("no title, no paragraphs", serde_json::json!({"session": sid, "game": id}).to_string(), true),
-        ("an image out of the journal", serde_json::json!({"session": sid, "game": id, "title": "t", "images": ["../x.png"]}).to_string(), true),
-        ("a game the library lost", serde_json::json!({"session": sid, "game": "gone", "title": "t"}).to_string(), false),
+    let escape = "../x";
+    for (case, session, entry, refused) in [
+        ("not JSON", sid, "{".to_string(), true),
+        ("another session's", sid, serde_json::json!({"session": "20261004-130000", "game": id, "title": "t"}).to_string(), true),
+        ("no title, no paragraphs", sid, serde_json::json!({"session": sid, "game": id}).to_string(), true),
+        ("an image out of the journal", sid, serde_json::json!({"session": sid, "game": id, "title": "t", "images": ["../x.png"]}).to_string(), true),
+        ("a session that is a path", escape, serde_json::json!({"session": escape, "game": id, "title": "t"}).to_string(), true),
+        ("a path given only as the argument", escape, serde_json::json!({"game": id, "title": "t"}).to_string(), true),
+        ("a game the library lost", sid, serde_json::json!({"session": sid, "game": "gone", "title": "t"}).to_string(), false),
     ] {
-        let out = universe(&dir, &["journal-add", sid, &entry], &[]);
+        let out = universe(&dir, &["journal-add", session, &entry], &[]);
         let err = text(&out.stderr);
         assert_eq!(out.status.code(), Some(1), "{case}: {err}");
         assert_eq!(err.contains("invalid:"), refused, "{case}: {err}");
     }
+    let escaped: Vec<_> = files_under(dir.path()).into_iter().filter(|p| p.file_name().is_some_and(|n| n == "x.json")).collect();
+    assert!(escaped.is_empty(), "{escaped:?}");
+}
+
+fn files_under(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    std::fs::read_dir(dir).into_iter().flatten().flatten().flat_map(|e| if e.path().is_dir() { files_under(&e.path()) } else { vec![e.path()] }).collect()
 }
 
 #[test]

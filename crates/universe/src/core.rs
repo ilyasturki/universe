@@ -1170,6 +1170,7 @@ impl Core {
         if entry.session != session_id {
             return Err(Error::Invalid("entry.session does not match".into()));
         }
+        entry.validate()?;
         let id = if entry.game.is_empty() { self.game_of_session(session_id).await } else { Some(entry.game.clone()) }
             .ok_or_else(|| Error::NotFound(format!("session {session_id}")))?;
         let r = self.get(&id).await?;
