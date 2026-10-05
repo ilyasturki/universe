@@ -498,10 +498,12 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
         "a key from steamgriddb.com/profile/preferences/api in keys.sgdb adds its community art".into(),
         "media",
     );
+    let themes: Vec<_> = crate::extensions::installed().into_iter().filter(|i| i.kind == "theme").collect();
     let apis = modules
         .iter()
         .map(|m| (m.id(), &m.manifest.name, m.manifest.api, "module"))
-        .chain(sources.iter().map(|s| (s.id(), &s.manifest.name, s.manifest.api, "source")));
+        .chain(sources.iter().map(|s| (s.id(), &s.manifest.name, s.manifest.api, "source")))
+        .chain(themes.iter().map(|t| (t.id.as_str(), &t.name, t.api, "theme")));
     for (id, name, api, kind) in apis {
         if let Some(why) = crate::extensions::unsupported(api) {
             push("extension-api", "Extension API", false, why, format!("update the {name} {kind} to one this Universe reads, or remove it"), id);

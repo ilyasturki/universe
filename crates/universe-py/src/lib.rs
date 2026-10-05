@@ -256,6 +256,9 @@ impl Core {
     fn extension_remove(&self, py: Python<'_>, id: String) -> PyResult<()> {
         self.run(py, |c| async move { c.extension_remove(&id).await })
     }
+    fn themes(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        py_of(py, &universe::extensions::themes())
+    }
 
     fn current(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.value_infallible(py, |c| c.current())

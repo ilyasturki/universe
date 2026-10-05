@@ -13,7 +13,11 @@ pub const API: u32 = 2;
 pub const MIN_API: u32 = 2;
 pub const SCHEMA: u32 = 1;
 pub const DEFAULT_INDEX: &str = "https://raw.githubusercontent.com/ilyasturki/universe-extensions/index/index.json";
-pub const KINDS: [&str; 2] = ["module", "source"];
+pub const KINDS: [&str; 3] = ["module", "source", "theme"];
+/// universe-ui's own looks (`themes.py` THEMES): no installed theme takes their ids.
+pub const BUILTIN_THEMES: [&str; 3] = ["reprise", "switch2", "ps5"];
+/// The root QML file universe-ui loads from a theme's folder, beside its `theme.toml`.
+pub const THEME_ENTRY: &str = "theme.qml";
 
 /// Why a manifest's `api` rules it out; `None` when this Universe runs it.
 pub fn unsupported(api: u32) -> Option<String> {
@@ -66,9 +70,18 @@ pub struct Installed {
     pub api: u32,
     #[serde(skip)]
     pub description: String,
+    #[serde(skip)]
+    pub author: String,
+    #[serde(skip)]
+    pub license: String,
+    /// The manifest's picture, relative to `dir`.
+    #[serde(skip)]
+    pub screenshot: String,
+    #[serde(skip)]
+    pub dir: PathBuf,
 }
 
-/// The fields every `module.toml` and `source.toml` shares.
+/// The fields every `module.toml`, `source.toml` and `theme.toml` shares.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
 struct Header {
@@ -77,6 +90,9 @@ struct Header {
     name: String,
     version: String,
     description: String,
+    author: String,
+    license: String,
+    screenshot: String,
 }
 
 pub fn index_url(config: &Config) -> String {
@@ -249,21 +265,25 @@ fn manifest_root(dir: &Path) -> Result<(PathBuf, &'static str)> {
     let root = if kinds(dir).is_empty() { components::single_child(dir) } else { dir.to_path_buf() };
     match kinds(&root).as_slice() {
         [kind] => Ok((root, kind)),
-        [] => Err(Error::Invalid("no module.toml or source.toml at its root: it is no extension".into())),
-        _ => Err(Error::Invalid("both a module.toml and a source.toml: an extension is one or the other".into())),
+        [] => Err(Error::Invalid("no module.toml, source.toml or theme.toml at its root: it is no extension".into())),
+        _ => Err(Error::Invalid("more than one of module.toml, source.toml and theme.toml: an extension is of one kind".into())),
     }
 }
 
-fn shipped_and_user(kind: &str) -> (Vec<PathBuf>, PathBuf) {
+/// `None` for a theme: the built-in looks are universe-ui's, not folders, and there is no folder of the user's own.
+fn shipped_and_user(kind: &str) -> Option<(Vec<PathBuf>, PathBuf)> {
     match kind {
-        "module" => (paths::system_module_dirs(), paths::user_modules_dir()),
-        _ => (paths::system_source_dirs(), paths::user_sources_dir()),
+        "module" => Some((paths::system_module_dirs(), paths::user_modules_dir())),
+        "source" => Some((paths::system_source_dirs(), paths::user_sources_dir())),
+        _ => None,
     }
 }
 
 /// Why `id` cannot be installed as a `kind`: one ships with Universe, or the user's own folder holds one.
 fn held(kind: &str, id: &str) -> Option<String> {
-    let (shipped, user) = shipped_and_user(kind);
+    let Some((shipped, user)) = shipped_and_user(kind) else {
+        return BUILTIN_THEMES.contains(&id).then(|| format!("{id} ships with Universe: a {kind} of that id cannot be installed"));
+    };
     let file = format!("{kind}.toml");
     if crate::modules::read_manifests::<Header>(shipped.into_iter(), &file, |m| &m.id).contains_key(id) {
         return Some(format!("{id} ships with Universe: a {kind} of that id cannot be installed"));
@@ -273,28 +293,21 @@ fn held(kind: &str, id: &str) -> Option<String> {
 }
 
 fn held_ids(kind: &str) -> std::collections::BTreeSet<String> {
-    let (shipped, user) = shipped_and_user(kind);
+    let Some((shipped, user)) = shipped_and_user(kind) else { return BUILTIN_THEMES.iter().map(|t| t.to_string()).collect() };
     crate::modules::read_manifests::<Header>(shipped.into_iter().chain([user]), &format!("{kind}.toml"), |m| &m.id).into_keys().collect()
 }
 
-fn other(kind: &str) -> &'static str {
-    if kind == "module" {
-        "source"
-    } else {
-        "module"
-    }
-}
-
-/// Every id the other kind holds, shipped, the user's own or installed: a module and a source never share one.
+/// Every id another kind holds, shipped, the user's own or installed: kinds never share one.
 fn other_ids(kind: &str, installed: &[Installed]) -> std::collections::BTreeSet<String> {
-    let other = other(kind);
-    let mut ids = held_ids(other);
-    ids.extend(installed.iter().filter(|i| i.kind == other).map(|i| i.id.clone()));
+    let mut ids: std::collections::BTreeSet<String> = KINDS.into_iter().filter(|k| *k != kind).flat_map(held_ids).collect();
+    ids.extend(installed.iter().filter(|i| i.kind != kind).map(|i| i.id.clone()));
     ids
 }
 
 fn other_kind_holds(kind: &str, id: &str) -> Option<String> {
-    other_ids(kind, &installed()).contains(id).then(|| format!("{id} is already a {}: a {kind} of that id cannot be installed", other(kind)))
+    let mine = installed();
+    let holder = KINDS.into_iter().filter(|k| *k != kind).find(|k| held_ids(k).contains(id) || mine.iter().any(|i| i.kind == *k && i.id == id))?;
+    Some(format!("{id} is already a {holder}: a {kind} of that id cannot be installed"))
 }
 
 fn valid_id(id: &str) -> bool {
@@ -357,10 +370,13 @@ pub async fn prepare(origin: Origin, mut progress: Option<Progress<'_, '_>>, can
     let text = std::fs::read_to_string(dir.join(format!("{kind}.toml")))?;
     let bad = |e: toml::de::Error| Error::Invalid(format!("{kind}.toml: {e}"));
     let header: Header = toml::from_str(&text).map_err(bad)?;
-    if kind == "module" {
-        toml::from_str::<crate::modules::Manifest>(&text).map_err(bad)?;
-    } else if toml::from_str::<crate::sources::Manifest>(&text).map_err(bad)?.exe.is_empty() {
-        return Err(Error::Invalid("source.toml names no exe".into()));
+    match kind {
+        "module" => drop(toml::from_str::<crate::modules::Manifest>(&text).map_err(bad)?),
+        "source" if toml::from_str::<crate::sources::Manifest>(&text).map_err(bad)?.exe.is_empty() => {
+            return Err(Error::Invalid("source.toml names no exe".into()));
+        }
+        "theme" if !dir.join(THEME_ENTRY).is_file() => return Err(Error::Invalid(format!("a theme starts at its {THEME_ENTRY}, which it lacks"))),
+        _ => {}
     }
     let id = header.id;
     if !valid_id(&id) {
@@ -437,15 +453,40 @@ pub fn installed() -> Vec<Installed> {
     let mut out = Vec::new();
     for kind in KINDS {
         let home = paths::extensions_dir(kind);
-        for (id, (_, header)) in crate::modules::read_manifests::<Header>(std::iter::once(home.clone()), &format!("{kind}.toml"), |m| &m.id) {
+        for (id, (dir, header)) in crate::modules::read_manifests::<Header>(std::iter::once(home.clone()), &format!("{kind}.toml"), |m| &m.id) {
             let sidecar = std::fs::read_to_string(home.join(format!("{id}.json"))).ok().and_then(|s| serde_json::from_str::<Installed>(&s).ok());
             let mut i = sidecar.unwrap_or_else(|| Installed { origin: "unlisted".into(), ..Installed::default() });
             i.name = if header.name.is_empty() { id.clone() } else { header.name };
             (i.id, i.kind, i.version, i.api, i.description) = (id, kind.into(), header.version, header.api, header.description);
+            (i.author, i.license, i.screenshot, i.dir) = (header.author, header.license, header.screenshot, dir);
             out.push(i);
         }
     }
     out
+}
+
+/// A file inside `dir` that `rel` names, `None` when it leaves the folder or is not there.
+fn within(dir: &Path, rel: &str) -> Option<PathBuf> {
+    let rel = Path::new(rel);
+    let inside = !rel.as_os_str().is_empty() && rel.components().all(|c| matches!(c, std::path::Component::Normal(_)));
+    Some(dir.join(rel)).filter(|p| inside && p.is_file())
+}
+
+/// The installed themes, by id: what universe-ui lists beside its built-in looks, read off the disk alone.
+pub fn themes() -> Vec<serde_json::Value> {
+    let path = |p: Option<PathBuf>| p.map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
+    installed()
+        .into_iter()
+        .filter(|i| i.kind == "theme")
+        .map(|i| {
+            serde_json::json!({
+                "id": i.id, "name": i.name, "version": i.version, "description": i.description, "author": i.author,
+                "license": i.license, "origin": i.origin, "dir": i.dir.to_string_lossy(),
+                "entry": path(within(&i.dir, THEME_ENTRY)), "screenshot": path(within(&i.dir, &i.screenshot)),
+                "incompatible": unsupported(i.api).unwrap_or_default(),
+            })
+        })
+        .collect()
 }
 
 fn take_out(kind: &str, id: &str) -> Result<()> {
@@ -485,7 +526,7 @@ fn row(listed: Option<&Listed>, mine: Option<&Installed>, enabled: bool) -> serd
 }
 
 impl Core {
-    /// The index's modules and sources, then the installed ones it does not list, by kind then name.
+    /// The index's modules, sources and themes, then the installed ones it does not list, by kind then name.
     pub async fn extensions(&self) -> Result<serde_json::Value> {
         let config = self.config.read().await.clone();
         let url = index_url(&config);
@@ -495,7 +536,8 @@ impl Core {
         };
         let enabled = |kind: &str, id: &str| match kind {
             "module" => config.modules.enabled.iter().any(|e| e == id),
-            _ => config.sources.enabled.iter().any(|e| e == id),
+            "source" => config.sources.enabled.iter().any(|e| e == id),
+            _ => false,
         };
         let mine = installed();
         let taken: std::collections::BTreeMap<&str, std::collections::BTreeSet<String>> =
@@ -527,8 +569,10 @@ impl Core {
             return Err(Error::Busy(format!("{} is running: replacing {} waits until it ends", c.title, staged.id)));
         }
         let i = place(staged)?;
-        self.reload_modules().await;
-        self.reload_all().await;
+        if i.kind != "theme" {
+            self.reload_modules().await;
+            self.reload_all().await;
+        }
         Ok(serde_json::json!({"id": i.id, "kind": i.kind, "name": i.name, "version": i.version, "origin": i.origin}))
     }
 
@@ -589,8 +633,9 @@ impl Core {
     /// Switched off first, so that another extension of the same id installed later is not on from the start.
     pub async fn extension_remove(&self, id: &str) -> Result<()> {
         let Some(found) = installed().into_iter().find(|i| i.id == id) else {
-            return Err(match KINDS.iter().find_map(|k| held(k, id)) {
-                Some(why) => Error::Invalid(format!("{why}; turn it off instead")),
+            return Err(match KINDS.iter().find_map(|k| held(k, id).map(|why| (k, why))) {
+                Some((&"theme", why)) => Error::Invalid(format!("{why}; it stays")),
+                Some((_, why)) => Error::Invalid(format!("{why}; turn it off instead")),
                 None => Error::NotFound(format!("{id} is not an installed extension")),
             });
         };
@@ -601,7 +646,8 @@ impl Core {
         let home = paths::extensions_dir(&found.kind).join(id);
         let runs = match found.kind.as_str() {
             "module" => self.modules.read().await.iter().any(|m| m.id() == id && m.dir == home),
-            _ => self.sources.read().await.iter().any(|s| s.id() == id && s.dir == home),
+            "source" => self.sources.read().await.iter().any(|s| s.id() == id && s.dir == home),
+            _ => false,
         };
         let off = match found.kind.as_str() {
             "module" if runs && config.modules.enabled.iter().any(|e| e == id) => Some(self.enable_module(id, false).await),
@@ -612,8 +658,10 @@ impl Core {
             tracing::warn!("{id} stays in config.toml's enabled list: {e}");
         }
         take_out(&found.kind, id)?;
-        self.reload_modules().await;
-        self.reload_all().await;
+        if found.kind != "theme" {
+            self.reload_modules().await;
+            self.reload_all().await;
+        }
         Ok(())
     }
 }
@@ -825,6 +873,73 @@ mod tests {
         let tried = core.extension_update("", None).await.unwrap();
         assert!(tried[0]["error"].as_str().is_some_and(|e| e.contains("extension api")), "{tried:?}");
         assert_eq!(ran(&core, "source", "shop").await, "shop 2.0.0");
+    }
+
+    fn theme_tree(root: &Path, id: &str, api: u32, screenshot: &str) -> PathBuf {
+        let dir = root.join(id);
+        std::fs::create_dir_all(dir.join("pages")).unwrap();
+        let header = format!("api = {api}\nid = \"{id}\"\nname = \"{id} name\"\nversion = \"1.0.0\"\nauthor = \"Someone\"\nlicense = \"MIT\"\n");
+        std::fs::write(dir.join("theme.toml"), format!("{header}screenshot = \"{screenshot}\"\n")).unwrap();
+        std::fs::write(dir.join(THEME_ENTRY), "import QtQuick\nItem {}\n").unwrap();
+        std::fs::write(dir.join("screenshot.png"), b"png").unwrap();
+        dir
+    }
+
+    #[tokio::test]
+    async fn a_theme_installs_from_a_folder_lists_its_entry_and_goes() {
+        let env = paths::test_env();
+        let work = env.path().join("work");
+        let core = open().await;
+        let dir = theme_tree(&work, "dusk", API, "screenshot.png");
+        let placed = core.extension_install(&dir.to_string_lossy(), true, None).await.unwrap();
+        assert_eq!((placed["kind"].as_str(), placed["origin"].as_str()), (Some("theme"), Some("unlisted")));
+        let home = paths::extensions_dir("theme").join("dusk");
+        let listed = themes();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0]["id"], "dusk");
+        assert_eq!(listed[0]["entry"], home.join(THEME_ENTRY).to_string_lossy().as_ref(), "the entry universe-ui loads");
+        assert_eq!(listed[0]["screenshot"], home.join("screenshot.png").to_string_lossy().as_ref());
+        assert_eq!((&listed[0]["author"], &listed[0]["license"], &listed[0]["incompatible"]), (&"Someone".into(), &"MIT".into(), &"".into()));
+        let rows = core.extensions().await.unwrap();
+        let row = rows["extensions"].as_array().unwrap().iter().find(|r| r["id"] == "dusk").cloned().unwrap();
+        assert_eq!((&row["kind"], &row["installed"], &row["enabled"]), (&"theme".into(), &true.into(), &false.into()));
+
+        core.extension_remove("dusk").await.unwrap();
+        assert!(!home.exists() && themes().is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_theme_without_its_entry_a_built_in_look_s_id_or_a_module_s_is_refused() {
+        let env = paths::test_env();
+        let work = env.path().join("work");
+        let core = open().await;
+        fn refused<T>(r: Result<T>) -> String {
+            r.err().map(|e| e.to_string()).unwrap_or_default()
+        }
+        let bare = theme_tree(&work, "bare", API, "");
+        std::fs::remove_file(bare.join(THEME_ENTRY)).unwrap();
+        assert!(refused(core.extension_install(&bare.to_string_lossy(), true, None).await).contains(THEME_ENTRY));
+        let ps5 = theme_tree(&work, "ps5", API, "");
+        assert!(refused(core.extension_install(&ps5.to_string_lossy(), true, None).await).contains("ships with Universe"));
+        assert!(refused(core.extension_remove("reprise").await).contains("ships with Universe"), "a built-in look cannot be removed");
+        core.extension_install(&tree(&work, "module", "hello", "1.0.0", API).to_string_lossy(), true, None).await.unwrap();
+        let hello = theme_tree(&work, "hello", API, "");
+        assert!(refused(core.extension_install(&hello.to_string_lossy(), true, None).await).contains("already a module"), "kinds never share an id");
+        let dawn = theme_tree(&work, "dawn", API, "../../escape.png");
+        core.extension_install(&dawn.to_string_lossy(), true, None).await.unwrap();
+        assert_eq!(themes()[0]["screenshot"], "", "a picture outside its folder is none");
+    }
+
+    #[tokio::test]
+    async fn an_installed_theme_for_another_api_stays_listed_and_doctor_says_so() {
+        let env = paths::test_env();
+        let old = theme_tree(&env.path().join("work"), "old", API + 1, "");
+        std::fs::create_dir_all(paths::extensions_dir("theme")).unwrap();
+        std::fs::rename(old, paths::extensions_dir("theme").join("old")).unwrap();
+        let core = open().await;
+        assert!(themes()[0]["incompatible"].as_str().is_some_and(|w| w.contains("extension api")));
+        let checks = core.doctor().await;
+        assert!(checks.iter().any(|c| c.check == "extension-api" && c.module == "old" && !c.ok));
     }
 
     #[tokio::test]

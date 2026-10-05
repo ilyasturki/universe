@@ -236,7 +236,7 @@ pub enum Cmd {
         #[command(subcommand)]
         action: SourceCmd,
     },
-    /// Extensions: modules and sources that do not ship with Universe, from its index, a URL, an archive or a folder
+    /// Extensions: modules, sources and themes that do not ship with Universe, from its index, a URL, an archive or a folder
     #[command(alias = "extensions")]
     Extension {
         #[command(subcommand)]
@@ -620,7 +620,7 @@ pub enum ExtensionCmd {
     },
     /// Fetch installed extensions again from where they came from: the index's newer version, else the URL, archive or folder; every one when no id is given
     Update { id: Option<String> },
-    /// Remove an installed extension, switched off first
+    /// Remove an installed extension, a module or a source switched off first
     Remove { id: String },
 }
 
@@ -2539,7 +2539,9 @@ async fn extension(core: Core, action: ExtensionCmd, json: bool) -> anyhow::Resu
             finish(
                 json,
                 placed.map(|v| {
-                    format!("{} {} {} installed: universe {} enable {} turns it on", s(&v, "kind"), s(&v, "id"), s(&v, "version"), s(&v, "kind"), s(&v, "id"))
+                    let (kind, id) = (s(&v, "kind"), s(&v, "id"));
+                    let on = if kind == "theme" { "Settings › Themes picks it".into() } else { format!("universe {kind} enable {id} turns it on") };
+                    format!("{kind} {id} {} installed: {on}", s(&v, "version"))
                 }),
             );
         }

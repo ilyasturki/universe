@@ -1099,19 +1099,20 @@ snapshot (`unstable`, `git`) or two numbering schemes propose nothing.
 
 ## Extensions
 
-Modules and sources that do not ship with Universe: [`extensions.md`](extensions.md) has the
+Modules, sources and themes that do not ship with Universe: [`extensions.md`](extensions.md) has the
 layout, the API number and the index's format.
 
 | Rust | Python | CLI | Role |
 |---|---|---|---|
-| `extensions()` | `extensions()` | `universe extension ls` | `{index: {url, error}, extensions: [Extension]}`: the index's modules and sources, then the installed ones it does not list, by kind then name; an index that cannot be read leaves its `error` and the installed ones |
-| `extension_install(what, accepted, progress)` | `extension_install(what, accepted=False, progress=None)` | `universe extension install <what> [--yes]` | `what` is an index id, an https:// URL, or an archive or a folder by a path holding a `/` (a `file://` URL too; a bare word is an index id): fetched, unpacked and checked, then put under `<data>/extensions/<kind>/<id>/`; `{id, kind, name, version, origin}`. `Invalid` until `accepted` (a frontend shows the kind, that it runs programs as you and the origin first; the CLI prints them and asks, `--yes` accepts, no terminal or `--json` refuses), for an id that ships, that the user's own folder holds or that the other kind holds, for an api this Universe does not read, for a pin that does not match; http:// is refused; `Busy` when it would replace an installed one while a game runs |
+| `extensions()` | `extensions()` | `universe extension ls` | `{index: {url, error}, extensions: [Extension]}`: the index's modules, sources and themes, then the installed ones it does not list, by kind then name; an index that cannot be read leaves its `error` and the installed ones |
+| `extension_install(what, accepted, progress)` | `extension_install(what, accepted=False, progress=None)` | `universe extension install <what> [--yes]` | `what` is an index id, an https:// URL, or an archive or a folder by a path holding a `/` (a `file://` URL too; a bare word is an index id): fetched, unpacked and checked, then put under `<data>/extensions/<kind>/<id>/`; `{id, kind, name, version, origin}`. `Invalid` until `accepted` (a frontend shows the kind, that it runs programs as you and the origin first; the CLI prints them and asks, `--yes` accepts, no terminal or `--json` refuses), for an id that ships (a built-in look's, for a theme), that the user's own folder holds or that another kind holds, for a theme without its `theme.qml`, for an api this Universe does not read, for a pin that does not match; http:// is refused; `Busy` when it would replace an installed one while a game runs |
 | `extension_update(id, progress)` | `extension_update(id="", progress=None)` | `universe extension update [id]` | fetches again what `id` (every installed one for `""`) came from: the index's entry when it lists another version, else its URL, archive or folder; replaces it in place; `[{id, kind, name, version, error?}]`; `Busy` while a game runs |
 | `extension_remove(id)` | `extension_remove(id)` | `universe extension remove <id>` | switches it off (a read-only `config.toml` only logs), then deletes its folder and sidecar; its data folder stays; `Invalid` for a shipped id, `Busy` while a game runs |
+| `extensions::themes()` | `themes()` | — | the installed themes, read off the disk alone (no index): `[{id, name, version, description, author, license, origin, dir, entry, screenshot, incompatible}]` by id, `entry` the path of its `theme.qml` and `screenshot` of the manifest's picture (`""` when it is missing or outside the folder), `incompatible` as in `Extension` |
 
-`Extension` = `{id, kind: module|source, name, description, version (the index's, else the installed
+`Extension` = `{id, kind: module|source|theme, name, description, version (the index's, else the installed
 one's), homepage, size, listed, installed, installed_version, origin: registry|unlisted|"", from,
-update (the index's version when an index install lists another, for an api this Universe reads, else ""), enabled, incompatible (why
+update (the index's version when an index install lists another, for an api this Universe reads, else ""), enabled (false for a theme), incompatible (why
 its `api` rules it out, else "")}`.
 
 ## Media

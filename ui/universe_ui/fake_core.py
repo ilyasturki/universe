@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import tomllib
 import zlib
 from datetime import UTC, datetime
 from pathlib import Path
@@ -25,6 +26,10 @@ COMPONENTS = Path(__file__).parent / "fixtures" / "components.json"
 EXTENSIONS = Path(__file__).parent / "fixtures" / "extensions.json"
 EXTENSION_INDEX = "https://raw.githubusercontent.com/ilyasturki/universe-extensions/index/index.json"
 EXTENSION_API = 2
+BUILTIN_THEMES = ("reprise", "switch2", "ps5")
+THEME_ENTRY = "theme.qml"
+# What an index theme installs here, where no archive exists to unpack.
+STUB_THEME = 'import QtQuick\nRectangle {\n    objectName: "stubTheme"\n    color: "#202024"\n}\n'
 GPU = {
     "vendor": "amd",
     "name": "AMD Radeon RX 7900 GRE",
@@ -2307,6 +2312,27 @@ class FakeCore:
         rows.sort(key=lambda r: (r["kind"], r["name"].lower()))
         return {"index": {"url": EXTENSION_INDEX, "error": ""}, "extensions": copy.deepcopy(rows)}
 
+    def _themes_dir(self):
+        return Path(self.data_home()) / "extensions" / "theme"
+
+    def _theme_of(self, folder):
+        """A folder's theme.toml as an index entry, checked as the core checks it; None for a folder of another kind."""
+        try:
+            manifest = tomllib.loads((folder / "theme.toml").read_text())
+        except OSError:
+            return None
+        except tomllib.TOMLDecodeError as e:
+            raise UniverseError("Invalid", f"theme.toml: {e}") from None
+        ident = manifest.get("id") or ""
+        if not (folder / THEME_ENTRY).is_file():
+            raise UniverseError("Invalid", f"a theme starts at its {THEME_ENTRY}, which it lacks")
+        if ident in BUILTIN_THEMES:
+            raise UniverseError("Invalid", f"{ident} ships with Universe: a theme of that id cannot be installed")
+        if manifest.get("api", 0) != EXTENSION_API:
+            raise UniverseError("Invalid", f"{ident}: written for extension api {manifest.get('api', 0)}: this Universe reads api {EXTENSION_API}")
+        fields = {k: manifest.get(k) or "" for k in ("name", "version", "description")}
+        return {"id": ident, "kind": "theme", **fields, "name": fields["name"] or ident, "api": EXTENSION_API}
+
     def extension_install(self, what, accepted=False, progress=None):
         if not accepted:
             raise UniverseError("Invalid", f"{what} runs programs as you: its install waits to be accepted")
@@ -2315,22 +2341,40 @@ class FakeCore:
             raise UniverseError("NotFound", f"{what} is not in the extension index ({EXTENSION_INDEX})")
         if listed is not None and listed["api"] != EXTENSION_API:
             raise UniverseError("Invalid", f"{what}: written for extension api {listed['api']}: this Universe reads api {EXTENSION_API}")
+        folder = Path(what.removeprefix("file://")).expanduser() if listed is None else None
+        theme = self._theme_of(folder) if folder is not None else None
         for step in range(1, 5):
             if progress is not None:
-                progress(step, 4, f"Downloading {(listed or {}).get('name', what)}")
+                progress(step, 4, f"Downloading {(listed or theme or {}).get('name', what)}")
             time.sleep(0.05)
-        if listed is None:
+        if theme is not None:
+            listed = theme
+        elif listed is None:
             ident = what.rstrip("/").rpartition("/")[2]
             listed = {"id": ident, "kind": "module", "name": ident.replace("-", " ").title(), "version": "1.0.0", "description": "", "api": EXTENSION_API}
         origin = "unlisted" if "/" in what else "registry"
         with self._lock:
-            self._place_extension(listed, origin, what if origin == "unlisted" else EXTENSION_INDEX)
+            self._place_extension(listed, origin, what if origin == "unlisted" else EXTENSION_INDEX, folder)
         return {"id": listed["id"], "kind": listed["kind"], "name": listed["name"], "version": listed["version"], "origin": origin}
 
-    def _place_extension(self, listed, origin, source):
+    def _place_theme(self, listed, folder):
+        dest = self._themes_dir() / listed["id"]
+        shutil.rmtree(dest, ignore_errors=True)
+        if folder is not None:
+            shutil.copytree(folder, dest, symlinks=True)
+            return
+        dest.mkdir(parents=True)
+        fields = "".join(f"{k} = {json.dumps(listed[k])}\n" for k in ("id", "name", "version", "description"))
+        (dest / "theme.toml").write_text(f"api = {listed['api']}\n{fields}")
+        (dest / THEME_ENTRY).write_text(STUB_THEME)
+
+    def _place_extension(self, listed, origin, source, folder=None):
         kind = listed["kind"] + "s"
         mine = {**{k: listed[k] for k in ("id", "kind", "name", "version", "description", "api")}, "origin": origin, "from": source}
         self._extensions[listed["id"]] = mine
+        if listed["kind"] == "theme":
+            self._place_theme(listed, folder)
+            return
         entries = self._data.setdefault(kind, [])
         was = next((e for e in entries if e["id"] == listed["id"]), None)
         entry = {"id": listed["id"], "name": listed["name"], "version": listed["version"], "description": listed["description"]}
@@ -2359,12 +2403,48 @@ class FakeCore:
         with self._lock:
             mine = self._extensions.pop(ident, None)
             if mine is None:
+                if ident in BUILTIN_THEMES:
+                    raise UniverseError("Invalid", f"{ident} ships with Universe; it stays")
                 shipped = any(e["id"] == ident for e in self._data.get("modules", []) + self._data.get("sources", []))
                 if shipped:
                     raise UniverseError("Invalid", f"{ident} ships with Universe; turn it off instead")
                 raise UniverseError("NotFound", f"{ident} is not an installed extension")
+            if mine["kind"] == "theme":
+                shutil.rmtree(self._themes_dir() / ident, ignore_errors=True)
+                return
             kind = mine["kind"] + "s"
             self._data[kind] = [e for e in self._data.get(kind, []) if e["id"] != ident]
+
+    def themes(self):
+        out = []
+        for manifest in sorted(self._themes_dir().glob("*/theme.toml")):
+            try:
+                m = tomllib.loads(manifest.read_text())
+            except (OSError, tomllib.TOMLDecodeError):
+                continue
+            ident, folder = m.get("id") or "", manifest.parent
+            if not ident:
+                continue
+
+            def inside(rel, folder=folder):
+                path = folder / rel
+                return str(path) if rel and not Path(rel).is_absolute() and ".." not in Path(rel).parts and path.is_file() else ""
+
+            api = m.get("api", 0)
+            fields = {k: m.get(k) or "" for k in ("name", "version", "description", "author", "license")}
+            out.append(
+                {
+                    "id": ident,
+                    **fields,
+                    "name": fields["name"] or ident,
+                    "origin": (self._extensions.get(ident) or {}).get("origin") or "unlisted",
+                    "dir": str(folder),
+                    "entry": inside(THEME_ENTRY),
+                    "screenshot": inside(m.get("screenshot") or ""),
+                    "incompatible": "" if api == EXTENSION_API else f"written for extension api {api}: this Universe reads api {EXTENSION_API}",
+                }
+            )
+        return sorted(out, key=lambda t: t["id"])
 
     def discover(self):
         report = copy.deepcopy(self._data.get("discover") or {"launchers": [], "gog_dirs": []})

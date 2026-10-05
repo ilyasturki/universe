@@ -31,6 +31,15 @@ SEED = {
     "data/games/the-technomancer/journal/20260912-120000.deferred.json": json.dumps({"game": "the-technomancer", "until": "2099-01-01T00:00:00+00:00"}),
     "data/games/the-technomancer/screenshots/20260913-121000.png": PNG,
     "data/games/the-technomancer/media/box_front.png": PNG,
+    **{
+        f"{home}/extensions/theme/dusk/{name}": content
+        for home in ("data", "fake/data")
+        for name, content in {
+            "theme.toml": 'api = 2\nid = "dusk"\nname = "Dusk"\nversion = "1.0.0"\nauthor = "Someone"\nlicense = "MIT"\nscreenshot = "shot.png"\n',
+            "theme.qml": "import QtQuick\nItem {}\n",
+            "shot.png": PNG,
+        }.items()
+    },
     "data/games/dead-cells/game.toml": 'schema = 1\nid = "dead-cells"\ntitle = "Dead Cells"\n[source]\nkind = "gog"\n',
     "data/games/dead-cells/achievements.json": json.dumps(
         {"source": "gog", "fetched_at": "2026-09-18T19:02:00+02:00", "items": [{"key": "prisoner", "name": "Prisoner", "unlocked_at": "", "rarity": 91.0}]}
@@ -49,6 +58,7 @@ READS = {
     "runners": ("runners",),
     "components": ("components",),
     "extensions": ("extensions",),
+    "themes": ("themes",),
     "sessions": ("sessions", ""),
     "journal": ("journal", "the-technomancer"),
     "media": ("media", "the-technomancer"),
@@ -191,6 +201,7 @@ ERRORS = [
     ("Invalid", "extension_install", "now-playing"),
     ("NotFound", "extension_remove", "nope"),
     ("Invalid", "extension_remove", "capture"),
+    ("Invalid", "extension_remove", "reprise"),
 ]
 
 

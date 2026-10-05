@@ -275,6 +275,9 @@ class CoreClient(QObject):
     def extensionRemove(self, ident):
         return self._call(self._core.extension_remove, ident)
 
+    def themes(self):
+        return self._guarded([], self._core.themes)
+
     def componentRemove(self, ident, version):
         return self._call(self._core.component_remove, ident, version)
 
