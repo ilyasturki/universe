@@ -442,6 +442,7 @@ class FakeCore:
         self.fps_limit_writes = 0
         self.frames = 0
         self.filter = None
+        self._filter_changed = False
         self.level, self.muted = 62, False
         self.outputs_list = [
             {"id": "alsa_card.pci-0000_00_1f.3/analog-output-speaker", "label": "Speakers", "device": "Built-in Audio", "current": True},
@@ -1274,7 +1275,10 @@ class FakeCore:
             if not current or self._closed:
                 return
             self.game_shown = self.frozen = False
-            self._runtime = {}
+            if self._filter_changed:
+                launch = self._config["launch"]
+                self.filter = (str(launch.get("gamescope_filter") or ""), launch.get("gamescope_sharpness"))
+            self._runtime, self._filter_changed = {}, False
             for c in self.system:
                 c["value"] = self._system_before.get(c["id"], c["value"])
             self._system_before = {}
@@ -1422,6 +1426,7 @@ class FakeCore:
         self.filter = (filter, sharpness)
         if self.current():
             self._runtime.update({"gamescope_filter": filter, "gamescope_sharpness": sharpness})
+            self._filter_changed = True
 
     def volume(self, change, value=0):
         step = int((self._config.get("controller") or {}).get("volume_step") or 2)

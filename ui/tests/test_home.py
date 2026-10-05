@@ -460,6 +460,7 @@ def test_sharpness_reaches_gamescope_with_the_running_filter(api, fake, monkeypa
     home.setRuntime("gamescope_sharpness", "")
     assert fake.core.filter == ("fsr", None)
     stop(api)
+    assert fake.core.filter == ("", None), "the session's end puts the settings' filter back"
 
 
 def covered_fraction(image):

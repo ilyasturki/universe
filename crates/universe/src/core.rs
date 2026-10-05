@@ -817,14 +817,7 @@ impl Core {
         self.nest_or()?.set_filter(filter, sharpness)?;
         if let Some(c) = self.current().await {
             let r = self.get(&c.id).await?;
-            crate::session::change_runtime(
-                &c.session_id,
-                || Runtime::of(&r.effective),
-                |rt| {
-                    rt.gamescope_filter = filter.to_owned();
-                    rt.gamescope_sharpness = sharpness;
-                },
-            )?;
+            crate::session::change_filter(&c.session_id, || Runtime::of(&r.effective), filter, sharpness)?;
         }
         Ok(())
     }
@@ -969,8 +962,8 @@ impl Core {
             }
             self.reload_config().await?;
         }
-        if running.is_some() {
-            crate::session::system_ends_at(id, value)?;
+        if let Some(c) = &running {
+            crate::session::system_ends_at(&c.session_id, id, value)?;
         }
         Ok(())
     }
@@ -979,18 +972,18 @@ impl Core {
     pub async fn set_system_for(&self, game: &str, id: &str, value: &str) -> Result<()> {
         let was = self.system_control(id, value).await?;
         let r = self.get(game).await?;
-        let running = self.current().await.is_some_and(|c| c.id == game);
-        if running {
+        let running = self.current().await.filter(|c| c.id == game);
+        if running.is_some() {
             self.apply_system_one(id, value).await?;
         }
         if let Err(e) = crate::game::set_key(&r.game.toml_path(), &format!("system.{id}"), value) {
-            if running {
+            if running.is_some() {
                 self.put_system_back(&was).await;
             }
             return Err(e);
         }
-        if running {
-            crate::session::system_before(id, &was.value)?;
+        if let Some(c) = &running {
+            crate::session::system_before(&c.session_id, id, &was.value)?;
         }
         self.reload_game(game).await
     }

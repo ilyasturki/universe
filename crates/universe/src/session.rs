@@ -80,6 +80,7 @@ pub enum Undo {
         env: BTreeMap<String, String>,
     },
     Hud,
+    Filter,
     /// The machine's controls the game's own changed, by control id: the values its end puts back.
     System {
         before: BTreeMap<String, String>,
@@ -111,14 +112,31 @@ fn remove_marker() {
     let _ = std::fs::remove_file(paths::current_session_file());
 }
 
-/// A change to the running session's marker, in place: a temp file renamed over it, so `session-end` never reads half a marker.
-fn update_marker(f: impl FnOnce(&mut Marker)) -> Result<()> {
-    static WRITES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-    let Some(mut m) = read_marker() else { return Ok(()) };
+/// Every process holds it to change or take the marker: a change and the session's end never interleave.
+fn marker_lock() -> Result<std::fs::File> {
+    let p = paths::current_session_file().with_extension("lock");
+    std::fs::create_dir_all(p.parent().unwrap())?;
+    let f = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(p)?;
+    f.lock()?;
+    Ok(f)
+}
+
+/// The session's marker, removed: `None` when it is gone or another session's.
+fn take_marker(session_id: &str) -> Option<Marker> {
+    let _lock = marker_lock().inspect_err(|e| tracing::warn!("marker lock: {e}")).ok();
+    let m = read_marker().filter(|m| m.current.session_id == session_id)?;
+    remove_marker();
+    Some(m)
+}
+
+/// A change to the session's marker, in place and only while it is that session's: a temp file renamed over it, so
+/// `session-end` never reads half a marker.
+fn update_marker(session_id: &str, f: impl FnOnce(&mut Marker)) -> Result<()> {
+    let _lock = marker_lock()?;
+    let Some(mut m) = read_marker().filter(|m| m.current.session_id == session_id) else { return Ok(()) };
     f(&mut m);
     let p = paths::current_session_file();
-    // Several processes and threads write it: one shared temp would be renamed half written.
-    let tmp = p.with_extension(format!("json.{}-{}.tmp", std::process::id(), WRITES.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
+    let tmp = p.with_extension("json.tmp");
     std::fs::write(&tmp, serde_json::to_string(&m)?)?;
     std::fs::rename(&tmp, &p)?;
     Ok(())
@@ -127,19 +145,29 @@ fn update_marker(f: impl FnOnce(&mut Marker)) -> Result<()> {
 /// `None` when the marker is gone or another session's.
 pub(crate) fn change_runtime(session_id: &str, seed: impl FnOnce() -> Runtime, f: impl FnOnce(&mut Runtime)) -> Result<Option<Runtime>> {
     let mut changed = None;
-    update_marker(|m| {
-        if m.current.session_id == session_id {
-            let rt = m.runtime.get_or_insert_with(seed);
-            f(rt);
-            changed = Some(rt.clone());
-        }
+    update_marker(session_id, |m| {
+        let rt = m.runtime.get_or_insert_with(seed);
+        f(rt);
+        changed = Some(rt.clone());
     })?;
     Ok(changed)
 }
 
+/// HOME's filter in the running game: its end puts the launcher's gamescope back on the settings' filter.
+pub(crate) fn change_filter(session_id: &str, seed: impl FnOnce() -> Runtime, filter: &str, sharpness: Option<u32>) -> Result<()> {
+    update_marker(session_id, |m| {
+        let rt = m.runtime.get_or_insert_with(seed);
+        rt.gamescope_filter = filter.to_owned();
+        rt.gamescope_sharpness = sharpness;
+        if !m.undo.contains(&Undo::Filter) {
+            m.undo.push(Undo::Filter);
+        }
+    })
+}
+
 /// A control the running game's own just changed: the first value noted is the one its end puts back.
-pub(crate) fn system_before(id: &str, value: &str) -> Result<()> {
-    update_marker(|m| match m.undo.iter_mut().find_map(|u| if let Undo::System { before } = u { Some(before) } else { None }) {
+pub(crate) fn system_before(session_id: &str, id: &str, value: &str) -> Result<()> {
+    update_marker(session_id, |m| match m.undo.iter_mut().find_map(|u| if let Undo::System { before } = u { Some(before) } else { None }) {
         Some(before) => {
             before.entry(id.into()).or_insert_with(|| value.into());
         }
@@ -148,8 +176,8 @@ pub(crate) fn system_before(id: &str, value: &str) -> Result<()> {
 }
 
 /// A new value of the machine's own for a control the running game changed: its end puts that one back.
-pub(crate) fn system_ends_at(id: &str, value: &str) -> Result<()> {
-    update_marker(|m| {
+pub(crate) fn system_ends_at(session_id: &str, id: &str, value: &str) -> Result<()> {
+    update_marker(session_id, |m| {
         for u in &mut m.undo {
             if let Undo::System { before } = u {
                 if let Some(v) = before.get_mut(id) {
@@ -286,9 +314,7 @@ impl Core {
         };
         let mut undo = Vec::new();
         if let Err(e) = self.begin(&r, &plan, &current, base.vars.clone(), runtime, &mut undo).await {
-            if read_marker().is_some_and(|m| m.current.session_id == session_id) {
-                remove_marker();
-            }
+            take_marker(&session_id);
             self.rollback(&undo).await;
             return Err(e);
         }
@@ -377,6 +403,14 @@ impl Core {
                         tracing::warn!("mangoapp: {e}");
                     }
                 }
+                Undo::Filter => {
+                    if let Some(nest) = self.nest() {
+                        let launch = self.config.read().await.launch.clone();
+                        if let Err(e) = nest.set_filter(&launch.gamescope_filter, launch.gamescope_sharpness) {
+                            tracing::warn!("gamescope filter: {e}");
+                        }
+                    }
+                }
                 Undo::PostCommand { command, cwd, env } => {
                     if let Err(e) = launcher::run_shell(command, env, Path::new(cwd)).await {
                         tracing::warn!("post_command: {e}");
@@ -430,8 +464,8 @@ impl Core {
             // A row that could not be appended keeps the marker: `reconcile` files it on the next open.
             Ok(r) => Ok(Some((self.file_session(&r, session_id, exit, ended, marker.as_ref()).await?, r))),
         };
-        if let Some(m) = &marker {
-            remove_marker();
+        // Taken again: a change since the first read may have added an undo step.
+        if let Some(m) = marker.as_ref().and_then(|_| take_marker(session_id)) {
             self.rollback(&m.undo).await;
         }
         let Some((session, r)) = filed? else { return Ok(()) };
@@ -550,7 +584,7 @@ impl Core {
             Ok(r) => crate::runners::spec(&r.game.runner_id()).is_none_or(|s| s.term_twice),
             Err(_) => true,
         };
-        update_marker(|m| m.stopped = true)?;
+        update_marker(&c.session_id, |m| m.stopped = true)?;
         self.host.units.stop(&c.unit, term_twice).await
     }
 
@@ -621,6 +655,7 @@ pub(crate) mod tests {
                 Undo::PostCommand { .. } => "post_command",
                 Undo::Cursor { .. } => "cursor",
                 Undo::Hud => "hud",
+                Undo::Filter => "filter",
                 Undo::System { .. } => "system",
             })
             .collect()
@@ -752,6 +787,43 @@ pub(crate) mod tests {
             "the next launch starts from the settings"
         );
         assert!(read().contains("no_display\n") && !read().contains("fps_limit="), "{}", read());
+    }
+
+    #[tokio::test]
+    async fn a_filter_set_in_game_is_noted_once_for_the_end_to_put_back() {
+        let _sb = sandbox();
+        let (core, memory) = open().await;
+        let sid = core.launch("sample", "", "").await.unwrap();
+        assert!(!undo_steps(&read_marker().unwrap()).contains(&"filter"), "nothing to put back until HOME changes it");
+        change_filter(&sid, Runtime::default, "fsr", Some(5)).unwrap();
+        change_filter(&sid, Runtime::default, "nis", None).unwrap();
+        let m = read_marker().unwrap();
+        assert_eq!(undo_steps(&m).iter().filter(|s| **s == "filter").count(), 1);
+        let rt = m.runtime.unwrap();
+        assert_eq!((rt.gamescope_filter.as_str(), rt.gamescope_sharpness), ("nis", None));
+        memory.finish(&format!("universe-game-sample-{sid}.service"), 0);
+        core.session_end("sample", &sid, None, None).await.unwrap();
+        assert!(read_marker().is_none());
+        core.launch("sample", "", "").await.unwrap();
+        assert_eq!(core.runtime().await.unwrap().gamescope_filter, "", "the next launch starts from the settings");
+    }
+
+    #[test]
+    fn a_change_racing_the_end_never_brings_the_marker_back() {
+        let _env = crate::paths::test_env();
+        let marker = |sid: &str| Marker { current: Current { session_id: sid.into(), ..Current::default() }, ..Marker::default() };
+        let flip = |sid: &'static str| change_runtime(sid, Runtime::default, |rt| rt.mangohud = !rt.mangohud).unwrap();
+        assert!(flip("a").is_none() && read_marker().is_none(), "no marker, none made");
+        write_marker(&marker("b")).unwrap();
+        assert!(flip("a").is_none() && read_marker().unwrap().runtime.is_none(), "another session's is left alone");
+        remove_marker();
+        for _ in 0..20 {
+            write_marker(&marker("a")).unwrap();
+            let changes: Vec<_> = (0..3).map(|_| std::thread::spawn(move || (0..10).for_each(|_| drop(flip("a"))))).collect();
+            assert!(take_marker("a").is_some());
+            changes.into_iter().for_each(|t| t.join().unwrap());
+            assert!(read_marker().is_none(), "a change after the end put no marker back");
+        }
     }
 
     #[tokio::test]
