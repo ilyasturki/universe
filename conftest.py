@@ -3,11 +3,14 @@ import time
 
 import pytest
 
-# One environment for `just test` and the flake's checks: the fixtures carry Paris timestamps, Qt has no display.
+# One environment for `just test` and the flake's checks: the fixtures carry Paris timestamps, Qt has no display
+# and no sound server.
 os.environ["TZ"] = "Europe/Paris"
 os.environ["LC_ALL"] = "C.UTF-8"
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QT_FORCE_STDERR_LOGGING", "1")
+os.environ["PIPEWIRE_REMOTE"] = "/nonexistent"
+os.environ["PULSE_SERVER"] = "unix:/nonexistent"
 time.tzset()
 
 
