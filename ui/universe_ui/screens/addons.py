@@ -68,18 +68,18 @@ class AddonsForm(AsyncScreen):
 
     @Slot(str, result="QVariant")
     def items(self, kind):
-        """The list of `kind`'s add-ons, as menu items whose action is the add-on's id; an empty action picks nothing."""
+        """The list of `kind`'s add-ons, as menu items whose action is the add-on's id; an empty action picks nothing, its
+        `state` says why (`loading`, `error`, `empty`). An open list takes them again on `listingChanged`."""
         if self._listing is None:
-            return [{"icon": "refresh", "label": "Loading the add-ons…", "detail": "", "action": ""}]
+            return [{"icon": "refresh", "label": "Loading add-ons…", "detail": "", "action": "", "state": "loading"}]
         out = []
         for r in self._rows(kind):
             icon = "refresh" if r["update"] else "check" if r["installed"] else "download"
-            out.append({"icon": icon, "label": r["name"], "detail": state(r, self._busy_on(r["id"])), "action": r["id"]})
-        error = self._listing["index"]["error"]
-        if error:
-            out.append({"icon": "", "label": "The add-on index could not be reached", "detail": "", "action": ""})
+            out.append({"icon": icon, "label": r["name"], "detail": state(r, self._busy_on(r["id"])), "action": r["id"], "state": "addon"})
+        if self._listing["index"]["error"]:
+            out.append({"icon": "", "label": "Couldn't load add-ons", "detail": "", "action": "", "state": "error"})
         elif not out:
-            out.append({"icon": "", "label": "No add-ons of this kind yet", "detail": "", "action": ""})
+            out.append({"icon": "", "label": "No add-ons of this kind yet", "detail": "", "action": "", "state": "empty"})
         return out
 
     @Slot(str, result="QVariant")

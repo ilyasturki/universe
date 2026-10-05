@@ -928,7 +928,9 @@ installed extension's `origin` reads `unlisted` as a `tag` and in `meta`. Each l
 `toggle` leaves it). Picking it opens `api.screens.addons` (`AddonsForm`, over the core's
 `extensions()`, fetched again when a list loads, or at once after an install or a removal, once a
 minute at most) in the look's menu: `items(kind)` is one item per add-on of the kind, its `action`
-the add-on's id, an empty one picking nothing (loading, the index unreachable, none listed).
+the add-on's id, an empty one picking nothing, its `state` saying why (`loading`, `error` as
+"Couldn't load add-ons", `empty`). The open list takes `items(kind)` again on `listingChanged`, in
+place (`addonsShown` names its kind while it is open).
 `actions(id)` is what the pick does: Install for one not installed, nothing for one written for
 another Universe (`incompatible`), Remove for an installed one, after Update when the index lists
 another version. A single action goes straight to its confirmation, more open a menu

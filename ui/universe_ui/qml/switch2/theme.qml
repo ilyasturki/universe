@@ -318,15 +318,25 @@ FocusScope {
             root.componentAction(ident, action);
         });
     }
+    // The kind whose add-ons the picker lists while it is open, "" otherwise, and the items it shows.
+    property string addonsShown: ""
+    property var addonsItems: []
+    function addonsChoices(kind) {
+        addonsItems = api.screens.addons.items(kind);
+        return addonsItems.map(function (i) {
+            return i.detail ? i.label + " · " + i.detail : i.label;
+        });
+    }
     function addonsMenu(kind) {
         var addons = api.screens.addons;
         Sound.play("ok");
-        menu("Add-ons", addons.items(kind).map(function (i) {
-            return {
-                label: i.detail ? i.label + " · " + i.detail : i.label,
-                act: i.action
-            };
-        }), function (ident) {
+        addonsShown = kind;
+        pick({
+            title: "Add-ons",
+            choices: addonsChoices(kind)
+        }, function (i) {
+            var ident = i >= 0 ? root.addonsItems[i].action : "";
+            root.addonsShown = "";
             if (ident === "")
                 return;
             var actions = addons.actions(ident);
@@ -709,6 +719,10 @@ FocusScope {
         target: api.screens.addons
         function onMessage(text) {
             Base.Notices.show(text);
+        }
+        function onListingChanged() {
+            if (root.addonsShown !== "" && picker.open)
+                picker.choices = root.addonsChoices(root.addonsShown);
         }
     }
 

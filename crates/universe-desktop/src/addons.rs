@@ -90,11 +90,11 @@ fn fill(page: &adw::PreferencesPage, shown: &Rc<RefCell<Option<adw::PreferencesG
         shown.replace(Some(group.clone()));
         let listing = match listing {
             Ok(listing) => listing,
-            Err(e) => return group.set_description(Some(&e.to_string())),
+            Err(e) => return group.set_description(Some(&gettext("Couldn’t load add-ons: {}").replace("{}", &e.to_string()))),
         };
         let error = text(&listing["index"], "error");
         if !error.is_empty() {
-            group.set_description(Some(&gettext("The add-on index could not be reached: {}").replace("{}", &error)));
+            group.set_description(Some(&gettext("Couldn’t load add-ons: {}").replace("{}", &error)));
         }
         let index = text(&listing["index"], "url");
         for entry in listing["extensions"].as_array().into_iter().flatten().filter(|r| text(r, "kind") == kind).cloned() {

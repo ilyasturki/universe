@@ -300,17 +300,29 @@ FocusScope {
             root.componentAction(ident, action);
         });
     }
-    function addonsMenu(kind) {
-        var addons = api.screens.addons;
-        Sound.play("ok");
-        menu("Add-ons", addons.items(kind).map(function (i) {
+    // The kind whose add-ons the popup lists while it is open, "" otherwise, and the items it shows.
+    property string addonsShown: ""
+    property var addonsItems: []
+    function addonsRows(kind) {
+        addonsItems = api.screens.addons.items(kind);
+        return addonsItems.map(function (i) {
             return {
                 label: i.label,
                 glyph: i.icon || "",
-                detail: i.detail || "",
-                act: i.action
+                detail: i.detail || ""
             };
-        }), function (ident) {
+        });
+    }
+    function addonsMenu(kind) {
+        var addons = api.screens.addons;
+        Sound.play("ok");
+        addonsShown = kind;
+        showMenu({
+            title: "Add-ons",
+            items: addonsRows(kind)
+        }, function (i) {
+            var ident = i >= 0 ? root.addonsItems[i].action : "";
+            root.addonsShown = "";
             if (ident === "")
                 return;
             var actions = addons.actions(ident);
@@ -650,6 +662,12 @@ FocusScope {
         target: api.screens.addons
         function onMessage(text) {
             Base.Notices.show(text);
+        }
+        function onListingChanged() {
+            if (root.addonsShown === "" || !popup.open)
+                return;
+            popup.detailHeights = {};
+            popup.items = root.addonsRows(root.addonsShown);
         }
     }
 

@@ -84,6 +84,8 @@ FocusScope {
     readonly property var modulesForm: api.screens.modules
     readonly property var sourceList: api.screens.sourceList
     readonly property var addons: api.screens.addons
+    // The kind whose add-ons the menu lists while it is open, "" otherwise.
+    property string addonsShown: ""
     readonly property var listForm: sectionId === "modules" ? modulesForm : sectionId === "sources" ? sourceList : null
     readonly property var launch: api.screens.launch
     readonly property var runners: api.screens.runners
@@ -672,7 +674,9 @@ FocusScope {
 
     function addonsMenu(kind) {
         Sound.panel();
+        addonsShown = kind;
         menu.show(addons.items(kind), cards, cards.focusRect, "Add-ons", function (ident) {
+            addonsShown = "";
             if (ident === "") {
                 cards.forceActiveFocus();
                 return;
@@ -1203,6 +1207,10 @@ FocusScope {
         function onMessage(text) {
             page.message(text);
         }
+        function onListingChanged() {
+            if (page.addonsShown !== "" && menu.open)
+                menu.items = page.addons.items(page.addonsShown);
+        }
     }
 
     Connections {
@@ -1595,7 +1603,10 @@ FocusScope {
         anchors.fill: parent
         z: 4
 
-        onDismissed: cards.forceActiveFocus()
+        onDismissed: {
+            page.addonsShown = "";
+            cards.forceActiveFocus();
+        }
     }
 
     Connections {

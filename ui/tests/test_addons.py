@@ -10,16 +10,16 @@ def form_of(api, kind):
     return api.screens.modules if kind == "module" else api.screens.sourceList
 
 
-def more_row(api, kind):
-    """The list's last row, once the index is in: "Get more…"."""
+def more_row(api, kind, loaded=True):
+    """The list's last row, "Get more…", once the index is in unless `loaded` is false."""
     form = form_of(api, kind)
-    until(lambda: form.rows and form.rows[-1]["key"] == "more" and api.screens.addons.listing is not None, "the list ends on Get more…")
+    until(lambda: form.rows and form.rows[-1]["key"] == "more" and (not loaded or api.screens.addons.listing is not None), "the list ends on Get more…")
     return len(form.rows) - 1, form.rows[-1]
 
 
-def opened(look, page, kind):
+def opened(look, page, kind, loaded=True):
     """The "Get more…" row picked: the add-ons of `kind`, in the look's menu."""
-    index, row = more_row(look.api, kind)
+    index, row = more_row(look.api, kind, loaded)
     invoke(page, "activate", index, {"key": "more", "addons": row["addons"]})
     menu = page.findChild(QObject, "settingsMenu") if not look.stacked else look.menu()
     until(lambda: menu.property("open") is True, "the add-ons list opens")
@@ -39,9 +39,15 @@ def answered(look, page, ask):
     until(lambda: dialog.property("open") is False)
 
 
+def labels(menu):
+    """The rows the look's menu shows: the Switch 2 picker's choices carry a row's detail after its label."""
+    if menu.objectName() == "picker":
+        return [c.partition(" · ")[0] for c in read(menu, "choices")]
+    return [i["label"] for i in read(menu, "items")]
+
+
 def shown(menu):
-    items = read(menu, "choices" if menu.objectName() == "picker" else "items")
-    return len(items)
+    return len(labels(menu))
 
 
 @pytest.mark.slow
@@ -61,6 +67,32 @@ def test_get_more_lists_the_index_installs_after_a_confirmation_and_the_list_tak
     form = form_of(api, kind)
     until(lambda: any(r["module"] == first for r in form.rows), "the installed add-on joins the list")
     until(lambda: next(r for r in addons.listing["extensions"] if r["id"] == first)["installed"], "and the add-ons list says it is installed")
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("lands", ["listing", "failure"])
+def test_an_open_add_ons_list_takes_the_index_in_place_when_it_lands(look, api, fake, monkeypatch, lands):
+    import threading
+
+    addons = api.screens.addons
+    page = look.settings("modules")
+    more_row(api, "module")
+    gate, listing = threading.Event(), fake.core.extensions
+
+    def held():
+        gate.wait(5)
+        return listing() if lands == "listing" else {"index": {"url": "", "error": "offline"}, "extensions": []}
+
+    monkeypatch.setattr(fake.core, "extensions", held)
+    addons._listing = None
+    addons.load()
+    menu = opened(look, page, "module", loaded=False)
+    assert [i["state"] for i in addons.items("module")] == ["loading"] and labels(menu) == [i["label"] for i in addons.items("module")]
+    gate.set()
+    states = ["addon", "addon"] if lands == "listing" else ["error"]
+    until(lambda: [i["state"] for i in addons.items("module")] == states, "the index lands")
+    until(lambda: labels(menu) == [i["label"] for i in addons.items("module")], "the open list takes it")
+    assert menu.property("open") is True, "in place, without reopening"
 
 
 @pytest.mark.slow
