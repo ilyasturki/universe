@@ -41,17 +41,20 @@ def main():
         search = f"/run/wrappers/bin{os.pathsep}{search}"
     for name in BINS:
         path = shutil.which(name, path=search)
-        ok, detail = path is not None, path or f"{name} is not on PATH"
+        ok, detail, line_fix, component = path is not None, path or f"{name} is not on PATH", fix, "gpu-screen-recorder"
         # Without the capability gpu-screen-recorder runs it through pkexec, a password prompt per recording.
         if path and name == "gsr-kms-server" and not capable(path):
             ok, detail = False, f"{path} lacks cap_sys_admin: each recording would ask for a password"
+            # Installing the package again leaves the capability as it is.
+            component = ""
+            line_fix = fix if distro == "nixos" else f"sudo setcap cap_sys_admin+ep {path}"
         line = {
             "check": name,
             "label": name,
             "ok": ok,
             "detail": detail,
-            "fix": fix,
-            "component": "gpu-screen-recorder",
+            "fix": line_fix,
+            "component": component,
         }
         print(json.dumps(line))
     return 0

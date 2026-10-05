@@ -249,15 +249,17 @@ def test_check_words_the_gsr_fix_for_the_distribution(tmp_path, distro, fix):
     assert all(fix in c["fix"] and c["component"] == "gpu-screen-recorder" for c in lines)
 
 
-def test_check_fails_a_gsr_kms_server_without_cap_sys_admin(tmp_path):
+@pytest.mark.parametrize("distro", ["arch", "debian"])
+def test_check_fails_a_gsr_kms_server_without_cap_sys_admin(tmp_path, distro):
     for name in ("gpu-screen-recorder", "gsr-cli", "gsr-kms-server"):
         _write_shim(tmp_path / name, "exit 0")
-    env = {"PATH": str(tmp_path), "UNIVERSE_DISTRO": "debian"}
+    env = {"PATH": str(tmp_path), "UNIVERSE_DISTRO": distro}
     result = subprocess.run([sys.executable, str(BIN_DIR / "check")], env=env, capture_output=True, text=True, timeout=30, check=False)
     assert result.returncode == 0, result.stderr
     lines = [json.loads(line) for line in result.stdout.splitlines()]
     assert [(c["check"], c["ok"]) for c in lines] == [("gpu-screen-recorder", True), ("gsr-cli", True), ("gsr-kms-server", False)]
-    assert "setcap cap_sys_admin+ep" in lines[2]["fix"]
+    assert lines[2]["fix"] == f"sudo setcap cap_sys_admin+ep {tmp_path / 'gsr-kms-server'}"
+    assert lines[2]["component"] == "", "the package is installed: installing it again sets no capability"
 
 
 def _vfs_cap(magic, permitted):
