@@ -485,7 +485,7 @@ FocusScope {
         var bt = api.screens.bluetooth;
         if (pairing && pairing.id === r.id && r.kind === "display") {
             pairing = r;
-            dialog.detail = r.code + "\n\n" + r.detail + (r.entered > 0 ? "\n\n" + r.entered + " typed" : "");
+            dialog.detail = r.detail + (r.entered > 0 ? "\n\n" + r.entered + " typed" : "");
             return;
         }
         pairing = r;
@@ -511,7 +511,7 @@ FocusScope {
         var display = r.kind === "display";
         dialog.show({
             message: r.title,
-            detail: display || r.kind === "confirm" ? r.code + "\n\n" + r.detail : r.detail,
+            detail: r.detail,
             buttons: display ? ["Cancel"] : ["Cancel", "Pair"]
         }, after(function (i) {
             if (!answered(r))

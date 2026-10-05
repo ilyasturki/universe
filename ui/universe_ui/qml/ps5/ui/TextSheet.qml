@@ -202,7 +202,7 @@ Modal {
                 anchors.verticalCenter: parent.verticalCenter
                 width: Theme.dp(30)
                 height: width
-                visible: sheet.labels.length === 0
+                visible: sheet.labels.length === 0 && !sheet.secret
                 kind: "search"
             }
 

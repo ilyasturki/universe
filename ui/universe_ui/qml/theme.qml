@@ -1291,7 +1291,7 @@ FocusScope {
                 bt.answerText(value);
             }, request.kind === "passkey" ? "number" : "text");
         } else if (request.kind === "display") {
-            confirm.choose(request.title + " · " + request.code, request.detail, [
+            confirm.choose(request.title, request.detail, [
                 {
                     icon: "close",
                     label: "Cancel",
@@ -1303,7 +1303,7 @@ FocusScope {
         } else {
             confirm.ask({
                 message: request.title,
-                detail: request.kind === "confirm" ? request.code + " · " + request.detail : request.detail,
+                detail: request.detail,
                 no: "Cancel",
                 yes: "Pair"
             }, answered);
