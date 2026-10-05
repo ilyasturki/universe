@@ -236,6 +236,12 @@ pub enum Cmd {
         #[command(subcommand)]
         action: SourceCmd,
     },
+    /// Extensions: modules and sources that do not ship with Universe, from its index, a URL, an archive or a folder
+    #[command(alias = "extensions")]
+    Extension {
+        #[command(subcommand)]
+        action: ExtensionCmd,
+    },
     /// Sources and their state: login, cached library, install folder
     Sources,
     /// Log into a source (prints the URL, then takes the code)
@@ -588,6 +594,24 @@ pub enum ComponentCmd {
     Rollback { id: String },
     /// What runs: latest (Universe's newest build), system (a runner's own program) or a version
     Use { id: String, build: String },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ExtensionCmd {
+    /// The index's extensions and the installed ones
+    #[command(alias = "list")]
+    Ls,
+    /// Install an extension, asking first: an id from the index, an https:// URL, an archive (tar or zip) or a folder
+    Install {
+        what: String,
+        /// Install without asking
+        #[arg(long, short)]
+        yes: bool,
+    },
+    /// Fetch installed extensions again from where they came from: the index's newer version, else the URL, archive or folder; every one when no id is given
+    Update { id: Option<String> },
+    /// Remove an installed extension, switched off first
+    Remove { id: String },
 }
 
 #[derive(Subcommand, Debug)]
@@ -1342,6 +1366,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         }
         Cmd::Runner { action } => return runner(core, action, json).await,
         Cmd::Component { action } => return component(core, action, json).await,
+        Cmd::Extension { action } => return extension(core, action, json).await,
         Cmd::Set { name, pairs } => {
             let id = pick(&core, &name).await?;
             for p in pairs {
@@ -2118,6 +2143,75 @@ async fn component(core: Core, action: ComponentCmd, json: bool) -> anyhow::Resu
         ComponentCmd::Use { id, build } => {
             core.component_use(&id, &build).await?;
             report(json, true, &format!("{id}: {build}"));
+        }
+    }
+    Ok(())
+}
+
+async fn extension(core: Core, action: ExtensionCmd, json: bool) -> anyhow::Result<()> {
+    match action {
+        ExtensionCmd::Ls => {
+            let v = core.extensions().await?;
+            if json {
+                return print_json(&v);
+            }
+            let error = s(&v["index"], "error");
+            if !error.is_empty() {
+                eprintln!("{}", format!("index: {error}").yellow());
+            }
+            let mut t = table(&["Id", "Kind", "Name", "Version", ""]);
+            for e in v["extensions"].as_array().cloned().unwrap_or_default() {
+                let state = match (e["installed"].as_bool() == Some(true), s(&e, "update"), s(&e, "incompatible")) {
+                    (true, update, _) if !update.is_empty() => format!("installed {} · update {update}", s(&e, "installed_version")),
+                    (true, _, _) if s(&e, "origin") == "unlisted" => format!("installed {} · unlisted", s(&e, "installed_version")),
+                    (true, _, _) => format!("installed {}", s(&e, "installed_version")),
+                    (false, _, why) if !why.is_empty() => why,
+                    _ => String::new(),
+                };
+                t.add_row(vec![s(&e, "id"), s(&e, "kind"), s(&e, "name"), s(&e, "version"), state]);
+            }
+            println!("{t}");
+        }
+        ExtensionCmd::Install { what, yes } => {
+            let config = core.config.read().await.clone();
+            let mut p = progress_printer(json);
+            let origin = crate::extensions::resolve(&config, &what).await?;
+            let staged = crate::extensions::prepare(origin, Some(&mut p), &std::sync::atomic::AtomicBool::new(false)).await?;
+            if !yes {
+                if json || !std::io::IsTerminal::is_terminal(&std::io::stdin()) {
+                    anyhow::bail!("{}\npass --yes to accept it and install", staged.warning());
+                }
+                eprintln!("{}", staged.warning().yellow());
+                if !confirm(&format!("install {}?", staged.name)) {
+                    return Ok(());
+                }
+            }
+            let placed = core.extension_place(staged).await;
+            finish(
+                json,
+                placed.map(|v| {
+                    format!("{} {} {} installed: universe {} enable {} turns it on", s(&v, "kind"), s(&v, "id"), s(&v, "version"), s(&v, "kind"), s(&v, "id"))
+                }),
+            );
+        }
+        ExtensionCmd::Update { id } => {
+            let mut p = progress_printer(json);
+            let list = core.extension_update(id.as_deref().unwrap_or(""), Some(&mut p)).await?;
+            if json {
+                return print_json(&list);
+            }
+            if list.is_empty() {
+                println!("everything is current");
+            }
+            for u in &list {
+                let error = s(u, "error");
+                let tail = if error.is_empty() { String::new() } else { format!(": {error}") };
+                report(false, error.is_empty(), &format!("{} {}{tail}", s(u, "name"), s(u, "version")));
+            }
+        }
+        ExtensionCmd::Remove { id } => {
+            core.extension_remove(&id).await?;
+            report(json, true, &format!("{id} removed"));
         }
     }
     Ok(())

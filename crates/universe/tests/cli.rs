@@ -176,3 +176,25 @@ fn osd_takes_a_dash_led_label_past_the_dashes_and_refuses_a_bad_argument_as_usag
         assert!(code == 2 || err.contains("desktop.profile"), "{args:?}: {err}");
     }
 }
+
+#[test]
+fn an_extension_install_asks_first_then_lists_and_goes() {
+    let dir = no_desktop();
+    let ext = dir.path().join("work/hello");
+    std::fs::create_dir_all(&ext).unwrap();
+    std::fs::write(ext.join("module.toml"), "api = 2\nid = \"hello\"\nname = \"Hello\"\nversion = \"1.0.0\"\n").unwrap();
+    let index = dir.path().join("index.json");
+    std::fs::write(&index, r#"{"schema": 1, "extensions": []}"#).unwrap();
+    let env = [("UNIVERSE_EXTENSIONS_INDEX", index.to_str().unwrap()), NO_BUS];
+    let asked = universe(&dir, &["extension", "install", ext.to_str().unwrap()], &env);
+    assert!(!asked.status.success() && text(&asked.stderr).contains("runs programs as you"), "no terminal, no --yes: {}", text(&asked.stderr));
+    let out = universe(&dir, &["extension", "install", ext.to_str().unwrap(), "--yes", "--json"], &env);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let listed: serde_json::Value = serde_json::from_slice(&universe(&dir, &["extension", "ls", "--json"], &env).stdout).unwrap();
+    let rows = listed["extensions"].as_array().unwrap();
+    assert_eq!((rows.len(), &rows[0]["id"], &rows[0]["origin"]), (1, &serde_json::json!("hello"), &serde_json::json!("unlisted")));
+    let modules = |dir| -> Vec<serde_json::Value> { serde_json::from_slice(&universe(dir, &["module", "ls", "--json"], &env).stdout).unwrap() };
+    assert!(modules(&dir).iter().any(|m| m["id"] == "hello"), "an installed module is a module");
+    assert!(universe(&dir, &["extension", "remove", "hello"], &env).status.success());
+    assert!(!modules(&dir).iter().any(|m| m["id"] == "hello"));
+}

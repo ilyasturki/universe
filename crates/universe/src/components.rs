@@ -282,7 +282,7 @@ pub async fn load(config: &Config, refresh: bool) -> Loaded {
     }
 }
 
-fn client() -> Result<reqwest::Client> {
+pub(crate) fn client() -> Result<reqwest::Client> {
     reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(20))
         .read_timeout(Duration::from_secs(60))
@@ -309,11 +309,11 @@ async fn fetch_catalogue(url: &str) -> Result<Catalogue> {
     Ok(catalogue)
 }
 
-fn now() -> String {
+pub(crate) fn now() -> String {
     chrono::Local::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
 
-fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
+pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -500,7 +500,7 @@ fn appimage_extract(image: &Path, work: &Path) -> Result<PathBuf> {
     Ok(root.canonicalize()?)
 }
 
-fn single_child(dir: &Path) -> PathBuf {
+pub(crate) fn single_child(dir: &Path) -> PathBuf {
     let entries: Vec<PathBuf> = std::fs::read_dir(dir).map(|rd| rd.flatten().map(|e| e.path()).collect()).unwrap_or_default();
     match entries.as_slice() {
         [only] if only.symlink_metadata().is_ok_and(|m| m.is_dir()) => only.clone(),
@@ -512,8 +512,32 @@ fn file_name(url: &str) -> String {
     url.rsplit('/').next().unwrap_or(url).split('?').next().unwrap_or("").to_string()
 }
 
+fn tar_archive(format: Format, file: &Path) -> Result<tar::Archive<std::io::BufReader<Box<dyn std::io::Read>>>> {
+    let f = std::fs::File::open(file)?;
+    let reader: Box<dyn std::io::Read> = match format {
+        Format::TarGz => Box::new(flate2::read::GzDecoder::new(f)),
+        Format::TarXz => Box::new(liblzma::read::XzDecoder::new(f)),
+        _ => Box::new(f),
+    };
+    let mut archive = tar::Archive::new(std::io::BufReader::new(reader));
+    archive.set_preserve_permissions(true);
+    archive.set_overwrite(true);
+    Ok(archive)
+}
+
+/// A tar (plain, gzip or xz) or a zip, whole, into `dir`; `label` names it in an error.
+pub(crate) fn unpack_archive(format: Format, file: &Path, dir: &Path, label: &str) -> Result<()> {
+    match format {
+        Format::Tar | Format::TarGz | Format::TarXz => Ok(tar_archive(format, file)?.unpack(dir)?),
+        Format::Zip => {
+            let zipped = |e: zip::result::ZipError| Error::Io(format!("{label}: {e}"));
+            zip::ZipArchive::new(std::fs::File::open(file)?).map_err(zipped)?.extract(dir).map_err(zipped)
+        }
+        Format::Binary | Format::AppImage => Err(Error::Invalid(format!("{label}: not an archive"))),
+    }
+}
+
 fn unpack(asset: &Asset, kind: Kind, bin: &str, file: &Path, staging: &Path) -> Result<(PathBuf, String)> {
-    use std::io::{BufReader, Read};
     std::fs::create_dir_all(staging)?;
     let program = default_program(kind, asset, bin);
     let single = || if program.is_empty() { file_name(&asset.url) } else { program.clone() };
@@ -525,34 +549,20 @@ fn unpack(asset: &Asset, kind: Kind, bin: &str, file: &Path, staging: &Path) -> 
             staging.to_path_buf()
         }
         Format::AppImage => appimage_extract(file, staging)?,
-        Format::Tar | Format::TarGz | Format::TarXz => {
-            let f = std::fs::File::open(file)?;
-            let reader: Box<dyn Read> = match asset.format {
-                Format::TarGz => Box::new(flate2::read::GzDecoder::new(f)),
-                Format::TarXz => Box::new(liblzma::read::XzDecoder::new(f)),
-                _ => Box::new(f),
-            };
-            let mut archive = tar::Archive::new(BufReader::new(reader));
-            archive.set_preserve_permissions(true);
-            archive.set_overwrite(true);
-            if asset.member.is_empty() {
-                archive.unpack(staging)?;
-                single_child(staging)
-            } else {
-                let mut entry = archive
-                    .entries()?
-                    .flatten()
-                    .find(|e| e.path().is_ok_and(|p| p.as_os_str() == asset.member.as_str()))
-                    .ok_or_else(|| Error::Io(format!("{}: no {} inside", asset.url, asset.member)))?;
-                let dest = staging.join(single());
-                entry.unpack(&dest)?;
-                set_executable(&dest)?;
-                staging.to_path_buf()
-            }
+        Format::Tar | Format::TarGz | Format::TarXz if !asset.member.is_empty() => {
+            let mut archive = tar_archive(asset.format, file)?;
+            let mut entry = archive
+                .entries()?
+                .flatten()
+                .find(|e| e.path().is_ok_and(|p| p.as_os_str() == asset.member.as_str()))
+                .ok_or_else(|| Error::Io(format!("{}: no {} inside", asset.url, asset.member)))?;
+            let dest = staging.join(single());
+            entry.unpack(&dest)?;
+            set_executable(&dest)?;
+            staging.to_path_buf()
         }
-        Format::Zip => {
-            let zipped = |e: zip::result::ZipError| Error::Io(format!("{}: {e}", asset.url));
-            zip::ZipArchive::new(std::fs::File::open(file)?).map_err(zipped)?.extract(staging).map_err(zipped)?;
+        Format::Tar | Format::TarGz | Format::TarXz | Format::Zip => {
+            unpack_archive(asset.format, file, staging, &asset.url)?;
             single_child(staging)
         }
     };
@@ -594,6 +604,16 @@ fn check_space(dir: &Path, asset: &Asset) -> Result<()> {
 }
 
 async fn download(url: &str, dest: &Path, sha256: &str, size: u64, label: &str, progress: &mut Option<Progress<'_, '_>>, cancel: &AtomicBool) -> Result<()> {
+    let digest = fetch(url, dest, size, label, progress, cancel).await?;
+    if !digest.eq_ignore_ascii_case(sha256.trim()) {
+        let _ = std::fs::remove_file(dest);
+        return Err(Error::Io(format!("{url}: sha256 {digest}, not the pinned {sha256}")));
+    }
+    Ok(())
+}
+
+/// `url` into `dest`, returning its sha256; `size` stands in for a length the server does not send.
+pub(crate) async fn fetch(url: &str, dest: &Path, size: u64, label: &str, progress: &mut Option<Progress<'_, '_>>, cancel: &AtomicBool) -> Result<String> {
     use sha2::Digest;
     use tokio::io::AsyncWriteExt;
     let failed = |e: reqwest::Error| Error::Unavailable(format!("{label} could not be downloaded: {e}"));
@@ -626,15 +646,10 @@ async fn download(url: &str, dest: &Path, sha256: &str, size: u64, label: &str, 
     }
     .await;
     drop(file);
-    let digest: String = hasher.finalize().iter().map(|b| format!("{b:02x}")).collect();
-    let result = match result {
-        Ok(()) if !digest.eq_ignore_ascii_case(sha256.trim()) => Err(Error::Io(format!("{url}: sha256 {digest}, not the pinned {sha256}"))),
-        r => r,
-    };
     if result.is_err() {
         let _ = std::fs::remove_file(dest);
     }
-    result
+    result.map(|()| hasher.finalize().iter().map(|b| format!("{b:02x}")).collect())
 }
 
 fn relink(id: &str, kind: Kind, bin: &str) -> Result<()> {

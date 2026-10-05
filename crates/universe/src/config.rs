@@ -90,6 +90,14 @@ pub struct Config {
     pub system: SystemConfig,
     pub components: ComponentsConfig,
     pub saves: SavesConfig,
+    pub extensions: ExtensionsConfig,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ExtensionsConfig {
+    /// An https:// URL or a file; empty is the registry's.
+    pub index: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -248,6 +256,7 @@ impl Default for Config {
             system: SystemConfig::default(),
             components: ComponentsConfig::default(),
             saves: SavesConfig::default(),
+            extensions: ExtensionsConfig::default(),
         }
     }
 }

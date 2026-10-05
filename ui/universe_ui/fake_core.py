@@ -92,6 +92,7 @@ GAME = {
 # The config sections the fixture leaves out, at the core's defaults.
 CONFIG = {
     "components": {"auto_update": True, "catalogue": ""},
+    "extensions": {"index": ""},
     "controller": {"enabled": True, "hold_ms": 600, "home_summons": True, "volume_step": 2, "axes": {}, "buttons": {}, "macros": None},
     "desktop": {"hide_cursor": True, "cursor_extension": "", "keep_awake": True, "profile": "auto", "whats_new": False},
     "keys": {"prefer_sgdb": False, "sgdb": "", "sgdb_file": "~/.config/steamgriddb/api_key"},
