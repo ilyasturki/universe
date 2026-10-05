@@ -11,6 +11,7 @@ def test_theme_ids_are_unique_and_have_entries():
     assert len(ids) == len(set(ids))
     for theme in THEMES:
         assert (host.QML_DIR / theme["entry"]).is_file(), theme["entry"]
+        assert (host.QML_DIR / theme["osd"]).is_file(), f"{theme['id']} draws the volume level over the game"
         assert theme["unlocked"], f"{theme['id']} words the overlay's unlock card"
         assert theme["accent"] and theme["ground"], f"{theme['id']}'s swatch in Themes"
 

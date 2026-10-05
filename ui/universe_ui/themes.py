@@ -10,6 +10,7 @@ THEMES = [
         "name": "Reprise",
         "entry": "theme.qml",
         "overlay": "ui/Dock.qml",
+        "osd": "ui/VolumeOsd.qml",
         "frame": True,
         "ground": "#0e0f13",
         "accent": "#5aa0ff",
@@ -21,6 +22,7 @@ THEMES = [
         "name": "Switch 2",
         "entry": "switch2/theme.qml",
         "overlay": "",
+        "osd": "ui/VolumePill.qml",
         "frame": False,
         "ground": "#ebebeb",
         "accent": "#1656b9",
@@ -32,6 +34,7 @@ THEMES = [
         "name": "PS5",
         "entry": "ps5/theme.qml",
         "overlay": "ps5/ui/ControlCenter.qml",
+        "osd": "ui/VolumePill.qml",
         "frame": False,
         "ground": "#0b0d12",
         "accent": "#3b8ff0",
@@ -131,6 +134,7 @@ class ThemeSelector(QObject):
     name = Property(str, lambda self: self._current["name"], notify=changed)
     entry = Property(str, lambda self: self._current["entry"], notify=changed)
     overlay = Property(str, lambda self: self._current["overlay"], notify=changed)
+    osd = Property(str, lambda self: self._current["osd"], notify=changed)
     # Whether the look bridges the swap with the game's last frame; without it HOME need not wait for one.
     frame = Property(bool, lambda self: bool(self._current["frame"]), notify=changed)
     ground = Property(str, lambda self: self._current["ground"], notify=changed)

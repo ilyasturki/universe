@@ -5,7 +5,7 @@ from looks import LOOKS, MENU, Look, call, current_row, invoke, lit_fraction, re
 from PySide6.QtCore import QObject, Qt
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QTest
-from uitest import own, pump, record, until
+from uitest import descendant, own, pump, record, until
 
 from universe_ui import host
 
@@ -232,25 +232,34 @@ def test_a_launch_holds_the_poster_until_the_window_is_shown(look, fake, monkeyp
     assert root.property("playingId") == "control"
 
 
-def test_the_overlay_draws_the_volume_level_inside_gamescope(api, fake, monkeypatch):
-    from PySide6.QtCore import QRect, QSize
-    from PySide6.QtQml import QQmlApplicationEngine
+def test_each_look_draws_its_volume_level_over_the_game_and_keeps_it_under_the_mute(api, fake, monkeypatch, look):
+    from PySide6.QtCore import QRectF, QSize
 
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
     monkeypatch.setattr(fake, "overlay", lambda window, input, opacity: None)
-    engine = QQmlApplicationEngine()
-    engine.rootContext().setContextProperty("api", api)
-    overlay = host.create_overlay(engine, QSize(1280, 720))
+    overlay = host.create_overlay(look.engine, QSize(1280, 720))
     assert api.home.attachOverlay(overlay)
     settle(overlay)
-    band = QRect(320, 540, 640, 120)
-    before = lit_fraction(overlay.grabWindow().copy(band), "#000000")
+    card = until(lambda: descendant(overlay.contentItem(), "osdCard"))
+    band = card.parentItem().mapRectToScene(QRectF(card.x(), card.y(), card.width(), card.height())).toRect()
+    assert overlay.contentItem().boundingRect().contains(band) and band.top() > overlay.height() / 2, "above the bottom edge, inside the frame"
+    assert lit_fraction(overlay.grabWindow().copy(band), "#000000") < 0.05
     api.screens.controller._on_event({"event": "volume", "percent": 60, "muted": False, "output": "Speakers"})
-    until(lambda: lit_fraction(overlay.grabWindow().copy(band), "#000000") > before + 0.05, "the level's pill above the bottom edge")
-    shot = overlay.grabWindow()
-    if os.environ.get("UNIVERSE_SHOT_DIR"):
-        shot.save(os.path.join(os.environ["UNIVERSE_SHOT_DIR"], "overlay-osd.png"))
+    until(lambda: lit_fraction(overlay.grabWindow().copy(band), "#000000") > 0.8, "the level's card drawn where it rests")
+    if where := os.environ.get("UNIVERSE_SHOT_DIR"):
+        overlay.grabWindow().save(os.path.join(where, f"overlay-osd-{look.name}.png"))
+    fill, glyph = descendant(card, "osdFill"), descendant(card, "osdGlyph")
+
+    def at_level():
+        return abs(fill.property("width") - fill.parentItem().width() * 0.6) < 1
+
+    until(at_level, "the bar fills to the level")
+    assert glyph.property("kind") != "mute"
+    api.screens.controller._on_event({"event": "volume", "percent": 60, "muted": True, "output": "Speakers"})
+    until(lambda: glyph.property("kind") == "mute" and fill.property("opacity") < 1, "the mute glyph, the level dimmed")
+    assert at_level(), "the level stays under the mute"
     assert api.home.osd
+    overlay.close()
 
 
 def test_signals_end_the_loop_while_it_idles(app):
