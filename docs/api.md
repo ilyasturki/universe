@@ -1257,7 +1257,10 @@ Every emulator: the game's environment gets `SDL_GAMECONTROLLERCONFIG_FILE`, poi
 `$XDG_RUNTIME_DIR/universe/controls-<session>.txt` (removed at `session-end`): each held pad's
 SDL mapping without `guide` (unless `guide` is on), `misc1`…`misc6` and `paddle1`…`paddle4`, after
 the controller databases an emulator would itself give that hint, so a line for the same GUID
-ends up ours. An emulator reading pads through SDL's gamepad API never sees
+ends up ours. A Nintendo-style pad's line keeps its `hint:!SDL_GAMECONTROLLER_USE_BUTTON_LABELS:=1`:
+SDL3 takes it as "this mapping is positional" and reads the pad's face style (B at the bottom) off
+it, which sdl2-compat's label swap and the writers that go by label (Ryujinx, Cemu, PPSSPP) rely on.
+An emulator reading pads through SDL's gamepad API never sees
 HOME, capture or the paddles — its hard-wired uses of them included (Vita3K's pause, xemu's and
 Flycast's menus, ScummVM engines' guide keys); the touchpad stays, PS4 and Vita games use it.
 Raw-index readers (Eden, Azahar, melonDS, mGBA, snes9x, mupen64plus) ignore the mapping, and
@@ -1286,19 +1289,28 @@ emulator's own auto-mapping would, player `n` being the `n`th pad in SDL's order
 | `scummvm` | `scummvm.ini` / `~/.scummvmrc` | `joystick_num` = the first pad |
 
 A game's page shows the module's rows on emulator games only (`[applies]`): `wiimote` on Wii games,
-`layout` and `shoulders` on the runners whose writer reads them. `layout` picks the face buttons of a Nintendo diamond (Switch, 3DS, Wii U, DS, GBA, SNES, the
-Wii's Classic Controller): `positional` (A on the right, as on a Switch and as these emulators map
-by themselves) or `xbox` (A at the bottom), per game over a global default; GameCube keeps
-Dolphin's own preset and N64 mupen64plus's (A bottom, B left). `wiimote` picks how a Wii game holds
-the remote, per game over a global default, on every held port: `nunchuk` (upright with a nunchuk),
-`sideways` (no extension, Dolphin's `Sideways Wiimote` on, the D-pad and left stick on its D-pad, 2,
-1 and A on `layout`'s A, B and X) or `classic` (the Classic Controller). `shoulders`, per game over
-a global default, `standard` or `swapped`, exchanges the pad's bumpers and triggers in every writer
-that binds them (not xemu, Flycast or ScummVM): standard is L/R on the bumpers and ZL/ZR, L2/R2 on
-the triggers; GameCube L/R on the triggers and Z on either bumper; N64 L/R on the bumpers, Z on
-the left trigger and R on the right one too. A console with only L and R (GBA, DS, SNES, PSP) takes
-them on the bumpers and the triggers both; on a pad with digital triggers mGBA and melonDS, which
-bind one button per key, keep the bumper, or the trigger when swapped. A game's own input profile
+`layout` and `shoulders` on the runners whose writer honours them (a value set for all games still
+reaches the others' hooks, and their writers ignore it). `layout` picks where a Nintendo A sits,
+per game over a global default: `positional` (A on the right, as on a Switch and as these
+emulators map by themselves) or `xbox` (A at the bottom), B, X and Y following as on a Switch
+diamond. It holds for the Switch, 3DS, Wii U, DS, GBA and SNES, the GameCube controller and the
+Wii's Classic Controller; on the Wii remote `layout`'s A is the remote's A and its B the remote's
+B (which also stays on the right trigger), 1 and 2 on the left and top buttons. N64 keeps
+mupen64plus's own (A bottom, B left). A face button is named by its place on the pad, not by the
+label SDL gives it: on a Nintendo-printed pad (8BitDo, Switch Pro) `positional` lands A on the
+button printed A in D-input (SDL's HIDAPI 8BitDo driver), in Switch mode, and in X-input mode,
+where SDL takes the pad for an Xbox 360 pad and labels its bottom button A. `wiimote` picks how a
+Wii game holds the remote, per game over a global default, on every held port: `nunchuk` (upright
+with a nunchuk), `sideways` (no extension, Dolphin's `Sideways Wiimote` on, the D-pad and left
+stick on its D-pad, 2, 1, A and B on `layout`'s A, B, X and Y, B also on the right trigger) or
+`classic` (the Classic Controller); no face button is left without a Wii or GameCube button. `shoulders`, per game over a global default,
+`standard` or `swapped`, exchanges the pad's bumpers and triggers where a console tells them
+apart (Switch, Wii U, 3DS, GameCube, Wii, N64, PS1-PS3): standard is L/R on the bumpers and ZL/ZR,
+L2/R2 on the triggers; GameCube L/R on the triggers and Z on either bumper; N64 L/R on the
+bumpers, Z on the left trigger and R on the right one too. A console with only L and R (GBA, DS,
+SNES, PSP) takes them on the bumpers and the triggers both, so there is nothing to swap and the
+row isn't offered; on a pad with digital triggers mGBA and melonDS, which bind one button per key,
+keep the bumper. A game's own input profile
 keeps its scheme and only follows the held pad (Dolphin `PadProfileN`/`WiimoteProfileN`, Cemu
 `gameProfiles` `controllerN`, RPCS3's other and per-title configs). Dolphin reads every port after
 a game's profiled one from that profile's file, so each held port past it gets
