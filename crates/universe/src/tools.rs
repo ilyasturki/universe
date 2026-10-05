@@ -104,6 +104,8 @@ builds = [{{ version = "{version}", assets = [{{ format = "binary", url = "https
         assert_eq!(pinned.components["storecli"].name, "store-cli", "a shipped pin wins over an installed source's of the same id");
         assert!(!pinned.components.contains_key("offcli"), "a disabled source pins nothing");
         assert!(find("umu-run", "").is_some() && find("wine", "").is_none());
+        pin(&crate::paths::user_sources_dir(), "store", "storecli", "storecli", "1.1.0");
+        assert_eq!(find("storecli", "store"), Some(("store-cli".into(), "1.1.0".into())), "a user's own copy of a shipped source pins in its place");
         let path = search_path();
         let dirs: Vec<PathBuf> = std::env::split_paths(&path).collect();
         assert_eq!(dirs.last(), Some(&dir()), "an installed tool wins over a fetched one");

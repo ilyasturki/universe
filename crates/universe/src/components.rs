@@ -139,20 +139,19 @@ fn builtin() -> Catalogue {
 }
 
 /// What stands in for the catalogue where it lacks an entry: the core's own, then the `[[tools]]` of the enabled sources,
-/// the shipped ones' before the user's and the installed ones'.
+/// each from the manifest that runs it (a user's own copy of a shipped one included), the shipped ids' before the others'.
 pub fn pinned(config: &Config) -> Catalogue {
     let mut out = builtin();
-    let shipped: Vec<PathBuf> = paths::system_source_dirs().into_iter().rev().collect();
-    let others = vec![paths::extensions_dir("source"), paths::user_sources_dir()];
-    for roots in [shipped, others] {
-        let found = crate::modules::read_manifests::<crate::sources::Manifest>(roots.into_iter(), "source.toml", |m| &m.id);
-        let enabled = found.into_values().filter(|(_, m)| config.sources.enabled.contains(&m.id) && crate::extensions::unsupported(m.api).is_none());
-        for (_, manifest) in enabled {
-            for tool in manifest.tools {
-                if !out.components.contains_key(&tool.id) {
-                    out.owners.insert(tool.id.clone(), manifest.id.clone());
-                    out.components.insert(tool.id, tool.entry);
-                }
+    let read = |roots: Vec<PathBuf>| crate::modules::read_manifests::<crate::sources::Manifest>(roots.into_iter(), "source.toml", |m| &m.id);
+    let shipped = read(paths::system_source_dirs());
+    let found = read(crate::modules::roots("source", paths::system_source_dirs(), paths::user_sources_dir()).collect());
+    let enabled = found.into_values().filter(|(_, m)| config.sources.enabled.contains(&m.id) && crate::extensions::unsupported(m.api).is_none());
+    let (first, rest): (Vec<_>, Vec<_>) = enabled.partition(|(_, m)| shipped.contains_key(&m.id));
+    for (_, manifest) in first.into_iter().chain(rest) {
+        for tool in manifest.tools {
+            if !out.components.contains_key(&tool.id) {
+                out.owners.insert(tool.id.clone(), manifest.id.clone());
+                out.components.insert(tool.id, tool.entry);
             }
         }
     }
