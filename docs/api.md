@@ -1292,14 +1292,16 @@ A game's page shows the module's rows on emulator games only (`[applies]`): `wii
 `layout` and `shoulders` on the runners whose writer honours them (a value set for all games still
 reaches the others' hooks, and their writers ignore it). `layout` picks where a Nintendo A sits,
 per game over a global default: `positional` (A on the right, as on a Switch and as these
-emulators map by themselves) or `xbox` (A at the bottom), B, X and Y following as on a Switch
-diamond. It holds for the Switch, 3DS, Wii U, DS, GBA and SNES, the GameCube controller and the
-Wii's Classic Controller; on the Wii remote `layout`'s A is the remote's A and its B the remote's
+emulators, Dolphin aside, map by themselves) or `xbox` (A at the bottom), B, X and Y following as
+on a Switch diamond. It holds for the Switch, 3DS, Wii U, DS, GBA and SNES, the GameCube
+controller and the Wii's Classic Controller; on the Wii remote `layout`'s A is the remote's A and its B the remote's
 B (which also stays on the right trigger), 1 and 2 on the left and top buttons. N64 keeps
 mupen64plus's own (A bottom, B left). A face button is named by its place on the pad, not by the
 label SDL gives it: on a Nintendo-printed pad (8BitDo, Switch Pro) `positional` lands A on the
 button printed A in D-input (SDL's HIDAPI 8BitDo driver), in Switch mode, and in X-input mode,
-where SDL takes the pad for an Xbox 360 pad and labels its bottom button A. `wiimote` picks how a
+where SDL takes the pad for an Xbox 360 pad and labels its bottom button A. In Dolphin a GameCube
+pad (SDL's `face:axby`) is bound by its print under either choice: `layout`'s A, B, X and Y are
+the buttons printed so, and the upright remote's 1 and 2 sit on its X and Y. `wiimote` picks how a
 Wii game holds the remote, per game over a global default, on every held port: `nunchuk` (upright
 with a nunchuk), `sideways` (no extension, Dolphin's `Sideways Wiimote` on, the D-pad and left
 stick on its D-pad, 2, 1, A and B on `layout`'s A, B, X and Y, B also on the right trigger) or

@@ -3,6 +3,7 @@ import re
 from pathlib import Path
 
 from _controls import EAST, NORTH, SOUTH, WEST, Context, Skip, config_home, data_home, ini_rewrite, ini_section, ordinals, swap_names
+from _gamepads import LABEL_A, LABEL_B, LABEL_X, LABEL_Y
 
 PORTS = 4
 GC_CONTROLLER, WIIU_ADAPTER = "6", "12"
@@ -16,6 +17,9 @@ SDL_HINTS = {
     "SDL_JOYSTICK_HIDAPI_VERTICAL_JOY_CONS": "0",
 }
 FACE_NAME = {SOUTH: "`Button S`", EAST: "`Button E`", WEST: "`Button W`", NORTH: "`Button N`"}
+# SDL's face:axby: a GameCube pad's A sits at SOUTH, X at EAST, B at WEST.
+GAMECUBE_LABELS = (LABEL_A, LABEL_X, LABEL_B, LABEL_Y)
+GAMECUBE_FACE = {"a": SOUTH, "b": WEST, "x": EAST, "y": NORTH}
 EXTENSION = {"nunchuk": "Nunchuk", "sideways": "None", "classic": "Classic"}
 CALIBRATION = "100.00 141.42 100.00 141.42 100.00 141.42 100.00 141.42"
 OWN_PROFILE = "universe-"
@@ -99,16 +103,16 @@ def devices(pads):
     return [f"SDL/{n}/{p.name}" for n, p in zip(ordinals([p.name for p in pads]), pads, strict=True)]
 
 
-def _face(ctx: Context):
-    return {k: FACE_NAME[b] for k, b in ctx.face.items()}
+def _face(ctx: Context, pad):
+    face = GAMECUBE_FACE if pad.labels == GAMECUBE_LABELS else ctx.face
+    return {k: FACE_NAME[b] for k, b in face.items()}
 
 
-def gcpad_buttons(ctx: Context):
-    return _shoulders(ctx, {**{f"Buttons/{k.upper()}": v for k, v in _face(ctx).items()}, **GCPAD})
+def gcpad_buttons(ctx: Context, pad):
+    return _shoulders(ctx, {**{f"Buttons/{k.upper()}": v for k, v in _face(ctx, pad).items()}, **GCPAD})
 
 
-def _sideways(ctx: Context):
-    face = _face(ctx)
+def _sideways(face):
     dpad, stick = _dpad("D-Pad"), _stick("D-Pad", "Left")
     return {
         "Buttons/A": face["x"],
@@ -120,12 +124,13 @@ def _sideways(ctx: Context):
 
 
 def wiimote(ctx: Context, pad):
-    face = _face(ctx)
+    face = _face(ctx, pad)
+    left = FACE_NAME[WEST]
     keys = {
         "Buttons/A": face["a"],
         "Buttons/B": f"`Trigger R` | {face['b']}",
-        "Buttons/1": "`Button W`",
-        "Buttons/2": "`Button N`",
+        "Buttons/1": FACE_NAME[EAST] if left in (face["a"], face["b"]) else left,
+        "Buttons/2": FACE_NAME[NORTH],
         "Buttons/-": "Back",
         "Buttons/+": "Start",
         **({"Buttons/Home": "Guide"} if ctx.guide else {}),
@@ -148,7 +153,7 @@ def wiimote(ctx: Context, pad):
         "Classic/Triggers/L": "`Shoulder L`",
         "Classic/Triggers/R": "`Shoulder R`",
         **_dpad("Classic/D-Pad"),
-        **(_sideways(ctx) if ctx.wiimote == "sideways" else {}),
+        **(_sideways(face) if ctx.wiimote == "sideways" else {}),
         "Extension": EXTENSION[ctx.wiimote],
         "Options/Sideways Wiimote": str(ctx.wiimote == "sideways"),
     }
@@ -229,9 +234,8 @@ def plan(ctx: Context):
     wiimotes = _read(config / "WiimoteNew.ini")
     dolphin = _read(config / "Dolphin.ini")
     core = ini_section(dolphin, "Core")
-    buttons = gcpad_buttons(ctx)
     for n, (pad, device) in enumerate(zip(pads, names, strict=True)):
-        gcpad = _section(gcpad, f"GCPad{n + 1}", device, buttons, GCPAD_DEFAULTS)
+        gcpad = _section(gcpad, f"GCPad{n + 1}", device, gcpad_buttons(ctx, pad), GCPAD_DEFAULTS)
         section = f"Wiimote{n + 1}"
         keys, defaults = wiimote(ctx, pad)
         if wii and ini_section(wiimotes, section).get("Source", "1" if n == 0 else "0") == "0":

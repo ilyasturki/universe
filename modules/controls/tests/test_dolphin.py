@@ -1,7 +1,10 @@
 import _dolphin
 import pytest
 from _controls import Context, ini_section
+from _gamepads import Pad
 from controls_fixtures import EDGE, SWITCH_PRO, XBOX, twin
+
+GAMECUBE_FACED = Pad(**{**vars(EDGE), "labels": _dolphin.GAMECUBE_LABELS})
 
 DOLPHIN_INI = """[Core]
 SIDevice0 = 6
@@ -93,6 +96,25 @@ def test_wiimote_holds_a_nunchuk_and_follows_the_layout(dolphin):
     assert "Buttons/Home" not in wm and wm["Shake/Y"] == "`Shoulder R`"
     positional = ini_section(run(Context([EDGE], "positional"))["WiimoteNew.ini"], "Wiimote1")
     assert [positional[f"Buttons/{k}"] for k in "AB12"] == ["`Button E`", "`Trigger R` | `Button S`", "`Button W`", "`Button N`"]
+
+
+@pytest.mark.parametrize("layout", ["positional", "xbox"])
+def test_a_gamecube_pad_presses_the_buttons_printed_on_it_under_either_layout(dolphin, layout):
+    files = run(Context([GAMECUBE_FACED], layout))
+    gc = ini_section(files["GCPadNew.ini"], "GCPad1")
+    assert [gc[f"Buttons/{k}"] for k in "ABXY"] == ["`Button S`", "`Button W`", "`Button E`", "`Button N`"]
+    wm = ini_section(files["WiimoteNew.ini"], "Wiimote1")
+    assert [wm[f"Buttons/{k}"] for k in "AB12"] == ["`Button S`", "`Trigger R` | `Button W`", "`Button E`", "`Button N`"]
+    assert [wm[f"Classic/Buttons/{k}"] for k in "ABXY"] == [gc[f"Buttons/{k}"] for k in "ABXY"]
+
+
+def test_swapped_shoulders_trade_the_triggers_and_the_bumpers(dolphin):
+    files = run(Context([EDGE], shoulders="swapped"))
+    gc = ini_section(files["GCPadNew.ini"], "GCPad1")
+    assert (gc["Buttons/Z"], gc["Triggers/L"], gc["Triggers/R-Analog"]) == ("`Trigger R` | `Trigger L`", "`Shoulder L`", "`Shoulder R`")
+    wm = ini_section(files["WiimoteNew.ini"], "Wiimote1")
+    assert wm["Buttons/B"] == "`Shoulder R` | `Button S`" and {wm[f"Shake/{k}"] for k in "XYZ"} == {"`Trigger R`"}
+    assert (wm["Nunchuk/Buttons/C"], wm["Nunchuk/Buttons/Z"]) == ("`Trigger L`", "`Shoulder L`")
 
 
 def test_the_games_scheme_picks_the_extension_and_how_the_remote_is_held(dolphin):
@@ -209,10 +231,11 @@ def test_userpath_holds_config_and_game_settings(tmp_path, monkeypatch):
     assert _dolphin.user_dirs() == (tmp_path / "user" / "Config", tmp_path / "user" / "GameSettings")
 
 
+@pytest.mark.parametrize("pad", [EDGE, GAMECUBE_FACED], ids=["diamond", "gamecube"])
 @pytest.mark.parametrize("layout", ["positional", "xbox"])
 @pytest.mark.parametrize("wiimote", ["nunchuk", "sideways", "classic"])
-def test_every_face_button_presses_a_remote_and_a_gamecube_button(dolphin, layout, wiimote):
-    files = run(Context([EDGE], layout, wiimote=wiimote))
+def test_every_face_button_presses_a_remote_and_a_gamecube_button(dolphin, pad, layout, wiimote):
+    files = run(Context([pad], layout, wiimote=wiimote))
     for name, section in (("WiimoteNew.ini", "Wiimote1"), ("GCPadNew.ini", "GCPad1")):
         bound = " ".join(v for k, v in ini_section(files[name], section).items() if k.startswith("Buttons/"))
         assert [face for face in _dolphin.FACE_NAME.values() if face not in bound] == []
