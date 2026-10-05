@@ -476,7 +476,9 @@ class KeyScript(QObject):
                 QCoreApplication.exit(EXPECT_FAILED)
             return
         if phase == "Volume":
-            if self._home is not None:
+            if bare not in ("up", "down", "mute"):
+                log.warning("unknown key %s", name)
+            elif self._home is not None:
                 self._home.volumeMacro(bare)
             return
         if phase == "Mark":

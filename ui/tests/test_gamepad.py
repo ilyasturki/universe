@@ -292,3 +292,10 @@ def test_return_in_homes_dock_launches_nothing_and_another_window_is_unknown(mon
     focused.objectName = lambda: "dialog"
     assert gamepad.launch_target(object()) is None
 
+
+def test_a_volume_phase_takes_up_down_or_mute_alone(app):
+    played = []
+    script = gamepad.KeyScript("Volume:set Volume:up Volume:mute", 1, None, home=SimpleNamespace(volumeMacro=played.append))
+    for _ in range(3):
+        script._step()
+    assert played == ["up", "mute"]
