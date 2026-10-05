@@ -118,3 +118,8 @@ digest differs is refused, and so is one whose manifest holds another id, kind o
 entry. A `url` that names a file is only read from an index that is a file itself. An update that
 the index lists for another `api` is not offered. The index is HTTPS plus these pins, with no
 signature. Universe reads schema 1 and refuses a newer one.
+
+The registry's index is built from
+[ilyasturki/universe-extensions](https://github.com/ilyasturki/universe-extensions). To list an
+extension there, open a pull request adding its entry. Its README says what an entry holds and what
+the check covers.
