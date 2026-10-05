@@ -143,11 +143,10 @@ def _cloud_rows(cloud):
     display = CLOUD_STATES.get(state, state)
     if state == "synced" and cloud.get("at"):
         display = f"Synced {_day(cloud['at'])}"
-    if not cloud.get("enabled") and state != "conflict":
-        display = "Off"
     places = [_home(p.get("path")) for p in cloud.get("locations") or [] if isinstance(p, dict)]
     detail = cloud.get("message") or " · ".join(places)
-    if not cloud.get("enabled"):
+    if not cloud.get("enabled") and state != "conflict":
+        display = "Off"
         detail = "Sessions sync once Cloud saves is on in the store's settings, for every game or this one."
     rows = [_static("cloud_status", "Cloud Saves", display, detail)]
     if state == "conflict":
