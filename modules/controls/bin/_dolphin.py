@@ -41,10 +41,6 @@ def _dpad(prefix):
 
 
 GCPAD = {
-    "Buttons/A": "`Button S`",
-    "Buttons/B": "`Button E`",
-    "Buttons/X": "`Button W`",
-    "Buttons/Y": "`Button N`",
     "Buttons/Z": "`Shoulder R` | `Shoulder L`",
     "Buttons/Start": "Start",
     **_stick("Main Stick", "Left"),
@@ -103,11 +99,20 @@ def devices(pads):
     return [f"SDL/{n}/{p.name}" for n, p in zip(ordinals([p.name for p in pads]), pads, strict=True)]
 
 
+def _face(ctx: Context):
+    return {k: FACE_NAME[b] for k, b in ctx.face.items()}
+
+
+def gcpad_buttons(ctx: Context):
+    return _shoulders(ctx, {**{f"Buttons/{k.upper()}": v for k, v in _face(ctx).items()}, **GCPAD})
+
+
 def _sideways(ctx: Context):
-    face = {k: FACE_NAME[b] for k, b in ctx.face.items()}
+    face = _face(ctx)
     dpad, stick = _dpad("D-Pad"), _stick("D-Pad", "Left")
     return {
         "Buttons/A": face["x"],
+        "Buttons/B": f"`Trigger R` | {face['y']}",
         "Buttons/1": face["b"],
         "Buttons/2": face["a"],
         **{k: f"{dpad[k]} | {stick[k]}" for k in dpad},
@@ -115,9 +120,10 @@ def _sideways(ctx: Context):
 
 
 def wiimote(ctx: Context, pad):
+    face = _face(ctx)
     keys = {
-        "Buttons/A": "`Button S`",
-        "Buttons/B": "`Trigger R`",
+        "Buttons/A": face["a"],
+        "Buttons/B": f"`Trigger R` | {face['b']}",
         "Buttons/1": "`Button W`",
         "Buttons/2": "`Button N`",
         "Buttons/-": "Back",
@@ -131,7 +137,7 @@ def wiimote(ctx: Context, pad):
         "Nunchuk/Buttons/C": "`Shoulder L`",
         "Nunchuk/Buttons/Z": "`Trigger L`",
         **_stick("Nunchuk/Stick", "Left"),
-        **{f"Classic/Buttons/{k.upper()}": FACE_NAME[b] for k, b in ctx.face.items()},
+        **{f"Classic/Buttons/{k.upper()}": v for k, v in face.items()},
         "Classic/Buttons/ZL": "`Trigger L`",
         "Classic/Buttons/ZR": "`Trigger R`",
         "Classic/Buttons/-": "Back",
@@ -223,8 +229,9 @@ def plan(ctx: Context):
     wiimotes = _read(config / "WiimoteNew.ini")
     dolphin = _read(config / "Dolphin.ini")
     core = ini_section(dolphin, "Core")
+    buttons = gcpad_buttons(ctx)
     for n, (pad, device) in enumerate(zip(pads, names, strict=True)):
-        gcpad = _section(gcpad, f"GCPad{n + 1}", device, _shoulders(ctx, GCPAD), GCPAD_DEFAULTS)
+        gcpad = _section(gcpad, f"GCPad{n + 1}", device, buttons, GCPAD_DEFAULTS)
         section = f"Wiimote{n + 1}"
         keys, defaults = wiimote(ctx, pad)
         if wii and ini_section(wiimotes, section).get("Source", "1" if n == 0 else "0") == "0":

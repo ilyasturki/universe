@@ -25,7 +25,7 @@ key = "layout"
 type = "enum"
 default = "positional"
 label = "Nintendo button layout"
-description = "Where A sits in Switch, Wii U, 3DS, DS, GBA and SNES games. GameCube and N64 games keep the emulator's own."
+description = "Where A sits in Nintendo games, GameCube and Wii included. B, X and Y follow it."
 choice_labels = { positional = "Switch (A on the right)", xbox = "Xbox (A at the bottom)" }
 scope = "game"
 choices = ["positional", "xbox"]

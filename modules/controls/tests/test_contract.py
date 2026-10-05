@@ -104,13 +104,12 @@ WRITERS = {
             "dolphin-emu/WiimoteNew.ini": "[Wiimote1]\nSource = 1\nIMUIR/Total Yaw = 50.\n\n[BalanceBoard]\nSource = 0\n",
         },
         kept=("ConfirmStop = False", "Main Stick/Calibration = 90.00 120.00", "IMUIR/Total Yaw = 50.", "[BalanceBoard]"),
-        layout=both_ways((("A", "B"), ("X", "Y")), "Classic/Buttons/"),
+        # The GameCube pad's A and B trade places; the remote's B also holds the right trigger.
+        layout={**both_ways((("A", "B"), ("X", "Y")), "Classic/Buttons/"), **both_ways((("X", "Y"),), "Buttons/"), "Buttons/A": None, "Buttons/B": None},
         shoulders={
-            **dict.fromkeys(("Buttons/Z", "Triggers/L", "Triggers/R", "Triggers/L-Analog", "Triggers/R-Analog")),
-            **both_ways((("Buttons/B", "Shake/X"), ("Nunchuk/Buttons/C", "Nunchuk/Buttons/Z"))),
+            **dict.fromkeys(("Buttons/Z", "Triggers/L", "Triggers/R", "Triggers/L-Analog", "Triggers/R-Analog", "Buttons/B", "Shake/X", "Shake/Y", "Shake/Z")),
+            **both_ways((("Nunchuk/Buttons/C", "Nunchuk/Buttons/Z"),)),
             **both_ways((("Classic/Buttons/ZL", "Classic/Triggers/L"), ("Classic/Buttons/ZR", "Classic/Triggers/R"))),
-            "Shake/Y": "Buttons/B",
-            "Shake/Z": "Buttons/B",
         },
         taken=bound(NAMED),
     ),

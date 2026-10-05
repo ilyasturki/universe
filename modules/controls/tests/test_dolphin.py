@@ -70,24 +70,29 @@ def test_devices_count_pads_of_the_same_name():
     ]
 
 
-def test_gamecube_takes_dolphins_preset_and_keeps_the_users_settings(dolphin):
+def test_gamecube_follows_the_layout_and_keeps_the_users_settings(dolphin):
     gc = ini_section(run(Context([EDGE], "positional"))["GCPadNew.ini"], "GCPad1")
     assert gc["Device"] == "SDL/0/DualSense Edge Wireless Controller"
-    assert (gc["Buttons/A"], gc["Buttons/B"], gc["Buttons/Z"]) == ("`Button S`", "`Button E`", "`Shoulder R` | `Shoulder L`")
+    assert [gc[f"Buttons/{k}"] for k in "ABXY"] == ["`Button E`", "`Button S`", "`Button N`", "`Button W`"]
+    assert gc["Buttons/Z"] == "`Shoulder R` | `Shoulder L`"
     assert gc["Triggers/L-Analog"] == "`Trigger L`" and gc["Main Stick/Up"] == "`Left Y+`"
     assert gc["Main Stick/Calibration"] == "90.00 120.00" and gc["Options/Always Connected"] == "True"
     assert gc["C-Stick/Calibration"] == _dolphin.CALIBRATION
+    xbox = ini_section(run(Context([EDGE], "xbox"))["GCPadNew.ini"], "GCPad1")
+    assert [xbox[f"Buttons/{k}"] for k in "ABXY"] == ["`Button S`", "`Button E`", "`Button W`", "`Button N`"]
 
 
-def test_wiimote_holds_a_nunchuk_and_classic_follows_the_layout(dolphin):
+def test_wiimote_holds_a_nunchuk_and_follows_the_layout(dolphin):
     text = run(Context([EDGE], "xbox"))["WiimoteNew.ini"]
     wm = ini_section(text, "Wiimote1")
     assert wm["Extension"] == "Nunchuk" and wm["Options/Sideways Wiimote"] == "False"
     assert wm["IMUIR/Total Yaw"] == "50." and wm["Source"] == "1"
-    assert wm["Buttons/A"] == "`Button S`" and wm["Buttons/B"] == "`Trigger R`"
+    assert [wm[f"Buttons/{k}"] for k in "AB12"] == ["`Button S`", "`Trigger R` | `Button E`", "`Button W`", "`Button N`"]
     assert wm["Classic/Buttons/A"] == "`Button S`" and wm["Classic/Buttons/B"] == "`Button E`"
     assert wm["IMUGyroscope/Yaw Left"] == "`Gyro Yaw Left`" and "IR/Up" not in wm
     assert "Buttons/Home" not in wm and wm["Shake/Y"] == "`Shoulder R`"
+    positional = ini_section(run(Context([EDGE], "positional"))["WiimoteNew.ini"], "Wiimote1")
+    assert [positional[f"Buttons/{k}"] for k in "AB12"] == ["`Button E`", "`Trigger R` | `Button S`", "`Button W`", "`Button N`"]
 
 
 def test_the_games_scheme_picks_the_extension_and_how_the_remote_is_held(dolphin):
@@ -97,10 +102,10 @@ def test_the_games_scheme_picks_the_extension_and_how_the_remote_is_held(dolphin
     for n in (1, 2):
         wm = ini_section(text, f"Wiimote{n}")
         assert wm["Extension"] == "None" and wm["Options/Sideways Wiimote"] == "True"
-        assert (wm["Buttons/1"], wm["Buttons/2"], wm["Buttons/A"]) == ("`Button S`", "`Button E`", "`Button N`")
+        assert [wm[f"Buttons/{k}"] for k in "12AB"] == ["`Button S`", "`Button E`", "`Button N`", "`Trigger R` | `Button W`"]
         assert wm["D-Pad/Up"] == "`Pad N` | `Left Y+`" and wm["Shake/Z"] == "`Shoulder R`"
     xbox = ini_section(run(Context([EDGE], "xbox", wiimote="sideways"))["WiimoteNew.ini"], "Wiimote1")
-    assert (xbox["Buttons/1"], xbox["Buttons/2"]) == ("`Button E`", "`Button S`")
+    assert [xbox[f"Buttons/{k}"] for k in "12AB"] == ["`Button E`", "`Button S`", "`Button W`", "`Trigger R` | `Button N`"]
 
 
 def test_a_pad_without_gyro_points_with_the_right_stick(dolphin):
@@ -202,3 +207,12 @@ def test_a_stale_copy_goes_once_the_games_profile_is_gone(dolphin):
 def test_userpath_holds_config_and_game_settings(tmp_path, monkeypatch):
     monkeypatch.setenv("DOLPHIN_EMU_USERPATH", str(tmp_path / "user"))
     assert _dolphin.user_dirs() == (tmp_path / "user" / "Config", tmp_path / "user" / "GameSettings")
+
+
+@pytest.mark.parametrize("layout", ["positional", "xbox"])
+@pytest.mark.parametrize("wiimote", ["nunchuk", "sideways", "classic"])
+def test_every_face_button_presses_a_remote_and_a_gamecube_button(dolphin, layout, wiimote):
+    files = run(Context([EDGE], layout, wiimote=wiimote))
+    for name, section in (("WiimoteNew.ini", "Wiimote1"), ("GCPadNew.ini", "GCPad1")):
+        bound = " ".join(v for k, v in ini_section(files[name], section).items() if k.startswith("Buttons/"))
+        assert [face for face in _dolphin.FACE_NAME.values() if face not in bound] == []
