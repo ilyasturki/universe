@@ -71,7 +71,7 @@ class Screens(QObject):
         self._search = SettingsSearch(client, screen_mode, themes, self._controller, self)
         self._gameData = GameData(client, self)
         self._storage = Storage(client, self)
-        self._onboarding = Onboarding(client, memory, games, self._login, self._controller, self._components, self)
+        self._onboarding = Onboarding(client, memory, games, self._login, self._controller, self._components, self._network, self)
         self._changelog = Changelog(client, self)
 
     def shutdown(self):

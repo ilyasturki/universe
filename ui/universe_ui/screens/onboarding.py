@@ -18,6 +18,7 @@ IMPORTERS = ("lutris", "roms")
 RUNNING = ("queued", "importing")
 
 TITLES = {
+    "network": "Connect to the internet",
     "found": "What's on this machine",
     "stores": "Your stores",
     "install": "Where games install",
@@ -26,6 +27,7 @@ TITLES = {
     "done": "You're set",
 }
 SUBTITLES = {
+    "network": "Pick your Wi-Fi network, or plug in a cable. Your stores and the games' art need it.",
     "found": "Games other launchers installed here. Adding them moves nothing.",
     "stores": "Sign in to see and install the games you own.",
     "install": "New installs go here. Games already installed stay where they are.",
@@ -123,6 +125,27 @@ def _shown(entries):
     return rows, groups
 
 
+def network_entries(wifi):
+    entries = []
+    if not wifi.enabled:
+        entries.append(("", _row("", "wifi", "Wi-Fi", "bool", False, detail="Off: turn it on to see the networks around."), False))
+    for n in wifi.networks:
+        busy = wifi.connecting == n["ssid"]
+        display = "Connected" if n["active"] else "Connecting…" if busy else "Saved" if n["saved"] else ""
+        row = _row("", "network", n["ssid"], "action", "")
+        # `verb`: the row says what A does, the looks draw no arrow to a page it does not open.
+        row.update(
+            {k: n[k] for k in ("ssid", "bars", "security", "secured", "joinable", "saved", "active")},
+            display=display,
+            action="" if n["active"] else "Connect",
+            verb=True,
+        )
+        entries.append(("", row, False))
+    if wifi.enabled and not wifi.networks:
+        entries.append(("", _static("searching", "Wi-Fi networks", "Searching…"), False))
+    return entries
+
+
 class Onboarding(RowsForm):
     stepChanged = Signal()
     headChanged = Signal()
@@ -131,8 +154,10 @@ class Onboarding(RowsForm):
     finished = Signal()
     message = Signal(str)
 
-    def __init__(self, client, memory, games, login, controller, components, parent=None):
+    def __init__(self, client, memory, games, login, controller, components, wifi, parent=None):
         super().__init__(client, parent)
+        self._wifi = wifi
+        self._wifi_open = False
         self._memory = memory
         self._games = games
         self._login = login
@@ -155,6 +180,7 @@ class Onboarding(RowsForm):
         login.finished.connect(self._on_login)
         client.jobFinished.connect(self._on_job_finished)
         components.listingChanged.connect(lambda: self._refresh() if self._step_id() == "found" else None)
+        wifi.changed.connect(lambda: self._refresh() if self._step_id() == "network" else None)
 
     def _needed(self):
         if self._client.onboarded():
@@ -183,12 +209,12 @@ class Onboarding(RowsForm):
         def look():
             everything = client.sources()
             gog = client.getSourceSettings("gog") if any(s["id"] == "gog" for s in everything) else {}
-            return client.core.discover(), everything, client.config(), client.form("runner", "proton"), gog
+            return client.core.discover(), everything, client.config(), client.form("runner", "proton"), gog, client.core.network()
 
         def done(found, error):
             if error:
                 self.message.emit(f"Could not look at this machine: {error}")
-            report, everything, config, fields, gog = found or ({}, [], {}, [], {})
+            report, everything, config, fields, gog, network = found or ({}, [], {}, [], {}, {})
             self._prefs = {"config": config or {}, "fields": fields or []}
             self._writable = bool(self._prefs["config"].get("config_writable", True))
             self._home_manager = self._prefs["config"].get("config_owner") == "home-manager"
@@ -210,7 +236,9 @@ class Onboarding(RowsForm):
                 launcher["blocked"] = "" if self._writable or why else self._blocked(launcher, known.get(via), gog or {})
                 if launcher["blocked"]:
                     launcher["importable"] = False
-            steps = ["found"]
+            # Offline where NetworkManager could join a Wi-Fi network: that comes first, the stores need it.
+            offline = network.get("available") and network.get("device") and not network.get("link")
+            steps = ["network", "found"] if offline else ["found"]
             if any(not s.get("logged_in") for s in self._sources):
                 steps.append("stores")
             if self._writable:
@@ -240,8 +268,15 @@ class Onboarding(RowsForm):
     def _step_id(self):
         return self._steps[self._step]["id"] if 0 <= self._step < len(self._steps) else ""
 
+    # The Wi-Fi card scans while the network step is up.
+    def _scan_wifi(self, on):
+        if on != self._wifi_open:
+            self._wifi_open = on
+            self._wifi.open() if on else self._wifi.close()
+
     def _go(self, index):
         self._step = max(0, min(index, len(self._steps) - 1))
+        self._scan_wifi(self._step_id() == "network")
         self._refresh()
         self.stepChanged.emit()
         self.headChanged.emit()
@@ -297,6 +332,8 @@ class Onboarding(RowsForm):
                     verb=True,
                 )
                 entries.append((NEEDED, row, True))
+        elif step == "network":
+            entries = network_entries(self._wifi)
         elif step == "stores":
             for source in self._sources:
                 name, signed_in = source.get("name", source["id"]), bool(source.get("logged_in"))
@@ -352,6 +389,7 @@ class Onboarding(RowsForm):
 
     @Slot()
     def finish(self):
+        self._scan_wifi(False)
         self._client.markOnboarded()
         self.finished.emit()
 
@@ -507,6 +545,8 @@ class Onboarding(RowsForm):
     def _write(self, row, payload):
         if row["key"] == "controller.family":
             return self._controller.setFamily(payload)
+        if row["key"] == "wifi":
+            return self._wifi.setEnabled(payload == "true")
         if row["key"] == "enabled" and row.get("module"):
             self._client.enableSource(row["module"], payload == "true")
             self._reread()
