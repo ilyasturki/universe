@@ -4,7 +4,7 @@ from _controls import EAST, NORTH, SOUTH, WEST, Context, Skip, config_home, ordi
 from _gamepads import LABEL_A, LABEL_B, LABEL_CIRCLE, LABEL_CROSS, LABEL_SQUARE, LABEL_TRIANGLE, LABEL_X, LABEL_Y
 
 PLAYERS = 8
-# Ryujinx names a face button by the label printed on it, not by its position.
+# Ryujinx names a face button by the label SDL gives it (SDL3Gamepad re-points A/B/X/Y by SDL_GetGamepadButtonLabel), not by its position.
 TOKEN = {LABEL_A: "A", LABEL_CROSS: "A", LABEL_B: "B", LABEL_CIRCLE: "B", LABEL_X: "X", LABEL_SQUARE: "X", LABEL_Y: "Y", LABEL_TRIANGLE: "Y"}
 POSITION_TOKEN = {SOUTH: "A", EAST: "B", WEST: "X", NORTH: "Y"}
 TUNING = ("deadzone_left", "deadzone_right", "range_left", "range_right", "trigger_threshold", "rumble", "led")

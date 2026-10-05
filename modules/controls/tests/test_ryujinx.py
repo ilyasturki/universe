@@ -3,7 +3,7 @@ import json
 import _ryujinx
 import pytest
 from _controls import Context, Skip
-from controls_fixtures import EDGE, SWITCH_PRO, XBOX, twin
+from controls_fixtures import EDGE, PRO3_DINPUT, PRO3_XINPUT, SWITCH_PRO, XBOX, twin
 
 OLD_P1 = {
     "deadzone_left": 0.2,
@@ -39,9 +39,21 @@ def test_ids_are_ryujinxs_guid_text_with_a_count_per_model():
     ]
 
 
-@pytest.mark.parametrize(("pad", "abxy"), [(EDGE, ("B", "A", "Y", "X")), (XBOX, ("B", "A", "Y", "X")), (SWITCH_PRO, ("A", "B", "X", "Y"))])
-def test_face_tokens_name_the_label_on_the_chosen_button(pad, abxy):
-    doc = _ryujinx.rewrite({"version": 73}, Context([pad]))
+# Ryujinx's SDL3Gamepad re-points A/B/X/Y to the buttons SDL labels so: a token names a label, never a position.
+@pytest.mark.parametrize(
+    ("pad", "layout", "abxy"),
+    [
+        (EDGE, "positional", ("B", "A", "Y", "X")),
+        (XBOX, "positional", ("B", "A", "Y", "X")),
+        (SWITCH_PRO, "positional", ("A", "B", "X", "Y")),
+        (PRO3_DINPUT, "positional", ("A", "B", "X", "Y")),
+        (PRO3_DINPUT, "xbox", ("B", "A", "Y", "X")),
+        (PRO3_XINPUT, "positional", ("B", "A", "Y", "X")),
+        (PRO3_XINPUT, "xbox", ("A", "B", "X", "Y")),
+    ],
+)
+def test_face_tokens_name_the_label_on_the_chosen_button(pad, layout, abxy):
+    doc = _ryujinx.rewrite({"version": 73}, Context([pad], layout))
     right = doc["input_config"][0]["right_joycon"]
     assert (right["button_a"], right["button_b"], right["button_x"], right["button_y"]) == abxy
 
