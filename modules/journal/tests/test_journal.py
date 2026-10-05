@@ -21,7 +21,7 @@ sys.path.insert(0, str(BIN_DIR))
 import images as img  # noqa: E402
 import prompt as pr  # noqa: E402
 import providers  # noqa: E402
-from _common import validate_entry  # noqa: E402
+from _common import CORE_ATTEMPTS, validate_entry  # noqa: E402
 
 SID = "20260911-120000"
 
@@ -143,6 +143,7 @@ def fakebin(tmp_path):
     write_shim(
         bindir / "universe",
         f'''printf "%s\\n" "$@" > "{bindir}/universe.args"
+echo "$1" >> "{bindir}/universe.calls"
 cat "$JOURNAL_DIR"/*.pending.json > "{bindir}/pending-at-add.json" 2>/dev/null
 if [ "${{FAKE_UNIVERSE_EXIT:-0}}" != "0" ]; then echo "${{FAKE_UNIVERSE_STDERR:-universe: io: No such file or directory}}" >&2; exit "${{FAKE_UNIVERSE_EXIT}}"; fi
 exit 0''',
@@ -294,6 +295,17 @@ def test_stub_pipeline_hands_off_to_the_core_in_the_forced_language(tmp_path, fa
     assert args[:2] == ["journal-add", SID] and (entry["provider"], entry["lang"], entry["images"]) == ("stub", "fr", [SHOT])
     pending_seen_by_core(fakebin)
     assert state_files(journal_dir) == []
+
+
+@pytest.mark.parametrize(
+    ("stderr", "tries"), [("universe: not found: game testgame", 1), ("universe: io: No such file or directory", CORE_ATTEMPTS)], ids=["game gone", "core down"]
+)
+def test_only_an_unreachable_core_is_asked_again_before_the_entry_is_written_directly(tmp_path, fakebin, stderr, tries):
+    add_shot(tmp_path)
+    res, journal_dir = run_process(tmp_path, fakebin, {}, {"FAKE_UNIVERSE_EXIT": "1", "FAKE_UNIVERSE_STDERR": stderr})
+    assert res.returncode == 0, res.stderr
+    assert (fakebin / "universe.calls").read_text().splitlines() == ["journal-add"] * tries
+    assert validate_entry(json.loads((journal_dir / f"{SID}.json").read_text())) == []
 
 
 @pytest.mark.parametrize(

@@ -108,7 +108,7 @@ fn journal_add_files_an_entry_the_journal_lists_and_calls_only_a_refusal_invalid
         (&serde_json::json!(sid), &serde_json::json!(id), &serde_json::json!("written"), &entry["paragraphs"])
     );
 
-    // modules/journal gives up on "invalid:"; on anything else it retries, then writes the file itself.
+    // modules/journal gives up on "invalid:"; on "not found:" it writes the file itself at once, on anything else after retries.
     let escape = "../x";
     for (case, session, entry, refused) in [
         ("not JSON", sid, "{".to_string(), true),
