@@ -111,6 +111,7 @@ Open **Universe** from your app menu. With an empty library a short setup runs o
 
 - [`docs/api.md`](docs/api.md): the core, the CLI, config, modules and sources
 - [`docs/frontends.md`](docs/frontends.md): how the UI is built, and how to write another frontend
+- [`docs/extensions.md`](docs/extensions.md): modules and sources that do not ship with Universe, and how to install them
 - [`CHANGELOG.md`](CHANGELOG.md): what each release changed, also under Settings › About in both apps
 
 ## License

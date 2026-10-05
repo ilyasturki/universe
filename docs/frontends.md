@@ -922,7 +922,22 @@ name, `value` whether it runs, `switch: true` so the row draws its state as a sw
 chevron, `display` On / Off / Unavailable, `meta` the version, `warning` what is missing, `source`
 which list it is), the ones running first, the others in an "Off" card. A opens the entry's page;
 △ (Y in Reprise, X in the Switch 2 look) toggles it in the list (`toggle(index)`, refused with a
-warning while it is off). `indexOf(id)` finds an entry's row for the cursor to land on again.
+warning while it is off). `indexOf(id)` finds an entry's row for the cursor to land on again. An
+installed extension's `origin` reads `unlisted` as a `tag` and in `meta`. Each list ends on a
+"Get more…" row of its own card (`key: "more"`, `addons` the kind, `module` or `source`; no switch,
+`toggle` leaves it). Picking it opens `api.screens.addons` (`AddonsForm`, over the core's
+`extensions()`, fetched again when a list loads, or at once after an install or a removal, once a
+minute at most) in the look's menu: `items(kind)` is one item per add-on of the kind, its `action`
+the add-on's id, an empty one picking nothing (loading, the index unreachable, none listed).
+`actions(id)` is what the pick does: Install for one not installed, nothing for one written for
+another Universe (`incompatible`), Remove for an installed one, after Update when the index lists
+another version. A single action goes straight to its confirmation, more open a menu
+(`addonsMenu(kind)` and `addonAction(id, action)`: the Reprise Settings page's, the stacked looks'
+root). `confirm(id, action)` is the question: an install's names the kind, that it runs programs as
+you, and its origin, the index's host (`kind`, `origin`, `runsAsYou` say the same to a test).
+`act(id, action)` installs or updates as a client job, or removes off the UI thread. Each one
+ends in a `message` and a `modulesChanged` plus `sourcesChanged` that reloads both lists. The UI
+installs from the index only: `universe extension install` takes a URL, an archive or a folder.
 `pages/FormPage.qml` with `{ module }` or `{ source }` (`theme.qml` `openSub`;
 `switch2/pages/FormPage.qml` on the stack; both lay the form out as the game settings page does, a
 sidebar of its cards beside the picked one, Y for the advanced rows) is on `api.screens.module` or
@@ -1427,7 +1442,12 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
   too on a Deck). Stores and Modules list each one with its whole
   description, its Markdown drawn (`rows::marked`), or what keeps it from working (a setting it waits
   on by its label), Off beside the chevron when it is off: the switch is on its page, and coming back
-  reads the list again in place, the focus kept. What was not a preference left it for a dialog of
+  reads the list again in place, the focus kept. An unlisted extension says Unlisted there. Both end
+  on "Get more…": a subpage (`addons.rs`) of the index's add-ons of that kind, each opening an
+  `AdwAlertDialog` (an install's names the kind, that it runs programs as you, and the index's
+  host; an installed one's is its removal, with its update beside it), the list and the page
+  read again once it lands. `app.preferences-page` takes `addons-module` and `addons-source` to
+  open there. What was not a preference left it for a dialog of
   its own, each an `AdwPreferencesDialog` of one page so a toast lands on it: Library Artwork
   (`dialogs/library_artwork.rs`), System Check (`dialogs/system_check.rs`, `universe doctor`'s checks;
   on GNOME the Shell extension's sits in a System Setup group of its own, and nowhere else) and

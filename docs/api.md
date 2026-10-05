@@ -654,7 +654,7 @@ source unavailable, and `doctor` reports it as fetched on first use.
 
 | Rust | Python | CLI | Role |
 |---|---|---|---|
-| `sources()` | `sources()` | `universe sources`, `universe source ls` | `[{id, name, version, description, dir, enabled, available, missing: [bin], capabilities: [name], hooks: {}, settings: [Setting], login: {kind, hint, purpose}, logged_in, user, games_dir, library_cached, library_at}]` (`login` with its defaults filled); `library_at` is when the store was last listed (RFC 3339, empty before the first); the login probe reaches the network once per process, on the first call |
+| `sources()` | `sources()` | `universe sources`, `universe source ls` | `[{id, name, version, description, dir, enabled, available, missing: [bin], incompatible, origin, capabilities: [name], hooks: {}, settings: [Setting], login: {kind, hint, purpose}, logged_in, user, games_dir, library_cached, library_at}]` (`login` with its defaults filled); `library_at` is when the store was last listed (RFC 3339, empty before the first); the login probe reaches the network once per process, on the first call |
 | `enable_source(id, enabled)` | `enable_source(id, enabled)` | `universe source enable\|disable <id>` | writes `[sources] enabled` in `config.toml` |
 | `source_settings(source, game_id)` | `source_settings(source, game_id="")` | `universe source settings <id> [game]` | the source's settings, defaults under `config.toml [sources.<id>]`, then a game's own game-scope keys (`game.toml [sources.<id>]`) when `game_id` names one; an empty `games_dir` default reads `paths.games_root` |
 | `set_source_setting(source, game_id, key, value)` | `set_source_setting(source, key, value, game_id="")` | `universe source set <id> k=v [--game g]` | validated against `[[settings]]`; `game_id=""` writes `config.toml [sources.<id>]`, otherwise a game-scope key into `game.toml [sources.<id>]` (`set(id, "sources.<id>.<key>", value)` is the same write) |
@@ -1095,6 +1095,23 @@ through a `/run/wrappers` copy, which the `suid-sgid-wrappers` unit names, and t
 wrappers), else an AppImage's file name, else the distribution's package (pacman, dpkg, rpm); a
 snapshot (`unstable`, `git`) or two numbering schemes propose nothing.
 
+## Extensions
+
+Modules and sources that do not ship with Universe: [`extensions.md`](extensions.md) has the
+layout, the API number and the index's format.
+
+| Rust | Python | CLI | Role |
+|---|---|---|---|
+| `extensions()` | `extensions()` | `universe extension ls` | `{index: {url, error}, extensions: [Extension]}`: the index's modules and sources, then the installed ones it does not list, by kind then name; an index that cannot be read leaves its `error` and the installed ones |
+| `extension_install(what, accepted, progress)` | `extension_install(what, accepted=False, progress=None)` | `universe extension install <what> [--yes]` | `what` is an index id, an https:// URL, or an archive or a folder that exists (a `file://` URL too): fetched, unpacked and checked, then put under `<data>/extensions/<kind>/<id>/`; `{id, kind, name, version, origin}`. `Invalid` until `accepted` (a frontend shows the kind, that it runs programs as you and the origin first; the CLI prints them and asks, `--yes` accepts, no terminal or `--json` refuses), for an id that ships or that the user's own folder holds, for an api this Universe does not read, for a pin that does not match; http:// is refused |
+| `extension_update(id, progress)` | `extension_update(id="", progress=None)` | `universe extension update [id]` | fetches again what `id` (every installed one for `""`) came from: the index's entry when it lists another version, else its URL, archive or folder; replaces it in place; `[{id, kind, name, version, error?}]`; `Busy` while a game runs |
+| `extension_remove(id)` | `extension_remove(id)` | `universe extension remove <id>` | switches it off (a read-only `config.toml` only logs), then deletes its folder and sidecar; its data folder stays; `Invalid` for a shipped id, `Busy` while a game runs |
+
+`Extension` = `{id, kind: module|source, name, description, version (the index's, else the installed
+one's), homepage, size, listed, installed, installed_version, origin: registry|unlisted|"", from,
+update (the index's version when an index install lists another, else ""), enabled, incompatible (why
+its `api` rules it out, else "")}`.
+
 ## Media
 
 | Rust | Python | CLI | Role |
@@ -1426,7 +1443,7 @@ written whole, missing or not.
 | — | — | `universe setup` | after an install: on GNOME, writes the `universe@ilyasturki.github.io` extension the binary carries into `~/.local/share/gnome-shell/extensions/` (rewritten when stale; left to a system copy when there is none there) and adds it to `org.gnome.shell enabled-extensions` (out of `disabled-extensions`, which overrides it), read by the shell at the next login; then prints `doctor` |
 
 A module entry is `{id, name, version, description, dir, enabled, available, missing: [bin], incompatible,
-unset: [key], hooks: {}, settings: [Setting], applies: {runner_kinds: [kind]}}`, and
+unset: [key], hooks: {}, settings: [Setting], applies: {runner_kinds: [kind]}, origin}`, and
 `Setting` = `{"key", "type": "bool|string|int|enum|path", "default", "label", "description",
 "scope": "global|game", "choices": [], "choice_labels": {value: label}, "dynamic": bool, "required": bool,
 "keywords": [word], "runners": [id], "platforms": [name]}`. `keywords` are words a settings search finds the
@@ -1444,7 +1461,10 @@ label and writes the value, and a value without one reads as itself.
 setting asks for, so a module is available or not by what it is set to. `incompatible` says why
 `[requires] core` rules out the running Universe (`needs Universe >=0.2.0, this is 0.0.9`, or the
 comparator it cannot read), empty when it fits: such a module is unavailable, its hooks never run, and
-`doctor` gives one `requires-core` line for it; a source's entry carries the same. `unset` lists the
+`doctor` gives one `requires-core` line for it; a source's entry carries the same. An `api` this
+Universe does not read (`extensions::API`, see [`extensions.md`](extensions.md)) comes first in
+`incompatible`, and `doctor` gives an `extension-api` line for it instead, enabled or not. `origin` is
+`registry` or `unlisted` for an installed extension, empty for a shipped module or the user's own. `unset` lists the
 `required` settings still empty on an enabled module: its hooks run and do nothing, `doctor` says
 which, and the settings page sends the cursor there when the module is switched on. `choices` binds an `enum`; on an `int`
 or a `string` it lists suggestions, any value stays accepted — except that an `int` also
@@ -1708,6 +1728,9 @@ fan = ""                             # on | off: SteamOS's fan curve
 auto_update = true                   # Universe's own builds follow the catalogue, the previous one kept (see Components)
 catalogue = ""                       # a URL or a file; empty: the project's catalogue branch
 
+[extensions]
+index = ""                           # an https:// URL or a file (UNIVERSE_EXTENSIONS_INDEX wins); empty: the registry's (see Extensions)
+
 [modules]
 enabled = []                         # a module is opt-in: `universe module enable capture`, or Settings › Modules
 
@@ -1742,7 +1765,8 @@ home_summons = true                  # HOME pressed in another app brings Univer
 
 A module runs hooks around a session. It is a directory `modules/<id>/` — system-wide under
 `$out/share/universe/modules/<id>`, per-user under `$XDG_CONFIG_HOME/universe/modules/<id>`, where a
-user module overrides a system one with the same id. It holds a `module.toml` and its executables.
+user module overrides a system one with the same id, and installed under
+`$XDG_DATA_HOME/universe/extensions/module/<id>`, which both override (see Extensions). It holds a `module.toml` and its executables.
 **The core never loads module code**; it only runs the executables.
 
 ```toml
@@ -1854,7 +1878,8 @@ that prints none and exits non-zero, or times out, is one failed `check` check n
 
 A source installs and updates games from a store. It is a directory `sources/<id>/` — system-wide
 under `$out/share/universe/sources/<id>` (`UNIVERSE_SOURCES_PATH` adds roots), per-user under
-`$XDG_CONFIG_HOME/universe/sources/<id>`, a user source overriding a system one with the same id —
+`$XDG_CONFIG_HOME/universe/sources/<id>`, a user source overriding a system one with the same id,
+installed under `$XDG_DATA_HOME/universe/extensions/source/<id>`, which both override (see Extensions) —
 holding a `source.toml` and its executable; its data lives in `$XDG_DATA_HOME/universe/sources/<id>`.
 
 ```toml
@@ -1871,7 +1896,8 @@ capabilities = ["achievements", "uninstall"]   # optional verbs it answers, past
 bins = ["gogdl"]                  # a missing binary makes the source "unavailable" and it is never run, unless Universe fetches it (see Fetched tools)
 
 [[tools]]                         # optional: a program Universe fetches when it is not on PATH, a catalogue entry (see Components) with its id;
-id = "gogdl"                      # the catalogue's entry of the same id wins, this one stands in when the catalogue lacks it or cannot be reached
+id = "gogdl"                      # the catalogue's entry of the same id wins, this one stands in when the catalogue lacks it or cannot be reached;
+                                  # only while the source is on, for its own programs, a shipped source's pin winning over another's of the same id
 name = "heroic-gogdl"
 kind = "tool"
 bin = "gogdl"
