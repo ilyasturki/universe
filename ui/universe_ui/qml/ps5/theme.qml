@@ -480,14 +480,22 @@ FocusScope {
     // The agent's question on the dialog or the sheet, wherever the user is: `pairing` is the one shown, `pairingOn` where.
     property var pairing: null
     property string pairingOn: ""
+    // A question that came while another dialog or the keyboard was up: shown once that closes, so neither loses its answer.
+    property bool pairingWaits: false
 
     function askPairing(r) {
         var bt = api.screens.bluetooth;
-        if (pairing && pairing.id === r.id && r.kind === "display") {
+        if (pairing && pairing.id === r.id) {
             pairing = r;
-            dialog.detail = r.detail + (r.entered > 0 ? "\n\n" + r.entered + " typed" : "");
+            if (r.kind === "display")
+                dialog.detail = r.detail + (r.entered > 0 ? "\n\n" + r.entered + " typed" : "");
             return;
         }
+        if (!pairing && (dialog.open || sheet.open)) {
+            pairingWaits = true;
+            return;
+        }
+        pairingWaits = false;
         pairing = r;
         var answered = function (shown) {
             return root.pairing !== null && root.pairing.id === shown.id;
@@ -523,6 +531,7 @@ FocusScope {
 
     // BlueZ took the question back (paired, timed out, cancelled): its dialog or sheet goes without an answer.
     function dropPairing() {
+        pairingWaits = false;
         if (!pairing)
             return;
         pairing = null;
@@ -530,6 +539,29 @@ FocusScope {
             dialog.finish(-1);
         else if (pairingOn === "sheet" && sheet.open)
             sheet.finish(null);
+    }
+
+    function resumePairing() {
+        if (!pairingWaits || dialog.open || sheet.open)
+            return;
+        pairingWaits = false;
+        var r = api.screens.bluetooth.request;
+        if (r)
+            askPairing(r);
+    }
+
+    Connections {
+        target: dialog
+        function onOpenChanged() {
+            Qt.callLater(root.resumePairing);
+        }
+    }
+
+    Connections {
+        target: sheet
+        function onOpenChanged() {
+            Qt.callLater(root.resumePairing);
+        }
     }
 
     Connections {
@@ -541,12 +573,20 @@ FocusScope {
             else
                 root.dropPairing();
         }
+        // A no from the user, or BlueZ withdrawing its question, needs no notice.
+        function onFailed(action, address, reason, message) {
+            if (reason !== "canceled" && reason !== "rejected")
+                Base.Notices.fail(action === "pair" ? "Could not pair: " + message : message);
+        }
     }
 
     Connections {
         target: api.screens.network
+        // Under a pairing question these say so in a notice: a dialog would take the question's place.
         function onFailed(ssid, reason, message) {
-            if (reason === "password")
+            if (reason === "password" && root.pairing)
+                Base.Notices.fail("Could not connect to " + ssid + ": the password was not accepted");
+            else if (reason === "password")
                 root.dialogAsk({
                     message: "Could not connect to " + ssid,
                     detail: "The password was not accepted.",
@@ -562,6 +602,10 @@ FocusScope {
             Base.Notices.show("Connected to " + ssid + (connectivity === "full" ? "" : connectivity === "portal" ? " · sign in to it from a browser" : " · no internet"));
         }
         function onChecked(connectivity) {
+            if (root.pairing) {
+                Base.Notices.show(Radio.connectivityText(connectivity));
+                return;
+            }
             root.dialogAsk({
                 message: "Test Internet Connection",
                 detail: Radio.connectivityText(connectivity),

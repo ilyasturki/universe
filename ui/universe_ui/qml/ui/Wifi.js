@@ -3,10 +3,10 @@
 // What A on a network row calls for: "refuse" (a kind Universe does not set up), "forget" (the one joined), "password" (a
 // secured one not saved yet), else "join".
 function step(wifi, row) {
-    if (!row.joinable)
-        return "refuse";
     if (row.active)
         return "forget";
+    if (!row.joinable)
+        return "refuse";
     return wifi.needsPassword(row.ssid) ? "password" : "join";
 }
 
@@ -59,8 +59,8 @@ function row(n, connecting) {
         detail: [signal(n.bars), SECURITY[n.security] || n.security].filter(Boolean).join(" · "),
         icon: n.secured ? "lock" : "wifi",
         accent: n.active,
-        disabled: !n.joinable,
-        action: !n.joinable ? "" : n.active ? "Forget" : "Connect",
+        disabled: !n.joinable && !n.active,
+        action: n.active ? "Forget" : !n.joinable ? "" : "Connect",
         ssid: n.ssid,
         saved: n.saved,
         active: n.active,

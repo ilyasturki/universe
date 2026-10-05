@@ -99,7 +99,7 @@ function askPassword(shell, wifi, ssid) {
 }
 
 function joinNetwork(shell, wifi, row, play) {
-    if (!row.joinable) {
+    if (!row.active && !row.joinable) {
         play("edge");
         shell.showToast(row.ssid + " uses " + (SECURITY[row.security] || row.security) + " security, which Universe does not set up.");
         return;

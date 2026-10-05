@@ -829,6 +829,10 @@ FocusScope {
 
     Connections {
         target: api.screens.network
+        function onForgot(ssid) {
+            if (ssid === page.forgetting)
+                page.forgetting = "";
+        }
         function onJoined(ssid, connectivity) {
             if (ssid !== page.joining)
                 return;
@@ -844,8 +848,9 @@ FocusScope {
             if (ssid !== page.joining)
                 return;
             page.joining = "";
-            if (reason !== "password") {
-                Notices.fail(message);
+            // A pairing question on the dialog keeps it: the refusal goes to a notice instead.
+            if (reason !== "password" || confirm.open) {
+                Notices.fail(reason === "password" ? ssid + " did not take that password" : message);
                 return;
             }
             confirm.ask({

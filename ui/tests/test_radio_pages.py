@@ -85,6 +85,19 @@ def test_a_saved_network_joins_as_saved_and_the_joined_one_forgets_after_asking(
     assert {"cmd": "connect", "ssid": "Atelier"} in fake.core.wifi.commands
 
 
+def test_a_network_forgotten_then_refused_asks_for_its_password_again(look, api, fake):
+    page = section(look, "network", key="network", ssid="Home", active=True)
+    activate(page, content_rows(page), key="network", ssid="Home")
+    dialog_open(look)
+    look.press(Qt.Key.Key_Return)
+    until(lambda: shows(page, key="network", ssid="Home", saved=False))
+    activate(page, content_rows(page), key="network", ssid="Home")
+    type_in(look, sheet_open(look, True), "nope")
+    dialog_open(look)
+    look.press(Qt.Key.Key_Return)
+    sheet_open(look, True)
+
+
 def test_a_network_universe_cannot_set_up_is_refused(look, api, fake):
     page = section(look, "network", key="network", ssid="Campus")
     activate(page, content_rows(page), key="network", ssid="Campus")
@@ -133,6 +146,22 @@ def test_a_cable_pairing_in_the_session_asks_over_any_screen(look, api, fake, mo
     dialog_open(look)
     look.press(Qt.Key.Key_Return)
     until(lambda: PAD in [d["address"] for d in api.screens.bluetooth.paired])
+
+
+def test_a_pairing_question_waits_for_the_password_being_typed(look, api, fake):
+    page = section(look, "network", key="network", ssid="Atelier")
+    api.screens.bluetooth.start()
+    until(lambda: fake.core.bt.watches)
+    activate(page, content_rows(page), key="network", ssid="Atelier")
+    sheet = sheet_open(look, True)
+    fake.core.bt.ask(PAD, "authorize")
+    until(lambda: api.screens.bluetooth.request)
+    assert sheet.property("open") is True and sheet.property("secret") is True, "the password keeps its sheet"
+    type_in(look, sheet, PASSWORD)
+    until(lambda: api.screens.network.ssid == "Atelier")
+    dialog_open(look)
+    look.press(Qt.Key.Key_Return)
+    until(lambda: PAD in [d["address"] for d in api.screens.bluetooth.paired], "the question comes once the sheet is gone")
 
 
 def test_a_code_to_type_on_the_device_shows_until_cancelled(look, api, fake):

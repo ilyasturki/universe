@@ -121,8 +121,9 @@ FocusScope {
             if (ssid !== page.joining)
                 return;
             page.joining = "";
-            if (reason !== "password") {
-                page.message(message);
+            // A pairing question on the dialog keeps it: the refusal goes to a notice instead.
+            if (reason !== "password" || confirm.open) {
+                page.message(reason === "password" ? ssid + " did not take that password" : message);
                 return;
             }
             confirm.ask({

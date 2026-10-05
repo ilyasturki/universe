@@ -286,13 +286,13 @@ FocusScope {
 
     function joinNetwork(n) {
         var wifi = api.screens.network;
+        if (n.active) {
+            forgetNetwork(n.ssid);
+            return;
+        }
         if (!n.joinable) {
             Sound.play("edge");
             Base.Notices.fail(n.ssid + " uses " + (n.security === "wep" ? "WEP" : "WPA Enterprise") + " security, which Universe does not set up: join it from a desktop's settings.");
-            return;
-        }
-        if (n.active) {
-            forgetNetwork(n.ssid);
             return;
         }
         if (wifi.needsPassword(n.ssid)) {
@@ -329,9 +329,22 @@ FocusScope {
     }
 
     property var pairing: null
+    // A question that came while another dialog or the keyboard was up: shown once that closes, so neither loses its answer.
+    property bool pairingWaits: false
 
     function askPairing(request) {
         var bt = api.screens.bluetooth;
+        if (pairing !== null && pairing.id === request.id) {
+            pairing = request;
+            if (request.kind === "display")
+                dialog.detail = request.detail;
+            return;
+        }
+        if (pairing === null && (dialog.open || sheet.open)) {
+            pairingWaits = true;
+            return;
+        }
+        pairingWaits = false;
         pairing = request;
         var answered = function () {
             var mine = root.pairing !== null && root.pairing.id === request.id;
@@ -365,6 +378,16 @@ FocusScope {
                 bt.answer(!display && i === 1);
         });
     }
+
+    function resumePairing() {
+        if (!pairingWaits || dialog.open || sheet.open)
+            return;
+        pairingWaits = false;
+        var request = api.screens.bluetooth.request;
+        if (request)
+            askPairing(request);
+    }
+
     function browse(spec, done) {
         folder.show(spec, after(done));
     }
@@ -863,9 +886,10 @@ FocusScope {
 
     Connections {
         target: api.screens.network
+        // Under a pairing question these say so in a notice: a dialog would take the question's place.
         function onFailed(ssid, reason, message) {
-            if (reason !== "password") {
-                Base.Notices.fail(message !== "" ? message : "Could not connect to " + ssid);
+            if (reason !== "password" || root.pairing !== null) {
+                Base.Notices.fail(reason === "password" ? "Could not connect to " + ssid + ": the password was not accepted" : message !== "" ? message : "Could not connect to " + ssid);
                 return;
             }
             root.dialogAsk({
@@ -884,16 +908,35 @@ FocusScope {
                 Base.Notices.fail("Connected to " + ssid + (connectivity === "portal" ? ", which wants a sign-in from a web browser" : ", without access to the internet"));
         }
         function onChecked(connectivity) {
+            var detail = ({
+                    full: "Connected to the internet.",
+                    limited: "Connected to the network, without access to the internet.",
+                    portal: "The network wants a sign-in from a web browser first.",
+                    none: "Not connected to the internet."
+                })[connectivity] || "The test could not run.";
+            if (root.pairing !== null) {
+                Base.Notices.show(detail);
+                return;
+            }
             root.dialogAsk({
                 message: "Connection Test",
-                detail: ({
-                        full: "Connected to the internet.",
-                        limited: "Connected to the network, without access to the internet.",
-                        portal: "The network wants a sign-in from a web browser first.",
-                        none: "Not connected to the internet."
-                    })[connectivity] || "The test could not run.",
+                detail: detail,
                 buttons: ["OK"]
             }, null);
+        }
+    }
+
+    Connections {
+        target: dialog
+        function onOpenChanged() {
+            Qt.callLater(root.resumePairing);
+        }
+    }
+
+    Connections {
+        target: sheet
+        function onOpenChanged() {
+            Qt.callLater(root.resumePairing);
         }
     }
 
@@ -905,6 +948,7 @@ FocusScope {
                 root.askPairing(request);
                 return;
             }
+            root.pairingWaits = false;
             var was = root.pairing;
             if (was === null)
                 return;

@@ -1236,6 +1236,8 @@ FocusScope {
                     root.pairingId = 0;
                     api.screens.bluetooth.answer(false);
                 }
+                if (root.pairingWaits)
+                    root.askPairing();
             });
         }
     }
@@ -1270,7 +1272,7 @@ FocusScope {
             }
             return;
         }
-        if (pairingId === 0 && confirm.open) {
+        if (pairingId === 0 && (confirm.open || prompts.open)) {
             pairingWaits = true;
             return;
         }
