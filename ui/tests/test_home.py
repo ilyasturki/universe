@@ -83,6 +83,20 @@ def test_a_volume_macro_shows_its_level_on_the_overlay_for_a_moment(api, fake, m
     assert not home.osd and states == [], "on the desktop the shell shows it"
 
 
+def test_a_key_scripts_volume_phase_plays_a_pad_macro(api, fake, monkeypatch):
+    from universe_ui import gamepad
+    from universe_ui import home as home_module
+
+    monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
+    home = home_module.Home(fake, api.screens.controller)
+    monkeypatch.setattr(fake, "overlay", lambda window, input, opacity: None)
+    home.attachOverlay(Overlay())
+    before = fake.core.level
+    gamepad.KeyScript("Volume:up", 1, None, home=home)._step()
+    until(lambda: home.osd, "the overlay shows the level as it does a pad's")
+    assert home.volumePercent == fake.core.level > before
+
+
 def test_home_flips_between_the_game_and_the_launcher(api, fake, monkeypatch):
     from universe_ui import home as home_module
 

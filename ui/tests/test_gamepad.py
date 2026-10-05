@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 from PySide6.QtCore import QCoreApplication, Qt
-from uitest import record
+from uitest import record, until
 
 from universe_ui import gamepad
 from universe_ui.gamepad import Mapper
@@ -248,3 +248,18 @@ def test_key_script_plays_a_fake_pad(app):
         ("axis", "lx", -0.5),
         ("button", "south", False),
     ]
+
+
+@pytest.mark.parametrize("look", ["reprise"], indirect=True)
+def test_expect_quits_unless_return_would_launch_that_game(look, monkeypatch):
+    exits = []
+    monkeypatch.setattr(gamepad, "QCoreApplication", SimpleNamespace(exit=exits.append))
+    look.home()
+    shown = until(lambda: gamepad.launch_target(look.window), "no tile's game under Return")
+    script = gamepad.KeyScript(f"Expect:{shown} Expect:another-game Right", 1, look.window)
+    script._step()
+    assert exits == [], "the game Return would launch"
+    script._step()
+    assert exits == [gamepad.EXPECT_FAILED] and script._queue == [], "nothing after it plays"
+    look.press(Qt.Key.Key_End)
+    until(lambda: gamepad.launch_target(look.window) == "", "the library tile launches nothing")

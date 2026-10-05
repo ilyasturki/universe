@@ -407,11 +407,26 @@ def post_wheel(window, x, y, steps, sideways=False, pixels=False):
     )
 
 
+EXPECT_FAILED = 3
+
+
+# The id of the game Reprise's Return would launch: its focus target's, "" while the tab bar holds the keys or on another look.
+def launch_target(window):
+    look = window.findChild(QObject, "look")
+    root = look.property("item") if look is not None else None
+    if root is None or root.property("focusOwner") in (None, "chrome"):
+        return ""
+    target = root.property("focusTarget")
+    game = target.property("currentGame") if target is not None else None
+    return str(game.property("id") or "") if game is not None else ""
+
+
 # `--keys`, one name per gap: `Wait`, `Wait:N`, `Hold:A`/`Release:A`, `Stick:rightX=0.6`, `Shot:path.png`, `Guide`; `Pad:A`/`PadHold:A`/`PadRelease:A` through the
 # pad thread, dropped as its presses are while covered; as if the watcher read them, `Press:slot`/`Unpress:slot`, `Axis:lx=0.6`;
 # the mouse, at 1080p design units (dp, so 1728 wide at 16:10): `Mouse:x,y` moves it, `Click:x,y` / `RightClick:x,y` press and release there, `MouseDown:x,y` / `MouseUp:x,y` one or the other,
 # `Wheel:x,y,N` rolls N notches (up positive), `HWheel:x,y,N` sideways (right positive), `Scroll:x,y,N` N pixels as a touchpad; `Type:text` types it from the keyboard (`_` a space);
-# a finger: `Tap:x,y`, `LongTap:x,y,ms` held that long, `Swipe:x1,y1,x2,y2` dragged across in eight moves; `Await` holds the script until a line comes on stdin, `Quit` quits.
+# a finger: `Tap:x,y`, `LongTap:x,y,ms` held that long, `Swipe:x1,y1,x2,y2` dragged across in eight moves; `Await` holds the script until a line comes on stdin, `Quit` quits;
+# `Volume:up`/`Volume:down`/`Volume:mute` as a pad's volume macro; `Expect:ID` quits with EXPECT_FAILED unless Return would launch game ID (`Expect:` none).
 class KeyScript(QObject):
     def __init__(self, script, gap_ms, window, pad=None, watcher=None, home=None, gamepad=None, parent=None):
         super().__init__(parent)
@@ -452,6 +467,17 @@ class KeyScript(QObject):
             return
         if phase == "Quit":
             QCoreApplication.quit()
+            return
+        if phase == "Expect":
+            target = launch_target(self._window)
+            if target != bare:
+                log.error("expected Return to launch %s, not %s: quitting", bare or "nothing", target or "nothing")
+                self._queue.clear()
+                QCoreApplication.exit(EXPECT_FAILED)
+            return
+        if phase == "Volume":
+            if self._home is not None:
+                self._home.volumeMacro(bare)
             return
         if phase == "Shot":
             ok = self._window.grabWindow().save(bare)

@@ -578,6 +578,10 @@ class Home(QObject):
     def volume(self, change, value=0):
         self._client.volumeAsync(change, int(value), self._land_volume)
 
+    # A key script's stand-in for a pad's volume macro: the level lands as the controller reports one.
+    def volumeMacro(self, change):
+        self._client.volumeAsync(change, 0, self._volume_reported)
+
     def _land_outputs(self, outputs, always=False):
         outputs = [dict(o) for o in outputs or []]
         if always or outputs != self._outputs:
