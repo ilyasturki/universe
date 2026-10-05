@@ -652,6 +652,7 @@ FocusScope {
 
     TextSheet {
         id: sheet
+        objectName: "textSheet"
         anchors.fill: parent
         anchors.bottomMargin: Theme.dp(Theme.hintBarHeight)
         z: 10

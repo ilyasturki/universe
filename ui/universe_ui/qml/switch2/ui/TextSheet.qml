@@ -13,6 +13,10 @@ Modal {
     property var values: ["", ""]
     property int typing: 0
     readonly property bool pair: labels.length === 2
+    // A password (`spec.secret`): dots on the TV until R shows it.
+    property bool secret: false
+    property bool revealed: false
+    readonly property string masked: secret && !revealed ? "•".repeat(text.length) : text
     readonly property alias numeric: panel.numeric
     readonly property alias symbols: panel.symbols
     readonly property alias shift: panel.shift
@@ -46,6 +50,8 @@ Modal {
         title = spec.title || "";
         text = spec.value === undefined || spec.value === null ? "" : String(spec.value);
         max = spec.max || 64;
+        secret = spec.secret === true;
+        revealed = false;
         panel.numeric = spec.numeric === true;
         panel.symbols = spec.path === true;
         panel.reset();
@@ -60,6 +66,7 @@ Modal {
         title = spec.title || "";
         text = values[0];
         max = spec.max || 64;
+        secret = false;
         panel.numeric = false;
         panel.symbols = false;
         panel.reset();
@@ -111,6 +118,11 @@ Modal {
         text = text.slice(0, -1);
     }
 
+    function reveal() {
+        Sound.play("type");
+        revealed = !revealed;
+    }
+
     function press() {
         panel.press();
     }
@@ -144,6 +156,8 @@ Modal {
             put(" ");
         } else if (api.keys.isMenu(event))
             accept();
+        else if (api.keys.isNextPage(event) && secret)
+            reveal();
     }
 
     Item {
@@ -178,7 +192,7 @@ Modal {
             x: Theme.dp(8)
             y: sheet.pair ? Theme.dp(90) : Theme.dp(185)
             width: parent.width - Theme.dp(140)
-            text: sheet.pair ? (sheet.typing === 0 ? sheet.text : sheet.values[0]) : sheet.text
+            text: sheet.pair ? (sheet.typing === 0 ? sheet.text : sheet.values[0]) : sheet.masked
             color: !sheet.pair || sheet.typing === 0 ? sheet.ink : sheet.inkIdle
             elide: Text.ElideLeft
             font.pixelSize: Theme.dp(48)
@@ -248,6 +262,31 @@ Modal {
             text: sheet.text.length + "/" + sheet.max
             color: sheet.ink
             font.pixelSize: Theme.dp(30)
+        }
+
+        Row {
+            id: revealButton
+            objectName: "revealButton"
+            anchors.right: parent.right
+            y: valueText.y + Theme.dp(10)
+            visible: sheet.secret
+            spacing: Theme.dp(10)
+
+            HintGlyph {
+                anchors.verticalCenter: parent.verticalCenter
+                glyph: "RB"
+            }
+
+            Label {
+                anchors.verticalCenter: parent.verticalCenter
+                text: sheet.revealed ? "Hide" : "Show"
+                color: sheet.ink
+                font.pixelSize: Theme.dp(30)
+            }
+
+            TapHandler {
+                onTapped: sheet.reveal()
+            }
         }
     }
 

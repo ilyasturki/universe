@@ -62,12 +62,13 @@ FocusScope {
         return doneAll && pendingRow ? "All " + pendingRow.reach : "";
     }
 
-    function prompt(label, value, after) {
+    // mode: the sheet's, "text" when left out; "secret" types a password behind dots.
+    function prompt(label, value, after, mode) {
         done = after;
         doneAll = null;
         pendingRow = null;
         customAll = false;
-        sheetsOf().sheet.show(label, value, "text");
+        sheetsOf().sheet.show(label, value, mode || "text");
     }
 
     // Two texts at once (a variable and its value): `after(first, second)`, `all` the same for every game `row` reaches.

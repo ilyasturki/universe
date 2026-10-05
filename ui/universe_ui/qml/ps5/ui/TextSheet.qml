@@ -14,13 +14,22 @@ Modal {
     property var values: ["", ""]
     property int typing: 0
     readonly property bool pair: labels.length === 2
+    // A password (`spec.secret`): dots on the TV until R shows it.
+    property bool secret: false
+    property bool revealed: false
+    readonly property string masked: secret && !revealed ? "•".repeat(text.length) : text
     readonly property alias numeric: panel.numeric
     readonly property alias symbols: panel.symbols
     readonly property alias shift: panel.shift
     readonly property alias rowIndex: panel.rowIndex
     readonly property alias colIndex: panel.colIndex
 
-    readonly property var hints: [
+    readonly property var hints: (secret ? [
+            {
+                glyph: "RB",
+                label: revealed ? "Hide" : "Show"
+            }
+        ] : []).concat([
         {
             glyph: "Y",
             label: "Space"
@@ -41,7 +50,7 @@ Modal {
             glyph: "A",
             label: "Select"
         }
-    ]
+    ])
 
     carded: false
     scrimColor: Theme.ground
@@ -54,6 +63,8 @@ Modal {
         title = spec.title || "";
         text = spec.value === undefined || spec.value === null ? "" : String(spec.value);
         max = spec.max || 64;
+        secret = spec.secret === true;
+        revealed = false;
         panel.numeric = spec.numeric === true;
         panel.symbols = spec.path === true;
         panel.reset();
@@ -68,6 +79,7 @@ Modal {
         title = spec.title || "";
         text = values[0];
         max = spec.max || 64;
+        secret = false;
         panel.numeric = false;
         panel.symbols = false;
         panel.reset();
@@ -118,6 +130,11 @@ Modal {
         text = text.slice(0, -1);
     }
 
+    function reveal() {
+        Sound.play("type");
+        revealed = !revealed;
+    }
+
     function press() {
         panel.press();
     }
@@ -151,6 +168,8 @@ Modal {
             put(" ");
         } else if (api.keys.isMenu(event))
             accept();
+        else if (api.keys.isNextPage(event) && secret)
+            reveal();
     }
 
     component Field: Item {
@@ -235,7 +254,7 @@ Modal {
 
         Field {
             name: sheet.pair ? sheet.labels[0] : ""
-            value: sheet.pair ? (sheet.typing === 0 ? sheet.text : sheet.values[0]) : sheet.text
+            value: sheet.pair ? (sheet.typing === 0 ? sheet.text : sheet.values[0]) : sheet.masked
             active: !sheet.pair || sheet.typing === 0
         }
 
@@ -253,6 +272,21 @@ Modal {
         text: sheet.text.length + "/" + sheet.max
         color: Theme.textMuted
         font.pixelSize: Theme.dp(Theme.fontTiny)
+    }
+
+    Label {
+        id: revealButton
+        objectName: "revealButton"
+        anchors.left: fields.left
+        y: fields.y + fields.height + Theme.dp(12)
+        visible: sheet.secret
+        text: sheet.revealed ? "Hide Password" : "Show Password"
+        color: Theme.textSecondary
+        font.pixelSize: Theme.dp(Theme.fontTiny)
+
+        TapHandler {
+            onTapped: sheet.reveal()
+        }
     }
 
     Timer {

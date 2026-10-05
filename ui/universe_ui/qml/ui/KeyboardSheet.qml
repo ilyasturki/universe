@@ -8,6 +8,10 @@ Sheet {
     property string text: ""
     property bool symbols: false
     property bool numeric: false
+    // A password: dots on the TV until Start shows it.
+    property bool secret: false
+    property bool revealed: false
+    readonly property string masked: secret && !revealed ? "•".repeat(text.length) : text
     // Two fields (`labels` names them) over one keyboard: `text` is the one at `typing`, `values` keeps both.
     property var labels: []
     property var values: ["", ""]
@@ -45,6 +49,11 @@ Sheet {
             glyph: "Start",
             label: "Browse"
         }
+    ] : secret ? [
+        {
+            glyph: "Start",
+            label: revealed ? "Hide" : "Show"
+        }
     ] : []).concat([
         {
             glyph: "B",
@@ -57,13 +66,15 @@ Sheet {
 
     contentHeight: Theme.dp(18) + fieldHeight + (pair ? fieldHeight + fieldGap : 0) + Theme.dp(22) + keyboard.height
 
-    // mode: "text", "path" (adds the path symbols) or "number" (a keypad).
+    // mode: "text", "path" (adds the path symbols), "number" (a keypad) or "secret" (a password).
     function show(label, value, mode) {
         labels = [];
         title = label;
         text = value === undefined || value === null ? "" : String(value);
         symbols = mode === "path";
         numeric = mode === "number";
+        secret = mode === "secret";
+        revealed = false;
         keyboard.shift = false;
         open = true;
         forceActiveFocus();
@@ -78,6 +89,7 @@ Sheet {
         text = values[0];
         symbols = false;
         numeric = false;
+        secret = false;
         keyboard.shift = false;
         open = true;
         forceActiveFocus();
@@ -116,6 +128,11 @@ Sheet {
         dismissed();
     }
 
+    function reveal() {
+        Sound.tick();
+        revealed = !revealed;
+    }
+
     function browse() {
         Sound.panel();
         open = false;
@@ -150,6 +167,8 @@ Sheet {
             finish();
         } else if (api.keys.isMenu(event) && browsable) {
             browse();
+        } else if (api.keys.isMenu(event) && secret) {
+            reveal();
         }
     }
 
@@ -192,12 +211,13 @@ Sheet {
 
         Text {
             id: valueText
+            objectName: "fieldText"
             anchors.left: parent.left
             anchors.leftMargin: Theme.dp(26) + (box.name !== "" ? nameText.width + Theme.dp(22) : 0)
-            anchors.right: browseButton.visible ? browseButton.left : parent.right
+            anchors.right: browseButton.visible ? browseButton.left : revealButton.visible ? revealButton.left : parent.right
             anchors.rightMargin: Theme.dp(26)
             anchors.verticalCenter: parent.verticalCenter
-            text: box.shown
+            text: box.active ? sheet.masked : box.shown
             color: box.active ? Theme.text : Theme.textMuted
             font.family: Theme.sans
             font.weight: Font.Medium
@@ -252,6 +272,52 @@ Sheet {
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
                     text: "Browse…"
+                    color: Theme.textSecondary
+                    font.family: Theme.sans
+                    font.weight: Font.Medium
+                    font.pixelSize: Theme.dp(19)
+                }
+            }
+        }
+
+        Rectangle {
+            id: revealButton
+            objectName: "revealButton"
+
+            anchors.right: parent.right
+            anchors.rightMargin: Theme.dp(10)
+            anchors.verticalCenter: parent.verticalCenter
+            visible: sheet.secret
+            width: revealBody.width + Theme.dp(36)
+            height: Theme.dp(46)
+            radius: height / 2
+            color: Qt.rgba(1, 1, 1, 0.08)
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.14)
+
+            Pointer {
+                accept: false
+                direct: true
+                radius: parent.radius
+                onPicked: sheet.reveal()
+            }
+
+            Row {
+                id: revealBody
+                anchors.centerIn: parent
+                spacing: Theme.dp(10)
+
+                MenuGlyph {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Theme.dp(22)
+                    height: width
+                    kind: sheet.revealed ? "eye-off" : "eye"
+                    tint: Theme.textSecondary
+                }
+
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: sheet.revealed ? "Hide" : "Show"
                     color: Theme.textSecondary
                     font.family: Theme.sans
                     font.weight: Font.Medium
