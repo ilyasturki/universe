@@ -103,6 +103,7 @@ package_universe-git() {
   cd universe
   python -m installer --destdir="$pkgdir" dist/*.whl
   install -Dm755 target/release/universe -t "$pkgdir/usr/bin"
+  install -Dm755 target/release/universe-system-install -t "$pkgdir/usr/lib/universe"
   for kind in modules sources; do
     install -d "$pkgdir/usr/share/universe/$kind"
     cp -r "$kind/." "$pkgdir/usr/share/universe/$kind"
@@ -117,6 +118,7 @@ package_universe-git() {
   install -Dm644 packaging/system/70-universe.rules -t "$pkgdir/usr/lib/udev/rules.d"
   install -Dm644 packaging/system/universe.conf -t "$pkgdir/usr/lib/modules-load.d"
   install -Dm644 packaging/system/universe.desktop -t "$pkgdir/usr/share/wayland-sessions"
+  install -Dm644 packaging/system/io.github.ilyasturki.universe.policy -t "$pkgdir/usr/share/polkit-1/actions"
   install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/$pkgname"
   install -Dm644 ui/universe-ui.desktop -t "$pkgdir/usr/share/applications"
   install -Dm644 ui/icons/hicolor/scalable/apps/universe-ui.svg -t "$pkgdir/usr/share/icons/hicolor/scalable/apps"

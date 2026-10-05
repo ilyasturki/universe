@@ -72,6 +72,7 @@ package_universe-bin() {
     python -m installer --destdir="$pkgdir" "$wheel"
   done
   install -Dm755 bin/universe -t "$pkgdir/usr/bin"
+  install -Dm755 lib/universe/universe-system-install -t "$pkgdir/usr/lib/universe"
   install -d "$pkgdir/usr/share"
   cp -r share/. "$pkgdir/usr/share"
   local f

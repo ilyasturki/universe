@@ -1,5 +1,5 @@
 #!/bin/sh
-# Universe for one user: PREFIX/lib/universe holds the CLI, the modules and the UI's Python venv; PREFIX/bin gets universe, universe-ui and, where GTK is new enough, universe-desktop. Root is only asked for (sudo) to put the udev rule and the uhid load under /etc, since /usr is read-only on SteamOS and Bazzite, and the login session where display managers read it.
+# Universe for one user: PREFIX/lib/universe holds the CLI, the modules and the UI's Python venv; PREFIX/bin gets universe, universe-ui and, where GTK is new enough, universe-desktop. Root is only asked for (sudo) to put the udev rule and the uhid load under /etc, since /usr is read-only on SteamOS and Bazzite, the login session where display managers read it, and the session's install helper with its polkit policy.
 set -eu
 
 usage() {
@@ -17,8 +17,10 @@ builds the checkout (cargo needed); piped from curl it downloads the release.
 The virtual pads and the key macros need /dev/uhid and /dev/uinput opened to
 your session: a udev rule and a module load under /etc. The login screen lists
 the Universe session from /usr/share/wayland-sessions (/usr/local/share where
-/usr is read-only). It installs these as root through sudo (asking for your
-password) or prints the commands for them.
+/usr is read-only); in it, where nothing can ask for a password, gamescope,
+MangoHud and gpu-screen-recorder install through a helper in /usr/local/lib
+that a polkit policy lets the session run as root. It installs these as root
+through sudo (asking for your password) or prints the commands for them.
 USAGE
 }
 
@@ -42,6 +44,10 @@ load=/etc/modules-load.d/universe.conf
 session=/usr/share/wayland-sessions/universe.desktop
 # SDDM and GDM read it too, LightDM does not: only where /usr is read-only
 local_session=/usr/local/share/wayland-sessions/universe.desktop
+helper=/usr/local/lib/universe/universe-system-install
+policy=/usr/share/polkit-1/actions/io.github.ilyasturki.universe.policy
+# polkit 126 and later read it too: only where /usr is read-only
+etc_policy=/etc/polkit-1/actions/io.github.ilyasturki.universe.policy
 
 say() { printf '%s\n' "$*"; }
 die() { printf 'install.sh: %s\n' "$*" >&2; exit 1; }
@@ -102,6 +108,28 @@ register_session() {
     say "  install -Dm644 $src $session"
 }
 
+# a distro package's policy names /usr/lib/universe
+ours_policy() { [ -f "$1" ] && ! grep -qF '>/usr/lib/universe/universe-system-install<' "$1"; }
+
+install_helper() {
+    src="$lib/system/${helper##*/}"
+    if [ ! -f "$src" ] || { [ -f "$policy" ] && ! ours_policy "$policy"; }; then
+        return 0
+    fi
+    if cmp -s "$src" "$helper" && { cmp -s "$lib/system/${policy##*/}" "$policy" || cmp -s "$lib/system/${policy##*/}" "$etc_policy"; }; then
+        return 0
+    fi
+    say "root (sudo) puts the install helper in $helper and its polkit policy in $policy (in $etc_policy where /usr is read-only): in the Universe session, where nothing can ask for a password, Settings › Components installs gamescope, MangoHud and gpu-screen-recorder through it"
+    # shellcheck disable=SC2016
+    if as_root sh -c 'install -Dm755 "$1" "$2" && { install -Dm644 "$3" "$4" 2>/dev/null || install -Dm644 "$3" "$5"; }' \
+        sh "$src" "$helper" "$lib/system/${policy##*/}" "$policy" "$etc_policy"; then
+        return 0
+    fi
+    say "note: without them the Universe session cannot install system tools; as root, run"
+    say "  install -Dm755 $src $helper"
+    say "  install -Dm644 $lib/system/${policy##*/} $policy"
+}
+
 if [ "$uninstall" = 1 ]; then
     [ -d "$lib" ] || die "nothing installed under $prefix"
     remove_installed
@@ -114,6 +142,14 @@ if [ "$uninstall" = 1 ]; then
             as_root rm -f "$f" || say "note: $f stays; remove it as root"
         fi
     done
+    for f in "$policy" "$etc_policy"; do
+        if ours_policy "$f"; then
+            as_root rm -f "$f" || say "note: $f stays; remove it as root"
+        fi
+    done
+    if [ -e "$helper" ]; then
+        as_root rm -rf "${helper%/*}" || say "note: $helper stays; remove it as root"
+    fi
     say "removed Universe from $prefix; your config, library and recordings stay under ~/.config/universe and ~/.local/share/universe"
     exit 0
 fi
@@ -195,6 +231,12 @@ cp -r "$dist/share/universe/sources" "$lib/sources"
 if [ -d "$dist/lib/udev" ]; then
     install -Dm644 "$dist/lib/udev/rules.d/${rules##*/}" "$dist/lib/modules-load.d/${load##*/}" -t "$lib/system"
 fi
+# releases up to 0.0.10 ship neither
+if [ -x "$dist/lib/universe/${helper##*/}" ]; then
+    install -Dm755 "$dist/lib/universe/${helper##*/}" -t "$lib/system"
+    # pkexec matches the policy against the helper's realpath: /usr/local is /var/usrlocal on Fedora Atomic
+    sed "s|>/usr/lib/universe/universe-system-install<|>$(realpath -m "$helper")<|" "$dist/share/polkit-1/actions/${policy##*/}" > "$lib/system/${policy##*/}"
+fi
 if [ -f "$dist/share/wayland-sessions/${session##*/}" ]; then
     mkdir -p "$lib/system"
     sed "s|^Exec=universe-ui|Exec=$prefix/bin/universe-ui|" "$dist/share/wayland-sessions/${session##*/}" > "$lib/system/${session##*/}"
@@ -222,7 +264,7 @@ EOF
 fi
 
 : > "$manifest"
-(cd "$dist" && find share -type f ! -path 'share/universe/*' ! -path 'share/wayland-sessions/*') | while IFS= read -r f; do
+(cd "$dist" && find share -type f ! -path 'share/universe/*' ! -path 'share/wayland-sessions/*' ! -path 'share/polkit-1/*') | while IFS= read -r f; do
     case "$f" in
         *io.github.ilyasturki.UniverseDesktop* | */universe-desktop.1) [ "$desktop" = 1 ] || continue ;;
     esac
@@ -241,6 +283,7 @@ fi
 say "installed Universe under $prefix"
 install_system_files
 register_session
+install_helper
 if [ "$desktop" = 1 ]; then
     say "note: GNOME Shell reads search providers from XDG_DATA_DIRS only, which $prefix/share is not on by default: its search does not list Universe Desktop's games"
 fi

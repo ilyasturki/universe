@@ -7,6 +7,8 @@ usage: tools/dist OUT
 
 Builds the release tree that install.sh installs from, outside Nix:
   OUT/bin/universe                    the CLI (release, sqlite bundled)
+  OUT/lib/universe/universe-system-install  the helper the session installs system
+                                      tools through, as root over pkexec
   OUT/bin/universe-desktop            the GTK app, where GTK 4.22 and libadwaita 1.9
                                       are to build it against
   OUT/wheels/                         universe_core (abi3) and universe_ui
@@ -17,6 +19,8 @@ Builds the release tree that install.sh installs from, outside Nix:
   OUT/lib/udev/rules.d/70-universe.rules    /dev/uhid, the virtual pads' hidraw
                                       and /dev/uinput opened to the session
   OUT/lib/modules-load.d/universe.conf      uhid loaded at boot
+  OUT/share/polkit-1/actions/io.github.ilyasturki.universe.policy  the helper's
+                                      polkit action, for /usr/lib/universe
   OUT/install.sh
 
 Needs cargo and python3 (3.11+) with pip; pip fetches maturin and
@@ -37,6 +41,7 @@ python="${PYTHON:-python3}"
 
 cargo build --release --locked -p universe --manifest-path "$repo/Cargo.toml"
 install -Dm755 "${CARGO_TARGET_DIR:-$repo/target}/release/universe" "$out/bin/universe"
+install -Dm755 "${CARGO_TARGET_DIR:-$repo/target}/release/universe-system-install" "$out/lib/universe/universe-system-install"
 
 rm -rf "$out/wheels"
 "$python" -m pip wheel --quiet --no-deps --wheel-dir "$out/wheels" "$repo/crates/universe-py" "$repo/ui"
@@ -98,6 +103,7 @@ install -Dm644 "$repo/ui/icons/hicolor/symbolic/apps/universe-ui-symbolic.svg" -
 install -Dm644 "$repo/packaging/system/universe.desktop" -t "$out/share/wayland-sessions"
 install -Dm644 "$repo/packaging/system/70-universe.rules" -t "$out/lib/udev/rules.d"
 install -Dm644 "$repo/packaging/system/universe.conf" -t "$out/lib/modules-load.d"
+install -Dm644 "$repo/packaging/system/io.github.ilyasturki.universe.policy" -t "$out/share/polkit-1/actions"
 install -Dm755 "$repo/install.sh" "$out/install.sh"
 install -Dm644 "$repo/LICENSE" "$out/LICENSE"
 echo "$out"

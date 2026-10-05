@@ -102,6 +102,7 @@ for wheel in dist/*.whl; do
   %{python3} -m installer --destdir=%{buildroot} $wheel
 done
 install -Dm755 target/release/universe -t %{buildroot}%{_bindir}
+install -Dm755 target/release/universe-system-install -t %{buildroot}%{_prefix}/lib/universe
 for kind in modules sources; do
   install -d %{buildroot}%{_datadir}/universe/$kind
   cp -r $kind/. %{buildroot}%{_datadir}/universe/$kind
@@ -116,6 +117,7 @@ install -Dm644 gen/_universe %{buildroot}%{_datadir}/zsh/site-functions/_univers
 install -Dm644 packaging/system/70-universe.rules -t %{buildroot}%{_udevrulesdir}
 install -Dm644 packaging/system/universe.conf -t %{buildroot}%{_modulesloaddir}
 install -Dm644 packaging/system/universe.desktop -t %{buildroot}%{_datadir}/wayland-sessions
+install -Dm644 packaging/system/io.github.ilyasturki.universe.policy -t %{buildroot}%{_datadir}/polkit-1/actions
 install -Dm644 ui/universe-ui.desktop -t %{buildroot}%{_datadir}/applications
 install -Dm644 ui/icons/hicolor/scalable/apps/universe-ui.svg -t %{buildroot}%{_datadir}/icons/hicolor/scalable/apps
 install -Dm644 ui/icons/hicolor/symbolic/apps/universe-ui-symbolic.svg -t %{buildroot}%{_datadir}/icons/hicolor/symbolic/apps
@@ -154,6 +156,8 @@ TZ=Europe/Paris cargo test --frozen -p universe -p universe-desktop
 %{_udevrulesdir}/70-universe.rules
 %{_modulesloaddir}/universe.conf
 %{_datadir}/wayland-sessions/universe.desktop
+%{_prefix}/lib/universe/
+%{_datadir}/polkit-1/actions/io.github.ilyasturki.universe.policy
 %{_datadir}/applications/universe-ui.desktop
 %{_datadir}/icons/hicolor/scalable/apps/universe-ui.svg
 %{_datadir}/icons/hicolor/symbolic/apps/universe-ui-symbolic.svg

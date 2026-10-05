@@ -46,6 +46,8 @@ sudo dnf install -y -q --allowerasing "$top"/RPMS/x86_64/*.rpm > /dev/null
 rpm -q universe universe-desktop
 cmp "$repo/packaging/system/70-universe.rules" /usr/lib/udev/rules.d/70-universe.rules
 cmp "$repo/packaging/system/universe.conf" /usr/lib/modules-load.d/universe.conf
+cmp "$repo/packaging/system/io.github.ilyasturki.universe.policy" /usr/share/polkit-1/actions/io.github.ilyasturki.universe.policy
+/usr/lib/universe/universe-system-install bash 2> /dev/null && { echo "rpm-check: the install helper took bash" >&2; exit 1; }
 [ -s /usr/share/universe/sources/gog/GalaxyCommunication.exe ] || { echo "rpm-check: no GOG Galaxy service stub" >&2; exit 1; }
 
 echo "── cli"
@@ -75,4 +77,5 @@ echo "$out/rpm-ui-fake.png"
 echo "── remove"
 sudo dnf remove -y -q universe universe-desktop > /dev/null
 [ ! -e /usr/lib/udev/rules.d/70-universe.rules ] || { echo "rpm-check: the udev rule stayed" >&2; exit 1; }
+[ ! -e /usr/lib/universe/universe-system-install ] || { echo "rpm-check: the install helper stayed" >&2; exit 1; }
 echo "rpm-check: ok"

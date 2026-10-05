@@ -53,6 +53,9 @@ export PATH="$HOME/.local/bin:$PATH"
 cmp "$repo/packaging/system/70-universe.rules" /etc/udev/rules.d/70-universe.rules
 cmp "$repo/packaging/system/universe.conf" /etc/modules-load.d/universe.conf
 grep -qxF "Exec=$HOME/.local/bin/universe-ui --session" /usr/share/wayland-sessions/universe.desktop
+cmp "$work/dist/lib/universe/universe-system-install" /usr/local/lib/universe/universe-system-install
+grep -qF ">$(realpath /usr/local/lib/universe/universe-system-install)<" /usr/share/polkit-1/actions/io.github.ilyasturki.universe.policy
+[ ! -e "$HOME/.local/share/polkit-1" ] || { echo "distro-check: the polkit policy landed where polkit does not read it" >&2; exit 1; }
 [ ! -e "$HOME/.local/share/wayland-sessions" ] || { echo "distro-check: the session landed where no display manager reads it" >&2; exit 1; }
 
 echo "── cli"
@@ -97,6 +100,7 @@ echo "── uninstall"
 "$work/dist/install.sh" --uninstall
 left="$(find "$HOME/.local/bin" "$HOME/.local/lib" "$HOME/.local/share/applications" "$HOME/.local/share/dbus-1/services" \
     "$HOME/.local/share/gnome-shell/search-providers" "$HOME/.local/share/metainfo" -mindepth 1 2> /dev/null || true)"
-left="$left$(find /etc/udev/rules.d/70-universe.rules /etc/modules-load.d/universe.conf /usr/share/wayland-sessions/universe.desktop 2> /dev/null || true)"
+left="$left$(find /etc/udev/rules.d/70-universe.rules /etc/modules-load.d/universe.conf /usr/share/wayland-sessions/universe.desktop \
+    /usr/local/lib/universe /usr/share/polkit-1/actions/io.github.ilyasturki.universe.policy 2> /dev/null || true)"
 [ -z "$left" ] || { echo "distro-check: left behind:"$'\n'"$left" >&2; exit 1; }
 echo "distro-check: ok"
