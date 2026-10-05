@@ -180,6 +180,8 @@ class FakeBluetooth:
         self.available = os.environ.get("UNIVERSE_FAKE_BLUETOOTH", "") != "none"
         self.powered = True
         self.discovering = False
+        # A watch asked for a search: it goes on again when the adapter does, as the core's watch has it.
+        self.searching = False
         self.devices = copy.deepcopy(PAIRED) if self.available else []
         self.commands = []
         self._asked = {}
@@ -200,8 +202,10 @@ class FakeBluetooth:
         return w
 
     def stopped(self, w):
-        if not self.watches and self.discovering:
-            self._scan(False)
+        if not self.watches:
+            self.searching = False
+            if self.discovering:
+                self._scan(False)
 
     def _changed(self):
         for w in list(self.watches):
@@ -249,14 +253,15 @@ class FakeBluetooth:
         self.commands.append(cmd)
         what, address = cmd.get("cmd"), cmd.get("address", "")
         if what == "scan":
-            self._scan(bool(cmd.get("on", True)))
+            self.searching = bool(cmd.get("on", True))
+            self._scan(self.searching)
             self._changed()
         elif what == "power":
             self.powered = bool(cmd.get("on", True))
             if not self.powered:
-                self._scan(False)
                 for dev in self.devices:
                     dev["connected"] = False
+            self._scan(self.searching)
             self._changed()
         elif what in ("pair", "connect", "disconnect", "remove"):
             self._act(w, what, address)

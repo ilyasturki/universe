@@ -87,10 +87,15 @@ class Network(QObject):
             self._link = link
             self.changed.emit()
 
-    # NetworkManager's link, once it answers: the sysfs poll stops for it.
+    # The network watch's link while it runs and NM answers: the sysfs poll stops for it, and comes back with `release`.
     def follow(self, kind, strength):
         self._timer.stop()
         self._set({"kind": kind, "bars": strength_bars(strength) if kind == "wifi" else 0})
+
+    def release(self):
+        if not self._timer.isActive():
+            self.refresh()
+            self._timer.start()
 
     # "wifi" | "wired" | "" offline
     kind = Property(str, lambda self: self._link["kind"], notify=changed)
@@ -105,14 +110,16 @@ JOINABLE = ("open", "owe", "psk", "sae")
 def network_row(n):
     security = str(n.get("security") or "")
     strength = int(n.get("strength") or 0)
+    saved = bool(n.get("saved"))
     return {
         "ssid": str(n.get("ssid") or ""),
         "strength": strength,
         "bars": strength_bars(strength),
         "security": security,
         "secured": security in SECURED,
-        "joinable": security in JOINABLE,
-        "saved": bool(n.get("saved")),
+        # A WEP or enterprise network a desktop saved joins as saved.
+        "joinable": security in JOINABLE or saved,
+        "saved": saved,
         "active": bool(n.get("active")),
     }
 
@@ -124,6 +131,7 @@ class WifiScreen(Streamed):
     # (ssid, connectivity) once a join is up; (ssid, reason, message) when a join or a forget fails, reason as the core gives it.
     joined = Signal(str, str)
     failed = Signal(str, str, str)
+    forgot = Signal(str)
     # A connection test's answer: "full", "limited", "portal", "none" or "unknown".
     checked = Signal(str)
 
@@ -138,8 +146,6 @@ class WifiScreen(Streamed):
 
     def _apply(self, state):
         state = {k: v for k, v in (state or {}).items() if k != "event"}
-        if state.get("available"):
-            self._status.follow(str(state.get("link") or ""), int(state.get("strength") or 0))
         if state != self._state:
             self._state = state
             self.changed.emit()
@@ -148,6 +154,10 @@ class WifiScreen(Streamed):
         event, action, ssid = line.get("event"), line.get("action"), str(line.get("ssid") or "")
         reason, message = str(line.get("reason") or "failed"), str(line.get("message") or "")
         if event == "state":
+            if line.get("available"):
+                self._status.follow(str(line.get("link") or ""), int(line.get("strength") or 0))
+            else:
+                self._status.release()
             self._apply(line)
         elif event == "connecting":
             self._connecting, self._error = ssid, {}
@@ -165,15 +175,19 @@ class WifiScreen(Streamed):
             self._checking = False
             self.changed.emit()
             self.checked.emit("unknown")
+        elif event == "done" and action == "forget":
+            self.forgot.emit(ssid)
         elif event == "failed" and action in ("connect", "forget"):
             if action == "connect":
                 self._connecting = ""
                 self._error = {"ssid": ssid, "reason": reason, "message": message}
                 self.changed.emit()
             self.failed.emit(ssid, reason, message)
-        elif event == "off" and self._connecting:
-            self._connecting = ""
-            self.changed.emit()
+        elif event == "off":
+            self._status.release()
+            if self._connecting:
+                self._connecting = ""
+                self.changed.emit()
 
     # Whether joining `ssid` takes a password typed first: a secured network not saved yet.
     @Slot(str, result=bool)

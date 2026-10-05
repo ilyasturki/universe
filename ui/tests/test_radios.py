@@ -15,8 +15,39 @@ def test_the_networks_come_from_the_first_read_and_drive_the_status(api):
     assert (home["active"], home["saved"], home["secured"], home["bars"]) == (True, True, True, 3)
     assert (by_ssid(wifi)["Campus"]["joinable"], by_ssid(wifi)["Café Lumière"]["secured"]) == (False, False)
     assert (wifi.available, wifi.link, wifi.ssid, wifi.connectivity) == (True, "wifi", "Home", "full")
+    assert api.network._timer.isActive(), "a read once is no watch: the sysfs poll keeps the status until one runs"
+    wifi.start()
+    until(lambda: not api.network._timer.isActive())
     assert (api.network.kind, api.network.bars) == ("wifi", 3), "NetworkManager's link replaces the sysfs one"
+    wifi._received({"event": "off", "code": 1})
+    assert api.network._timer.isActive(), "and the sysfs poll comes back once the watch ends"
     assert api.system.network and api.system.bluetooth
+
+
+def test_a_network_a_desktop_saved_joins_whatever_its_security(api):
+    wifi = api.screens.network
+    wifi.on_line(
+        {
+            "event": "state",
+            "available": True,
+            "device": "wlan0",
+            "enabled": True,
+            "networks": [
+                {"ssid": "Campus", "strength": 60, "security": "enterprise", "saved": True, "active": True},
+                {"ssid": "Lab", "strength": 40, "security": "enterprise", "saved": False, "active": False},
+            ],
+        }
+    )
+    assert [(n["ssid"], n["joinable"]) for n in wifi.networks] == [("Campus", True), ("Lab", False)]
+
+
+def test_a_forget_that_took_says_so(api):
+    wifi = api.screens.network
+    until(lambda: wifi.networks)
+    forgot = record(wifi.forgot)
+    wifi.forget("Home")
+    until(lambda: forgot)
+    assert forgot == [("Home",)]
 
 
 def test_a_new_network_joins_with_its_password_and_a_wrong_one_fails_as_such(api, fake):

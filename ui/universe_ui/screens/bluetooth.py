@@ -95,7 +95,8 @@ class BluetoothScreen(Streamed):
                 self.changed.emit()
             if event == "done":
                 self.done.emit(action, address)
-            else:
+            # The watch searches again once the adapter can; a cancel that fails found no pairing left to stop.
+            elif action not in ("scan", "cancel"):
                 self.failed.emit(action, address, str(line.get("reason") or "failed"), str(line.get("message") or ""))
         elif event == "off":
             self._set_request(None)
