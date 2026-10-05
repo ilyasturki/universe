@@ -7,7 +7,7 @@
 
 <p align="center">A game launcher for Linux you drive with a controller, from the couch or on a Steam Deck.</p>
 
-<p align="center"><img src="docs/images/home.avif" alt="Browsing the home row with a controller" width="100%"></p>
+<p align="center"><img src="docs/images/home.avif" alt="Browsing the home row with a controller, then searching for Dead Cells and launching it" width="100%"></p>
 
 Your GOG, Steam, Epic, itch.io, Lutris and emulated games in one library, each launched in gamescope with the runner it needs.
 
@@ -34,9 +34,14 @@ Reprise, a port of my [Pegasus theme](https://github.com/ilyasturki/pegasus-them
 
 Not affiliated with Nintendo or Sony. Nintendo Switch is a trademark of Nintendo; PlayStation and PS5 are trademarks of Sony Interactive Entertainment.
 
+## HOME over a running game
+
+HOME opens over the game and pauses it. From there, take a screenshot, show MangoHud, cap the frame rate, change the volume or quit.
+
+![HOME over Dead Cells: the dock, MangoHud turned on, then the volume level](docs/images/home-over-game.avif)
+
 ## Also
 
-- HOME over a running game: pause, screenshot, MangoHud, volume, quit.
 - Opt-in session recording; recordings and screenshots land in the Media tab.
 - Pad, keyboard, mouse or touch, with a guided button setup; each emulator gets its own pad per player.
 - Achievements, with unlock banners in game.
