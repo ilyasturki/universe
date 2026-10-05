@@ -183,6 +183,18 @@ def test_keeping_the_saves_here_needs_some(src, cloud, run):
     assert state(src)["state"] == "error"
 
 
+def test_a_side_kept_offline_fails_and_leaves_the_conflict_to_settle(src, cloud, run, monkeypatch):
+    put(cloud["local"], "profile.json", "local")
+    put(cloud["cloud"], "profile.json", "cloud")
+    src.main(["pre-launch"])
+    monkeypatch.setattr(src, "reachable", lambda host: False)
+    code, events, err = run("cloud-saves", "1434554947", "keep-cloud")
+    assert code == 1 and events == []
+    assert "could not be reached" in err
+    assert state(src)["state"] == "conflict"
+    assert (cloud["local"] / "profile.json").read_text() == "local"
+
+
 def test_the_prefix_names_the_user_folder(src, tmp_path):
     root = tmp_path / "pfx"
     (root / "drive_c").mkdir(parents=True)

@@ -55,10 +55,12 @@ SCAN_DEPTH = 5  # a .info can sit under a wine prefix: gog/<slug>/drive_c/GOG Ga
 ONLINE_TIMEOUT_S = 2
 PRE_LAUNCH_BUDGET_S = 34  # the hook's timeout_s (40) cancels the launch: the sync ends by then, whatever comet took
 SYNC_MIN_S = 5
+SYNC_KILL_GRACE_S = 2  # PRE_LAUNCH_BUDGET_S plus this stays under the hook's timeout_s
 CLOUD_SYNC_TIMEOUT_S = 600
 CONFLICT_MARK = "Files in conflict"  # gogdl logs a conflict, then prints a fresh timestamp as if it synced
 SYNC_FLAGS = {"download": "--skip-upload", "upload": "--skip-download", "keep-local": "--force-upload", "keep-cloud": "--force-download"}
 CLOUD_ACTIONS = ("status", *SYNC_FLAGS)
+KEEPS = ("keep-local", "keep-cloud")
 SHELL_FOLDERS_KEY = r"[Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders]"
 REG_VALUE_RE = re.compile(r'^"([^"]+)"="(.*)"$')
 LOCATION_VAR_RE = re.compile(r"<\?(\w+)\?>")
@@ -166,13 +168,13 @@ def gogdl_json(settings, *args):
         raise SourceError(f"gogdl {args[0]} printed no JSON") from None
 
 
-def kill_group(proc):
+def kill_group(proc, grace=KILL_GRACE_S):
     try:
         os.killpg(proc.pid, signal.SIGTERM)
     except ProcessLookupError:
         return
     try:
-        proc.wait(timeout=KILL_GRACE_S)
+        proc.wait(timeout=grace)
     except subprocess.TimeoutExpired:
         with contextlib.suppress(ProcessLookupError):
             os.killpg(proc.pid, signal.SIGKILL)
@@ -1051,7 +1053,7 @@ def save_sync(settings, game_id, path, name, ts, flag, deadline):
     try:
         out, err = proc.communicate(timeout=max(deadline - time.monotonic(), 0.1))
     except subprocess.TimeoutExpired:
-        kill_group(proc)
+        kill_group(proc, SYNC_KILL_GRACE_S)
         raise SyncTimeout("gogdl save-sync ran out of time, killed") from None
     finally:
         _child = None
@@ -1120,9 +1122,13 @@ def run_sync(settings, game_id, action, deadline):
         return update_cloud(game_id, state="unsupported", message="Only a Windows build run through Proton or Wine syncs its saves.", at=now_iso())
     root = wine_root(ctx["prefix"]) if ctx["prefix"] else None
     if root is None or not (root / "drive_c").is_dir():
+        if action in KEEPS:
+            raise SourceError("the game's prefix is not made yet")
         log("the prefix is not made yet: the saves sync after the session")
         return cloud_entry(game_id)
     if not reachable(CLOUD_HOST):
+        if action in KEEPS:
+            raise SourceError("GOG could not be reached.")
         return update_cloud(game_id, state="offline", message="GOG could not be reached.", at=now_iso())
     locations = cloud_locations(cloud_client_id(settings, game_id, ctx["dir"]), deadline)
     if not locations:
@@ -1146,7 +1152,7 @@ def run_sync(settings, game_id, action, deadline):
     ts = dict(entry.get("ts") or {})
     conflict = False
     for name, path in paths.items():
-        if action == "upload" and not has_files(path):
+        if action in ("upload", "keep-local") and not has_files(path):
             continue
         stamp = sync_location(settings, game_id, name, path, ts.get(name, "0"), action, deadline)
         if stamp is None:
@@ -1159,19 +1165,25 @@ def run_sync(settings, game_id, action, deadline):
     return update_cloud(game_id, ts=ts, state="synced", message="", at=now_iso(), locations=places)
 
 
+def sync_failed(game_id, action, message):
+    if action in KEEPS and cloud_entry(game_id).get("state") == "conflict":
+        return update_cloud(game_id, message=message)
+    return update_cloud(game_id, state="error", message=message, at=now_iso())
+
+
 def cloud_sync(settings, game_id, action, deadline):
     try:
         with game_lock(game_id, deadline):
             return run_sync(settings, game_id, action, deadline)
     except SyncTimeout as exc:
         late = "The cloud saves did not come down in time: the game started with the saves on this device."
-        update_cloud(game_id, state="error", message=late if action == "download" else str(exc), at=now_iso())
+        sync_failed(game_id, action, late if action == "download" else str(exc))
         raise
     except SourceError as exc:
-        update_cloud(game_id, state="error", message=str(exc), at=now_iso())
+        sync_failed(game_id, action, str(exc))
         raise
-    except (OSError, subprocess.SubprocessError) as exc:
-        update_cloud(game_id, state="error", message=str(exc), at=now_iso())
+    except (OSError, ValueError, TypeError, KeyError, subprocess.SubprocessError) as exc:
+        sync_failed(game_id, action, str(exc))
         raise SourceError(str(exc)) from exc
 
 
@@ -1228,7 +1240,10 @@ def hook_check(settings):
 
 def hook_pre_launch(settings):
     started = time.monotonic()
-    start_session_comet(settings)
+    try:
+        start_session_comet(settings)
+    except (SourceError, OSError, subprocess.SubprocessError) as exc:
+        log(f"comet: {exc}")
     if settings["cloud_saves"]:
         sync_hook(settings, "download", started + PRE_LAUNCH_BUDGET_S)
 

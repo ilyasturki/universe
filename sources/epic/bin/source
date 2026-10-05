@@ -53,8 +53,10 @@ EPIC_HOST = "account-public-service-prod03.ol.epicgames.com"
 ONLINE_TIMEOUT_S = 2
 PRE_LAUNCH_BUDGET_S = 34  # the hook's timeout_s (40) cancels the launch: the sync ends by then, whatever the launch arguments took
 SYNC_MIN_S = 5
+SYNC_KILL_GRACE_S = 2  # PRE_LAUNCH_BUDGET_S plus this stays under the hook's timeout_s
 CLOUD_SYNC_TIMEOUT_S = 600
 CLOUD_ACTIONS = ("status", "download", "upload", "keep-local", "keep-cloud")
+KEEPS = ("keep-local", "keep-cloud")
 SAVE_DATE = "%Y-%m-%d %H:%M:%S"
 SAME_AGE_S = 60  # legendary calls two saves within a minute of each other the same
 CLOUD_DATE_RE = re.compile(r"- Cloud save date: (\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)")
@@ -175,13 +177,13 @@ def legendary_json(settings, verb, *args, timeout=LEGENDARY_TIMEOUT_S):
         raise SourceError(f"legendary {verb} printed no JSON{last_error(proc.stderr)}") from None
 
 
-def kill_group(proc):
+def kill_group(proc, grace=KILL_GRACE_S):
     try:
         os.killpg(proc.pid, signal.SIGTERM)
     except ProcessLookupError:
         return
     try:
-        proc.wait(timeout=KILL_GRACE_S)
+        proc.wait(timeout=grace)
     except subprocess.TimeoutExpired:
         with contextlib.suppress(ProcessLookupError):
             os.killpg(proc.pid, signal.SIGKILL)
@@ -888,7 +890,7 @@ def sync_saves(settings, app, path, deadline, *flags):
     try:
         _out, err = proc.communicate(timeout=max(deadline - time.monotonic(), 0.1))
     except subprocess.TimeoutExpired:
-        kill_group(proc)
+        kill_group(proc, SYNC_KILL_GRACE_S)
         raise SyncTimeout("legendary sync-saves ran out of time, killed") from None
     finally:
         _child = None
@@ -961,6 +963,8 @@ def run_sync(settings, app, action, deadline):
         return update_cloud(app, state="unsupported", message="Only a Windows build run through Proton or Wine syncs its saves.", at=now_iso())
     root = wine_root(ctx["prefix"]) if ctx["prefix"] else None
     if root is None or not (root / "drive_c").is_dir():
+        if action in KEEPS:
+            raise SourceError("the game's prefix is not made yet")
         log("the prefix is not made yet: the saves sync after the session")
         return cloud_entry(app)
     template = cloud_save_folder(settings, app)
@@ -971,6 +975,8 @@ def run_sync(settings, app, action, deadline):
         raise SourceError(f"{template} names a folder Universe does not know")
     places = [{"name": "saves", "path": str(path)}]
     if not reachable(EPIC_HOST):
+        if action in KEEPS:
+            raise SourceError("Epic could not be reached.")
         return update_cloud(app, state="offline", message="Epic could not be reached.", at=now_iso(), locations=places)
     local = path.is_dir() and latest_mtime(path) > 0
     if action == "keep-local" and not local:
@@ -1005,19 +1011,25 @@ def run_sync(settings, app, action, deadline):
     return update_cloud(app, base=base, state="synced", message="", at=now_iso(), locations=places)
 
 
+def sync_failed(app, action, message):
+    if action in KEEPS and cloud_entry(app).get("state") == "conflict":
+        return update_cloud(app, message=message)
+    return update_cloud(app, state="error", message=message, at=now_iso())
+
+
 def cloud_sync(settings, app, action, deadline):
     try:
         with game_lock(app, deadline):
             return run_sync(settings, app, action, deadline)
     except SyncTimeout as exc:
         late = "The cloud saves did not come down in time: the game started with the saves on this device."
-        update_cloud(app, state="error", message=late if action == "download" else str(exc), at=now_iso())
+        sync_failed(app, action, late if action == "download" else str(exc))
         raise
     except SourceError as exc:
-        update_cloud(app, state="error", message=str(exc), at=now_iso())
+        sync_failed(app, action, str(exc))
         raise
-    except (OSError, ValueError, subprocess.SubprocessError) as exc:
-        update_cloud(app, state="error", message=str(exc), at=now_iso())
+    except (OSError, ValueError, TypeError, KeyError, subprocess.SubprocessError) as exc:
+        sync_failed(app, action, str(exc))
         raise SourceError(str(exc)) from exc
 
 
@@ -1055,7 +1067,10 @@ def cmd_cloud_saves(settings, args):
 
 def hook_pre_launch(settings):
     started = time.monotonic()
-    pass_launch_parameters(settings)
+    try:
+        pass_launch_parameters(settings)
+    except (SourceError, OSError, ValueError, subprocess.SubprocessError) as exc:
+        log(f"launch parameters: {exc}")
     if settings["cloud_saves"]:
         sync_hook(settings, "download", started + PRE_LAUNCH_BUDGET_S)
 

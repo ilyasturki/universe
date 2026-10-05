@@ -777,7 +777,8 @@ a copy of the folder that replaces the folder only once gogdl finished. `pre-lau
 hook began, under the hook's 40 s `timeout_s`, which would cancel the launch: the game then starts
 on the saves it had, and the state says so. A per-game lock makes the next `pre-launch` wait for an
 upload still running, until that deadline. `keep-local` is `--force-upload` (refused with no saves
-on the device), `keep-cloud` `--force-download`.
+on the device; a folder empty here keeps what the cloud has), `keep-cloud` `--force-download`. A
+keep that cannot reach the store fails and leaves the conflict to settle.
 
 The **steam** source has no `cloud-saves` capability: Steam Cloud is the client's, and Universe
 does not launch through it (see Steam).
