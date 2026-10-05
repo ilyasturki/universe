@@ -244,14 +244,14 @@ impl Core {
         let splash = (!splash.is_empty()).then(|| std::path::PathBuf::from(splash));
         let gamescope_pid = self.nest().map_or(0, |n| n.pid);
         let launcher_pid = if gamescope_pid != 0 { std::process::id() } else { 0 };
-        let mut plan = if self.under_steam() {
+        let (mut plan, runtime) = if self.under_steam() {
             // Steam's mangoapp draws its HUD and Steam limits the frame rate: no MangoHud layer, no limit of Universe's.
             let mut steam = r.clone();
             steam.effective.mangohud = false;
             steam.effective.fps_limit = "none".into();
-            launcher::plan(&steam, &cfg, &extra_env, mode, splash.as_deref(), true, true)?
+            (launcher::plan(&steam, &cfg, &extra_env, mode, splash.as_deref(), true, true)?, Runtime::of(&steam.effective))
         } else {
-            launcher::plan(&r, &cfg, &extra_env, mode, splash.as_deref(), gamescope_pid != 0, launcher::mangoapp_installed())?
+            (launcher::plan(&r, &cfg, &extra_env, mode, splash.as_deref(), gamescope_pid != 0, launcher::mangoapp_installed())?, Runtime::of(&r.effective))
         };
         for (path, text) in plan.mangohud_conf.iter().chain(&plan.mangoapp_conf) {
             std::fs::write(path, text)?;
@@ -278,7 +278,7 @@ impl Core {
             launcher_pid,
         };
         let mut undo = Vec::new();
-        if let Err(e) = self.begin(&r, &plan, &current, base.vars.clone(), &mut undo).await {
+        if let Err(e) = self.begin(&r, &plan, &current, base.vars.clone(), runtime, &mut undo).await {
             if read_marker().is_some_and(|m| m.current.session_id == session_id) {
                 remove_marker();
             }
@@ -305,7 +305,7 @@ impl Core {
     }
 
     /// Each effect pushes its undo as it begins; the marker carries the list before the unit starts.
-    async fn begin(&self, r: &Resolved, plan: &Plan, current: &Current, hook_env: Vec<(String, String)>, undo: &mut Vec<Undo>) -> Result<()> {
+    async fn begin(&self, r: &Resolved, plan: &Plan, current: &Current, hook_env: Vec<(String, String)>, runtime: Runtime, undo: &mut Vec<Undo>) -> Result<()> {
         if !plan.post_command.trim().is_empty() {
             undo.push(Undo::PostCommand { command: plan.post_command.clone(), cwd: plan.cwd.to_string_lossy().to_string(), env: plan.env.clone() });
         }
@@ -332,14 +332,7 @@ impl Core {
                 }
             }
         }
-        write_marker(&Marker {
-            current: current.clone(),
-            hook_env,
-            undo: undo.clone(),
-            command: plan.command_line(),
-            stopped: false,
-            runtime: Some(Runtime::of(&r.effective)),
-        })?;
+        write_marker(&Marker { current: current.clone(), hook_env, undo: undo.clone(), command: plan.command_line(), stopped: false, runtime: Some(runtime) })?;
         tracing::info!("launch {}: {}", r.game.id, plan.command_line());
         let budget: u64 = 60 + self.hook_modules(r, "session-end").await.iter().map(|m| m.timeout().as_secs()).sum::<u64>();
         let mut env = passthrough_env();
