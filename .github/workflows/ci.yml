@@ -19,14 +19,23 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: DeterminateSystems/nix-installer-action@v23
-      # The Rust derivations are slow cold (~9 min for the core's two); a push that touches no Rust substitutes them from the cache
-      - uses: DeterminateSystems/magic-nix-cache-action@v15
+      # The Rust derivations are slow cold (~9 min for the core's two); a push that touches no Rust finds them in the last run's store.
+      # One cache entry for the store: magic-nix-cache's per-path calls get throttled by the Actions cache.
+      - id: nix-cache
+        uses: nix-community/cache-nix-action/restore@v7
         with:
-          use-flakehub: disabled
-      - run: nix build .#universe .#universe-ui .#universe-desktop --no-link -L
+          primary-key: nix-build-${{ github.sha }}
+          restore-prefixes-first-match: nix-build-
+      # The out-links are gc roots: the save's garbage collection keeps what they point to
+      - run: nix build .#universe .#universe-ui .#universe-desktop -o "$RUNNER_TEMP/package" -L
       # The lint job builds the two lint checks; listing the rest keeps this job from compiling the Rust tree twice
-      - run: nix build .#checks.x86_64-linux.pytest-ui .#checks.x86_64-linux.pytest-modules .#checks.x86_64-linux.pytest-sources .#checks.x86_64-linux.pytest-core-py --no-link -L
+      - run: nix build .#checks.x86_64-linux.pytest-ui .#checks.x86_64-linux.pytest-modules .#checks.x86_64-linux.pytest-sources .#checks.x86_64-linux.pytest-core-py -o "$RUNNER_TEMP/check" -L
       - run: nix flake check --no-build
+      - if: always() && steps.nix-cache.outputs.hit-primary-key != 'true'
+        uses: nix-community/cache-nix-action/save@v7
+        with:
+          primary-key: nix-build-${{ github.sha }}
+          gc-max-store-size-linux: 1G
   # Off NixOS: the core's tests, tools/dist, install.sh, the CLI and the UI offscreen, as a user other than root
   distros:
     runs-on: ubuntu-latest
