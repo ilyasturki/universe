@@ -119,7 +119,7 @@ context.modules = [
 ]
 context.objects = [
     { factory = spa-node-factory, args = { factory.name = support.node.driver, node.name = record-driver, node.group = record, priority.driver = 8000 } }
-    { factory = adapter, args = { factory.name = support.null-audio-sink, node.name = record-sink, node.description = "Universe recording", media.class = Audio/Sink, audio.position = [ FL FR ], node.group = record } }
+    { factory = adapter, args = { factory.name = support.null-audio-sink, node.name = record-sink, node.description = "Speakers", media.class = Audio/Sink, audio.position = [ FL FR ], node.group = record } }
     { factory = metadata, args = { metadata.name = default, metadata.values = [ { key = default.audio.sink, type = "Spa:String:JSON", value = "{ \"name\": \"record-sink\" }" } ] } }
 ]
 EOF
