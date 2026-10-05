@@ -236,8 +236,9 @@ impl Core {
             let config = config.clone();
             blocking(move || Ok(index(&game, &games, &config, uninstaller))).await?
         };
-        data["saves"] = self.saves_status(&r.game, &config).await;
-        data["saves"]["cloud"] = match self.saves_cloud_of(&r, "status").await {
+        let (saves, cloud) = tokio::join!(self.saves_status(&r.game, &config), self.saves_cloud_of(&r, "status"));
+        data["saves"] = saves;
+        data["saves"]["cloud"] = match cloud {
             Ok(cloud) => cloud,
             Err(e) => {
                 if !matches!(e, Error::Unavailable(_)) {
