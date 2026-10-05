@@ -55,6 +55,15 @@ def test_the_card_scans_while_a_page_is_open_and_forgets_on_demand(api, fake):
     assert (api.network.kind, api.network.bars) == ("", 0)
 
 
+def test_a_connection_test_answers_once_at_a_time(api, fake):
+    wifi = api.screens.network
+    checked = record(wifi.checked)
+    assert wifi.check() and wifi.checking
+    assert not wifi.check(), "one test at a time"
+    until(lambda: checked)
+    assert checked == [("full",)] and not wifi.checking
+
+
 def test_wifi_switches_off_and_on(api):
     wifi = api.screens.network
     until(lambda: wifi.networks)

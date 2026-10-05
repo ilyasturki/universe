@@ -124,6 +124,8 @@ class WifiScreen(Streamed):
     # (ssid, connectivity) once a join is up; (ssid, reason, message) when a join or a forget fails, reason as the core gives it.
     joined = Signal(str, str)
     failed = Signal(str, str, str)
+    # A connection test's answer: "full", "limited", "portal", "none" or "unknown".
+    checked = Signal(str)
 
     def __init__(self, client, status, parent=None):
         super().__init__(client, "network", parent)
@@ -131,6 +133,7 @@ class WifiScreen(Streamed):
         self._state = {}
         self._connecting = ""
         self._error = {}
+        self._checking = False
         client.networkAsync(self._apply)
 
     def _apply(self, state):
@@ -153,6 +156,15 @@ class WifiScreen(Streamed):
             self._connecting = ""
             self.changed.emit()
             self.joined.emit(ssid, str(line.get("connectivity") or ""))
+        elif event == "done" and action == "check":
+            self._checking = False
+            self._state = {**self._state, "connectivity": str(line.get("connectivity") or "unknown")}
+            self.changed.emit()
+            self.checked.emit(str(line.get("connectivity") or "unknown"))
+        elif event == "failed" and action == "check":
+            self._checking = False
+            self.changed.emit()
+            self.checked.emit("unknown")
         elif event == "failed" and action in ("connect", "forget"):
             if action == "connect":
                 self._connecting = ""
@@ -184,6 +196,15 @@ class WifiScreen(Streamed):
     def forget(self, ssid):
         return self.send({"cmd": "forget", "ssid": ssid})
 
+    # NetworkManager's connection test, run now: `checked` answers.
+    @Slot(result=bool)
+    def check(self):
+        if self._checking or not self.send({"cmd": "check"}):
+            return False
+        self._checking = True
+        self.changed.emit()
+        return True
+
     @Slot(bool, result=bool)
     def setEnabled(self, on):
         return self.send({"cmd": "wifi", "on": bool(on)})
@@ -209,5 +230,6 @@ class WifiScreen(Streamed):
     networks = Property("QVariantList", lambda self: [network_row(n) for n in self._get("networks", [])], notify=changed)
     # The network a join is under way to, "" when none.
     connecting = Property(str, lambda self: self._connecting, notify=changed)
+    checking = Property(bool, lambda self: self._checking, notify=changed)
     # The last join's failure, {ssid, reason, message}, empty once another starts.
     error = Property("QVariantMap", lambda self: dict(self._error), notify=changed)
