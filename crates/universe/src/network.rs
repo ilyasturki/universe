@@ -492,6 +492,18 @@ impl<E: FnMut(serde_json::Value) -> bool> Watch<E> {
         });
     }
 
+    fn test_link(&self) {
+        let conn = self.conn.clone();
+        let done = self.done.clone();
+        tokio::spawn(async move {
+            let line = match check(&conn).await {
+                Ok(c) => json!({"event": "done", "action": "check", "connectivity": c}),
+                Err(f) => json!({"event": "failed", "action": "check", "reason": f.reason, "message": f.message}),
+            };
+            let _ = done.send(line);
+        });
+    }
+
     async fn command(&mut self, line: &str) -> bool {
         let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
             return (self.emit)(json!({"event": "error", "message": "bad command"}));
@@ -512,7 +524,10 @@ impl<E: FnMut(serde_json::Value) -> bool> Watch<E> {
                 return (self.emit)(json!({"event": "connecting", "ssid": ssid}));
             }
             "forget" => ("forget", forget(&self.conn, &ssid).await.map(|()| json!({"ssid": ssid}))),
-            "check" => ("check", check(&self.conn).await.map(|c| json!({"connectivity": c}))),
+            "check" => {
+                self.test_link();
+                return true;
+            }
             "refresh" => {
                 self.shown = None;
                 return self.refresh().await;
@@ -767,6 +782,9 @@ mod tests {
         s.send(json!({"cmd": "scan"}));
         assert_eq!(s.outcome().await["action"], "scan");
         assert_eq!(nm.scans(), 1);
+        s.send(json!({"cmd": "check"}));
+        let checked = s.outcome().await;
+        assert_eq!((&checked["action"], &checked["connectivity"]), (&json!("check"), &json!("none")), "{checked}");
         s.send(json!({"cmd": "wifi", "on": false}));
         s.state(|n| !n.enabled).await;
         s.send(json!({"cmd": "forget", "ssid": "Home"}));
