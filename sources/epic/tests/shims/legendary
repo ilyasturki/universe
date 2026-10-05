@@ -113,6 +113,66 @@ elif verb == "launch":
     ]
     launch = {"game_parameters": ["-SaveToUserDir"], "game_executable": "x64/Hades.exe", "game_directory": "/g/Hades", "egl_parameters": egl}
     print(json.dumps({**launch, "launch_command": [], "working_directory": "/g/Hades/x64", "user_parameters": [], "environment": {}}))
+elif verb == "sync-saves":
+    # legendary 0.21.1's cli.sync_saves over a folder standing in for the cloud (SHIM_CLOUD): the newest mtime is each side's date.
+    import shutil
+    from datetime import UTC, datetime
+
+    if not rest or rest[0].startswith("-"):
+        err("shim: sync-saves without an app name syncs every installed game")
+        sys.exit(3)
+    if mode == "hang":
+        time.sleep(60)
+    info = lambda message: print(f"[cli] INFO: {message}", file=sys.stderr)  # noqa: E731
+    info("Got 1 remote save game(s)")
+    if mode == "cloudless":
+        sys.exit(0)
+    local, cloud = Path(rest[rest.index("--save-path") + 1]), Path(os.environ["SHIM_CLOUD"])
+    upload_only, download_only = "--skip-download" in rest, "--skip-upload" in rest
+    force_up, force_down = "--force-upload" in rest, "--force-download" in rest
+    info(f'Checking "Hades" ({rest[0]})')
+    info(f'Overriding save path with "{local}"...')
+    local.mkdir(parents=True, exist_ok=True)
+
+    def latest(folder):
+        return max((p.stat().st_mtime for p in folder.rglob("*") if p.is_file()), default=0) if folder.is_dir() else 0
+
+    def date(stamp):
+        return datetime.fromtimestamp(stamp, UTC).strftime("%Y-%m-%d %H:%M:%S") if stamp else "N/A"
+
+    def replace(src, dest):
+        shutil.rmtree(dest, ignore_errors=True)
+        shutil.copytree(src, dest)
+
+    mine, theirs = latest(local), latest(cloud)
+    if not mine and not theirs:
+        info("No cloud or local savegame found.")
+        sys.exit(0)
+    same = mine and theirs and abs(mine - theirs) < 60
+    if same and not (force_up or force_down):
+        info('Save game for "Hades" is up to date, skipping...')
+        sys.exit(0)
+    remote_newer = not same and (not mine or (theirs and theirs > mine))
+    if (remote_newer and not force_up) or force_down:
+        if remote_newer:
+            info('Cloud save for "Hades" is newer:')
+            info(f"- Cloud save date: {date(theirs)}")
+            info(f"- Local save date: {date(mine)}")
+        if upload_only:
+            info("Save game downloading is disabled, skipping...")
+            sys.exit(0)
+        info("Downloading remote savegame...")
+        replace(cloud, local)
+    else:
+        if not same:
+            info('Local save for "Hades" is newer')
+            info(f"- Cloud save date: {date(theirs)}")
+            info(f"- Local save date: {date(mine)}")
+        if download_only:
+            info("Save game uploading is disabled, skipping...")
+            sys.exit(0)
+        info("Uploading local savegame...")
+        replace(local, cloud)
 elif verb == "achievements":
     if mode == "none":
         print("[cli] INFO: No achievements found", file=sys.stderr)

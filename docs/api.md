@@ -774,6 +774,24 @@ on the saves it had, and the state says so. A per-game lock makes the next `pre-
 upload still running, until that deadline. `keep-local` is `--force-upload` (refused with no saves
 on the device), `keep-cloud` `--force-download`.
 
+The **epic** source drives `legendary sync-saves <app>`, always with the app name (without one it
+syncs every installed game) and `--save-path`. The folder is the game's `CloudSaveFolder` in
+legendary's metadata cache (`<config_path>/metadata/<app>.json`), resolved as legendary resolves it
+under Wine (`{AppData}` is the prefix's Local AppData, `{UserDir}` its Documents,
+`{UserSavedGames}`, `{InstallDir}`, `{EpicId}`; each part matched regardless of case) but by the
+source on every run, since the path legendary stores goes stale once a prefix moves. legendary keeps
+no baseline: the newer side wins. So each sync first runs it with both `--skip-upload` and
+`--skip-download`, which only compares and logs the cloud save's date, and the source keeps its own
+baseline in `cloud.json` (the cloud save's date and the newest local mtime after the last sync):
+the cloud newer while the local files changed, or the local files newer while the cloud moved on
+(by more than legendary's minute), is a conflict, and neither side is touched. A first sync with
+saves on both sides that are not the same age is one. A download goes into a copy of the folder
+(legendary empties the folder before it downloads), which replaces the folder once legendary
+finished, so legendary's record names that copy until the next sync. `pre-launch` runs after the
+launch arguments (online, then `--offline`), under the same 34 s deadline, and checks that
+`account-public-service-prod03.ol.epicgames.com` answers first. `keep-local` is `--force-upload`,
+`keep-cloud` `--force-download` (refused while the cloud holds no save).
+
 ### Epic Games
 
 The **epic** source drives legendary with `LEGENDARY_CONFIG_PATH` set to its `config_path`

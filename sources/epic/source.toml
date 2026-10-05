@@ -4,7 +4,7 @@ name = "Epic Games"
 version = "0.0.10"
 description = "Installs and updates the games of your Epic Games account through legendary; lists their achievements."
 exe = "bin/source"
-capabilities = ["achievements", "uninstall"]
+capabilities = ["achievements", "uninstall", "cloud-saves"]
 
 [requires]
 bins = ["legendary"]
@@ -31,6 +31,15 @@ type = "bool"
 default = true
 label = "Achievements"
 description = "Fetched from Epic after each session."
+scope = "game"
+
+[[settings]]
+key = "cloud_saves"
+type = "bool"
+default = false
+label = "Cloud saves"
+description = "Saves come down from Epic before a session and go up after it."
+keywords = ["cloud", "sync", "saves"]
 scope = "game"
 
 [[settings]]

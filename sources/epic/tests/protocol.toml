@@ -20,3 +20,4 @@ SHIM_LIBRARY = '[{"app_name": "Min", "app_title": "Hades", "asset_infos": {"Wind
 "update <id>" = ["Min"]
 "achievements <id>" = ["Min"]
 "uninstall <id>" = ["Min"]
+"cloud-saves <id>" = ["Min", "status"]
