@@ -426,7 +426,8 @@ def launch_target(window):
 # the mouse, at 1080p design units (dp, so 1728 wide at 16:10): `Mouse:x,y` moves it, `Click:x,y` / `RightClick:x,y` press and release there, `MouseDown:x,y` / `MouseUp:x,y` one or the other,
 # `Wheel:x,y,N` rolls N notches (up positive), `HWheel:x,y,N` sideways (right positive), `Scroll:x,y,N` N pixels as a touchpad; `Type:text` types it from the keyboard (`_` a space);
 # a finger: `Tap:x,y`, `LongTap:x,y,ms` held that long, `Swipe:x1,y1,x2,y2` dragged across in eight moves; `Await` holds the script until a line comes on stdin, `Quit` quits;
-# `Volume:up`/`Volume:down`/`Volume:mute` as a pad's volume macro; `Expect:ID` quits with EXPECT_FAILED unless Return would launch game ID (`Expect:` none).
+# `Volume:up`/`Volume:down`/`Volume:mute` as a pad's volume macro; `Expect:ID` quits with EXPECT_FAILED unless Return would launch game ID (`Expect:` none);
+# `Mark:NAME` logs NAME with the wall-clock time, which tools/ui-record turns into a time in its recording.
 class KeyScript(QObject):
     def __init__(self, script, gap_ms, window, pad=None, watcher=None, home=None, gamepad=None, parent=None):
         super().__init__(parent)
@@ -478,6 +479,9 @@ class KeyScript(QObject):
         if phase == "Volume":
             if self._home is not None:
                 self._home.volumeMacro(bare)
+            return
+        if phase == "Mark":
+            log.info("mark %s %.3f", bare, time.time())
             return
         if phase == "Shot":
             ok = self._window.grabWindow().save(bare)

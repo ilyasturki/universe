@@ -263,3 +263,10 @@ def test_expect_quits_unless_return_would_launch_that_game(look, monkeypatch):
     assert exits == [gamepad.EXPECT_FAILED] and script._queue == [], "nothing after it plays"
     look.press(Qt.Key.Key_End)
     until(lambda: gamepad.launch_target(look.window) == "", "the library tile launches nothing")
+
+
+def test_a_mark_logs_its_name_with_the_time(app, caplog, monkeypatch):
+    monkeypatch.setattr(gamepad.time, "time", lambda: 1234.5)
+    with caplog.at_level("INFO", logger="universe.gamepad"):
+        gamepad.KeyScript("Mark:launch", 1, None)._step()
+    assert "mark launch 1234.500" in caplog.messages
