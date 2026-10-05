@@ -521,7 +521,7 @@ class Api(QObject):
         super().__init__(parent)
         self._client = client
         self._memory = Memory(memory_path, self)
-        self._theme = ThemeSelector(self._memory, theme, self)
+        self._theme = ThemeSelector(self._memory, theme, self, installed=client.themes)
         self._boot = Boot(boot and self._theme.bootIntro, self)
         self._keys = Keys(self, boot=self._boot)
         self._keys.setLayout(keyboard.rows(**client.keyboardLayout()))
@@ -545,6 +545,7 @@ class Api(QObject):
         radios = (self._screens.network, self._screens.bluetooth)
         for radio in radios:
             radio.changed.connect(lambda: self._system.setRadios(*(r.available for r in radios)))
+        self._screens.addons.settled.connect(self._theme.rescan)
         controller = self._screens.controller
         controller.testingChanged.connect(lambda: self._pad.setMuted(controller.testing or controller.walking))
         controller.walkChanged.connect(lambda: self._pad.setMuted(controller.testing or controller.walking))

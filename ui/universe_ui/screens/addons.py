@@ -6,7 +6,7 @@ from ..qt import QVARIANT, Property
 from .media import _size
 from .settings import AsyncScreen
 
-KINDS = {"module": "A module", "source": "A source"}
+KINDS = {"module": "A module", "source": "A source", "theme": "A theme"}
 # The index is fetched again once a list shows past this, or at once after an install or a removal.
 FRESH_S = 60
 
@@ -35,6 +35,8 @@ def _ask(message, detail, yes, no="Not now", **extra):
 class AddonsForm(AsyncScreen):
     message = Signal(str)
     listingChanged = Signal()
+    # An install, an update or a removal is over, whichever way it went.
+    settled = Signal()
 
     def __init__(self, client, parent=None):
         super().__init__(client, parent)
@@ -99,7 +101,10 @@ class AddonsForm(AsyncScreen):
         if r is None:
             return None
         if action == "remove":
-            detail = f"Universe deletes it and turns it off. {r['name']} cannot run until it is installed again."
+            if r["kind"] == "theme":
+                detail = f"Universe deletes it. {r['name']} cannot be picked until it is installed again."
+            else:
+                detail = f"Universe deletes it and turns it off. {r['name']} cannot run until it is installed again."
             return _ask(f"Remove {r['name']}?", detail, "Remove", "Keep it", kind=r["kind"], danger=True)
         listed = r["listed"] and r["origin"] != "unlisted"
         origin = f"from the index at {host((self._listing or {})['index']['url'])}" if listed else "Unlisted"
@@ -132,6 +137,7 @@ class AddonsForm(AsyncScreen):
         self.message.emit(text)
         self._client.modulesChanged.emit()
         self._client.sourcesChanged.emit()
+        self.settled.emit()
         self._fetch()
 
     def _on_job_finished(self, job_id, ok, text):

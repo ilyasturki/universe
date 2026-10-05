@@ -1,7 +1,7 @@
 import QtQuick
 import "../core"
 
-// Item: { icon, image, label, detail, more, danger, active }; `image` is a file under qml/ drawn where the glyph goes,
+// Item: { icon, image, label, detail, more, danger, active }; `image` is a file under qml/ or a file: URL drawn where the glyph goes,
 // `active` checks the value a setting has now.
 Rectangle {
     id: row
@@ -53,7 +53,7 @@ Rectangle {
         width: Theme.dp(34)
         height: width
         visible: row.hasImage
-        source: row.hasImage ? Qt.resolvedUrl("../" + row.item.image) : ""
+        source: !row.hasImage ? "" : row.item.image.indexOf("file:") === 0 ? row.item.image : Qt.resolvedUrl("../" + row.item.image)
         asynchronous: true
         fillMode: Image.PreserveAspectFit
         sourceSize.height: 128

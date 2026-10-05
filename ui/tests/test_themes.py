@@ -1,9 +1,16 @@
+import shutil
+from pathlib import Path
+
 import pytest
-from looks import LOOKS, read
+from looks import LOOKS, Look, call, invoke, read, theme_rows
+from PySide6.QtCore import QUrl
+from uitest import until
 
 from universe_ui import host
 from universe_ui.api import Memory
 from universe_ui.themes import THEMES, ThemeSelector
+
+SAMPLE = Path(__file__).resolve().parents[2] / "examples" / "theme"
 
 
 def test_theme_ids_are_unique_and_have_entries():
@@ -129,3 +136,102 @@ def test_a_sound_folder_replaces_the_wavs_it_holds(app, tmp_path):
     selector.set("switch2")
     selector.soundsPath = str(tmp_path / "gone")
     assert selector.soundFiles == {}
+
+
+DUSK = {"id": "dusk", "name": "Dusk", "entry": "/themes/dusk/theme.qml", "screenshot": "/themes/dusk/shot.png", "description": "", "incompatible": ""}
+OLD = {**DUSK, "id": "old", "name": "Old", "incompatible": "written for extension api 9: this Universe reads api 2"}
+
+
+def test_an_installed_theme_lists_beside_the_looks_and_one_for_another_universe_cannot_be_picked(app, tmp_path):
+    memory = Memory(str(tmp_path / "memory.json"))
+    memory.set("theme", "old")
+    selector = ThemeSelector(memory, installed=lambda: [DUSK, OLD, {**DUSK, "id": "ps5"}])
+    assert [t["id"] for t in selector.themes] == ["reprise", "switch2", "ps5", "dusk", "old"], "a built-in look keeps its id"
+    assert next(t for t in selector.themes if t["id"] == "old")["unavailable"]
+    assert selector.current == "reprise" and selector.takeNotice(), "remembered but unusable: the default look, with a notice"
+    assert selector.takeNotice() == "", "said once"
+    assert selector.set("old") is False and selector.current == "reprise"
+    assert selector.set("dusk") is True
+    assert selector.entry == QUrl.fromLocalFile(DUSK["entry"]).toString()
+    assert (selector.overlay, selector.osd, selector.frame) == ("", "ui/VolumePill.qml", False)
+
+
+def test_a_removed_theme_hands_over_to_the_default_look(app, tmp_path):
+    memory = Memory(str(tmp_path / "memory.json"))
+    shelf = [DUSK]
+    selector = ThemeSelector(memory, installed=lambda: list(shelf))
+    selector.set("dusk")
+    listed = []
+    selector.listChanged.connect(lambda: listed.append(True))
+    shelf.clear()
+    selector.rescan()
+    assert listed and "dusk" not in [t["id"] for t in selector.themes]
+    assert (selector.current, memory.get("theme")) == ("reprise", "reprise")
+    assert selector.takeNotice()
+
+
+def notice(look):
+    """What the shared notices show now, as [text, error], or None."""
+    from PySide6.QtQml import QQmlComponent
+
+    component = QQmlComponent(look.engine)
+    now = "Notices.current ? [Notices.current.text, Notices.current.error] : null"
+    component.setData(
+        f'import QtQuick\nimport "{(host.QML_DIR / "core").as_uri()}"\nQtObject {{ function now() {{ return {now}; }} }}\n'.encode(), QUrl("file:///probe.qml")
+    )
+    obj = component.create()
+    assert obj is not None, [e.toString() for e in component.errors()]
+    return call(obj, "now")
+
+
+def test_a_theme_for_another_universe_is_listed_but_cannot_be_picked(look, api, fake):
+    from PySide6.QtCore import QCoreApplication
+
+    old = Path(fake.core.data_home()) / "extensions" / "theme" / "old"
+    shutil.copytree(SAMPLE, old)
+    (old / "theme.toml").write_text((SAMPLE / "theme.toml").read_text().replace('id = "sample"', 'id = "old"').replace("api = 2", "api = 9"))
+    page = look.settings("themes")
+    until(lambda: any(t["id"] == "old" for t in api.theme.themes), "the Themes section reads the installed themes")
+    if look.stacked:
+        at, row = until(lambda: next(((i, r) for i, r in enumerate(theme_rows(page)) if r.get("theme") == "old"), None), "listed")
+        assert row["dim"] is True
+        invoke(page, "activate", at, row)
+        QCoreApplication.processEvents()
+    else:
+        at = [t["id"] for t in api.theme.themes].index("old")
+        assert call(page, "themeItems")[at]["action"] == "", "its pick in the Theme menu picks nothing"
+    assert api.theme.set("old") is False
+    assert api.theme.current == look.name
+
+
+@pytest.mark.slow
+@pytest.mark.qt_log_ignore(r"broken/theme\.qml", extend=True)
+def test_the_sample_theme_installs_from_a_folder_switches_falls_back_when_broken_and_goes(api, fake, tmp_path):
+    look = Look(api, "reprise")
+    try:
+        fake.core.extension_install(str(SAMPLE), True)
+        api.theme.rescan()
+        assert next(t for t in api.theme.themes if t["id"] == "sample")["unavailable"] == ""
+        look.switch("sample")
+        until(lambda: look.root.objectName() == "sampleTheme", "the sample's own tree is the look")
+
+        broken = tmp_path / "broken"
+        shutil.copytree(SAMPLE, broken)
+        (broken / "theme.toml").write_text((SAMPLE / "theme.toml").read_text().replace('id = "sample"', 'id = "broken"'))
+        (broken / "theme.qml").write_text("import QtQuick\nItem {\n")
+        fake.core.extension_install(str(broken), True)
+        api.theme.rescan()
+        look.switch("broken")
+        until(lambda: api.theme.current == "reprise", "a theme that fails to load falls back")
+        assert api.memory.get("theme") == "reprise", "and the next start does not try it again"
+        shown = until(lambda: notice(look), "with a notice")
+        assert shown[1] is True, shown
+
+        look.switch("sample")
+        until(lambda: look.root.objectName() == "sampleTheme")
+        fake.core.extension_remove("sample")
+        api.theme.rescan()
+        until(lambda: api.theme.current == "reprise", "removed, the default look takes over")
+        assert "sample" not in [t["id"] for t in api.theme.themes]
+    finally:
+        look.close()

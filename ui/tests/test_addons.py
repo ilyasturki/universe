@@ -1,5 +1,5 @@
 import pytest
-from looks import invoke, read
+from looks import call, invoke, read, theme_rows
 from PySide6.QtCore import QObject, Qt
 from uitest import until
 
@@ -110,6 +110,29 @@ def test_an_unlisted_add_on_is_tagged_and_removes_from_the_list(look, api, fake)
     answered(look, page, addons.confirm("lights", "remove"))
     until(lambda: not any(r["module"] == "lights" for r in form.rows), "removed, it leaves the list")
     assert menu.property("open") is False
+
+
+@pytest.mark.slow
+def test_themes_get_more_lists_the_index_themes_and_an_install_joins_the_looks(look, api, fake):
+    addons = api.screens.addons
+    page = look.settings("themes")
+    at, more = until(lambda: next(((i, r) for i, r in enumerate(theme_rows(page)) if r.get("key") == "more"), None), "Themes ends its look on Get more…")
+    assert more["addons"] == "theme"
+    until(lambda: addons.listing is not None, "the section loads the index")
+    invoke(page, "activate", at, more)
+    menu = page.findChild(QObject, "settingsMenu") if not look.stacked else look.menu()
+    until(lambda: menu.property("open") is True, "the add-ons list opens")
+    listed = [r["id"] for r in addons.listing["extensions"] if r["kind"] == "theme"]
+    assert listed == ["midnight"] and shown(menu) == 1
+    ask = addons.confirm("midnight", "install")
+    assert (ask["kind"], ask["origin"], ask["runsAsYou"]) == ("theme", "registry", True)
+    look.press(Qt.Key.Key_Return)
+    answered(look, page, ask)
+    until(lambda: any(t["id"] == "midnight" and not t["unavailable"] for t in api.theme.themes), "the installed theme joins the looks")
+    if look.stacked:
+        until(lambda: any(r.get("theme") == "midnight" for r in theme_rows(page)), "and the Themes section")
+    else:
+        assert "midnight" in [i["action"] for i in call(page, "themeItems")], "and the Theme row's menu"
 
 
 def test_an_add_on_for_another_universe_is_listed_and_offers_nothing(api, fake):

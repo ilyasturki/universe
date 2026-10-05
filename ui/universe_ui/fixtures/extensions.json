@@ -50,6 +50,18 @@
       "homepage": ""
     },
     {
+      "id": "midnight",
+      "kind": "theme",
+      "name": "Midnight",
+      "version": "1.1.0",
+      "description": "A dark shelf of covers, one row per platform.",
+      "api": 2,
+      "url": "https://example.org/midnight-1.1.0.tar.gz",
+      "sha256": "5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b",
+      "size": 240000,
+      "homepage": ""
+    },
+    {
       "id": "arcade-vault",
       "kind": "source",
       "name": "Arcade Vault",

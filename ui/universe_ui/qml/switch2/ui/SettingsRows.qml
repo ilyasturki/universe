@@ -382,6 +382,16 @@ FocusScope {
                             visible: row.entry.swatchAccent !== undefined && row.entry.swatchAccent !== ""
                             color: visible ? row.entry.swatchAccent : "transparent"
                         }
+
+                        Image {
+                            anchors.fill: parent
+                            anchors.margins: 1
+                            visible: row.entry.swatchImage !== undefined && row.entry.swatchImage !== ""
+                            source: visible ? row.entry.swatchImage : ""
+                            fillMode: Image.PreserveAspectCrop
+                            asynchronous: true
+                            sourceSize.height: 132
+                        }
                     }
 
                     Item {

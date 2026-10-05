@@ -94,6 +94,10 @@ FocusScope {
             launch: function () {
                 launch.load();
             },
+            themes: function () {
+                api.theme.rescan();
+                api.screens.addons.load();
+            },
             modules: function () {
                 modulesForm.load();
             },
@@ -510,12 +514,21 @@ FocusScope {
                     type: "radio",
                     value: t.id === api.theme.current,
                     swatch: t.ground,
-                    swatchAccent: t.accent,
+                    swatchAccent: t.screenshot ? "" : t.accent,
+                    swatchImage: t.screenshot,
                     action: "theme",
                     theme: t.id,
-                    detail: t.detail || ""
+                    dim: t.unavailable !== "",
+                    detail: t.unavailable ? "Can't be used: " + t.unavailable : t.detail || ""
                 };
             }).concat([
+                {
+                    label: "Get more…",
+                    type: "action",
+                    key: "more",
+                    addons: "theme",
+                    detail: "Add-ons: themes others made"
+                },
                 {
                     label: api.theme.affiliation,
                     key: "affiliation",
@@ -729,6 +742,8 @@ FocusScope {
             Sound.play(row.value ? "edge" : "select");
             if (!row.value)
                 api.home.setOutput(row.output);
+        } else if (row.action === "theme" && row.dim) {
+            Sound.play("edge");
         } else if (row.action === "theme") {
             Sound.play("select");
             var id = row.theme;

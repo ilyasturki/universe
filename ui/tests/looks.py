@@ -93,6 +93,12 @@ def current_row(page):
     return read(page, "row") or read(page, "currentRow") or {}
 
 
+def theme_rows(page):
+    """The Themes section's rows as the look builds them: Reprise's `content` carries its cards beside them."""
+    content = read(page, "content") or []
+    return content.get("rows", []) if isinstance(content, dict) else content
+
+
 def page_name(source):
     stem = source.rpartition("/")[2].removesuffix(".qml")
     return stem[0].lower() + stem[1:]

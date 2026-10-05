@@ -416,9 +416,20 @@ FocusScope {
                 display: api.theme.soundsPath ? api.theme.soundsPath.split("/").pop() + " · " + Object.keys(api.theme.soundFiles).length + " sounds" : "Bundled",
                 detail: "WAVs named tick.wav, enter.wav, launch.wav… replace the bundled ones."
             });
+            rows.push({
+                section: "Themes",
+                key: "more",
+                addons: "theme",
+                label: "Get more…",
+                type: "action",
+                display: "",
+                action: "Open",
+                icon: "plus",
+                detail: "Add-ons: themes others made"
+            });
             groups.push({
                 title: "Look",
-                rows: [0, 1]
+                rows: [0, 4, 1]
             });
             groups.push({
                 title: "Sounds",
@@ -879,6 +890,19 @@ FocusScope {
         }
     }
 
+    // One that can't be used picks nothing and says why.
+    function themeItems() {
+        return api.theme.themes.map(function (t) {
+            return {
+                label: t.name,
+                image: t.screenshot,
+                detail: t.unavailable ? "Can't be used" : t.installed ? "Add-on" : "",
+                active: t.id === api.theme.current,
+                action: t.unavailable ? "" : t.id
+            };
+        });
+    }
+
     function leave() {
         editor.hide();
         if (menu.open)
@@ -1019,7 +1043,7 @@ FocusScope {
                 Qt.callLater(cards.stepInto);
             return;
         }
-        if (row.key === "more" && listForm !== null) {
+        if (row.key === "more" && row.addons) {
             addonsMenu(row.addons);
         } else if (sectionId === "modules") {
             cards.forceActiveFocus();
@@ -1094,16 +1118,17 @@ FocusScope {
             });
         } else if (sectionId === "themes") {
             Sound.panel();
-            editor.edit(row, function (value) {
-                var looks = api.theme.themes;
-                var theme = looks.filter(function (t) {
-                    return t.name === value;
-                })[0];
-                // The switch rebuilds this tree; let the editor finish closing first.
-                if (theme)
-                    Qt.callLater(function () {
-                        api.theme.set(theme.id);
-                    });
+            menu.show(page.themeItems(), cards, cards.focusRect, "Theme", function (id) {
+                if (id === "" || id === api.theme.current) {
+                    if (id === "")
+                        Sound.edge();
+                    cards.forceActiveFocus();
+                    return;
+                }
+                // The switch rebuilds this tree; let the menu finish closing first.
+                Qt.callLater(function () {
+                    api.theme.set(id);
+                });
             });
         } else if (sectionId === "sound") {
             if (row.output && row.action !== "") {
@@ -1488,7 +1513,10 @@ FocusScope {
             api.home.loadOutputs();
         else if (sections[section].id === "doctor")
             modulesForm.loadDoctor();
-        else if (sections[section].id === "storage")
+        else if (sections[section].id === "themes") {
+            api.theme.rescan();
+            addons.load();
+        } else if (sections[section].id === "storage")
             api.screens.storage.load();
         else if (sections[section].id === "runners")
             runners.load();

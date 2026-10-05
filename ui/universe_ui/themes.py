@@ -1,6 +1,7 @@
+import logging
 import os
 
-from PySide6.QtCore import QObject, Signal, Slot
+from PySide6.QtCore import QObject, QUrl, Signal, Slot
 
 from .qt import Property
 
@@ -47,38 +48,109 @@ TRADEMARKS = "Nintendo Switch is a trademark of Nintendo; PlayStation and PS5 ar
 DEFAULT = "reprise"
 MEMORY_KEY = "theme"
 BOOT_KEY = "bootIntro"
+# What an installed theme cannot name: it draws in the main window alone, and the host's own pill shows the volume over a game.
+INSTALLED = {"overlay": "", "osd": "ui/VolumePill.qml", "frame": False, "ground": "#000000", "accent": "#ffffff", "unlocked": "ACHIEVEMENT UNLOCKED"}
+
+log = logging.getLogger("universe.themes")
 
 
-def theme_by_id(ident):
-    return next((t for t in THEMES if t["id"] == ident), None)
+def _url(path):
+    return QUrl.fromLocalFile(path).toString() if path else ""
+
+
+def installed_look(theme):
+    """A row of the core's `themes()` as a look; `unavailable` says why it cannot be picked."""
+    unavailable = theme.get("incompatible") or ("" if theme.get("entry") else "its theme.qml is missing")
+    return {
+        **INSTALLED,
+        "id": theme["id"],
+        "name": theme.get("name") or theme["id"],
+        "entry": _url(theme.get("entry")),
+        "detail": theme.get("description") or "",
+        "screenshot": _url(theme.get("screenshot")),
+        "installed": True,
+        "unavailable": unavailable,
+    }
+
+
+BUILT_IN = [{**t, "screenshot": "", "installed": False, "unavailable": ""} for t in THEMES]
 
 
 class ThemeSelector(QObject):
     changed = Signal()
+    listChanged = Signal()
     fontChanged = Signal()
     soundsChanged = Signal()
     bootChanged = Signal()
 
-    def __init__(self, memory, initial="", parent=None):
+    # installed: the core's `themes()`, read again by rescan().
+    def __init__(self, memory, initial="", parent=None, installed=None):
         super().__init__(parent)
         self._memory = memory
-        self._current = theme_by_id(initial) or theme_by_id(memory.get(MEMORY_KEY)) or theme_by_id(DEFAULT) or THEMES[0]
+        self._installed = installed or list
+        self._themes = self._read()
         self._landing = ""
+        self._notice = ""
+        wanted = self._by_id(initial) or self._by_id(memory.get(MEMORY_KEY))
+        if wanted is not None and wanted["unavailable"]:
+            self._notice = f"{wanted['name']} can't be used: {wanted['unavailable']}"
+            wanted = None
+        self._current = wanted or self._by_id(DEFAULT) or self._themes[0]
+
+    def _read(self):
+        builtin = {t["id"] for t in BUILT_IN}
+        return BUILT_IN + [installed_look(t) for t in self._installed() if t["id"] not in builtin]
+
+    def _by_id(self, ident):
+        return next((t for t in self._themes if t["id"] == ident), None)
+
+    def _switch(self, theme, landing):
+        self._memory.set(MEMORY_KEY, theme["id"])
+        if theme is not self._current:
+            self._current = theme
+            self._landing = landing
+            self.changed.emit()
+            self.fontChanged.emit()
+            self.soundsChanged.emit()
 
     # A switch rebuilds the whole tree: the new look opens on its Themes page, once.
     @Slot(str, result=bool)
     def set(self, ident):
-        theme = theme_by_id(ident)
-        if theme is None:
+        theme = self._by_id(ident)
+        if theme is None or theme["unavailable"]:
             return False
-        self._memory.set(MEMORY_KEY, theme["id"])
-        if theme is not self._current:
-            self._current = theme
-            self._landing = "themes"
-            self.changed.emit()
-            self.fontChanged.emit()
-            self.soundsChanged.emit()
+        self._switch(theme, "themes")
         return True
+
+    def _fall_back(self, notice):
+        default = self._by_id(DEFAULT)
+        if default is None or self._current is default:
+            return
+        self._notice = f"{notice}: back on {default['name']}"
+        self._switch(default, "")
+
+    @Slot()
+    def rescan(self):
+        """The installed themes read again, after an install or a removal; the current one gone, the default look takes over."""
+        self._themes = self._read()
+        self.listChanged.emit()
+        now = self._by_id(self._current["id"])
+        if now is None or now["unavailable"]:
+            self._fall_back(f"{self._current['name']} is no longer installed" if now is None else f"{now['name']} can't be used")
+        else:
+            self._current = now
+
+    @Slot()
+    def failed(self):
+        """main.qml's Loader could not load the current look: QML has logged why."""
+        log.warning("%s failed to load", self._current["entry"])
+        self._fall_back(f"{self._current['name']} failed to load")
+
+    # What a fall back to the default look says, for the look that takes over to show once.
+    @Slot(result=str)
+    def takeNotice(self):
+        notice, self._notice = self._notice, ""
+        return notice
 
     @Slot(result=str)
     def takeLanding(self):
@@ -126,7 +198,7 @@ class ThemeSelector(QObject):
             self._memory.set(BOOT_KEY, bool(on))
             self.bootChanged.emit()
 
-    themes = Property(list, lambda self: [dict(t) for t in THEMES], constant=True)
+    themes = Property(list, lambda self: [dict(t) for t in self._themes], notify=listChanged)
     affiliation = Property(str, lambda self: AFFILIATION, constant=True)
     trademarks = Property(str, lambda self: TRADEMARKS, constant=True)
     current = Property(str, lambda self: self._current["id"], notify=changed)
