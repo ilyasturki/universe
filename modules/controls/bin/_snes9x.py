@@ -14,9 +14,9 @@ from _controls import (
     axis,
     button,
     config_home,
+    held_shoulders,
     ini_section,
     ini_set,
-    pad_shoulders,
     taken_buttons,
 )
 from _gamepads import BIND_AXIS, BIND_BUTTON, BIND_HAT
@@ -50,7 +50,7 @@ def _source(pad, binding, joystick):
 def pad_sets(pad, ctx: Context):
     joystick = f"Joystick {pad.index + 1}"
     buttons = {**{k.upper(): b for k, b in ctx.face.items()}, "Select": BACK, "Start": START, **DPAD}
-    lb, rb, lt, rt = pad_shoulders(ctx, pad)
+    lb, rb, lt, rt = held_shoulders(pad)
     main = {
         **{k: _source(pad, button(pad, b), joystick) for k, b in buttons.items()},
         "L": _source(pad, lb, joystick),

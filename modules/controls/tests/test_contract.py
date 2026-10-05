@@ -157,7 +157,6 @@ WRITERS = {
         },
         kept=("QuickSave000 = Keyboard F1", "Fullscreen = true"),
         layout=both_ways((("A", "B"), ("X", "Y"))),
-        shoulders=dict.fromkeys(("L", "R")),
         taken=bound(rf"Button ({RAW})\b"),
         fresh=True,
         ctx={"runner_path": "/nix/store/x-snes9x-gtk/bin/snes9x-gtk"},
