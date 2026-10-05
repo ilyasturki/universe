@@ -90,7 +90,7 @@ installed copy.
 ## The index
 
 `extensions.index` in `config.toml`, or `UNIVERSE_EXTENSIONS_INDEX`, is an https:// URL or a file.
-When empty it is the registry's,
+When empty it is the one the registry (below) publishes,
 `https://raw.githubusercontent.com/ilyasturki/universe-extensions/index/index.json`:
 
 ```json
@@ -119,7 +119,7 @@ entry. A `url` that names a file is only read from an index that is a file itsel
 the index lists for another `api` is not offered. The index is HTTPS plus these pins, with no
 signature. Universe reads schema 1 and refuses a newer one.
 
-The registry's index is built from
-[ilyasturki/universe-extensions](https://github.com/ilyasturki/universe-extensions). To list an
-extension there, open a pull request adding its entry. Its README says what an entry holds and what
-the check covers.
+The registry is [ilyasturki/universe-extensions](https://github.com/ilyasturki/universe-extensions).
+To list an extension there, open a pull request adding `extensions/<id>.toml` to its `main` branch.
+CI writes `index.json` to the `index` branch from those entries, so nobody edits it by hand. The
+registry's README says what an entry holds and what a pull request's check covers.
