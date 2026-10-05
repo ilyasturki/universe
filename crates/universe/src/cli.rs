@@ -25,6 +25,7 @@ Files:
   ~/.local/state/universe/current-session.json — the running session
   ~/.local/state/universe/logs/<id>/<session>/ — Proton's and DXVK's logs of a launch with debug_log on; the game's own output is the journal's (`universe logs`)
   $XDG_RUNTIME_DIR/universe/controller.lock — held by the one controller watcher (the launcher's, or a session's)
+  $XDG_RUNTIME_DIR/universe/active-pad — the sysfs device of the pad a button was last pressed on: player 1 in the emulators
 
 Environment:
   UNIVERSE_CONFIG_HOME, UNIVERSE_DATA_HOME, UNIVERSE_STATE_HOME — replace the XDG directories

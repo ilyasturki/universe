@@ -46,7 +46,9 @@ operation; a dash means the surface doesn't expose it.
   (`universe controller watch`), which lives exactly as long as the launcher or a session does: the
   UI starts one for its lifetime, `launch` starts one bound to the game's unit
   (`universe-controller-<session>`, `BindsTo=` the game), and a lock (`$XDG_RUNTIME_DIR/universe/
-  controller.lock`) hands the pads over between them. Once both are gone nothing runs.
+  controller.lock`) hands the pads over between them. Once both are gone nothing runs. It notes the
+  pad a button was last pressed on in `$XDG_RUNTIME_DIR/universe/active-pad` (the sysfs device its
+  evdev node hangs off), the pad the controls module makes player 1.
 - The other is `universe keep-awake`, started by a launch as `universe-awake-<session>` (`BindsTo=`
   the game, `desktop.keep_awake`): it holds every inhibit the session offers, each standing only
   as long as the connection that took it, so it is a unit rather than a step undone at the end:

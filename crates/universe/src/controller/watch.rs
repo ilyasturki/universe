@@ -50,6 +50,22 @@ pub fn lock_path() -> PathBuf {
     paths::runtime_dir().join("controller.lock")
 }
 
+/// The pad a button was last pressed on, which the controls module makes player 1: the sysfs device its evdev node hangs off,
+/// the one SDL's hidraw node for it hangs off too.
+pub fn active_pad_path() -> PathBuf {
+    paths::runtime_dir().join("active-pad")
+}
+
+fn device_of(sysfs: &Path, event: &Path) -> Option<PathBuf> {
+    std::fs::canonicalize(sysfs.join("class/input").join(event.file_name()?).join("device/device")).ok()
+}
+
+fn record_active(path: &Path, device: &Path) -> std::io::Result<()> {
+    let tmp = path.with_extension("tmp");
+    std::fs::write(&tmp, format!("{}\n", device.display()))?;
+    std::fs::rename(tmp, path)
+}
+
 async fn take_lock(wait: bool, out: &Out) -> crate::Result<Option<std::fs::File>> {
     let path = lock_path();
     if let Some(p) = path.parent() {
@@ -552,6 +568,8 @@ struct Watcher {
     learning: Option<(String, Learn, Instant)>,
     started: Instant,
     config_mtime: Option<std::time::SystemTime>,
+    /// The pad `active_pad_path` names.
+    active: Option<String>,
 }
 
 fn config_mtime() -> Option<std::time::SystemTime> {
@@ -622,6 +640,17 @@ impl Watcher {
             pad_task(id.clone(), dev, hid, address, self.tx.clone(), crx);
             self.out.emit(pad.json());
             self.pads.insert(id, pad);
+        }
+    }
+
+    fn note_active(&mut self, id: &str) {
+        if self.active.as_deref() == Some(id) {
+            return;
+        }
+        let Some(device) = self.pads.get(id).and_then(|p| device_of(Path::new("/sys"), &p.path)) else { return };
+        match record_active(&active_pad_path(), &device) {
+            Ok(()) => self.active = Some(id.to_string()),
+            Err(e) => tracing::warn!("active pad: {e}"),
         }
     }
 
@@ -696,6 +725,9 @@ impl Watcher {
             if !self.out.emit(sample) {
                 return false;
             }
+        }
+        if transitions.iter().any(|(_, down)| *down) {
+            self.note_active(&id);
         }
         for (source, down) in transitions {
             if let Some((lid, Learn::Slot(slot), _)) = self.learning.clone() {
@@ -960,6 +992,7 @@ pub async fn watch(core: Arc<Core>, opts: WatchOptions) -> crate::Result<()> {
         learning: None,
         started: Instant::now(),
         config_mtime: config_mtime(),
+        active: None,
     };
     if !w.out.emit(serde_json::json!({"event": "ready", "enabled": w.cfg.enabled})) {
         return Ok(());
@@ -1071,6 +1104,24 @@ pub async fn learn_once(cfg: &ControllerConfig, family: &Family, slot: &str) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_pad_last_pressed_is_named_by_the_device_its_nodes_hang_off() {
+        let sys = tempfile::tempdir().unwrap();
+        let hid = sys.path().join("devices/virtual/misc/uhid/0005:2DC8:6009.000E");
+        let input = hid.join("input/input37");
+        std::fs::create_dir_all(input.join("event257")).unwrap();
+        std::fs::create_dir_all(sys.path().join("class/input")).unwrap();
+        std::os::unix::fs::symlink(input.join("event257"), sys.path().join("class/input/event257")).unwrap();
+        std::os::unix::fs::symlink(&input, input.join("event257/device")).unwrap();
+        std::os::unix::fs::symlink(&hid, input.join("device")).unwrap();
+        let device = device_of(sys.path(), Path::new("/dev/input/event257")).unwrap();
+        assert_eq!(device, hid.canonicalize().unwrap());
+        assert_eq!(device_of(sys.path(), Path::new("/dev/input/event9")), None, "a node gone from sysfs names nothing");
+        let file = sys.path().join("active-pad");
+        record_active(&file, &device).unwrap();
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), format!("{}\n", device.display()));
+    }
 
     #[test]
     fn axes_normalize_by_their_range() {
