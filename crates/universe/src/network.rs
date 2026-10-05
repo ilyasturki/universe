@@ -114,7 +114,7 @@ fn timeout() -> zbus::Error {
     zbus::Error::InputOutput(std::io::Error::from(std::io::ErrorKind::TimedOut).into())
 }
 
-async fn timed<T>(limit: Duration, call: impl std::future::Future<Output = zbus::Result<T>>) -> zbus::Result<T> {
+pub(crate) async fn timed<T>(limit: Duration, call: impl std::future::Future<Output = zbus::Result<T>>) -> zbus::Result<T> {
     tokio::time::timeout(limit, call).await.unwrap_or_else(|_| Err(timeout()))
 }
 
@@ -148,7 +148,8 @@ async fn devices(conn: &zbus::Connection) -> zbus::Result<Vec<Device>> {
     let paths: Vec<OwnedObjectPath> = proxy(conn, root(), NM).await?.call("GetDevices", &()).await?;
     let mut out = vec![];
     for path in paths {
-        let props = all(conn, &path, DEVICE).await?;
+        // A device can go between the listing and the read (a container's veth, a USB card pulled).
+        let Ok(props) = all(conn, &path, DEVICE).await else { continue };
         out.push(Device {
             kind: get(&props, "DeviceType").unwrap_or(0),
             interface: get::<&str>(&props, "Interface").unwrap_or("").to_string(),
@@ -388,9 +389,7 @@ async fn activated(conn: &zbus::Connection, active: &OwnedObjectPath, device: &O
     }
 }
 
-/// Joins `ssid`: a saved network as saved (with `password` it is saved again with it), a new one added with `password`. A
-/// password the network refuses leaves no new connection behind. No call may ask polkit for a password: where NM wants an
-/// admin, it refuses.
+/// A refused password leaves no new connection behind; no call asks polkit, so where NM wants an admin it refuses.
 pub async fn connect(conn: &zbus::Connection, ssid: &str, password: Option<&str>) -> std::result::Result<(), Failure> {
     let device = wifi_device(conn).await?;
     let aps = access_points(conn, &device).await?;
@@ -465,6 +464,7 @@ struct Watch<E> {
     emit: E,
     shown: Option<Network>,
     scanning: bool,
+    rescan: tokio::time::Interval,
     done: mpsc::UnboundedSender<serde_json::Value>,
 }
 
@@ -516,6 +516,7 @@ impl<E: FnMut(serde_json::Value) -> bool> Watch<E> {
                 if !on {
                     return true;
                 }
+                self.rescan.reset();
                 ("scan", scan(&self.conn).await.map(|()| json!({})))
             }
             "wifi" => ("wifi", set_enabled(&self.conn, on).await.map(|()| json!({}))),
@@ -558,13 +559,13 @@ where
     let rule = zbus::MatchRule::builder().msg_type(zbus::message::Type::Signal).sender(NM).map_err(failed)?.build();
     let mut signals = zbus::MessageStream::for_match_rule(rule, &conn, None).await.map_err(failed)?;
     let (done, mut outcomes) = mpsc::unbounded_channel();
-    let mut w = Watch { conn, emit, shown: None, scanning: false, done };
+    let mut rescan = tokio::time::interval(SCAN_EVERY);
+    rescan.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    let mut w = Watch { conn, emit, shown: None, scanning: false, rescan, done };
     if !(w.emit)(json!({"event": "ready"})) || !w.refresh().await {
         return Ok(());
     }
     let mut due: Option<tokio::time::Instant> = None;
-    let mut rescan = tokio::time::interval(SCAN_EVERY);
-    rescan.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     loop {
         let settle = async {
             match due {
@@ -586,7 +587,7 @@ where
                 due.get_or_insert_with(|| tokio::time::Instant::now() + SETTLE);
                 true
             }
-            _ = rescan.tick(), if w.scanning => {
+            _ = w.rescan.tick(), if w.scanning => {
                 let _ = scan(&w.conn).await;
                 true
             }

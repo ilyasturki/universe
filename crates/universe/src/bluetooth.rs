@@ -7,6 +7,8 @@ use serde_json::json;
 use tokio::sync::{mpsc, oneshot};
 use zbus::zvariant::{ObjectPath, OwnedObjectPath, OwnedValue};
 
+pub use crate::network::system;
+use crate::network::timed;
 use crate::{Error, Result};
 
 const BLUEZ: &str = "org.bluez";
@@ -113,10 +115,6 @@ pub async fn read(conn: &zbus::Connection) -> Bluetooth {
     }
 }
 
-pub async fn system() -> Result<zbus::Connection> {
-    zbus::Connection::system().await.map_err(|e| Error::Unavailable(format!("the system bus: {e}")))
-}
-
 pub async fn state() -> Bluetooth {
     match system().await {
         Ok(conn) => read(&conn).await,
@@ -172,10 +170,6 @@ async fn device(conn: &zbus::Connection, address: &str) -> Result<OwnedObjectPat
         .find(|(_, ifaces)| ifaces.get(DEVICE).and_then(|d| text(d, "Address")).is_some_and(|a| a.eq_ignore_ascii_case(address)))
         .map(|(path, _)| path)
         .ok_or_else(|| Error::NotFound(format!("no Bluetooth device {address}")))
-}
-
-async fn timed<T>(limit: Duration, call: impl std::future::Future<Output = zbus::Result<T>>) -> zbus::Result<T> {
-    tokio::time::timeout(limit, call).await.unwrap_or_else(|_| Err(zbus::Error::InputOutput(std::io::Error::from(std::io::ErrorKind::TimedOut).into())))
 }
 
 pub async fn set_powered(conn: &zbus::Connection, on: bool) -> Result<()> {
@@ -288,7 +282,12 @@ impl Agent {
         match tokio::time::timeout(ANSWER, rx).await {
             Ok(Ok(Answer::No)) => Err(Refusal::Rejected),
             Ok(Ok(answer)) => Ok(answer),
-            Ok(Err(_)) | Err(_) => Err(Refusal::Canceled),
+            Ok(Err(_)) => Err(Refusal::Canceled),
+            Err(_) => {
+                // BlueZ sends no Cancel for a question it got an answer to, this refusal included.
+                let _ = self.asks.send(Ask::Cancel);
+                Err(Refusal::Canceled)
+            }
         }
     }
 
@@ -377,13 +376,20 @@ struct Watch<E> {
     default: bool,
     pending: BTreeMap<u64, oneshot::Sender<Answer>>,
     next: u64,
+    // The code on show and its request's id: BlueZ calls DisplayPasskey again for each key typed on the device.
+    display: Option<(OwnedObjectPath, u64)>,
     shown: Option<Bluetooth>,
+    scanning: bool,
     done: mpsc::UnboundedSender<serde_json::Value>,
 }
 
 impl<E: FnMut(serde_json::Value) -> bool> Watch<E> {
     async fn refresh(&mut self) -> bool {
         let now = read(&self.conn).await;
+        // An adapter powered off drops every discovery: a page still open searches again once it is back.
+        if self.scanning && now.powered && !now.discovering {
+            let _ = discover(&self.conn, true).await;
+        }
         if self.shown.as_ref() == Some(&now) {
             return true;
         }
@@ -402,20 +408,31 @@ impl<E: FnMut(serde_json::Value) -> bool> Watch<E> {
             Ask::Display { device, code, entered } => ("display", device, code, entered, None),
             Ask::Cancel => {
                 self.pending.clear();
+                self.display = None;
                 return (self.emit)(json!({"event": "cancel"}));
             }
         };
         let (address, name, device_kind) = describe(&self.conn, &device).await;
-        self.next += 1;
-        if let Some(reply) = reply {
-            self.pending.insert(self.next, reply);
+        let id = match (&reply, &self.display) {
+            (None, Some((shown, id))) if *shown == device => *id,
+            _ => {
+                self.next += 1;
+                self.next
+            }
+        };
+        match reply {
+            Some(reply) => {
+                self.pending.insert(id, reply);
+                self.display = None;
+            }
+            None => self.display = Some((device, id)),
         }
         (self.emit)(
-            json!({"event": "request", "id": self.next, "kind": kind, "address": address, "name": name, "device_kind": device_kind, "code": code, "entered": entered}),
+            json!({"event": "request", "id": id, "kind": kind, "address": address, "name": name, "device_kind": device_kind, "code": code, "entered": entered}),
         )
     }
 
-    fn spawn(&self, action: &'static str, address: String) -> Result<()> {
+    fn spawn(&self, action: &'static str, address: String) {
         let conn = self.conn.clone();
         let done = self.done.clone();
         tokio::spawn(async move {
@@ -439,7 +456,6 @@ impl<E: FnMut(serde_json::Value) -> bool> Watch<E> {
             };
             let _ = done.send(line);
         });
-        Ok(())
     }
 
     async fn command(&mut self, line: &str) -> bool {
@@ -448,14 +464,25 @@ impl<E: FnMut(serde_json::Value) -> bool> Watch<E> {
         };
         let address = v["address"].as_str().unwrap_or("").to_string();
         let on = v["on"].as_bool().unwrap_or(true);
-        let outcome = match v["cmd"].as_str().unwrap_or("") {
-            "scan" => discover(&self.conn, on).await,
+        let cmd = v["cmd"].as_str().unwrap_or("");
+        let action = match cmd {
+            "pair" => "pair",
+            "connect" => "connect",
+            "disconnect" => "disconnect",
+            "remove" => "remove",
+            _ => "",
+        };
+        if !action.is_empty() {
+            self.spawn(action, address);
+            return true;
+        }
+        let outcome = match cmd {
+            "scan" => {
+                self.scanning = on;
+                discover(&self.conn, on).await
+            }
             "power" => set_powered(&self.conn, on).await,
             "cancel" => cancel_pairing(&self.conn, &address).await,
-            "pair" => self.spawn("pair", address),
-            "connect" => self.spawn("connect", address),
-            "disconnect" => self.spawn("disconnect", address),
-            "remove" => self.spawn("remove", address),
             "answer" => {
                 let Some(reply) = v["id"].as_u64().and_then(|id| self.pending.remove(&id)) else {
                     return true;
@@ -466,7 +493,7 @@ impl<E: FnMut(serde_json::Value) -> bool> Watch<E> {
                     _ => Answer::No,
                 };
                 let _ = reply.send(answer);
-                Ok(())
+                return true;
             }
             "refresh" => {
                 self.shown = None;
@@ -475,10 +502,10 @@ impl<E: FnMut(serde_json::Value) -> bool> Watch<E> {
             "quit" => return false,
             other => return (self.emit)(json!({"event": "error", "message": format!("unknown command {other}")})),
         };
-        match outcome {
-            Ok(()) => true,
-            Err(e) => (self.emit)(json!({"event": "error", "message": e.to_string()})),
-        }
+        (self.emit)(match outcome {
+            Ok(()) => json!({"event": "done", "action": cmd, "address": address}),
+            Err(e) => json!({"event": "failed", "action": cmd, "address": address, "reason": "failed", "message": e.to_string()}),
+        })
     }
 }
 
@@ -497,7 +524,7 @@ where
     let dbus = zbus::fdo::DBusProxy::new(&conn).await.map_err(failed)?;
     let mut owners = dbus.receive_name_owner_changed_with_args(&[(0, BLUEZ)]).await.map_err(failed)?;
     let (done, mut outcomes) = mpsc::unbounded_channel();
-    let mut w = Watch { conn, emit, default, pending: BTreeMap::new(), next: 0, shown: None, done };
+    let mut w = Watch { conn, emit, default, pending: BTreeMap::new(), next: 0, display: None, shown: None, scanning: false, done };
     if !(w.emit)(json!({"event": "ready", "agent": agent_ok, "default": default})) || !w.refresh().await {
         return Ok(());
     }
@@ -517,6 +544,9 @@ where
             },
             Some(ask) = asks.recv() => w.ask(ask).await,
             Some(line) = outcomes.recv() => {
+                if line["action"] == "pair" {
+                    w.display = None;
+                }
                 due = Some(tokio::time::Instant::now());
                 (w.emit)(line)
             }
@@ -740,6 +770,44 @@ mod tests {
         s.send(json!({"cmd": "connect", "address": "00:00:00:00:00:00"}));
         let failed = s.until(|v| v["event"] == "failed").await;
         assert_eq!(failed["action"], "connect");
+    }
+
+    // A page's search outlives the adapter going off and on, and each command says how it went.
+    #[tokio::test]
+    async fn a_search_outlives_a_power_cycle_and_every_command_answers() {
+        let bus = Bus::start();
+        let _bluez = Bluez::serve(&bus).await;
+        let mut s = Session::start(&bus, false).await;
+        s.send(json!({"cmd": "power", "on": false}));
+        assert_eq!(s.until(|v| v["action"] == "power").await["event"], "done");
+        s.send(json!({"cmd": "scan", "on": true}));
+        assert_eq!(s.until(|v| v["action"] == "scan").await["event"], "failed", "no search while the adapter is off");
+        s.send(json!({"cmd": "power", "on": true}));
+        s.state(|b| b.powered && b.discovering).await;
+        s.send(json!({"cmd": "cancel", "address": "00:00:00:00:00:00"}));
+        let failed = s.until(|v| v["action"] == "cancel").await;
+        assert_eq!((&failed["event"], &failed["reason"]), (&json!("failed"), &json!("failed")), "{failed}");
+    }
+
+    // BlueZ shows a keyboard's code again for each key typed on it: the same question, its count moved on.
+    #[tokio::test]
+    async fn a_codes_keystrokes_keep_its_question() {
+        let bus = Bus::start();
+        let (tx, mut lines) = mpsc::unbounded_channel();
+        let (done, _outcomes) = mpsc::unbounded_channel();
+        let emit = move |v| tx.send(v).is_ok();
+        let mut w =
+            Watch { conn: bus.connect().await, emit, default: false, pending: BTreeMap::new(), next: 0, display: None, shown: None, scanning: false, done };
+        let keyboard: OwnedObjectPath = ObjectPath::from_static_str_unchecked("/org/bluez/hci0/dev_AA_BB_CC_00_00_02").into();
+        for entered in [0, 1] {
+            w.ask(Ask::Display { device: keyboard.clone(), code: "123456".into(), entered }).await;
+        }
+        let (first, second) = (lines.recv().await.unwrap(), lines.recv().await.unwrap());
+        assert_eq!((&first["id"], &second["entered"]), (&second["id"], &json!(1)));
+        w.ask(Ask::Cancel).await;
+        w.ask(Ask::Display { device: keyboard, code: "654321".into(), entered: 0 }).await;
+        lines.recv().await.unwrap();
+        assert_ne!(lines.recv().await.unwrap()["id"], first["id"], "a new pairing's code is a new question");
     }
 
     #[test]
