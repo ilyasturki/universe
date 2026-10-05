@@ -1,5 +1,5 @@
 // Colour reaches a terminal only; NO_COLOR and CLICOLOR_FORCE are honoured.
-use anstream::{eprintln, print, println};
+use anstream::{eprint, eprintln, print, println};
 use clap::{Parser, Subcommand};
 use comfy_table::{presets::UTF8_FULL_CONDENSED, Attribute, Cell, ColumnConstraint, ContentArrangement, Table};
 use owo_colors::OwoColorize;
@@ -317,6 +317,16 @@ pub enum Cmd {
     Controller {
         #[command(subcommand)]
         action: ControllerCmd,
+    },
+    /// Wi-Fi through NetworkManager: the networks in range (default), joining, forgetting
+    Network {
+        #[command(subcommand)]
+        action: Option<NetworkCmd>,
+    },
+    /// Bluetooth through BlueZ: paired and found devices (default), pairing, forgetting
+    Bluetooth {
+        #[command(subcommand)]
+        action: Option<BluetoothCmd>,
     },
     /// Reload config, reread the library, add the games under the emulators' own folders (universe discover lists them)
     Rescan,
@@ -748,6 +758,69 @@ pub enum ControllerCmd {
     Forget { family: String, slot: String },
 }
 
+#[derive(Subcommand, Debug)]
+pub enum NetworkCmd {
+    /// The link, then the Wi-Fi networks in range
+    #[command(alias = "list")]
+    Ls,
+    /// Ask the Wi-Fi card for a fresh scan
+    Scan,
+    /// Join a network; a new secured one reads its password from the terminal or stdin
+    Connect { ssid: String },
+    /// Delete a saved network
+    Forget { ssid: String },
+    /// Turn Wi-Fi on or off
+    Wifi {
+        #[arg(value_parser = ["on", "off"])]
+        state: String,
+    },
+    /// Run NetworkManager's internet check now
+    Check,
+    /// Stream the state and each command's outcome: what the launcher's Network pages run
+    Watch {
+        /// One JSON object per line on stdout, commands on stdin
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum BluetoothCmd {
+    /// The adapter, then the paired devices and those a scan found
+    #[command(alias = "list")]
+    Ls,
+    /// Look for devices for a while, then list them
+    Scan {
+        #[arg(long, default_value_t = 10)]
+        seconds: u64,
+    },
+    /// Pair, trust and connect a device; a passkey or PIN is asked here
+    Pair {
+        address: String,
+    },
+    Connect {
+        address: String,
+    },
+    Disconnect {
+        address: String,
+    },
+    /// Unpair a device and forget it
+    Remove {
+        address: String,
+    },
+    /// Turn the adapter on or off
+    Power {
+        #[arg(value_parser = ["on", "off"])]
+        state: String,
+    },
+    /// Stream the state, pairing questions and each command's outcome: what the launcher's Bluetooth pages run
+    Watch {
+        /// One JSON object per line on stdout, commands on stdin
+        #[arg(long)]
+        json: bool,
+    },
+}
+
 fn table(headers: &[&str]) -> Table {
     let mut t = Table::new();
     t.load_style(UTF8_FULL_CONDENSED);
@@ -938,6 +1011,8 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             return Ok(());
         }
         Cmd::Osd { icon, label, level } => return crate::desktop::show_osd(desktop_profile(), icon, label, *level).await.map_err(|e| anyhow::anyhow!("{e}")),
+        Cmd::Network { action } => return network(action.as_ref().unwrap_or(&NetworkCmd::Ls), json).await,
+        Cmd::Bluetooth { action } => return bluetooth(action.as_ref().unwrap_or(&BluetoothCmd::Ls), json).await,
         _ => {}
     }
     let core = Core::open().await?;
@@ -1916,6 +1991,8 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         | Cmd::KeepAwake { .. }
         | Cmd::NestShot { .. }
         | Cmd::DesktopShot { .. }
+        | Cmd::Network { .. }
+        | Cmd::Bluetooth { .. }
         | Cmd::Osd { .. } => unreachable!(),
     }
     Ok(())
@@ -2002,6 +2079,227 @@ async fn controller(core: Core, action: ControllerCmd, json: bool) -> anyhow::Re
             core.set_controller_button(&family, &slot, None).await?;
             report(json, true, "forgotten");
         }
+    }
+    Ok(())
+}
+
+/// A watch's commands: stdin's lines, until it closes. A terminal's watch outlives a closed stdin (`< /dev/null`) to keep printing.
+fn stdin_lines(json: bool) -> futures_util::stream::BoxStream<'static, String> {
+    use futures_util::StreamExt;
+    use tokio::io::AsyncBufReadExt;
+    let lines = tokio::io::BufReader::new(tokio::io::stdin()).lines();
+    let read = futures_util::stream::unfold(lines, |mut lines| async move { lines.next_line().await.ok().flatten().map(|l| (l, lines)) });
+    if json {
+        read.boxed()
+    } else {
+        read.chain(futures_util::stream::pending()).boxed()
+    }
+}
+
+/// A watch's lines: JSON on stdout for the launcher; on a terminal without --json, to stderr as logged. False once stdout is gone.
+fn watch_out(json: bool) -> impl FnMut(Value) -> bool {
+    move |v| {
+        if json {
+            use std::io::Write;
+            let mut o = std::io::stdout().lock();
+            writeln!(o, "{v}").and_then(|()| o.flush()).is_ok()
+        } else {
+            eprintln!("{v}");
+            true
+        }
+    }
+}
+
+/// A secret read from the terminal without echo, else a line of stdin.
+fn secret(prompt: &str) -> String {
+    use std::io::IsTerminal;
+    let stdin = std::io::stdin();
+    if !stdin.is_terminal() {
+        let mut s = String::new();
+        let _ = stdin.read_line(&mut s);
+        return s.trim_end_matches(['\n', '\r']).to_string();
+    }
+    eprint!("{prompt} ");
+    let saved = rustix::termios::tcgetattr(&stdin).ok();
+    if let Some(mut quiet) = saved.clone() {
+        quiet.local_modes.remove(rustix::termios::LocalModes::ECHO);
+        let _ = rustix::termios::tcsetattr(&stdin, rustix::termios::OptionalActions::Now, &quiet);
+    }
+    let mut s = String::new();
+    let _ = stdin.read_line(&mut s);
+    if let Some(saved) = saved {
+        let _ = rustix::termios::tcsetattr(&stdin, rustix::termios::OptionalActions::Now, &saved);
+    }
+    eprintln!();
+    s.trim_end_matches(['\n', '\r']).to_string()
+}
+
+fn bars(strength: u8) -> &'static str {
+    match strength {
+        60.. => "▂▄▆",
+        35.. => "▂▄ ",
+        _ => "▂  ",
+    }
+}
+
+async fn network(action: &NetworkCmd, json: bool) -> anyhow::Result<()> {
+    use crate::network as nm;
+    let failed = |f: nm::Failure| anyhow::Error::from(crate::Error::from(f));
+    if let NetworkCmd::Ls = action {
+        let state = nm::state().await;
+        if json {
+            return print_json(&state);
+        }
+        if !state.available {
+            anyhow::bail!(crate::Error::Unavailable("NetworkManager is not running".into()));
+        }
+        let link = match state.link.as_str() {
+            "wired" => "on a cable".to_string(),
+            "wifi" => format!("on {} {}", state.ssid, bars(state.strength)),
+            _ => "offline".to_string(),
+        };
+        println!("{} · Wi-Fi {} · internet {}", link.bold(), if state.enabled { "on" } else { "off" }, state.connectivity);
+        if state.device.is_empty() {
+            println!("{}", "no Wi-Fi device".dimmed());
+            return Ok(());
+        }
+        let mut t = table(&["Network", "Signal", "Security", ""]);
+        for w in &state.networks {
+            let tag = if w.active {
+                "connected"
+            } else if w.saved {
+                "saved"
+            } else {
+                ""
+            };
+            t.add_row(vec![w.ssid.clone(), format!("{} {}%", bars(w.strength), w.strength), w.security.clone(), tag.into()]);
+        }
+        println!("{t}");
+        return Ok(());
+    }
+    let conn = nm::system().await?;
+    match action {
+        NetworkCmd::Ls => unreachable!(),
+        NetworkCmd::Scan => {
+            nm::scan(&conn).await.map_err(failed)?;
+            report(json, true, "scanning");
+        }
+        NetworkCmd::Connect { ssid } => {
+            let state = nm::read(&conn).await;
+            let known = state.networks.iter().find(|w| &w.ssid == ssid);
+            let needs = known.is_some_and(|w| !w.saved && matches!(w.security.as_str(), "psk" | "sae"));
+            let mut password = needs.then(|| secret(&format!("password for {ssid}:")));
+            if !json {
+                eprintln!("joining {ssid}…");
+            }
+            let mut joined = nm::connect(&conn, ssid, password.as_deref()).await;
+            if matches!(&joined, Err(f) if f.reason == "password") && password.is_none() && known.is_some_and(|w| w.saved) {
+                password = Some(secret(&format!("{ssid} wants its password again:")));
+                joined = nm::connect(&conn, ssid, password.as_deref()).await;
+            }
+            joined.map_err(failed)?;
+            let connectivity = nm::check(&conn).await.unwrap_or_else(|_| "unknown".into());
+            if json {
+                return print_json(&serde_json::json!({"ok": true, "ssid": ssid, "connectivity": connectivity}));
+            }
+            report(json, true, &format!("on {ssid} · internet {connectivity}"));
+        }
+        NetworkCmd::Forget { ssid } => {
+            nm::forget(&conn, ssid).await.map_err(failed)?;
+            report(json, true, &format!("forgot {ssid}"));
+        }
+        NetworkCmd::Wifi { state } => {
+            nm::set_enabled(&conn, state == "on").await.map_err(failed)?;
+            report(json, true, &format!("Wi-Fi {state}"));
+        }
+        NetworkCmd::Check => {
+            let connectivity = nm::check(&conn).await.map_err(failed)?;
+            if json {
+                return print_json(&serde_json::json!({"connectivity": connectivity}));
+            }
+            println!("internet {connectivity}");
+        }
+        NetworkCmd::Watch { json: as_json } => nm::watch(conn, stdin_lines(*as_json), watch_out(*as_json)).await?,
+    }
+    Ok(())
+}
+
+async fn bluetooth(action: &BluetoothCmd, json: bool) -> anyhow::Result<()> {
+    use crate::bluetooth as bt;
+    let list = |state: &bt::Bluetooth| -> anyhow::Result<()> {
+        if json {
+            return print_json(state);
+        }
+        if !state.available {
+            anyhow::bail!(crate::Error::Unavailable("no Bluetooth adapter, or BlueZ is not running".into()));
+        }
+        println!(
+            "{} · {}",
+            if state.powered { "on".bold().to_string() } else { "off".bold().to_string() },
+            if state.discovering { "scanning" } else { "not scanning" }
+        );
+        let mut t = table(&["Address", "Name", "Kind", "State", "Battery"]);
+        for d in &state.devices {
+            let what = if d.connected {
+                "connected"
+            } else if d.paired {
+                "paired"
+            } else {
+                "found"
+            };
+            t.add_row(vec![d.address.clone(), d.name.clone(), d.kind.clone(), what.into(), d.battery.map(|b| format!("{b}%")).unwrap_or_default()]);
+        }
+        println!("{t}");
+        Ok(())
+    };
+    if let BluetoothCmd::Ls = action {
+        return list(&bt::state().await);
+    }
+    let conn = bt::system().await?;
+    match action {
+        BluetoothCmd::Ls => unreachable!(),
+        BluetoothCmd::Scan { seconds } => {
+            bt::discover(&conn, true).await?;
+            tokio::time::sleep(std::time::Duration::from_secs(*seconds)).await;
+            let state = bt::read(&conn).await;
+            let _ = bt::discover(&conn, false).await;
+            list(&state)?;
+        }
+        BluetoothCmd::Pair { address } => {
+            let mut asks = bt::agent(&conn, false).await?;
+            let pairing = bt::pair(&conn, address);
+            tokio::pin!(pairing);
+            let connected = loop {
+                tokio::select! {
+                    done = &mut pairing => break done?,
+                    Some(question) = asks.recv() => match question {
+                        bt::Ask::Confirm { passkey, reply, .. } => { let _ = reply.send(if confirm(&format!("does the device show {passkey:06}?")) { bt::Answer::Yes } else { bt::Answer::No }); }
+                        bt::Ask::Authorize { reply, .. } => { let _ = reply.send(if confirm("let it pair?") { bt::Answer::Yes } else { bt::Answer::No }); }
+                        bt::Ask::Passkey { reply, .. } | bt::Ask::Pin { reply, .. } => { let _ = reply.send(bt::Answer::Text(ask("the code the device shows:"))); }
+                        bt::Ask::Display { code, entered: 0, .. } => eprintln!("type {code} on the device, then Enter"),
+                        bt::Ask::Display { .. } | bt::Ask::Cancel => {}
+                    },
+                }
+            };
+            report(json, true, if connected { "paired and connected" } else { "paired" });
+        }
+        BluetoothCmd::Connect { address } => {
+            bt::connect(&conn, address).await?;
+            report(json, true, "connected");
+        }
+        BluetoothCmd::Disconnect { address } => {
+            bt::disconnect(&conn, address).await?;
+            report(json, true, "disconnected");
+        }
+        BluetoothCmd::Remove { address } => {
+            bt::remove(&conn, address).await?;
+            report(json, true, "removed");
+        }
+        BluetoothCmd::Power { state } => {
+            bt::set_powered(&conn, state == "on").await?;
+            report(json, true, &format!("Bluetooth {state}"));
+        }
+        BluetoothCmd::Watch { json: as_json } => bt::watch(conn, crate::nest::session(), stdin_lines(*as_json), watch_out(*as_json)).await?,
     }
     Ok(())
 }

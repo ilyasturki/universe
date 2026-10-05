@@ -198,3 +198,75 @@ fn an_extension_install_asks_first_then_lists_and_goes() {
     assert!(universe(&dir, &["extension", "remove", "hello"], &env).status.success());
     assert!(!modules(&dir).iter().any(|m| m["id"] == "hello"));
 }
+
+#[path = "../src/testbus/mod.rs"]
+#[allow(dead_code)]
+mod testbus;
+
+const NO_SYSTEM_BUS: (&str, &str) = ("DBUS_SYSTEM_BUS_ADDRESS", "unix:path=/dev/null/bus");
+
+#[test]
+fn network_and_bluetooth_lists_read_as_unavailable_without_a_system_bus() {
+    let dir = tempfile::tempdir().unwrap();
+    for what in ["network", "bluetooth"] {
+        let out = universe(&dir, &[what, "--json"], &[NO_SYSTEM_BUS]);
+        assert!(out.status.success(), "{what}: {}", text(&out.stderr));
+        let state: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        assert_eq!(state["available"], false, "{what}: {state}");
+        let out = universe(&dir, &[what, "ls"], &[NO_SYSTEM_BUS]);
+        assert_eq!(out.status.code(), Some(1), "{what}");
+        assert!(text(&out.stderr).contains("unavailable:"), "{what}: {}", text(&out.stderr));
+    }
+}
+
+#[tokio::test]
+async fn network_lists_what_networkmanager_on_the_system_bus_sees() {
+    let bus = testbus::Bus::start();
+    let nm = testbus::nm::Nm::serve(&bus, testbus::nm::Router::default()).await;
+    nm.access_point("Home", 70, "psk").await;
+    let dir = tempfile::tempdir().unwrap();
+    let address = bus.address.clone();
+    let out = tokio::task::spawn_blocking(move || universe(&dir, &["network", "--json"], &[("DBUS_SYSTEM_BUS_ADDRESS", &address)])).await.unwrap();
+    let state: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| panic!("{e}: {}", text(&out.stderr)));
+    let first = &state["networks"][0];
+    assert_eq!((&state["device"], &first["ssid"], &first["security"]), (&serde_json::json!("wlan0"), &serde_json::json!("Home"), &serde_json::json!("psk")));
+}
+
+// The launcher's side of the stream: commands on stdin, a pairing's question out and its answer back in, on the watch's own agent.
+#[tokio::test]
+async fn bluetooth_watch_pairs_through_its_own_agent_over_stdin() {
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+    let bus = testbus::Bus::start();
+    let bluez = testbus::bluez::Bluez::serve(&bus).await;
+    bluez.add("AA:BB:CC:00:00:02", Some("K380"), "input-keyboard", false, testbus::bluez::Pairing::Confirm(4242)).await;
+    let dir = tempfile::tempdir().unwrap();
+    let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_universe"))
+        .args(["bluetooth", "watch", "--json"])
+        .env("DBUS_SYSTEM_BUS_ADDRESS", &bus.address)
+        .env("HOME", dir.path())
+        .env_remove("UNIVERSE_SESSION")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    let mut lines = tokio::io::BufReader::new(child.stdout.take().unwrap()).lines();
+    let mut next = async |event: &str| loop {
+        let line =
+            tokio::time::timeout(std::time::Duration::from_secs(5), lines.next_line()).await.expect("no line within 5 s").unwrap().expect("the watch ended");
+        let v: serde_json::Value = serde_json::from_str(&line).unwrap();
+        if v["event"] == event {
+            return v;
+        }
+    };
+    assert_eq!(next("ready").await["default"], false, "outside the Universe session the desktop keeps its default agent");
+    stdin.write_all(b"{\"cmd\": \"pair\", \"address\": \"AA:BB:CC:00:00:02\"}\n").await.unwrap();
+    let ask = next("request").await;
+    assert_eq!((&ask["kind"], &ask["code"]), (&serde_json::json!("confirm"), &serde_json::json!("004242")));
+    stdin.write_all(format!("{{\"cmd\": \"answer\", \"id\": {}, \"yes\": true}}\n", ask["id"]).as_bytes()).await.unwrap();
+    assert_eq!(next("done").await["action"], "pair");
+    drop(stdin);
+    let status = tokio::time::timeout(std::time::Duration::from_secs(5), child.wait()).await.expect("a closed stdin ends the watch").unwrap();
+    assert!(status.success());
+}

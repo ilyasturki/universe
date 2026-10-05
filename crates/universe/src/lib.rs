@@ -1,4 +1,5 @@
 pub mod achievements;
+pub mod bluetooth;
 pub mod changelog;
 pub mod changes;
 pub mod cli;
@@ -31,6 +32,7 @@ pub mod mangoapp;
 pub mod media;
 pub mod modules;
 pub mod nest;
+pub mod network;
 pub mod packagekit;
 pub mod paths;
 pub mod recording;
@@ -48,6 +50,9 @@ pub mod system_install;
 pub mod thumbs;
 pub mod timeline;
 pub mod tools;
+
+#[cfg(test)]
+mod testbus;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 // The version with the short git rev behind it (build.rs), `-dirty` when the tree was.
