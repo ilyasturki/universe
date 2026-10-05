@@ -541,7 +541,7 @@
       "user": "yasso",
       "games_dir": "/mnt/games/PC",
       "library_at": "2026-09-11T19:03:00+02:00",
-      "capabilities": ["achievements"],
+      "capabilities": ["achievements", "cloud-saves"],
       "login": {"kind": "code", "hint": "Sign in at the link. The address it lands on ends in code=…: enter what follows code=, or the whole address.", "purpose": "install games"},
       "settings": [
         {"key": "games_dir", "type": "path", "default": "/mnt/games/PC", "label": "Install folder", "description": "Empty installs into the library's games folder.", "keywords": ["install folder", "directory"], "scope": "global", "choices": [], "dynamic": false, "advanced": false},
@@ -550,7 +550,8 @@
         {"key": "with_dlcs", "type": "bool", "default": true, "label": "Install owned DLCs", "description": "Installs the DLCs you own along with the game.", "keywords": ["dlc", "expansions", "addons"], "scope": "global", "choices": [], "dynamic": false, "advanced": false},
         {"key": "auth_path", "type": "path", "default": "~/.config/gogdl/auth.json", "label": "gogdl token file", "description": "The token file gogdl writes at login.", "scope": "global", "choices": [], "dynamic": false, "advanced": true},
         {"key": "install_timeout_s", "type": "int", "default": 7200, "label": "Install time limit", "description": "In seconds; a longer install or update is stopped.", "scope": "global", "choices": [], "dynamic": false, "advanced": true},
-        {"key": "achievements", "type": "bool", "default": true, "label": "Achievements", "description": "Comet stands in for GOG Galaxy, so games unlock theirs.", "scope": "game", "choices": [], "dynamic": false, "advanced": false}
+        {"key": "achievements", "type": "bool", "default": true, "label": "Achievements", "description": "Comet stands in for GOG Galaxy, so games unlock theirs.", "scope": "game", "choices": [], "dynamic": false, "advanced": false},
+        {"key": "cloud_saves", "type": "bool", "default": false, "label": "Cloud saves", "description": "Saves come down from GOG before a session and go up after it.", "keywords": ["cloud", "sync", "saves"], "scope": "game", "choices": [], "dynamic": false, "advanced": false}
       ]
     },
     {
@@ -565,12 +566,13 @@
       "user": "",
       "games_dir": "/mnt/games/PC",
       "library_at": "",
-      "capabilities": ["achievements", "uninstall"],
+      "capabilities": ["achievements", "uninstall", "cloud-saves"],
       "login": {"kind": "code", "hint": "Sign in at the link, then enter the authorizationCode the page shows, or the whole page.", "purpose": "install games"},
       "settings": [
         {"key": "games_dir", "type": "path", "default": "/mnt/games/PC", "label": "Install folder", "description": "Empty installs into the library's games folder.", "keywords": ["install folder", "directory"], "scope": "global", "choices": [], "dynamic": false, "advanced": false},
         {"key": "with_dlcs", "type": "bool", "default": true, "label": "Install owned DLCs", "keywords": ["dlc", "expansions", "addons"], "scope": "global", "choices": [], "dynamic": false, "advanced": false},
-        {"key": "achievements", "type": "bool", "default": true, "label": "Achievements", "description": "Fetched from Epic after each session.", "scope": "game", "choices": [], "dynamic": false, "advanced": false}
+        {"key": "achievements", "type": "bool", "default": true, "label": "Achievements", "description": "Fetched from Epic after each session.", "scope": "game", "choices": [], "dynamic": false, "advanced": false},
+        {"key": "cloud_saves", "type": "bool", "default": false, "label": "Cloud saves", "description": "Saves come down from Epic before a session and go up after it.", "keywords": ["cloud", "sync", "saves"], "scope": "game", "choices": [], "dynamic": false, "advanced": false}
       ]
     },
     {
