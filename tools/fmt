@@ -55,7 +55,7 @@ qml_file() {
 }
 qml_all() {
     local f rc=0
-    while IFS= read -r f; do qml_file "$f" || rc=1; done < <(find ui/universe_ui/qml -name '*.qml' | sort)
+    while IFS= read -r f; do qml_file "$f" || rc=1; done < <(find ui/universe_ui/qml examples -name '*.qml' | sort)
     return $rc
 }
 

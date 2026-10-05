@@ -440,11 +440,12 @@
         };
       pytestUi = pytestOf {
         name = "universe-pytest-ui";
-        # the core contract test lists the modules and sources the real core reads
+        # the core contract test lists the modules and sources the real core reads; the theme tests install examples/theme
         dirs = [
           "ui"
           "modules"
           "sources"
+          "examples"
         ];
         tests = [ "ui" ];
         py =

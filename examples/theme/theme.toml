@@ -1,0 +1,8 @@
+api = 2
+id = "sample"
+name = "Sample"
+version = "1.0.0"
+description = "The smallest theme: the library as a row of covers, and every look a Start away."
+author = "Ilyas Turki"
+license = "MIT"
+screenshot = "screenshot.png"
