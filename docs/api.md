@@ -796,7 +796,9 @@ the cloud newer while the local files changed, or the local files newer while th
 (by more than legendary's minute), is a conflict, and neither side is touched. A first sync with
 saves on both sides that are not the same age is one. A download goes into a copy of the folder
 (legendary empties the folder before it downloads), which replaces the folder once legendary
-finished, so legendary's record names that copy until the next sync. `pre-launch` runs after the
+finished. legendary keeps the last `--save-path` as the game's, so the source then writes the game's
+own folder back into `installed.json` under legendary's `installed.json.lock`, whether the download
+finished or not; a lock another legendary holds past 2 s fails the sync instead. `pre-launch` runs after the
 launch arguments (online, then `--offline`), under the same 34 s deadline, and checks that
 `account-public-service-prod03.ol.epicgames.com` answers first. `keep-local` is `--force-upload`,
 `keep-cloud` `--force-download` (refused while the cloud holds no save).

@@ -121,7 +121,10 @@ elif verb == "sync-saves":
     if not rest or rest[0].startswith("-"):
         err("shim: sync-saves without an app name syncs every installed game")
         sys.exit(3)
-    if mode == "hang":
+    if "--save-path" in rest and rest[0] in installed:
+        installed[rest[0]]["save_path"] = rest[rest.index("--save-path") + 1]
+        save()
+    if mode == "hang" or (mode == "hangdown" and "--skip-download" not in rest):
         time.sleep(60)
     info = lambda message: print(f"[cli] INFO: {message}", file=sys.stderr)  # noqa: E731
     info("Got 1 remote save game(s)")

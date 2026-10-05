@@ -53,7 +53,8 @@ EPIC_HOST = "account-public-service-prod03.ol.epicgames.com"
 ONLINE_TIMEOUT_S = 2
 PRE_LAUNCH_BUDGET_S = 34  # the hook's timeout_s (40) cancels the launch: the sync ends by then, whatever the launch arguments took
 SYNC_MIN_S = 5
-SYNC_KILL_GRACE_S = 2  # PRE_LAUNCH_BUDGET_S plus this stays under the hook's timeout_s
+SYNC_KILL_GRACE_S = 2  # PRE_LAUNCH_BUDGET_S plus this and INSTALLED_LOCK_WAIT_S stays under the hook's timeout_s
+INSTALLED_LOCK_WAIT_S = 2
 CLOUD_SYNC_TIMEOUT_S = 600
 CLOUD_ACTIONS = ("status", "download", "upload", "keep-local", "keep-cloud")
 KEEPS = ("keep-local", "keep-cloud")
@@ -955,6 +956,37 @@ def download(settings, app, path, deadline, force):
         mirror(stage, path)
     finally:
         shutil.rmtree(stage, ignore_errors=True)
+        restored = restore_save_path(settings, app, path)
+    if not restored:
+        raise SourceError(f"legendary is busy: its save path for {app} names Universe's copy until the next sync")
+
+
+# legendary keeps the last --save-path as the game's: one left on the copy would have legendary run by hand, or the next sync after a crash, use a folder that is gone.
+def restore_save_path(settings, app, path):
+    config = Path(settings["config_path"])
+    try:
+        with open(config / "installed.json.lock", "a") as lock:
+            deadline = time.monotonic() + INSTALLED_LOCK_WAIT_S
+            while True:
+                try:
+                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if time.monotonic() >= deadline:
+                        log(f"{config / 'installed.json'} stays locked: {app}'s save path is not put back")
+                        return False
+                    time.sleep(0.1)
+            installed = load_json(config / "installed.json")
+            if not isinstance(installed, dict) or not isinstance(installed.get(app), dict) or installed[app].get("save_path") == str(path):
+                return True
+            installed[app]["save_path"] = str(path)
+            tmp = config / "installed.json.universe"
+            tmp.write_text(json.dumps(installed, indent=2, sort_keys=True))
+            tmp.replace(config / "installed.json")
+    except OSError as exc:
+        log(f"{app}'s save path is not put back: {exc}")
+        return False
+    return True
 
 
 def run_sync(settings, app, action, deadline):

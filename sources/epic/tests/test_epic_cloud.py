@@ -21,6 +21,8 @@ def cloud(src, tmp_path, monkeypatch, shims):
         folder.mkdir(parents=True)
     (pfx / "user.reg").write_text(USER_REG)
     (config / "user.json").write_text(json.dumps({"displayName": "Yasso", "account_id": "acc42"}))
+    installed = {"Min": {"app_name": "Min", "title": "Hades", "version": "1.0", "install_path": str(game), "save_path": None, "is_dlc": False}}
+    (config / "installed.json").write_text(json.dumps(installed))
     meta = {"app_name": "Min", "metadata": {"customAttributes": {"CloudSaveFolder": {"value": "{AppData}/Hades/{EpicId}"}}}}
     (config / "metadata" / "Min.json").write_text(json.dumps(meta))
     settings = {
@@ -103,6 +105,10 @@ def test_a_conflict_ends_on_the_side_the_player_keeps(src, cloud, run, pick, fla
     assert (cloud["cloud"] / "slot1.sav").read_text() == kept
 
 
+def save_path(cloud):
+    return json.loads((cloud["config"] / "installed.json").read_text())["Min"]["save_path"]
+
+
 def test_a_session_brings_newer_cloud_saves_down_before_it_and_its_own_up_after(src, cloud):
     put(cloud["local"], "slot1.sav", "old", age_s=900)
     put(cloud["local"], "stale.sav", "gone in the cloud", age_s=900)
@@ -114,6 +120,7 @@ def test_a_session_brings_newer_cloud_saves_down_before_it_and_its_own_up_after(
     assert not (cloud["local"] / "stale.sav").exists()
     assert state(src)["state"] == "synced"
     assert state(src)["locations"] == [{"name": "saves", "path": str(cloud["local"])}]
+    assert save_path(cloud) == str(cloud["local"]), "legendary's own record names the game's folder, not the copy it downloaded into"
 
     put(cloud["local"], "slot1.sav", "played here", age_s=-120)
     assert src.main(["post-process"]) == 0
@@ -149,6 +156,32 @@ def test_offline_the_launch_goes_on_without_legendary(src, cloud, monkeypatch):
     assert src.main(["pre-launch"]) == 0
     assert syncs(cloud) == []
     assert state(src)["state"] == "offline"
+
+
+@pytest.mark.slow
+def test_a_download_killed_at_the_deadline_puts_legendarys_save_path_back(src, cloud, monkeypatch):
+    monkeypatch.setattr(src, "PRE_LAUNCH_BUDGET_S", 1.5)
+    monkeypatch.setattr(src, "SYNC_MIN_S", 0.5)
+    monkeypatch.setenv("SHIM_MODE", "hangdown")
+    put(cloud["local"], "slot1.sav", "old", age_s=900)
+    src.update_cloud("Min", base={"cloud": src.utc_date(time.time() - 900), "local": time.time() - 900})
+    put(cloud["cloud"], "slot1.sav", "played elsewhere")
+    assert src.main(["pre-launch"]) == 0
+    assert syncs(cloud) == [COMPARE, "--skip-upload"]
+    assert state(src)["state"] == "error"
+    assert save_path(cloud) == str(cloud["local"])
+    assert (cloud["local"] / "slot1.sav").read_text() == "old"
+
+
+def test_a_save_path_legendary_holds_locked_fails_the_sync_rather_than_stay_on_the_copy(src, cloud, monkeypatch):
+    import fcntl
+
+    monkeypatch.setattr(src, "INSTALLED_LOCK_WAIT_S", 0.2)
+    with open(cloud["config"] / "installed.json.lock", "a") as held:
+        fcntl.flock(held, fcntl.LOCK_EX)
+        assert src.restore_save_path(json.loads(os.environ["SOURCE_SETTINGS_JSON"]), "Min", cloud["local"]) is False
+    assert src.restore_save_path(json.loads(os.environ["SOURCE_SETTINGS_JSON"]), "Min", cloud["local"]) is True
+    assert save_path(cloud) == str(cloud["local"])
 
 
 @pytest.mark.slow
