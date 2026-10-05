@@ -33,14 +33,6 @@ pub fn state(row: &Value) -> String {
     }
 }
 
-/// `https://host/…` as its host, a file as itself.
-fn host(url: &str) -> String {
-    match url.split_once("://") {
-        Some(("https", rest)) => rest.split('/').next().unwrap_or(rest).to_string(),
-        _ => url.strip_prefix("file://").unwrap_or(url).to_string(),
-    }
-}
-
 /// The confirmation before `action` (`install`, `update`, `remove`): an install names the kind, that it runs programs as
 /// you and where it comes from.
 pub fn ask(row: &Value, action: &str, index: &str) -> Ask {
@@ -50,7 +42,7 @@ pub fn ask(row: &Value, action: &str, index: &str) -> Ask {
         return Ask { heading: gettext("Remove {}?").replace("{}", &name), body, yes: gettext("_Remove"), destructive: true };
     }
     let listed = row["listed"] == true && text(row, "origin") != "unlisted";
-    let origin = if listed { gettext("from the index at {}").replace("{}", &host(index)) } else { gettext("Unlisted") };
+    let origin = if listed { gettext("from the index at {}").replace("{}", &universe::extensions::host(index)) } else { gettext("Unlisted") };
     let version = if action == "update" { text(row, "update") } else { text(row, "version") };
     let head =
         [kind_line(&text(row, "kind")), version.clone(), row["size"].as_u64().filter(|s| *s > 0).map(|s| glib::format_size(s).to_string()).unwrap_or_default()];
@@ -73,6 +65,9 @@ pub fn present(dialog: &adw::PreferencesDialog, kind: &'static str, changed: Rc<
     toolbar.set_content(Some(&page));
     dialog.push_subpage(&adw::NavigationPage::new(&toolbar, &gettext("Add-ons")));
     let shown: Rc<RefCell<Option<adw::PreferencesGroup>>> = Rc::default();
+    // Owned by the page: a row holding it strongly would keep its own group alive.
+    let owned = shown.clone();
+    page.connect_destroy(move |_| drop(owned.take()));
     fill(&page, &shown, kind, changed);
 }
 
