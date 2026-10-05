@@ -127,7 +127,7 @@ install_helper() {
     fi
     say "note: without them the Universe session cannot install system tools; as root, run"
     say "  install -Dm755 $src $helper"
-    say "  install -Dm644 $lib/system/${policy##*/} $policy"
+    say "  install -Dm644 $lib/system/${policy##*/} $policy  (or $etc_policy where /usr is read-only)"
 }
 
 if [ "$uninstall" = 1 ]; then
