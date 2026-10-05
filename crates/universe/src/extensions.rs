@@ -266,6 +266,11 @@ fn held(kind: &str, id: &str) -> Option<String> {
     own.get(id).map(|(dir, _)| format!("{id} is your own {kind} in {}, which would hide the installed one", dir.display()))
 }
 
+fn held_ids(kind: &str) -> std::collections::BTreeSet<String> {
+    let (shipped, user) = shipped_and_user(kind);
+    crate::modules::read_manifests::<Header>(shipped.into_iter().chain([user]), &format!("{kind}.toml"), |m| &m.id).into_keys().collect()
+}
+
 fn valid_id(id: &str) -> bool {
     id.starts_with(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit())
         && id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
@@ -301,15 +306,20 @@ pub async fn prepare(origin: Origin, mut progress: Option<Progress<'_, '_>>, can
             (url, sha, None)
         }
         Origin::Listed(listed, index) => {
-            let file = match local(&listed.url)? {
-                Some(path) => path,
+            let (file, sha) = match local(&listed.url)? {
+                Some(_) if local(&index)?.is_none() => {
+                    return Err(Error::Invalid(format!("{}: the index at {index} names a file on this computer", listed.url)));
+                }
+                Some(path) => {
+                    let sha = digest(&path)?;
+                    (path, sha)
+                }
                 None => {
                     let file = scratch.0.join("download");
-                    components::fetch(&listed.url, &file, listed.size, &listed.name, &mut progress, cancel).await?;
-                    file
+                    let sha = components::fetch(&listed.url, &file, listed.size, &listed.name, &mut progress, cancel).await?;
+                    (file, sha)
                 }
             };
-            let sha = digest(&file)?;
             if !sha.eq_ignore_ascii_case(listed.sha256.trim()) {
                 return Err(Error::Io(format!("{}: sha256 {sha}, not the index's {}", listed.url, listed.sha256)));
             }
@@ -332,6 +342,9 @@ pub async fn prepare(origin: Origin, mut progress: Option<Progress<'_, '_>>, can
     }
     if let Some(l) = listed.as_ref().filter(|l| l.id != id || l.kind != kind) {
         return Err(Error::Invalid(format!("the index lists {} as a {}, its archive holds the {kind} {id}", l.id, l.kind)));
+    }
+    if let Some(l) = listed.as_ref().filter(|l| l.version != header.version) {
+        return Err(Error::Invalid(format!("the index lists {id} {}, its archive holds {id} {}", l.version, header.version)));
     }
     if let Some(why) = unsupported(header.api) {
         return Err(Error::Invalid(format!("{id}: {why}")));
@@ -423,7 +436,7 @@ fn row(listed: Option<&Listed>, mine: Option<&Installed>, enabled: bool) -> serd
     let pick = |l: fn(&Listed) -> &String, i: fn(&Installed) -> &String| mine.map(i).or(listed.map(l)).cloned().unwrap_or_default();
     let api = mine.map(|i| i.api).or(listed.map(|l| l.api)).unwrap_or_default();
     let update = match (listed, mine) {
-        (Some(l), Some(i)) if i.origin == "registry" && l.version != i.version => l.version.clone(),
+        (Some(l), Some(i)) if i.origin == "registry" && l.version != i.version && unsupported(l.api).is_none() => l.version.clone(),
         _ => String::new(),
     };
     serde_json::json!({
@@ -459,10 +472,12 @@ impl Core {
             _ => config.sources.enabled.iter().any(|e| e == id),
         };
         let mine = installed();
-        let shown = index.extensions.iter().filter(|l| KINDS.contains(&l.kind.as_str()) && valid_id(&l.id) && held(&l.kind, &l.id).is_none());
+        let taken: std::collections::BTreeMap<&str, std::collections::BTreeSet<String>> = KINDS.into_iter().map(|k| (k, held_ids(k))).collect();
+        let shown: Vec<&Listed> =
+            index.extensions.iter().filter(|l| valid_id(&l.id) && taken.get(l.kind.as_str()).is_some_and(|ids| !ids.contains(&l.id))).collect();
         let mut rows: Vec<serde_json::Value> =
-            shown.clone().map(|l| row(Some(l), mine.iter().find(|i| i.kind == l.kind && i.id == l.id), enabled(&l.kind, &l.id))).collect();
-        for i in mine.iter().filter(|i| !shown.clone().any(|l| l.kind == i.kind && l.id == i.id)) {
+            shown.iter().map(|l| row(Some(l), mine.iter().find(|i| i.kind == l.kind && i.id == l.id), enabled(&l.kind, &l.id))).collect();
+        for i in mine.iter().filter(|i| !shown.iter().any(|l| l.kind == i.kind && l.id == i.id)) {
             rows.push(row(None, Some(i), enabled(&i.kind, &i.id)));
         }
         rows.sort_by_key(|r| (r["kind"].as_str().unwrap_or_default().to_string(), r["name"].as_str().unwrap_or_default().to_lowercase()));
@@ -505,8 +520,11 @@ impl Core {
             let origin = match t.origin.as_str() {
                 "registry" => match index.as_ref().expect("fetched for a registry extension") {
                     Ok(index) => match index.extensions.iter().find(|l| l.kind == t.kind && l.id == t.id) {
-                        Some(l) if l.version != t.version => Ok(Origin::Listed(Box::new(l.clone()), url.clone())),
-                        Some(_) => continue,
+                        Some(l) if l.version == t.version => continue,
+                        Some(l) => match unsupported(l.api) {
+                            Some(why) => Err(Error::Invalid(format!("{} {}: {why}", t.id, l.version))),
+                            None => Ok(Origin::Listed(Box::new(l.clone()), url.clone())),
+                        },
                         None => Err(Error::NotFound(format!("{} is no longer in the extension index", t.id))),
                     },
                     Err(e) => Err(Error::Unavailable(e.to_string())),
@@ -550,9 +568,14 @@ impl Core {
             return Err(Error::Busy(format!("{} is running: removing {id} waits until it ends", c.title)));
         }
         let config = self.config.read().await.clone();
+        let home = paths::extensions_dir(&found.kind).join(id);
+        let runs = match found.kind.as_str() {
+            "module" => self.modules.read().await.iter().any(|m| m.id() == id && m.dir == home),
+            _ => self.sources.read().await.iter().any(|s| s.id() == id && s.dir == home),
+        };
         let off = match found.kind.as_str() {
-            "module" if config.modules.enabled.iter().any(|e| e == id) => Some(self.enable_module(id, false).await),
-            "source" if config.sources.enabled.iter().any(|e| e == id) => Some(self.enable_source(id, false).await),
+            "module" if runs && config.modules.enabled.iter().any(|e| e == id) => Some(self.enable_module(id, false).await),
+            "source" if runs && config.sources.enabled.iter().any(|e| e == id) => Some(self.enable_source(id, false).await),
             _ => None,
         };
         if let Some(Err(e)) = off {
@@ -680,6 +703,20 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn removing_a_copy_that_another_hides_leaves_that_one_on() {
+        let env = paths::test_env();
+        let work = env.path().join("work");
+        let core = open().await;
+        core.extension_install(&tree(&work, "module", "hello", "1.0.0", API).to_string_lossy(), true, None).await.unwrap();
+        core.enable_module("hello", true).await.unwrap();
+        std::fs::create_dir_all(paths::user_modules_dir()).unwrap();
+        std::fs::rename(tree(&work, "module", "hello", "2.0.0", API), paths::user_modules_dir().join("hello")).unwrap();
+        core.reload_modules().await;
+        core.extension_remove("hello").await.unwrap();
+        assert!(core.config.read().await.modules.enabled.iter().any(|e| e == "hello"), "the user's own hello stays on");
+    }
+
+    #[tokio::test]
     async fn a_shipped_id_an_unsupported_api_and_plain_http_are_refused() {
         let env = paths::test_env();
         let work = env.path().join("work");
@@ -708,8 +745,8 @@ mod tests {
         let archive = |version: &str| tgz(&tree(&work, "source", "shop", version, API), &work.join(format!("shop-{version}.tar.gz")));
         let (one, two) = (archive("1.0.0"), archive("2.0.0"));
         let index = env.path().join("index.json");
-        let write = |version: &str, file: &Path, pin: &str| {
-            let entry = serde_json::json!({"id": "shop", "kind": "source", "name": "Shop", "version": version, "api": API,
+        let write = |version: &str, file: &Path, pin: &str, api: u32| {
+            let entry = serde_json::json!({"id": "shop", "kind": "source", "name": "Shop", "version": version, "api": api,
                 "url": format!("file://{}", file.display()), "sha256": pin});
             let other = serde_json::json!({"id": "later", "kind": "module", "name": "Later", "version": "1.0.0", "api": API + 1, "url": "https://example.org/l.tar.gz", "sha256": ""});
             std::fs::write(&index, serde_json::json!({"schema": SCHEMA, "extensions": [entry, other]}).to_string()).unwrap();
@@ -717,13 +754,13 @@ mod tests {
         std::env::set_var("UNIVERSE_EXTENSIONS_INDEX", format!("file://{}", index.display()));
         let core = open().await;
 
-        write("1.0.0", &one, &"0".repeat(64));
+        write("1.0.0", &one, &"0".repeat(64), API);
         assert!(core.extension_install("shop", true, None).await.is_err_and(|e| e.to_string().contains("sha256")), "a pin that does not match");
-        write("1.0.0", &one, &sha(&one));
+        write("1.0.0", &one, &sha(&one), API);
         assert_eq!(core.extension_install("shop", true, None).await.unwrap()["origin"], "registry");
         assert_eq!(ran(&core, "source", "shop").await, "shop 1.0.0");
 
-        write("2.0.0", &two, &sha(&two));
+        write("2.0.0", &two, &sha(&two), API);
         let listing = core.extensions().await.unwrap();
         let rows = listing["extensions"].as_array().unwrap();
         let shop = rows.iter().find(|r| r["id"] == "shop").unwrap();
@@ -733,6 +770,19 @@ mod tests {
         assert_eq!(core.extension_update("", None).await.unwrap().len(), 1);
         assert_eq!(ran(&core, "source", "shop").await, "shop 2.0.0");
         assert!(core.extension_update("", None).await.unwrap().is_empty(), "current: nothing to fetch");
+
+        write("2.5.0", &two, &sha(&two), API);
+        assert!(
+            core.extension_update("shop", None).await.is_err_and(|e| e.to_string().contains("its archive holds shop 2.0.0")),
+            "an entry naming another version"
+        );
+        write("3.0.0", &two, &sha(&two), API + 1);
+        let listing = core.extensions().await.unwrap();
+        let shop = listing["extensions"].as_array().unwrap().iter().find(|r| r["id"] == "shop").cloned().unwrap();
+        assert_eq!(shop["update"], "", "no update to a version for another Universe");
+        let tried = core.extension_update("", None).await.unwrap();
+        assert!(tried[0]["error"].as_str().is_some_and(|e| e.contains("extension api")), "{tried:?}");
+        assert_eq!(ran(&core, "source", "shop").await, "shop 2.0.0");
     }
 
     #[tokio::test]

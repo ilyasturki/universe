@@ -1109,7 +1109,7 @@ layout, the API number and the index's format.
 
 `Extension` = `{id, kind: module|source, name, description, version (the index's, else the installed
 one's), homepage, size, listed, installed, installed_version, origin: registry|unlisted|"", from,
-update (the index's version when an index install lists another, else ""), enabled, incompatible (why
+update (the index's version when an index install lists another, for an api this Universe reads, else ""), enabled, incompatible (why
 its `api` rules it out, else "")}`.
 
 ## Media

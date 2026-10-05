@@ -110,6 +110,7 @@ When empty it is the registry's,
 ```
 
 `kind` is `module` or `source`. `url` is the archive and `sha256` its digest: an archive whose
-digest differs is refused, and so is one whose manifest holds another id or kind than its entry.
-The index is HTTPS plus these pins, with no signature. Universe reads schema 1 and refuses a
-newer one.
+digest differs is refused, and so is one whose manifest holds another id, kind or version than its
+entry. A `url` that names a file is only read from an index that is a file itself. An update that
+the index lists for another `api` is not offered. The index is HTTPS plus these pins, with no
+signature. Universe reads schema 1 and refuses a newer one.

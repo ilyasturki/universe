@@ -2268,7 +2268,8 @@ class FakeCore:
         either = mine or listed
         api = (mine or {}).get("api", (listed or {}).get("api", 0))
         incompatible = "" if api == EXTENSION_API else f"written for extension api {api}: this Universe reads api {EXTENSION_API}"
-        update = listed["version"] if listed and mine and mine["origin"] == "registry" and listed["version"] != mine["version"] else ""
+        newer = listed and mine and mine["origin"] == "registry" and listed["version"] != mine["version"] and listed["api"] == EXTENSION_API
+        update = listed["version"] if newer else ""
         enabled = any(e["id"] == either["id"] and e.get("enabled") for e in self._data.get(either["kind"] + "s", []))
         return {
             **{k: either[k] for k in ("id", "kind", "name", "description")},
