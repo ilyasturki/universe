@@ -9,11 +9,20 @@ Plays KEYs to the UI inside a headless sway rendering on the GPU and records it:
 no window on the desktop, no sound. OUT is H.264 yuv420p at 60 fps, the leading
 black trimmed. KEYs are the `--keys` phases (Wait, Wait:N, Right, Return…).
 
-  UNIVERSE_UI_ARGS      the UI's flags (default --fake --no-gamepad)
-  UNIVERSE_UI_SIZE      the window (default 1920x1080)
-  UNIVERSE_UI_GAP       ms between keys (default 500)
-  UNIVERSE_RECORD_SCALE rendered at N times the size, OUT scaled back (default 2)
-  UNIVERSE_RECORD_NODE  the render node (default the boot GPU's)
+  UNIVERSE_UI_ARGS          the UI's flags (default --fake --no-gamepad)
+  UNIVERSE_UI_SIZE          the window (default 1920x1080)
+  UNIVERSE_UI_GAP           ms between keys (default 500)
+  UNIVERSE_RECORD_SCALE     rendered at N times the size, OUT scaled back (default 2)
+  UNIVERSE_RECORD_NODE      the render node (default the boot GPU's)
+  UNIVERSE_RECORD_GAMESCOPE 1: the UI fullscreen in its own gamescope, as on a desktop, so a game
+                            it launches runs there and HOME opens over it. The take plays on a copy
+                            of the profile, modules off; the game's sound and the volume keys go to
+                            a private PipeWire sink at 50 %. gamescope, pipewire and wpctl come from
+                            the system.
+
+A game launched in a take stays off the desktop: an X11 one finds no X server
+outside gamescope, and a unit still up when the UI quits is stopped. Each
+`Mark:NAME` key lands in OUT's .marks file as NAME and its time in OUT, in seconds.
 USAGE
 }
 
@@ -27,6 +36,7 @@ size=${UNIVERSE_UI_SIZE:-1920x1080}
 gap=${UNIVERSE_UI_GAP:-500}
 scale=${UNIVERSE_RECORD_SCALE:-2}
 node=${UNIVERSE_RECORD_NODE:-}
+gamescope=${UNIVERSE_RECORD_GAMESCOPE:-}
 if [ -z "$node" ]; then
     for card in /sys/class/drm/card[0-9]*; do
         [ "$(cat "$card/device/boot_vga" 2>/dev/null)" = 1 ] || continue
@@ -49,15 +59,87 @@ done
 script="$script Wait:2"
 gaps=$((gaps + 2))
 
-tmp=$(mktemp -d)
+game_units() {
+    systemctl --user list-units 'universe-game-*' --all --plain --no-legend 2>/dev/null | awk '{ print $1 }' | sort
+}
+
+# Under the home: a Proton game's container sees the take's MangoHud.conf there, not under /tmp.
+mkdir -p "${XDG_CACHE_HOME:-$HOME/.cache}"
+tmp=$(mktemp -d "${XDG_CACHE_HOME:-$HOME/.cache}/universe-record.XXXXXX")
 sway_pid=
 rec_pid=
+pw_pid=
+units_before=$(game_units)
+stop_new_units() {
+    local unit
+    for unit in $(comm -13 <(printf '%s\n' "$units_before") <(game_units)); do
+        echo "ui-record: stopping $unit" >&2
+        systemctl --user stop "$unit" || true
+    done
+}
 cleanup() {
     [ -n "$rec_pid" ] && kill "$rec_pid" 2>/dev/null
+    stop_new_units
     [ -n "$sway_pid" ] && kill "$sway_pid" 2>/dev/null
+    [ -n "$pw_pid" ] && kill "$pw_pid" 2>/dev/null
     rm -rf "$tmp"
 }
 trap cleanup EXIT
+
+# A game unit takes DISPLAY from the launcher, else from the user manager: the desktop's.
+ui_env=(QT_QPA_PLATFORM=wayland DISPLAY=:ui-record XDG_CURRENT_DESKTOP=sway XDG_SESSION_TYPE=wayland PIPEWIRE_REMOTE=/nonexistent PULSE_SERVER=unix:/nonexistent)
+size_args=(--size "$size")
+if [ -n "$gamescope" ]; then
+    size_args=()
+    profile=$tmp/profile
+    root=$(dirname "${UNIVERSE_CONFIG_HOME:?run through just}")
+    mkdir -p "$profile"
+    for part in data config state cache; do
+        var=UNIVERSE_${part^^}_HOME
+        [ -d "${!var}" ] && cp -a "${!var}" "$profile/$part"
+        export "$var=$profile/$part"
+    done
+    [ -f "$profile/config/config.toml" ] && sed -i "s|$root/|$profile/|g" "$profile/config/config.toml"
+
+    remote=universe-record-$$
+    pulse=unix:$tmp/pulse
+    # wpctl reads the default sink only as strict JSON, which PipeWire's relaxed config syntax does not write by itself.
+    cat >"$tmp/pipewire.conf" <<EOF
+context.properties = { core.daemon = true, core.name = $remote, support.dbus = false }
+context.spa-libs = { audio.convert.* = audioconvert/libspa-audioconvert, support.* = support/libspa-support }
+context.modules = [
+    { name = libpipewire-module-protocol-native }
+    { name = libpipewire-module-metadata }
+    { name = libpipewire-module-client-node }
+    { name = libpipewire-module-adapter }
+    { name = libpipewire-module-spa-node-factory }
+    { name = libpipewire-module-link-factory }
+    { name = libpipewire-module-access }
+    { name = libpipewire-module-protocol-pulse, args = { server.address = [ "$pulse" ] } }
+]
+context.objects = [
+    { factory = spa-node-factory, args = { factory.name = support.node.driver, node.name = record-driver, node.group = record, priority.driver = 8000 } }
+    { factory = adapter, args = { factory.name = support.null-audio-sink, node.name = record-sink, node.description = "Universe recording", media.class = Audio/Sink, audio.position = [ FL FR ], node.group = record } }
+    { factory = metadata, args = { metadata.name = default, metadata.values = [ { key = default.audio.sink, type = "Spa:String:JSON", value = "{ \"name\": \"record-sink\" }" } ] } }
+]
+EOF
+    # The dev shell's LD_LIBRARY_PATH carries its own libpipewire, whose modules the system daemon cannot load.
+    # Its pulse server hands each client on to PIPEWIRE_REMOTE's daemon, the desktop's when unset.
+    env -u LD_LIBRARY_PATH PIPEWIRE_REMOTE="$remote" pipewire -c "$tmp/pipewire.conf" >"$tmp/pipewire.log" 2>&1 &
+    pw_pid=$!
+    for _ in $(seq 50); do
+        PIPEWIRE_REMOTE=$remote timeout 5 wpctl set-volume @DEFAULT_AUDIO_SINK@ 0.5 >/dev/null 2>&1 && break
+        kill -0 "$pw_pid" 2>/dev/null || break
+        sleep 0.1
+    done
+    PIPEWIRE_REMOTE=$remote timeout 5 wpctl get-volume @DEFAULT_AUDIO_SINK@ >/dev/null 2>&1 ||
+        { echo "ui-record: the private PipeWire never came up" >&2; cat "$tmp/pipewire.log" >&2; exit 1; }
+
+    "$UNIVERSE_BIN" config set modules.enabled '[]' >/dev/null
+    "$UNIVERSE_BIN" config set launch.env.PIPEWIRE_REMOTE "$remote" >/dev/null
+    "$UNIVERSE_BIN" config set launch.env.PULSE_SERVER "$pulse" >/dev/null
+    ui_env+=(PIPEWIRE_REMOTE="$remote")
+fi
 
 cat >"$tmp/sway.cfg" <<EOF
 output HEADLESS-1 resolution $((w * scale))x$((h * scale)) scale $scale bg #000000 solid_color
@@ -81,27 +163,35 @@ export WAYLAND_DISPLAY=$display SWAYSOCK=$sock
 
 # Lossless while recording: x264 at a real encode setting falls behind 60 fps and drops frames.
 # -D: without it wf-recorder only sees SIGINT on the next damaged frame, and a quit UI sends none.
+rec_start=$(date +%s.%N)
 wf-recorder -y -D -o HEADLESS-1 -r 60 -c libx264rgb -x bgr0 -p preset=ultrafast -p qp=0 -f "$tmp/raw.mkv" >"$tmp/rec.log" 2>&1 &
 rec_pid=$!
 
 status=0
 # shellcheck disable=SC2086
-QT_QPA_PLATFORM=wayland PIPEWIRE_REMOTE=/nonexistent "$ui_bin" ${UNIVERSE_UI_ARGS---fake --no-gamepad} \
-    --size "$size" --key-gap "$gap" --keys "$script" --quit-after $((1200 + gap * (gaps + 8))) || status=$?
+env "${ui_env[@]}" "$ui_bin" ${UNIVERSE_UI_ARGS---fake --no-gamepad} \
+    "${size_args[@]}" --key-gap "$gap" --keys "$script" --quit-after $((1200 + gap * (gaps + 8))) 2> >(tee "$tmp/ui.log" >&2) || status=$?
 
 kill -INT "$rec_pid"
 wait "$rec_pid" || true
 rec_pid=
+stop_new_units
 swaymsg exit >/dev/null 2>&1 || true
 wait "$sway_pid" 2>/dev/null || true
 sway_pid=
 [ "$status" = 0 ] || echo "ui-record: the UI exited $status" >&2
 [ -s "$tmp/raw.mkv" ] || { echo "ui-record: nothing recorded" >&2; cat "$tmp/rec.log" >&2; exit 1; }
 
-start=$(ffmpeg -hide_banner -i "$tmp/raw.mkv" -t 20 -vf blackdetect=d=0.05:pix_th=0.02 -an -f null - 2>&1 |
-    sed -n 's/.*black_start:0 black_end:\([0-9.]*\).*/\1/p' | head -1)
+# gamescope's first frame flashes between the black ones: runs under half a second apart count as one.
+start=$(ffmpeg -hide_banner -i "$tmp/raw.mkv" -t 30 -vf blackdetect=d=0.05:pix_th=0.02 -an -f null - 2>&1 |
+    sed -n 's/.*black_start:\([0-9.]*\) black_end:\([0-9.]*\).*/\1 \2/p' |
+    awk '(NR == 1 && $1 > 0.5) || (NR > 1 && $1 - end > 0.5) { exit } { end = $2 } END { if (end != "") print end }')
 ffmpeg -hide_banner -loglevel error -y -ss "${start:-0}" -i "$tmp/raw.mkv" \
     -vf "scale=${w}:${h}:flags=lanczos:out_color_matrix=bt709:out_range=tv,format=yuv420p" \
     -c:v libx264 -preset slow -crf 14 -profile:v high -colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv \
     -movflags +faststart -an "$out"
+marks=${out%.*}.marks
+sed -n 's/.*universe\.gamepad: mark \([^ ]*\) \([0-9.]*\)$/\1 \2/p' "$tmp/ui.log" |
+    awk -v t0="$rec_start" -v cut="${start:-0}" '{ printf "%s %.3f\n", $1, $2 - t0 - cut }' >"$marks"
+[ -s "$marks" ] || rm -f "$marks"
 echo "$out"
