@@ -654,8 +654,8 @@ def test_record_follows_the_monitor_that_replaces_the_recorded_one(tmp_path, liv
     env, thread, done = _supervise(tmp_path, livebin, monkeypatch)
     _plug(livebin, DP_1="disconnected")
     part1 = tmp_path / "data" / "pending" / f"{SESSION_ID}.part1.mkv"
-    assert _wait_for(lambda: part1.exists() and not (livebin["logs"] / "gsr.current").exists())
-    assert part1.with_name(part1.name + ".ts").exists(), "the sidecar moves with the part"
+    assert _wait_for(lambda: (_timeline(tmp_path) or {}).get("parts") == [str(part1)] and not (livebin["logs"] / "gsr.current").exists())
+    assert part1.exists() and part1.with_name(part1.name + ".ts").exists(), "the sidecar moves with the part"
     state = _timeline(tmp_path)
     assert state["parts"] == [str(part1)] and len(state["pauses"]) == 1 and state["pauses"][0][1] is None, (
         "the gap is a pause until the next monitor's first frame"
