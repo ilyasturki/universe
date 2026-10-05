@@ -50,8 +50,7 @@ pub fn lock_path() -> PathBuf {
     paths::runtime_dir().join("controller.lock")
 }
 
-/// The pad a button was last pressed on, which the controls module makes player 1: the sysfs device its evdev node hangs off,
-/// the one SDL's hidraw node for it hangs off too.
+/// The sysfs device of the pad a button was last pressed on, the one its evdev and SDL's hidraw nodes hang off: the controls module's player 1.
 pub fn active_pad_path() -> PathBuf {
     paths::runtime_dir().join("active-pad")
 }
@@ -183,7 +182,7 @@ fn hidraw_of(path: &Path, vendor: u16) -> Option<AsyncFd<std::fs::File>> {
     if vendor != EIGHTBITDO {
         return None;
     }
-    let sysfs = Path::new("/sys/class/input").join(path.file_name()?).join("device/device/hidraw");
+    let sysfs = device_of(Path::new("/sys"), path)?.join("hidraw");
     let node = std::fs::read_dir(sysfs).ok()?.flatten().next()?.file_name();
     let fd = rustix::fs::open(Path::new("/dev").join(node), rustix::fs::OFlags::RDONLY | rustix::fs::OFlags::NONBLOCK, rustix::fs::Mode::empty()).ok()?;
     AsyncFd::new(std::fs::File::from(fd)).ok()
@@ -661,6 +660,9 @@ impl Watcher {
     }
 
     fn drop_pad(&mut self, id: &str) {
+        if self.active.as_deref() == Some(id) {
+            self.active = None;
+        }
         if let Some(p) = self.pads.remove(id) {
             let _ = p.cmd.try_send(PadCmd::Close);
             self.engine.forget_device(id);
