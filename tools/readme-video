@@ -20,8 +20,7 @@ without sound.
 USAGE
 }
 
-# Wait:N is N gaps of UNIVERSE_UI_GAP (400 ms here). The game's title screen is up
-# well within the 50 s after its launch.
+# Wait:N is N gaps of 400 ms: Wait:125 is 50 s, well past the game's title screen.
 KEYS=(
     Wait:4 Mark:hero
     Right Wait Right Wait Right Wait:2
@@ -33,7 +32,7 @@ KEYS=(
     Wait:6 Mark:overlay
     Wait:3 Guide Wait:3
     Right Right Right Right Right Right Wait:2
-    Return Wait:2 Return Wait:4
+    Expect: Return Wait:2 Expect: Return Wait:4
     Guide Wait:4
     Volume:up Wait Volume:up Wait Volume:up Wait:5
     Mark:end
@@ -44,7 +43,7 @@ FADE_S=0.4
 
 mark() {
     local at
-    at=$(awk -v name="$1" '$1 == name { print $2 }' "$2")
+    at=$(awk -v name="$1" '$1 == name { print $2; exit }' "$2")
     [ -n "$at" ] || { echo "readme-video: no $1 mark in $2" >&2; exit 1; }
     echo "$at"
 }
