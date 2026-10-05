@@ -9,6 +9,7 @@ use crate::host::Host;
 use crate::library::{self, Resolved};
 use crate::modules::{self, HookEnv, Hooker, Module};
 use crate::paths;
+use crate::session::{Current, Runtime};
 use crate::sources::{self, Source, SourceEvent};
 use crate::{Error, Result};
 
@@ -114,6 +115,17 @@ fn load_source_caches(sources: &[Source]) -> BTreeMap<String, Vec<serde_json::Ma
         }
     }
     caches
+}
+
+fn runtime_of(c: &Current, r: &Resolved) -> Runtime {
+    crate::session::read_marker().filter(|m| m.current.session_id == c.session_id).and_then(|m| m.runtime).unwrap_or_else(|| Runtime::of(&r.effective))
+}
+
+fn change_runtime(c: &Current, r: &Resolved, f: impl FnOnce(&mut Runtime)) -> Result<Runtime> {
+    let mut rt = runtime_of(c, r);
+    f(&mut rt);
+    crate::session::set_runtime(&c.session_id, &rt)?;
+    Ok(rt)
 }
 
 pub struct Core {
@@ -727,20 +739,30 @@ impl Core {
         gamescope && crate::launcher::mangoapp_installed()
     }
 
-    async fn write_layer_conf(&self, c: &crate::session::Current, r: &Resolved) -> Result<()> {
-        let hz = crate::launcher::fps_limit_hz(&r.effective, crate::desktop::screen_mode(&c.screen).await);
+    async fn write_layer_conf(&self, c: &crate::session::Current, r: &Resolved, rt: &Runtime) -> Result<()> {
+        let limited = crate::library::Effective { fps_limit: rt.fps_limit.clone(), ..r.effective.clone() };
+        let hz = crate::launcher::fps_limit_hz(&limited, crate::desktop::screen_mode(&c.screen).await);
         let mangoapp = self.mangoapp_draws(c, r).await;
         Ok(std::fs::write(
             crate::launcher::layer_conf_path(),
-            crate::launcher::layer_conf_text((!mangoapp).then_some(c.id.as_str()), hz, mangoapp || !r.effective.mangohud),
+            crate::launcher::layer_conf_text((!mangoapp).then_some(c.id.as_str()), hz, mangoapp || !rt.mangohud),
         )?)
     }
 
-    /// MangoHud rereads its conf on inotify's `IN_MODIFY`, and a frozen game's on the thaw: the write is the reload.
-    pub async fn set_fps_limit(&self) -> Result<()> {
-        self.steam_owns("The frame rate limit")?;
+    /// The running game's HUD, frame rate limit and filter as HOME left them, its settings untouched.
+    pub async fn runtime(&self) -> Result<Runtime> {
         let Some(c) = self.current().await else { return Err(Error::NotFound("no session running".into())) };
-        self.write_layer_conf(&c, &self.get(&c.id).await?).await
+        Ok(runtime_of(&c, &self.get(&c.id).await?))
+    }
+
+    /// MangoHud rereads its conf on inotify's `IN_MODIFY`, and a frozen game's on the thaw: the write is the reload.
+    pub async fn set_fps_limit(&self, value: &str) -> Result<()> {
+        self.steam_owns("The frame rate limit")?;
+        crate::launcher::parse_fps_limit(value)?;
+        let Some(c) = self.current().await else { return Err(Error::NotFound("no session running".into())) };
+        let r = self.get(&c.id).await?;
+        let rt = change_runtime(&c, &r, |rt| rt.fps_limit = value.trim().to_owned())?;
+        self.write_layer_conf(&c, &r, &rt).await
     }
 
     /// The SysV queue outlives mangoapp: told with none running, the next to start obeys.
@@ -758,20 +780,18 @@ impl Core {
     pub async fn set_mangohud(&self, on: Option<bool>) -> Result<bool> {
         self.steam_owns("The performance overlay")?;
         let Some(c) = self.current().await else { return Err(Error::NotFound("no session running".into())) };
-        // The dock and the watcher each hold a library: the other may have written the key since this one loaded.
-        self.reload_game(&c.id).await?;
         let r = self.get(&c.id).await?;
-        if !self.mangoapp_draws(&c, &r).await && crate::runners::on_path("mangohud").is_none() {
+        let mangoapp = self.mangoapp_draws(&c, &r).await;
+        if !mangoapp && crate::runners::on_path("mangohud").is_none() {
             return Err(Error::Unavailable("MangoHud is not installed: nothing draws the HUD".into()));
         }
-        let was = r.effective.mangohud;
+        let was = runtime_of(&c, &r).mangohud;
         let on = on.unwrap_or(!was);
-        self.set(&c.id, "launch.mangohud", if on { "true" } else { "false" }).await?;
-        let r = self.get(&c.id).await?;
-        if self.mangoapp_draws(&c, &r).await {
+        let rt = change_runtime(&c, &r, |rt| rt.mangohud = on)?;
+        if mangoapp {
             self.apply_mangoapp(on, true)?;
         } else {
-            self.write_layer_conf(&c, &r).await?;
+            self.write_layer_conf(&c, &r, &rt).await?;
             if on != was {
                 if let Err(e) = crate::mangoapp::layer_toggle(&c.id) {
                     tracing::debug!("mangohud layer: {e}");
@@ -781,8 +801,16 @@ impl Core {
         Ok(on)
     }
 
-    pub fn nest_filter(&self, filter: &str, sharpness: Option<u32>) -> Result<()> {
-        self.nest_or()?.set_filter(filter, sharpness)
+    pub async fn nest_filter(&self, filter: &str, sharpness: Option<u32>) -> Result<()> {
+        self.nest_or()?.set_filter(filter, sharpness)?;
+        if let Some(c) = self.current().await {
+            let r = self.get(&c.id).await?;
+            change_runtime(&c, &r, |rt| {
+                rt.gamescope_filter = filter.to_owned();
+                rt.gamescope_sharpness = sharpness;
+            })?;
+        }
+        Ok(())
     }
 
     pub async fn volume(&self, change: &str, value: u8) -> Result<serde_json::Value> {

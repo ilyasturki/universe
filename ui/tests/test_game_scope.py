@@ -136,25 +136,43 @@ def land(api, look, overlay, group, row):
         panel.setProperty("icon", [i["id"] for i in read(panel, "icons")].index(group))
         panel.setProperty("zone", "panel")
         panel.setProperty("row", [r["id"] for r in read(panel, "panelRows")].index(row))
-    scope = overlay.findChild(QObject, SCOPE[look.name])
-    until(lambda: scope.property("visible") is True, "the panel says the setting is this game's and Y gives it to all")
-    return panel, scope
+    return panel, overlay.findChild(QObject, SCOPE[look.name])
 
 
 @pytest.mark.parametrize("look", list(PANEL), indirect=True)
-def test_a_quick_setting_is_the_games_and_y_gives_it_to_every_game(look, overlay, api, fake):
+def test_pause_on_home_is_the_games_and_y_gives_it_to_every_game(look, overlay, api, fake):
     fake.launch("mirrors-edge", "")
     until(lambda: api.home.shown == "game")
-    panel, scope = land(api, look, overlay, "perf", "fps")
+    panel, scope = land(api, look, overlay, "perf" if look.name == "reprise" else "game", "pause")
+    until(lambda: scope.property("visible") is True, "the panel says the setting is this game's and Y gives it to all")
     if where := os.environ.get("UNIVERSE_TEST_SHOTS"):
         until(lambda: panel.property("shown") is True and scope.property("opacity") == 1)
         settle(overlay)
         overlay.grabWindow().save(os.path.join(where, f"quick-settings-{look.name}.png"))
-    QTest.keyClick(overlay, Qt.Key.Key_Right)
-    picked = until(lambda: own(fake, "fps_limit", "mirrors-edge"), "a step is this game's")
+    QTest.keyClick(overlay, Qt.Key.Key_Return)
+    until(lambda: own(fake, "pause_on_home", "mirrors-edge") is not None, "a flip is this game's")
+    picked = own(fake, "pause_on_home", "mirrors-edge")
     QTest.keyClick(overlay, Qt.Key.Key_F)
-    until(lambda: everyones(fake, "fps_limit") == picked, "Y: every game's")
-    assert own(fake, "fps_limit", "mirrors-edge") is None, "the game follows it"
+    until(lambda: everyones(fake, "pause_on_home") is not None, "Y: every game's")
+    assert own(fake, "pause_on_home", "mirrors-edge") is None and everyones(fake, "pause_on_home") == picked, "the game follows it"
+
+
+@pytest.mark.parametrize("look", list(PANEL), indirect=True)
+def test_the_hud_and_the_frame_limit_change_the_running_game_alone(look, overlay, api, fake):
+    fake.launch("mirrors-edge", "")
+    until(lambda: api.home.shown == "game")
+    panel, scope = land(api, look, overlay, "perf", "fps")
+    was = fake.core.runtime()["fps_limit"]
+    QTest.keyClick(overlay, Qt.Key.Key_Right)
+    until(lambda: fake.core.runtime()["fps_limit"] != was, "a step reaches the running game")
+    QTest.keyClick(overlay, Qt.Key.Key_F)
+    target = panel.property("sub" if look.name == "reprise" else "row")
+    panel.setProperty("sub" if look.name == "reprise" else "row", target - 1)
+    QTest.keyClick(overlay, Qt.Key.Key_Return)
+    until(lambda: fake.core.runtime()["mangohud"] is True, "A shows the HUD")
+    assert not scope.property("visible"), "no line saying the setting is this game's, no Y for every game"
+    assert own(fake, "fps_limit", "mirrors-edge") is None and everyones(fake, "fps_limit") is None, "no setting written, Y or not"
+    assert own(fake, "mangohud", "mirrors-edge") is None and everyones(fake, "mangohud") is None
 
 
 @pytest.mark.parametrize("look", list(PANEL), indirect=True)
@@ -171,14 +189,16 @@ def test_a_decks_control_set_in_a_game_is_its_own_until_y_makes_it_the_machines(
 
     fake.launch("mirrors-edge", "")
     until(lambda: api.home.shown == "game")
-    land(api, look, overlay, "system", "sys_tdp")
+    _panel, scope = land(api, look, overlay, "system", "sys_tdp")
+    until(lambda: scope.property("visible") is True, "the panel says the control is this game's and Y gives it to the machine")
     QTest.keyClick(overlay, Qt.Key.Key_Left)
     until(lambda: own_tdp() == "14", "a step is this game's")
     api.home.stop()
     until(lambda: api.universe.currentSession is None and watts() == "15", "its end puts the machine's own back")
     fake.launch("mirrors-edge", "")
     until(lambda: api.home.shown == "game" and watts() == "14", "its next launch brings the game's back")
-    land(api, look, overlay, "system", "sys_tdp")
+    _panel, scope = land(api, look, overlay, "system", "sys_tdp")
+    until(lambda: scope.property("visible") is True, "the panel says the control is this game's and Y gives it to the machine")
     QTest.keyClick(overlay, Qt.Key.Key_F)
     until(lambda: own_tdp() is None, "Y: the game lets its own go")
     api.home.stop()

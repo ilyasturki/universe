@@ -306,16 +306,19 @@ impl Core {
     fn nest_frame(&self, py: Python<'_>) -> PyResult<Option<String>> {
         py.detach(|| self.core.nest_frame()).map_err(err)
     }
-    fn set_fps_limit(&self, py: Python<'_>) -> PyResult<()> {
-        self.run(py, |c| c.set_fps_limit())
+    fn set_fps_limit(&self, py: Python<'_>, value: String) -> PyResult<()> {
+        self.run(py, |c| async move { c.set_fps_limit(&value).await })
+    }
+    fn runtime(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.value(py, |c| async move { c.runtime().await })
     }
     #[pyo3(signature = (on = None))]
     fn set_mangohud(&self, py: Python<'_>, on: Option<bool>) -> PyResult<bool> {
         self.run(py, |c| async move { c.set_mangohud(on).await })
     }
     #[pyo3(signature = (filter, sharpness = None))]
-    fn nest_filter(&self, filter: String, sharpness: Option<u32>) -> PyResult<()> {
-        self.core.nest_filter(&filter, sharpness).map_err(err)
+    fn nest_filter(&self, py: Python<'_>, filter: String, sharpness: Option<u32>) -> PyResult<()> {
+        self.run(py, |c| async move { c.nest_filter(&filter, sharpness).await })
     }
     #[pyo3(signature = (change, value = 0))]
     fn volume(&self, py: Python<'_>, change: String, value: u8) -> PyResult<Py<PyAny>> {

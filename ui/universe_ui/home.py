@@ -520,13 +520,6 @@ class Home(QObject):
         if self._shutter is not None:
             self._shutter.play()
 
-    @Slot(str, result=str)
-    def launchValue(self, key):
-        value = (self._game().get("effective") or {}).get(key)
-        if isinstance(value, bool):
-            return "true" if value else "false"
-        return "" if value is None else str(value)
-
     @Slot(str, result="QVariantList")
     def launchChoices(self, key):
         for spec in self._client.launchKeys("both", self._screen_mode()):
@@ -534,22 +527,23 @@ class Home(QObject):
                 return [str(c) for c in spec.get("choices") or []]
         return []
 
+    # The running game's HUD, frame rate limit and filter as HOME left them: its settings stay as they are.
+    @Slot(result="QVariantMap")
+    def runtime(self):
+        return self._client.runtime() if self._session() else {}
+
     @Slot(str, str)
-    def setLaunchValue(self, key, value):
-        session = self._session()
-        if not session:
+    def setRuntime(self, key, value):
+        if not self._session():
             return
         if key == "mangohud":
             self._client.setMangohud(value == "true")
-            self.changed.emit()
-            return
-        self._client.set(str(session.get("id") or ""), "launch." + key, value)
-        if key == "fps_limit":
-            self._client.setFpsLimit()
+        elif key == "fps_limit":
+            self._client.setFpsLimit(value)
         elif key in ("gamescope_filter", "gamescope_sharpness") and self._client.nested:
-            effective = self._game().get("effective") or {}
-            filter = value if key == "gamescope_filter" else str(effective.get("gamescope_filter") or "")
-            sharpness = value if key == "gamescope_sharpness" else effective.get("gamescope_sharpness")
+            now = self._client.runtime()
+            filter = value if key == "gamescope_filter" else str(now.get("gamescope_filter") or "")
+            sharpness = value if key == "gamescope_sharpness" else now.get("gamescope_sharpness")
             self._client.nestFilter(filter, None if sharpness in (None, "") else int(sharpness))
         self.changed.emit()
 

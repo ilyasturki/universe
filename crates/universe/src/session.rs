@@ -41,6 +41,29 @@ pub struct Marker {
     /// Set by `stop`: the end that follows was asked for.
     #[serde(default)]
     pub stopped: bool,
+    /// None in a marker written before it existed: the game's settings stand in.
+    #[serde(default)]
+    pub runtime: Option<Runtime>,
+}
+
+/// What HOME changed in the running game alone, seeded from its settings at launch: the next launch starts from them again.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct Runtime {
+    pub mangohud: bool,
+    pub fps_limit: String,
+    pub gamescope_filter: String,
+    pub gamescope_sharpness: Option<u32>,
+}
+
+impl Runtime {
+    pub fn of(e: &crate::library::Effective) -> Runtime {
+        Runtime {
+            mangohud: e.mangohud,
+            fps_limit: e.fps_limit.clone(),
+            gamescope_filter: e.gamescope_fields.filter.clone(),
+            gamescope_sharpness: e.gamescope_fields.sharpness,
+        }
+    }
 }
 
 /// What `launch` began, in begin order; undone in reverse.
@@ -97,6 +120,14 @@ fn update_marker(f: impl FnOnce(&mut Marker)) -> Result<()> {
     std::fs::write(&tmp, serde_json::to_string(&m)?)?;
     std::fs::rename(&tmp, &p)?;
     Ok(())
+}
+
+pub(crate) fn set_runtime(session_id: &str, runtime: &Runtime) -> Result<()> {
+    update_marker(|m| {
+        if m.current.session_id == session_id {
+            m.runtime = Some(runtime.clone());
+        }
+    })
 }
 
 /// A control the running game's own just changed: the first value noted is the one its end puts back.
@@ -301,7 +332,14 @@ impl Core {
                 }
             }
         }
-        write_marker(&Marker { current: current.clone(), hook_env, undo: undo.clone(), command: plan.command_line(), stopped: false })?;
+        write_marker(&Marker {
+            current: current.clone(),
+            hook_env,
+            undo: undo.clone(),
+            command: plan.command_line(),
+            stopped: false,
+            runtime: Some(Runtime::of(&r.effective)),
+        })?;
         tracing::info!("launch {}: {}", r.game.id, plan.command_line());
         let budget: u64 = 60 + self.hook_modules(r, "session-end").await.iter().map(|m| m.timeout().as_secs()).sum::<u64>();
         let mut env = passthrough_env();
@@ -673,33 +711,47 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
-    async fn the_hud_toggle_is_the_games_key_and_the_layers_conf() {
+    async fn the_hud_and_the_limit_change_the_running_game_alone_and_the_next_launch_starts_from_the_settings() {
         let _sb = sandbox();
-        let (core, _memory) = open().await;
+        let (core, memory) = open().await;
         assert!(matches!(core.set_mangohud(None).await, Err(Error::NotFound(_))), "no game, nothing to show");
-        core.launch("sample", "", "").await.unwrap();
+        let sid = core.launch("sample", "", "").await.unwrap();
         let conf = launcher::layer_conf_path();
-        assert!(
-            std::fs::read_to_string(&conf).map(|t| t.contains("no_display\n")).unwrap_or(true),
-            "off by config, hidden: {:?}",
-            std::fs::read_to_string(&conf)
-        );
-        if crate::runners::on_path("mangohud").is_none() {
+        let read = || std::fs::read_to_string(&conf).unwrap_or_default();
+        assert_eq!(core.runtime().await.unwrap(), Runtime { mangohud: false, fps_limit: "none".into(), ..Runtime::default() }, "seeded from the settings");
+        if crate::runners::on_system_path("mangohud").is_none() {
             assert!(matches!(core.set_mangohud(None).await, Err(Error::Unavailable(_))), "no MangoHud installed: nothing to draw the HUD");
-            assert_eq!(core.get("sample").await.unwrap().game.launch.mangohud, None, "and nothing written");
-            return;
+            assert!(!core.runtime().await.unwrap().mangohud, "and nothing changed");
         }
+        std::fs::create_dir_all(crate::tools::dir()).unwrap();
+        std::fs::write(crate::tools::dir().join("mangohud"), b"#!/bin/sh\n").unwrap();
 
         assert!(core.set_mangohud(None).await.unwrap(), "off flips on");
-        assert_eq!(core.get("sample").await.unwrap().game.launch.mangohud, Some(true), "written as the game's own key");
-        let text = std::fs::read_to_string(&conf).unwrap();
+        let text = read();
         assert!(!text.contains("no_display") && text.contains("control=universe-mangohud-sample\n"), "{text}");
+        core.set_fps_limit("30").await.unwrap();
+        let text = read();
+        assert!(text.contains("fps_limit=30\n") && !text.contains("no_display"), "a new limit keeps the HUD shown at runtime: {text}");
+        assert!(matches!(core.set_fps_limit("fast").await, Err(Error::Invalid(_))));
 
-        crate::game::set_key(&core.get("sample").await.unwrap().game.toml_path(), "launch.mangohud", "false").unwrap();
-        assert!(core.set_mangohud(None).await.unwrap(), "a key another process wrote is read before the flip");
+        set_runtime(&sid, &Runtime { mangohud: false, ..core.runtime().await.unwrap() }).unwrap();
+        assert!(core.set_mangohud(None).await.unwrap(), "what another process left in the marker is read before the flip");
         assert!(!core.set_mangohud(Some(false)).await.unwrap());
-        let text = std::fs::read_to_string(&conf).unwrap();
-        assert!(text.contains("no_display\n") && text.contains("control=universe-mangohud-sample\n"), "hidden, still the desktop's HUD: {text}");
+        assert!(read().contains("no_display\n"), "hidden");
+        let launch = core.get("sample").await.unwrap().game.launch;
+        assert_eq!((launch.mangohud, launch.fps_limit.as_str()), (None, ""), "the game's settings untouched");
+        assert!(core.config.read().await.launch.fps_limit == "none" && !core.config.read().await.launch.mangohud, "and every game's");
+
+        core.set_mangohud(Some(true)).await.unwrap();
+        memory.finish(&format!("universe-game-sample-{sid}.service"), 0);
+        core.session_end("sample", &sid, None, None).await.unwrap();
+        core.launch("sample", "", "").await.unwrap();
+        assert_eq!(
+            core.runtime().await.unwrap(),
+            Runtime { mangohud: false, fps_limit: "none".into(), ..Runtime::default() },
+            "the next launch starts from the settings"
+        );
+        assert!(read().contains("no_display\n") && !read().contains("fps_limit="), "{}", read());
     }
 
     #[tokio::test]

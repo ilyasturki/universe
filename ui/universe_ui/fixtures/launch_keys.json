@@ -78,7 +78,7 @@
     "section": "Overlay",
     "scope": "both",
     "runners": [],
-    "description": "Draw the overlay (frame rate, frame time, GPU and CPU load) over the game from launch. Off keeps MangoHud loaded but hidden, the frame rate limit still holds, and the in-game menu or the pad macro shows it mid-game and writes the state back here.",
+    "description": "Draw the overlay (frame rate, frame time, GPU and CPU load) over the game from launch. Off keeps MangoHud loaded but hidden, the frame rate limit still holds. The in-game menu or the pad macro shows or hides it for the running game alone: the next launch starts from here again.",
     "advanced": false
   },
   {
@@ -105,7 +105,7 @@
     "section": "Overlay",
     "scope": "both",
     "runners": [],
-    "description": "MangoHud holds the game to this many frames per second, overlay or not; auto is the refresh rate the game sees, and no limit for an emulator, which paces itself.",
+    "description": "MangoHud holds the game to this many frames per second, overlay or not; auto is the refresh rate the game sees, and no limit for an emulator, which paces itself. The in-game menu changes it for the running game alone.",
     "advanced": false
   },
   {
@@ -153,7 +153,7 @@
     "section": "Scaling",
     "scope": "both",
     "runners": [],
-    "description": "The upscaling filter: fsr and nis sharpen, nearest and pixel keep pixel art crisp.",
+    "description": "The upscaling filter: fsr and nis sharpen, nearest and pixel keep pixel art crisp. The in-game menu changes it for the running game alone.",
     "advanced": true
   },
   {
@@ -172,7 +172,7 @@
     "section": "Scaling",
     "scope": "both",
     "runners": [],
-    "description": "For fsr and nis: 0 is sharpest, 20 softest.",
+    "description": "For fsr and nis: 0 is sharpest, 20 softest. The in-game menu changes it for the running game alone.",
     "advanced": true
   },
   {

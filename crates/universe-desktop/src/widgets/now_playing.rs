@@ -10,7 +10,7 @@ use crate::backend;
 use crate::format;
 use crate::widgets::Cover;
 
-/// What the popover's switches read when it opens: the running game's own keys, as the launch took them.
+/// What the popover's switches read when it opens: the running game's HUD and frame limit as it stands, its settings untouched.
 #[derive(Debug, Clone, Default)]
 struct Controls {
     hud: bool,
@@ -110,8 +110,7 @@ glib::wrapper! {
 
 fn fps_label(value: &str) -> String {
     match value {
-        "" => gettext("Game Default"),
-        "auto" => gettext("Match the Display"),
+        "" | "auto" => gettext("Match the Display"),
         "none" => gettext("No Limit"),
         n => gettext("{} FPS").replace("{}", n),
     }
@@ -160,12 +159,13 @@ impl NowPlaying {
             let controls = backend::run(async move {
                 let core = backend::core();
                 let r = core.get(&id).await.ok()?;
+                let runtime = core.runtime().await.ok()?;
                 let mode = universe::desktop::screen_mode(&screen).await;
                 let fps_choices = core.launch_keys("game", mode).ok()?.into_iter().find(|k| k.key == "fps_limit").map(|k| k.choices).unwrap_or_default();
                 let capture = r.effective.modules.get("capture");
                 Some(Controls {
-                    hud: r.effective.mangohud,
-                    fps: r.game.launch.fps_limit.clone(),
+                    hud: runtime.mangohud,
+                    fps: runtime.fps_limit,
                     fps_choices,
                     recording: capture.is_some_and(|m| m.get("enabled").and_then(|v| v.as_bool()) != Some(false)),
                 })
@@ -180,8 +180,7 @@ impl NowPlaying {
         let imp = self.imp();
         imp.syncing.set(true);
         imp.hud.set_active(c.hud);
-        let mut values = vec![String::new()];
-        values.extend(c.fps_choices.iter().cloned());
+        let mut values = c.fps_choices.clone();
         if !values.contains(&c.fps) {
             values.push(c.fps.clone());
         }
@@ -213,14 +212,9 @@ impl NowPlaying {
     }
 
     fn set_fps(&self, value: String) {
-        let Some(id) = self.imp().session.borrow().as_ref().map(|s| s.id.clone()) else { return };
         let this = self.downgrade();
         glib::spawn_future_local(async move {
-            let result = backend::call(move |core| async move {
-                core.set(&id, "launch.fps_limit", &value).await?;
-                core.set_fps_limit().await
-            })
-            .await;
+            let result = backend::call(move |core| async move { core.set_fps_limit(&value).await }).await;
             let Some(n) = this.upgrade() else { return };
             if let Err(e) = result {
                 n.toast(&e.to_string());

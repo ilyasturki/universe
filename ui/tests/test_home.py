@@ -350,28 +350,32 @@ def test_the_hud_and_the_limit_reach_the_game_without_a_key(api, fake):
     api.screens.controller.start(watcher)
     fake.launch("mirrors-edge", "")
     until(lambda: home.shown == "game")
-    assert home.launchValue("mangohud") == "false" and fake.core.hud_shown is False, "off by default, hidden at launch"
-    home.setLaunchValue("mangohud", "true")
-    until(lambda: fake.core.hud_shown is True)
-    assert fake.game("mirrors-edge")["launch"]["mangohud"] is True, "written as the game's own key, shown in the game"
-    assert home.launchValue("mangohud") == "true"
-    home.setLaunchValue("mangohud", "false")
-    until(lambda: fake.core.hud_shown is False)
-    assert fake.game("mirrors-edge")["launch"]["mangohud"] is False
+    assert home.runtime()["mangohud"] is False, "off by default, hidden at launch"
+    home.setRuntime("mangohud", "true")
+    until(lambda: home.runtime()["mangohud"] is True)
+    home.setRuntime("mangohud", "false")
+    until(lambda: home.runtime()["mangohud"] is False)
     assert not any(c.get("action") == "keys" for c in watcher.commands), "no key typed for the HUD"
 
     home.setPauseOnHome(True)
     home.openDock()
     until(lambda: fake.core.frozen is True)
     assert home.paused
-    home.setLaunchValue("fps_limit", "60")
-    home.setLaunchValue("fps_limit", "30")
+    home.setRuntime("fps_limit", "60")
+    home.setRuntime("fps_limit", "30")
     until(lambda: fake.core.fps_limit_writes == 2, "each change rewrites the layer's conf, frozen or not")
+    assert home.runtime()["fps_limit"] == "30"
     home.closeDock()
     home.dockClosed()
     until(lambda: fake.core.frozen is False)
     assert not home.paused
     assert not any(c.get("action") == "keys" for c in watcher.commands), "MangoHud rereads its conf by itself: no key typed, before or after the thaw"
+    launch = fake.game("mirrors-edge").get("launch") or {}
+    assert launch.get("mangohud") is None and launch.get("fps_limit") in (None, ""), "the running game's alone: its settings stand"
+    stop(api)
+    fake.launch("mirrors-edge", "")
+    until(lambda: home.shown == "game")
+    assert home.runtime()["mangohud"] is False and home.runtime()["fps_limit"] != "30", "the next launch starts from the settings"
     stop(api)
 
 
@@ -442,18 +446,18 @@ def test_a_launch_that_fails_before_its_session_takes_the_dock_down(api, fake, m
     assert home.pending is None and not home.open and not home.loading
 
 
-def test_sharpness_reaches_gamescope_with_the_games_filter(api, fake, monkeypatch):
+def test_sharpness_reaches_gamescope_with_the_running_filter(api, fake, monkeypatch):
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
     home = api.home
     fake.launch("mirrors-edge", "")
     until(lambda: home.shown == "game")
-    assert home.launchValue("gamescope_sharpness") == "" and home.launchChoices("gamescope_sharpness") == ["0", "2", "5", "10", "15", "20"]
-    home.setLaunchValue("gamescope_filter", "fsr")
+    assert home.runtime()["gamescope_sharpness"] is None and home.launchChoices("gamescope_sharpness") == ["0", "2", "5", "10", "15", "20"]
+    home.setRuntime("gamescope_filter", "fsr")
     assert fake.core.filter == ("fsr", None), "no sharpness set: the card goes, gamescope's default holds"
-    home.setLaunchValue("gamescope_sharpness", "5")
-    assert str(fake.game("mirrors-edge")["launch"]["gamescope_sharpness"]) == "5", "written as the game's own key"
-    assert fake.core.filter == ("fsr", 5) and home.launchValue("gamescope_sharpness") == "5", "applied with the filter the game has"
-    home.setLaunchValue("gamescope_sharpness", "")
+    home.setRuntime("gamescope_sharpness", "5")
+    assert fake.core.filter == ("fsr", 5) and home.runtime()["gamescope_sharpness"] == 5, "applied with the filter the game runs with"
+    assert (fake.game("mirrors-edge").get("launch") or {}).get("gamescope_sharpness") in (None, ""), "the game's settings stand"
+    home.setRuntime("gamescope_sharpness", "")
     assert fake.core.filter == ("fsr", None)
     stop(api)
 

@@ -31,8 +31,9 @@ operation; a dash means the surface doesn't expose it.
   (a crash, a kill, Ctrl-C), `session-end` still runs. `universe play --no-wait`, hooks and anything
   else that never adopted a scope leave the game to systemd alone: it outlives them.
 - `state/current-session.json` (written `O_EXCL`) is the marker for the running session: the session
-  (`session_id`, `id`, `title`, `unit`, `screen`, `started_at`), the hook environment and the `undo`
-  list of the effects `launch` began. The current session is the marker whose unit is still active.
+  (`session_id`, `id`, `title`, `unit`, `screen`, `started_at`), the hook environment, the `undo`
+  list of the effects `launch` began and the `runtime` HOME changes in the game alone (`runtime()`).
+  The current session is the marker whose unit is still active.
   On every open the core **reconciles**: a marker with no live unit is closed from `journalctl`
   timestamps, one it cannot read is dropped. A launch that fails after an effect began undoes the
   same list.
@@ -295,9 +296,10 @@ every 10 s, since the 30-minute timeout writes no file.
 | `freeze(on)` | `freeze(on)` | — | `FreezeUnit` / `ThawUnit` on the running game's unit: every process of it stops in place, then the `freeze` / `thaw` hooks run (the capture module pauses its recorder). A stop job thaws on its own, so `stop` works on a frozen game |
 | `volume(change, value)` | `volume(change, value=0)` | — | the default sink through `wpctl`: `up` / `down` by `controller.volume_step` (`up` unmutes, as GNOME's and KDE's keys do; `down` leaves the mute alone), `mute` toggles, `set` to `value` percent, `get`; returns `{percent, muted, output}`, `percent` the sink's level whether muted or not. `output` is read from `pw-dump` on a `get` and on the first change after a second without one; the changes in between reuse it |
 | `outputs()` / `set_output(id)` | `outputs()` / `set_output(id)` | `universe output [<id>] [--json]` | the playback outputs, from one `pw-dump`: each output route of a card whose `available` is not `no` (jacks without detection say `unknown`) that the card's current profile plays or an available profile could, then each sink no route stands for (a filter, a pro-audio profile). `[{id, label, device, current}]`: `id` is `<device.name>/<route name>`, or the sink's `node.name`; `label` the route's description, `device` the card's; `current` marks the effective default sink's route (`default.audio.sink`, not the configured one, which can name a sink of a profile gone). `set_output` switches the card's profile when the route needs it (the one keeping the current input, else the highest priority), waits up to 3 s for the sink to come up, sets its route with `wpctl set-route`, then `wpctl set-default`: WirePlumber keeps it, the desktop follows. Returns the new sink's `volume("get")`; `Invalid` for an id not listed |
-| `set_fps_limit()` | `set_fps_limit()` | — | rewrites the running game's `<state>/MangoHud.conf` from its `fps_limit` as launch resolves it: the layer watches that file (inotify) and rereads it by itself, a frozen game on the thaw, so no key is typed and no uinput is needed |
-| `set_mangohud(on)` | `set_mangohud(on=None)` | — | the running game's HUD: `None` flips it. Written as the game's `launch.mangohud` (reread from disk first: the dock and the watcher each hold a library), then applied in the game — mangoapp told over its control queue where one draws (see MangoHud), the layer over its control socket elsewhere, each also through its conf, which it rereads — and the new state returned. `NotFound` without a session; `Unavailable`, nothing written, when nothing can draw the HUD (no mangoapp where one would, no `mangohud` for the layer) |
-| `nest()` / `nest_game_shown()` / `nest_overlay(window, input, opacity)` / `nest_frame()` / `nest_filter(filter, sharpness)` | `nested()` / `nest_game_shown()` / … | — | the gamescope this process runs in (see Gamescope): whether there is one; whether it shows a window of the running game's; `STEAM_OVERLAY` on a window of this process, with its `STEAM_INPUT_FOCUS` and `_NET_WM_WINDOW_OPACITY`; the game's last painted frame into `<state>/frame.png` (`None` when no paint came within 5 s); `GAMESCOPE_SCALING_FILTER` and `GAMESCOPE_FSR_SHARPNESS` (no sharpness deletes the card: gamescope reads its default, 2, back). `Unavailable` on the desktop |
+| `runtime()` | `runtime()` | — | the running game's `{mangohud, fps_limit, gamescope_filter, gamescope_sharpness}` as HOME left them: its settings as launch resolved them, then each change below. Kept in the session marker (`state/current-session.json`), so the launcher's core, the controller watcher and the GTK app read and change the same state; a marker from before it reads the game's settings. `NotFound` without a session |
+| `set_fps_limit(value)` | `set_fps_limit(value)` | — | the running game's frame rate limit (`auto`, `none` or frames per second; `Invalid` otherwise), for this session alone: noted in `runtime()`, then the game's `<state>/MangoHud.conf` rewritten with it and the HUD's runtime state — the layer watches that file (inotify) and rereads it by itself, a frozen game on the thaw, so no key is typed and no uinput is needed. The game's and every game's settings are left alone: the next launch starts from them |
+| `set_mangohud(on)` | `set_mangohud(on=None)` | — | the running game's HUD, for this session alone: `None` flips the state `runtime()` holds, which another process may have changed. Applied in the game — mangoapp told over its control queue where one draws (see MangoHud), the layer over its control socket elsewhere, each also through its conf, which it rereads — and the new state returned; no setting is written. `NotFound` without a session; `Unavailable`, nothing changed, when nothing can draw the HUD (no mangoapp where one would, no `mangohud` for the layer) |
+| `nest()` / `nest_game_shown()` / `nest_overlay(window, input, opacity)` / `nest_frame()` / `nest_filter(filter, sharpness)` | `nested()` / `nest_game_shown()` / … | — | the gamescope this process runs in (see Gamescope): whether there is one; whether it shows a window of the running game's; `STEAM_OVERLAY` on a window of this process, with its `STEAM_INPUT_FOCUS` and `_NET_WM_WINDOW_OPACITY`; the game's last painted frame into `<state>/frame.png` (`None` when no paint came within 5 s); `GAMESCOPE_SCALING_FILTER` and `GAMESCOPE_FSR_SHARPNESS` (no sharpness deletes the card: gamescope reads its default, 2, back), noted in `runtime()` for the running game alone. `Unavailable` on the desktop |
 | `under_steam()` | `under_steam()` | — | inside Steam's gamescope (Game Mode, see Gamescope): Steam owns power, sound, screenshots and the HUD there |
 | `nest::session()` | `session()` | — | inside the Universe session a display manager started (see Gamescope): the launcher is alone on the screen, and quitting it logs out |
 | `power_actions()` / `power(action)` | `power_actions()` / `power(action)` | — | logind on the system bus. `power_actions()` lists which of `suspend`, `reboot` and `power_off` its `Can*` does not answer `no` or `na` (`inhibited` and `challenge` stay: the call says why, or polkit asks); empty when logind cannot be asked. `power(action)` calls `Suspend` / `Reboot` / `PowerOff` interactive, so a desktop's polkit agent may ask for a password; logind's refusal is `Unavailable` with its message, an unknown action `Invalid` |
@@ -472,7 +474,7 @@ and the launcher's children inherit them.
 The game keeps rendering behind the launcher; `freeze` stops it. The per-game `gamescope_resolution`, `gamescope_refresh`,
 `gamescope_scaler` and `gamescope_adaptive_sync` fields cannot reach a gamescope that is already
 running: only the global ones apply there, and `gamescope_filter` / `gamescope_sharpness` go through
-`nest_filter` at runtime. `pause_on_home` (global or per game, on by default) is the frontend's cue
+`nest_filter` at runtime, for that session alone. `pause_on_home` (global or per game, on by default) is the frontend's cue
 to `freeze` the game whenever the launcher covers it — its dock, its home menu, its home over the
 game — and to `thaw` it on the way back. Nothing else takes the pad away from a running game:
 gamescope's `STEAM_INPUT_FOCUS` routes keyboard and mouse only, and the game keeps its evdev and
@@ -561,10 +563,11 @@ write — measured: a limit rewritten mid-game holds from then on, and one writt
 was stopped holds from the thaw — so a write alone is a reload, and the conf has the last word over
 the queue and the socket.
 
-`launch.mangohud` is the HUD's state: shown at launch when true — on the launcher's gamescope
+`launch.mangohud` is the HUD's state at launch: shown when true — on the launcher's gamescope
 mangoapp is told at `begin` and hidden again when the session ends (`Undo::Hud`), between sessions
-it stays hidden — and flipped in game by `set_mangohud`, which writes the key back, so the game
-reopens as it was left. The user's own `no_display` no longer hides a HUD that is on, and the
+it stays hidden. `set_mangohud` flips it in game for that session alone, through `runtime()`, and
+writes no key: the next launch starts from the setting again. A frame limit changed meanwhile
+(`set_fps_limit`) rewrites the conf with the runtime state, so it keeps a HUD shown in game. The user's own `no_display` no longer hides a HUD that is on, and the
 `toggle_hud` key MangoHud itself listens to is nothing Universe types or reads.
 
 ### Frame rate limit
@@ -580,7 +583,8 @@ which paces itself (a second limiter on top of its own jitters against it). The 
 MANGOHUD_CONFIGFILE=<that>`: on the unit when no gamescope runs there, else through `env` in
 front of the program, after `setpriv`, since gamescope (a Vulkan client itself) would draw the
 layer. Inside gamescope the layer limits and draws nothing while mangoapp shows the HUD. A change
-mid-game (`set_fps_limit`) rewrites the conf, which the layer rereads by itself. A 32-bit game needs
+mid-game (`set_fps_limit(value)`) is the running game's alone: it rewrites the conf, which the layer
+rereads by itself, and the next launch takes `fps_limit` again. A 32-bit game needs
 MangoHud's 32-bit layer (`MangoHud.x86.json`), which `doctor` looks for. A native
 or emulator program (not one run through Proton) with a limit goes through the `mangohud` wrapper
 so an OpenGL game is limited too; Proton and Wine get the Vulkan layer alone, nothing preloaded
@@ -1572,7 +1576,7 @@ launcher's overlay draws it over the game, whatever the desktop; on the desktop 
 desktop's OSD (see Desktop), the latest level only, and where there is none the macro runs
 silently. `screenshot` is `screenshot()`, reported back as a `screenshot` event
 (`{"event": "screenshot", "path"}`) that the launcher turns into its flash and shutter. `keys` types through uinput; `mangohud` is `set_mangohud(None)` — no key: the running
-game's `launch.mangohud` flipped and the HUD told (see MangoHud) — and the watcher reports the
+game's HUD flipped for this session alone, no setting written (see MangoHud) — and the watcher reports the
 outcome as a `hud` event, which the launcher toasts: "MangoHud shown · <title>", "MangoHud hidden ·
 <title>", "MangoHud: no game running".
 

@@ -438,7 +438,7 @@ class FakeCore:
         self.focus = ""
         self.summons = 0
         self.frozen = False
-        self.hud_shown = False
+        self._runtime = {}
         self.fps_limit_writes = 0
         self.frames = 0
         self.filter = None
@@ -1232,7 +1232,14 @@ class FakeCore:
             self._session = current
             self._session_started = time.monotonic()
             self._stopped = False
-            self.hud_shown = bool(self._resolved(game)["effective"].get("mangohud"))
+            effective = self._resolved(game)["effective"]
+            sharpness = effective.get("gamescope_sharpness")
+            self._runtime = {
+                "mangohud": bool(effective.get("mangohud")),
+                "fps_limit": str(effective.get("fps_limit") or ""),
+                "gamescope_filter": str(effective.get("gamescope_filter") or ""),
+                "gamescope_sharpness": None if sharpness in (None, "") else int(sharpness),
+            }
             own = {k: v for k, v in (game.get("system") or {}).items() if v}
             self._system_before = {c["id"]: c["value"] for c in self.system if c["id"] in own}
             for c in self.system:
@@ -1266,7 +1273,8 @@ class FakeCore:
             current, self._session, self._process = self._session, None, None
             if not current or self._closed:
                 return
-            self.game_shown = self.frozen = self.hud_shown = False
+            self.game_shown = self.frozen = False
+            self._runtime = {}
             for c in self.system:
                 c["value"] = self._system_before.get(c["id"], c["value"])
             self._system_before = {}
@@ -1388,23 +1396,31 @@ class FakeCore:
     def keyboard_layout(self):
         return keyboard_layout()
 
-    def set_fps_limit(self):
+    def runtime(self):
         if not self.current():
             raise UniverseError("NotFound", "no session running")
+        return dict(self._runtime)
+
+    def set_fps_limit(self, value):
+        if not self.current():
+            raise UniverseError("NotFound", "no session running")
+        if value.strip() not in ("", "auto", "none") and not value.strip().isdigit():
+            raise UniverseError("Invalid", f"fps_limit must be auto, none or frames per second, not '{value}'")
+        self._runtime["fps_limit"] = value.strip()
         self.fps_limit_writes += 1
 
     def set_mangohud(self, on=None):
-        current = self.current()
-        if not current:
+        if not self.current():
             raise UniverseError("NotFound", "no session running")
         if on is None:
-            on = not self.get(current["id"])["effective"]["mangohud"]
-        self.set(current["id"], "launch.mangohud", "true" if on else "false")
-        self.hud_shown = on
+            on = not self._runtime["mangohud"]
+        self._runtime["mangohud"] = on
         return on
 
     def nest_filter(self, filter, sharpness=None):
         self.filter = (filter, sharpness)
+        if self.current():
+            self._runtime.update({"gamescope_filter": filter, "gamescope_sharpness": sharpness})
 
     def volume(self, change, value=0):
         step = int((self._config.get("controller") or {}).get("volume_step") or 2)

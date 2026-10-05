@@ -178,14 +178,14 @@ FocusScope {
             return [
                 {
                     id: "hud",
-                    key: "mangohud",
+                    runtime: "mangohud",
                     glyph: "pulse",
                     label: "MangoHud",
                     kind: "toggle"
                 },
                 {
                     id: "fps",
-                    key: "fps_limit",
+                    runtime: "fps_limit",
                     glyph: "gauge",
                     label: "FPS limit",
                     kind: "value",
@@ -194,7 +194,7 @@ FocusScope {
                 },
                 {
                     id: "filter",
-                    key: "gamescope_filter",
+                    runtime: "gamescope_filter",
                     glyph: "sliders",
                     label: "Filter",
                     kind: "value",
@@ -204,7 +204,7 @@ FocusScope {
             ].concat(sharpens ? [
                 {
                     id: "sharp",
-                    key: "gamescope_sharpness",
+                    runtime: "gamescope_sharpness",
                     glyph: "sun",
                     label: "Sharpness",
                     kind: "value",
@@ -284,14 +284,15 @@ FocusScope {
     // Slot results are not bindings: reread on open, then patched by the change that was just made.
     function refresh() {
         tracksAchievements = !game || (api.universe.sourceSettingsOf(game.source, game.id) || {}).achievements !== false;
+        var rt = api.home.runtime();
         var v = {
             pause: api.home.pauseOnHome,
-            hud: api.home.launchValue("mangohud") === "true",
-            fps: api.home.launchValue("fps_limit") || "auto",
+            hud: rt.mangohud === true,
+            fps: rt.fps_limit || "auto",
             fpsOptions: api.home.launchChoices("fps_limit"),
             hz: api.home.screenRefresh(),
-            filter: api.home.launchValue("gamescope_filter"),
-            sharp: api.home.launchValue("gamescope_sharpness"),
+            filter: rt.gamescope_filter || "",
+            sharp: rt.gamescope_sharpness === undefined || rt.gamescope_sharpness === null ? "" : String(rt.gamescope_sharpness),
             vol: api.home.volumePercent,
             mute: api.home.muted,
             output: outputApply.running ? vals.output : currentOutput()
@@ -376,7 +377,7 @@ FocusScope {
 
     // A setting of the game's own: what changes here is this game's, △ gives its value to every game.
     function scoped(item) {
-        return !!item && (!!item.key || item.id === "pause" || (!!item.sys && !!session && !!session.id));
+        return !!item && (item.id === "pause" || (!!item.sys && !!session && !!session.id));
     }
 
     function allGames(item) {
@@ -388,7 +389,7 @@ FocusScope {
         var value = toggle ? (isOn(item) ? "true" : "false") : String(vals[item.id] || "");
         if (item.sys)
             api.system.setAll(session.id, item.sys, vals[item.id]);
-        else if (!api.home.setLaunchValueAll(item.key || "pause_on_home", value)) {
+        else if (!api.home.setLaunchValueAll("pause_on_home", value)) {
             Sound.play("edge");
             return;
         }
@@ -427,7 +428,7 @@ FocusScope {
         if (item.id === "output")
             outputApply.restart();
         else
-            api.home.setLaunchValue(item.key, next);
+            api.home.setRuntime(item.runtime, next);
         Sound.play("tick");
         patch(item.id, next);
     }
@@ -441,7 +442,7 @@ FocusScope {
         } else if (item.id === "pause")
             api.home.setPauseOnHome(!vals.pause);
         else if (item.id === "hud") {
-            api.home.setLaunchValue("mangohud", vals.hud ? "false" : "true");
+            api.home.setRuntime("mangohud", vals.hud ? "false" : "true");
             patch("hud", !vals.hud);
         } else if (item.id === "vol")
             api.home.volume("mute", 0);
