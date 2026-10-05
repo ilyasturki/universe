@@ -1,6 +1,7 @@
 use x11rb::connection::Connection;
 use x11rb::protocol::xproto::{AtomEnum, ClientMessageEvent, ConnectionExt, EventMask, ImageFormat, ImageOrder, Window};
 use x11rb::rust_connection::RustConnection;
+use x11rb::wrapper::ConnectionExt as _;
 
 use super::Toplevel;
 
@@ -96,7 +97,8 @@ pub async fn activate_window(id: &str) -> Result<bool, String> {
         }
         let event = ClientMessageEvent::new(32, window, d.atom("_NET_ACTIVE_WINDOW")?, [2u32, x11rb::CURRENT_TIME, 0, 0, 0]);
         d.conn.send_event(false, d.root, EventMask::SUBSTRUCTURE_REDIRECT | EventMask::SUBSTRUCTURE_NOTIFY, event).map_err(xerr)?;
-        d.conn.flush().map_err(xerr)?;
+        // Flushed then dropped, the request can be lost; the round trip returns once the server has processed it.
+        d.conn.sync().map_err(xerr)?;
         Ok(true)
     })
     .await
