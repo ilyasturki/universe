@@ -5,6 +5,7 @@ from PySide6.QtCore import QObject
 from ..qt import Property
 from .achievements import AchievementsList
 from .add import AddGameForm
+from .addons import AddonsForm
 from .artwork import ArtworkForm, ArtworkOverview
 from .changelog import Changelog
 from .components import ComponentsForm
@@ -25,9 +26,10 @@ class Screens(QObject):
     def __init__(self, client, memory, screen_mode: Callable[[], dict], games, power, themes: Callable[[], list] = list, parent=None):
         super().__init__(parent)
         self._gameSettings = GameSettingsForm(client, screen_mode, self)
-        self._modules = ModulesForm(client, self)
+        self._addons = AddonsForm(client, self)
+        self._modules = ModulesForm(client, self, self._addons)
         self._module = ModuleForm(client, self)
-        self._sourceList = SourcesForm(client, self)
+        self._sourceList = SourcesForm(client, self, self._addons)
         self._source = SourceForm(client, self)
         self._launch = LaunchForm(client, screen_mode, self)
         self._sources = SourcesBrowser(client, games, self)
@@ -65,6 +67,7 @@ class Screens(QObject):
         self._components.shutdown()
 
     gameSettings = Property(QObject, lambda self: self._gameSettings, constant=True)
+    addons = Property(QObject, lambda self: self._addons, constant=True)
     modules = Property(QObject, lambda self: self._modules, constant=True)
     module = Property(QObject, lambda self: self._module, constant=True)
     sourceList = Property(QObject, lambda self: self._sourceList, constant=True)

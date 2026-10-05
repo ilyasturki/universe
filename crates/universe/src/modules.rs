@@ -185,6 +185,7 @@ impl Module {
             "hooks": hooks,
             "settings": self.settings_json(),
             "applies": m.applies,
+            "origin": crate::extensions::origin_of("module", &self.dir),
         })
     }
 

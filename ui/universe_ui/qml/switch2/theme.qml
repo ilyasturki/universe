@@ -318,6 +318,52 @@ FocusScope {
             root.componentAction(ident, action);
         });
     }
+    // The "Get more…" row's list, then the picked add-on's confirmation, or its menu when it has more than one thing to do.
+    function addonsMenu(kind) {
+        var addons = api.screens.addons;
+        Sound.play("ok");
+        menu("Add-ons", addons.items(kind).map(function (i) {
+            return {
+                label: i.detail ? i.label + " · " + i.detail : i.label,
+                act: i.action
+            };
+        }), function (ident) {
+            if (ident === "")
+                return;
+            var actions = addons.actions(ident);
+            if (actions.length === 0)
+                Sound.play("edge");
+            else if (actions.length === 1)
+                root.addonAction(ident, actions[0].action);
+            else
+                menu("", actions.map(function (i) {
+                    return {
+                        label: i.label,
+                        act: i.action
+                    };
+                }), function (action) {
+                    root.addonAction(ident, action);
+                });
+        });
+    }
+    function addonAction(ident, action) {
+        var addons = api.screens.addons;
+        var ask = addons.confirm(ident, action);
+        if (!ask) {
+            Sound.play("edge");
+            return;
+        }
+        dialogAsk({
+            message: ask.message,
+            detail: ask.detail,
+            buttons: [ask.no, ask.yes],
+            danger: ask.danger === true ? 1 : -1
+        }, function (i) {
+            if (i === 1)
+                Sound.play(addons.act(ident, action) ? "ok" : "edge");
+        });
+    }
+
     function componentAction(ident, action) {
         var components = api.screens.components;
         if (action === "versions") {
@@ -657,6 +703,13 @@ FocusScope {
             if (root.pendingLaunch)
                 root.launch(root.pendingLaunch);
             root.pendingLaunch = null;
+        }
+    }
+
+    Connections {
+        target: api.screens.addons
+        function onMessage(text) {
+            Base.Notices.show(text);
         }
     }
 

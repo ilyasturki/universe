@@ -384,6 +384,15 @@ fn place(staged: Staged) -> Result<Installed> {
     Ok(installed)
 }
 
+/// `registry` or `unlisted` for an installed extension's folder, empty for a shipped one or the user's own.
+pub fn origin_of(kind: &str, dir: &Path) -> String {
+    if dir.parent() != Some(paths::extensions_dir(kind).as_path()) {
+        return String::new();
+    }
+    let sidecar = std::fs::read_to_string(dir.with_extension("json")).ok().and_then(|s| serde_json::from_str::<Installed>(&s).ok());
+    sidecar.map(|i| i.origin).filter(|o| !o.is_empty()).unwrap_or_else(|| "unlisted".into())
+}
+
 /// By kind, then id; a folder without its sidecar reads as unlisted, from nowhere.
 pub fn installed() -> Vec<Installed> {
     let mut out = Vec::new();
@@ -649,6 +658,8 @@ mod tests {
             let placed = core.extension_install(&first, true, None).await.unwrap();
             assert_eq!((placed["kind"].as_str(), placed["origin"].as_str()), (Some(kind), Some("unlisted")));
             assert!(paths::extensions_dir(kind).join(id).join(format!("{kind}.toml")).is_file());
+            let listed = if kind == "module" { core.modules().await } else { core.sources().await };
+            assert_eq!(listed.iter().find(|e| e["id"] == id).map(|e| e["origin"].clone()), Some("unlisted".into()), "its entry says where it came from");
             assert_eq!(ran(&core, kind, id).await, format!("{id} 1.0.0"), "{how}: the installed {kind} runs");
 
             if how == "folder" {

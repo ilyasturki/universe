@@ -258,6 +258,23 @@ class CoreClient(QObject):
 
         return self._job("component", ident, work)
 
+    def extensions(self):
+        return self._call(self._core.extensions)
+
+    # Only from the index: unlisted installs are the CLI's. The job's text names what was installed.
+    def extensionInstall(self, ident):
+        return self._job("extension", ident, lambda progress: self._core.extension_install(ident, True, progress), text=lambda r: f"{r['name']} {r['version']}")
+
+    def extensionUpdate(self, ident):
+        def work(progress):
+            done = self._core.extension_update(ident, progress)
+            return ", ".join(f"{u['name']} {u['version']}" + (f" failed: {u['error']}" if u.get("error") else "") for u in done)
+
+        return self._job("extension", ident, work)
+
+    def extensionRemove(self, ident):
+        return self._call(self._core.extension_remove, ident)
+
     def componentRemove(self, ident, version):
         return self._call(self._core.component_remove, ident, version)
 

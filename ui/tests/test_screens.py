@@ -106,8 +106,10 @@ def test_modules_list(api, fake):
     journal_module.update(enabled=False, available=False, missing=["ffmpeg"])
     form = api.screens.modules
     form.load()
-    assert [r["module"] for r in form.rows] == ["capture", "journal", "screenshot", "controls"], "the manifests' order, sources apart"
-    assert all(r["type"] == "action" and r["key"] == "module" and r["switch"] is True and r["source"] is False for r in form.rows)
+    *modules, more = form.rows
+    assert [r["module"] for r in modules] == ["capture", "journal", "screenshot", "controls"], "the manifests' order, sources apart"
+    assert all(r["type"] == "action" and r["key"] == "module" and r["switch"] is True and r["source"] is False for r in modules)
+    assert (more["key"], more["addons"]) == ("more", "module"), "the list ends on the add-ons"
     assert sorted(i for g in form.groups for i in g["rows"]) == list(range(len(form.rows)))
     assert all(g["off"] is not form.rows[i]["value"] for g in form.groups for i in g["rows"]), "the modules turned off share a card of their own"
     capture, journal = (form.rows[form.indexOf(m)] for m in ("capture", "journal"))
@@ -137,20 +139,27 @@ def test_sources_list(api, fake):
     form = api.screens.sourceList
     form.load()
     until(lambda: form.rows, "the listing probes the logins: off the UI thread")
-    assert [r["module"] for r in form.rows] == ["gog", "epic", "itch", "steam"], "the running ones first"
-    assert all(r["switch"] is True and r["source"] is True for r in form.rows)
-    assert [r["value"] for r in form.rows] == [True, False, False, False]
+
+    def sources():
+        return [r for r in form.rows if r["key"] == "module"]
+
+    assert [r["module"] for r in sources()] == ["gog", "epic", "itch", "steam"], "the running ones first"
+    assert all(r["switch"] is True and r["source"] is True for r in sources())
+    assert [r["value"] for r in sources()] == [True, False, False, False]
+    assert (form.rows[-1]["key"], form.rows[-1]["addons"]) == ("more", "source"), "the list ends on the add-ons"
 
     def cards_hold():
         assert sorted(i for g in form.groups for i in g["rows"]) == list(range(len(form.rows))) and all(g["rows"] for g in form.groups), "no empty card"
         assert all(g["off"] is not form.rows[i]["value"] for g in form.groups for i in g["rows"]), "the sources turned off share a card of their own"
         return True
 
-    assert cards_hold() and len(form.groups) == 2
+    assert cards_hold() and len(form.groups) == 3, "on, off, then the add-ons"
     form.toggle(0)
-    until(lambda: [r["value"] for r in form.rows] == [False, False, False, False])
+    until(lambda: [r["value"] for r in sources()] == [False, False, False, False])
     assert next(s for s in fake.sources() if s["id"] == "gog")["enabled"] is False
-    assert cards_hold() and len(form.groups) == 1
+    assert cards_hold() and len(form.groups) == 2
+    form.toggle(len(form.rows) - 1)
+    assert [r["value"] for r in sources()] == [False, False, False, False], "the add-ons row is no switch"
 
 
 def test_source_form(api, fake):

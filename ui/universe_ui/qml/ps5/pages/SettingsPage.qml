@@ -117,7 +117,7 @@ FocusScope {
                 label: launch.showAdvanced ? "Hide advanced" : "Show advanced"
             });
         var row = rows.currentRow;
-        if (listForm !== null && zone === "rows" && row && !row.heading)
+        if (listForm !== null && zone === "rows" && row && !row.heading && row.key !== "more")
             out.push({
                 glyph: "X",
                 label: row.value === true ? "Disable" : "Enable",
@@ -289,6 +289,15 @@ FocusScope {
             });
         if (listForm !== null)
             return Forms.grouped(listForm.groups, listForm.rows, function (m, i) {
+                if (m.key === "more")
+                    return {
+                        label: m.label,
+                        type: "action",
+                        key: "more",
+                        addons: m.addons,
+                        detail: m.detail,
+                        form: i
+                    };
                 return {
                     label: m.label,
                     type: "action",
@@ -298,7 +307,7 @@ FocusScope {
                     display: m.display,
                     switch: true,
                     warning: m.warning,
-                    detail: m.warning ? m.detail : Details.enabledSentence(m.label, m.source),
+                    detail: m.warning ? m.detail : (m.tag ? m.tag + " · " : "") + Details.enabledSentence(m.label, m.source),
                     form: i,
                     dim: m.warning !== "" && m.value !== true
                 };
@@ -626,6 +635,8 @@ FocusScope {
                     launch.setValue(row.form, value);
                 });
             }
+        } else if (row.key === "more") {
+            shell.addonsMenu(row.addons);
         } else if (sectionId === "modules") {
             Sound.play("ok");
             reopen = {
@@ -702,7 +713,7 @@ FocusScope {
 
     function toggleModule() {
         var row = rows.currentRow;
-        if (listForm === null || zone !== "rows" || !row || row.heading || row.dim === true) {
+        if (listForm === null || zone !== "rows" || !row || row.heading || row.dim === true || row.key === "more") {
             Sound.play("edge");
             return;
         }

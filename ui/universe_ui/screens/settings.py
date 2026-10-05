@@ -100,7 +100,7 @@ def advanced_row(shown):
 
 def _meta(entry):
     version = entry.get("version")
-    return f"v{version}" if version else ""
+    return " · ".join(p for p in (f"v{version}" if version else "", "Unlisted" if entry.get("origin") == "unlisted" else "") if p)
 
 
 def _dig(data, dotted, default=None):
@@ -661,6 +661,10 @@ class ListForm(RowsForm):
     source: bool
     _entries: Callable[[], list]
 
+    def __init__(self, client, parent=None, addons=None):
+        super().__init__(client, parent)
+        self._addons = addons
+
     def _show(self, entries):
         rows, on, off = [], [], []
         for entry in entries:
@@ -678,6 +682,7 @@ class ListForm(RowsForm):
                 meta=_meta(entry),
                 warning=warning,
                 source=self.source,
+                tag="Unlisted" if entry.get("origin") == "unlisted" else "",
                 detail=warning.replace("unavailable", "On, but its hooks are skipped" if enabled else "Cannot be enabled", 1)
                 if warning
                 else f"On, {setup}"
@@ -689,16 +694,23 @@ class ListForm(RowsForm):
         groups = [_group("", on)] if on else []
         if off:
             groups.append(_group("Off", off, caps=True, off=True))
+        if self._addons is not None:
+            more = _row(self.section, "more", "Get more…", "action", "", detail=f"Add-ons: {self.section.lower()} others made")
+            more.update(display="", action="Open", icon="plus", addons="source" if self.source else "module")
+            groups.append(_group("", [len(rows)]))
+            rows.append(more)
         self._set_rows(rows, groups)
 
     @Slot()
     def load(self):
         self._show(self._entries())
+        if self._addons is not None:
+            self._addons.load()
 
     @Slot(int)
     def toggle(self, index):
         row = self.row(index)
-        if not row:
+        if not row or row["key"] != "module":
             return
         self._client.setField("source" if self.source else "module", row["module"], "enabled", "false" if row["value"] else "true")
         self.load()
@@ -710,8 +722,8 @@ DOCTOR_GROUPS = {"core": "Core", "runners": "Runners", "media": "Media", "contro
 class ModulesForm(ModuleApi, ListForm):
     doctorChanged = Signal()
 
-    def __init__(self, client, parent=None):
-        super().__init__(client, parent)
+    def __init__(self, client, parent=None, addons=None):
+        super().__init__(client, parent, addons)
         self._doctor = []
         self._doctor_groups = []
         client.modulesChanged.connect(self.load)
@@ -758,13 +770,15 @@ class ModulesForm(ModuleApi, ListForm):
 class SourcesForm(SourceApi, ListForm):
     section = "Sources"
 
-    def __init__(self, client, parent=None):
-        super().__init__(client, parent)
+    def __init__(self, client, parent=None, addons=None):
+        super().__init__(client, parent, addons)
         client.sourcesChanged.connect(self.load)
 
     @Slot()
     def load(self):
         self._client.runAsync(self._entries, self._show)
+        if self._addons is not None:
+            self._addons.load()
 
 
 def page_info(api, entry, ident):

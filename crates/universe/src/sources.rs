@@ -119,6 +119,7 @@ impl Source {
             "hooks": hooks,
             "settings": self.manifest.settings.iter().map(modules::setting_json).collect::<Vec<_>>(),
             "login": self.manifest.login.to_json(),
+            "origin": crate::extensions::origin_of("source", &self.dir),
         })
     }
 

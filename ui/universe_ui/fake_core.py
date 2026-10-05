@@ -1599,7 +1599,7 @@ class FakeCore:
         return out
 
     def _manifests(self, kind):
-        out = [{"dir": "", "hooks": {}, "incompatible": "", **entry} for entry in copy.deepcopy(self._data.get(kind, []))]
+        out = [{"dir": "", "hooks": {}, "incompatible": "", "origin": "", **entry} for entry in copy.deepcopy(self._data.get(kind, []))]
         for entry in out:
             entry["settings"] = [{"platforms": [], "required": False, "runners": [], **s} for s in entry.get("settings", [])]
             for setting in entry["settings"]:
@@ -2320,7 +2320,7 @@ class FakeCore:
         entries = self._data.setdefault(kind, [])
         was = next((e for e in entries if e["id"] == listed["id"]), None)
         entry = {"id": listed["id"], "name": listed["name"], "version": listed["version"], "description": listed["description"]}
-        entry.update(enabled=bool(was and was.get("enabled")), available=True, missing=[], settings=[])
+        entry.update(enabled=bool(was and was.get("enabled")), available=True, missing=[], settings=[], origin=origin)
         if kind == "sources":
             entry.update(capabilities=[], games_dir="", library_at="", logged_in=False, user="")
             entry["login"] = {"kind": "code", "hint": "Open the link, sign in, then enter the code it shows.", "purpose": "install games"}

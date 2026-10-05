@@ -83,6 +83,7 @@ FocusScope {
 
     readonly property var modulesForm: api.screens.modules
     readonly property var sourceList: api.screens.sourceList
+    readonly property var addons: api.screens.addons
     readonly property var listForm: sectionId === "modules" ? modulesForm : sectionId === "sources" ? sourceList : null
     readonly property var launch: api.screens.launch
     readonly property var runners: api.screens.runners
@@ -148,7 +149,7 @@ FocusScope {
     readonly property var moreItems: {
         var out = [];
         var row = cards.currentRow;
-        if (listForm !== null && row && !(row.warning !== "" && row.value !== true))
+        if (listForm !== null && row && row.key === "module" && !(row.warning !== "" && row.value !== true))
             out.push({
                 icon: row.value === true ? "eye-off" : "check",
                 label: row.value === true ? "Disable" : "Enable",
@@ -661,12 +662,47 @@ FocusScope {
 
     function toggleModule() {
         var row = cards.currentRow;
-        if (listForm === null || !row || (row.warning !== "" && row.value !== true)) {
+        if (listForm === null || !row || row.key !== "module" || (row.warning !== "" && row.value !== true)) {
             Sound.edge();
             return;
         }
         Sound.favourite(!row.value);
         listForm.toggle(cards.index);
+    }
+
+    // The "Get more…" row's list, then the picked add-on's confirmation, or its menu when it has more than one thing to do.
+    function addonsMenu(kind) {
+        Sound.panel();
+        menu.show(addons.items(kind), cards, cards.focusRect, "Add-ons", function (ident) {
+            if (ident === "") {
+                cards.forceActiveFocus();
+                return;
+            }
+            var actions = addons.actions(ident);
+            if (actions.length === 0) {
+                Sound.edge();
+                cards.forceActiveFocus();
+            } else if (actions.length === 1) {
+                page.addonAction(ident, actions[0].action);
+            } else {
+                menu.show(actions, cards, cards.focusRect, "", function (action) {
+                    page.addonAction(ident, action);
+                });
+            }
+        });
+    }
+
+    function addonAction(ident, action) {
+        var ask = addons.confirm(ident, action);
+        if (!ask) {
+            Sound.edge();
+            return;
+        }
+        dialog.ask(ask, function (yes) {
+            if (yes)
+                addons.act(ident, action) ? Sound.enter() : Sound.edge();
+            cards.forceActiveFocus();
+        });
     }
 
     function activate(index, row) {
@@ -677,7 +713,9 @@ FocusScope {
                 Qt.callLater(cards.stepInto);
             return;
         }
-        if (sectionId === "modules") {
+        if (row.key === "more" && listForm !== null) {
+            addonsMenu(row.addons);
+        } else if (sectionId === "modules") {
             cards.forceActiveFocus();
             openedModule = row.module;
             page.moduleRequested(row.module);
@@ -1162,6 +1200,13 @@ FocusScope {
     }
 
     Connections {
+        target: page.addons
+        function onMessage(text) {
+            page.message(text);
+        }
+    }
+
+    Connections {
         target: page.modulesForm
         function onDoctorChanged() {
             if (page.sectionId === "doctor")
@@ -1547,6 +1592,7 @@ FocusScope {
     ActionMenu {
         id: menu
 
+        objectName: "settingsMenu"
         anchors.fill: parent
         z: 4
 
