@@ -1,8 +1,10 @@
+import importlib.machinery
 import importlib.util
 import json
 import os
 import shutil
 import stat
+import struct
 import subprocess
 import sys
 import threading
@@ -245,6 +247,39 @@ def test_check_words_the_gsr_fix_for_the_distribution(tmp_path, distro, fix):
     lines = [json.loads(line) for line in result.stdout.splitlines()]
     assert [(c["check"], c["ok"]) for c in lines] == [("gpu-screen-recorder", True), ("gsr-cli", False), ("gsr-kms-server", False)]
     assert all(fix in c["fix"] and c["component"] == "gpu-screen-recorder" for c in lines)
+
+
+def test_check_fails_a_gsr_kms_server_without_cap_sys_admin(tmp_path):
+    for name in ("gpu-screen-recorder", "gsr-cli", "gsr-kms-server"):
+        _write_shim(tmp_path / name, "exit 0")
+    env = {"PATH": str(tmp_path), "UNIVERSE_DISTRO": "debian"}
+    result = subprocess.run([sys.executable, str(BIN_DIR / "check")], env=env, capture_output=True, text=True, timeout=30, check=False)
+    assert result.returncode == 0, result.stderr
+    lines = [json.loads(line) for line in result.stdout.splitlines()]
+    assert [(c["check"], c["ok"]) for c in lines] == [("gpu-screen-recorder", True), ("gsr-cli", True), ("gsr-kms-server", False)]
+    assert "setcap cap_sys_admin+ep" in lines[2]["fix"]
+
+
+def _vfs_cap(magic, permitted):
+    return struct.pack("<IIIII", magic, permitted, 0, 0, 0)
+
+
+@pytest.mark.parametrize(
+    ("xattr", "ok"),
+    [
+        (_vfs_cap(0x02000001, 1 << 21), True),
+        (_vfs_cap(0x03000001, 1 << 21 | 1 << 8) + struct.pack("<I", 0), True),
+        (_vfs_cap(0x02000000, 1 << 21), False),
+        (_vfs_cap(0x02000001, 1 << 24), False),
+        (b"", False),
+    ],
+    ids=["v2", "v3-with-setpcap", "not-effective", "sys-resource-only", "empty"],
+)
+def test_check_reads_cap_sys_admin_from_the_file_capability(xattr, ok):
+    loader = importlib.machinery.SourceFileLoader("capture_check", str(BIN_DIR / "check"))
+    check = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
+    loader.exec_module(check)
+    assert check.sys_admin(xattr) is ok
 
 
 def test_fps_choices_stop_at_the_screens_refresh_rate(tmp_path, fakebin):

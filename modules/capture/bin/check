@@ -2,6 +2,7 @@
 import json
 import os
 import shutil
+import struct
 import sys
 
 # Native gpu-screen-recorder 6.1+: its Flatpak cannot be driven from outside, and gsr-kms-server needs cap_sys_admin (Arch's package sets it).
@@ -11,17 +12,44 @@ FIXES = {
 }
 FIX = "install gpu-screen-recorder 6.1 or later natively (not its Flatpak), then sudo setcap cap_sys_admin+ep on its gsr-kms-server"
 BINS = ("gpu-screen-recorder", "gsr-cli", "gsr-kms-server")
+CAP_SYS_ADMIN = 21
+# struct vfs_cap_data (linux/capability.h): magic_etc, then permitted and inheritable per 32 capabilities.
+VFS_CAP_FLAGS_EFFECTIVE = 0x000001
+
+
+def sys_admin(xattr):
+    """`security.capability`'s value grants cap_sys_admin, effective at exec."""
+    if len(xattr) < 12:
+        return False
+    magic, permitted = struct.unpack_from("<II", xattr)
+    return bool(magic & VFS_CAP_FLAGS_EFFECTIVE) and bool(permitted & (1 << CAP_SYS_ADMIN))
+
+
+def capable(path):
+    try:
+        return sys_admin(os.getxattr(path, "security.capability"))
+    except OSError:
+        return False
 
 
 def main():
-    fix = FIXES.get(os.environ.get("UNIVERSE_DISTRO", ""), FIX)
+    distro = os.environ.get("UNIVERSE_DISTRO", "")
+    fix = FIXES.get(distro, FIX)
+    search = os.environ.get("PATH", os.defpath)
+    if distro == "nixos":
+        # nixpkgs' gpu-screen-recorder puts the security wrappers first; the store's gsr-kms-server has no capability.
+        search = f"/run/wrappers/bin{os.pathsep}{search}"
     for name in BINS:
-        path = shutil.which(name)
+        path = shutil.which(name, path=search)
+        ok, detail = path is not None, path or f"{name} is not on PATH"
+        # Without the capability gpu-screen-recorder runs it through pkexec, a password prompt per recording.
+        if path and name == "gsr-kms-server" and not capable(path):
+            ok, detail = False, f"{path} lacks cap_sys_admin: each recording would ask for a password"
         line = {
             "check": name,
             "label": name,
-            "ok": path is not None,
-            "detail": path or f"{name} is not on PATH",
+            "ok": ok,
+            "detail": detail,
             "fix": fix,
             "component": "gpu-screen-recorder",
         }
