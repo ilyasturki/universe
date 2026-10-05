@@ -58,7 +58,7 @@ def test_a_new_network_joins_with_its_password_and_a_wrong_one_fails_as_such(api
     assert wifi.join("Atelier", "nope")
     assert wifi.connecting == "Atelier"
     until(lambda: failed)
-    assert failed == [("Atelier", "password", "the password was not accepted")]
+    assert failed == [("Atelier", "password", "the password was not accepted", "connect")]
     assert (wifi.connecting, wifi.error["reason"]) == ("", "password")
     wifi.join("Atelier", PASSWORD)
     assert wifi.error == {}, "a new try clears the last failure"
@@ -84,6 +84,10 @@ def test_the_card_scans_while_a_page_is_open_and_forgets_on_demand(api, fake):
     until(lambda: wifi.link == "")
     assert not by_ssid(wifi)["Home"]["saved"]
     assert (api.network.kind, api.network.bars) == ("", 0)
+    failed = record(wifi.failed)
+    wifi.forget("Home")
+    until(lambda: failed)
+    assert failed[0][1::2] == ("notfound", "forget"), "a refused forget says it was one"
 
 
 def test_a_connection_test_answers_once_at_a_time(api, fake):

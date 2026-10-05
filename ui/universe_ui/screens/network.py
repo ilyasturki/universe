@@ -128,9 +128,10 @@ class WifiScreen(Streamed):
     """Wi-Fi through `universe network watch`: the networks in range, joining one, forgetting one. The link it reads drives `status`."""
 
     changed = Signal()
-    # (ssid, connectivity) once a join is up; (ssid, reason, message) when a join or a forget fails, reason as the core gives it.
+    # (ssid, connectivity) once a join is up; (ssid, reason, message, action) when a join or a forget fails, reason as the core
+    # gives it, action "connect" or "forget".
     joined = Signal(str, str)
-    failed = Signal(str, str, str)
+    failed = Signal(str, str, str, str)
     forgot = Signal(str)
     # A connection test's answer: "full", "limited", "portal", "none" or "unknown".
     checked = Signal(str)
@@ -182,7 +183,7 @@ class WifiScreen(Streamed):
                 self._connecting = ""
                 self._error = {"ssid": ssid, "reason": reason, "message": message}
                 self.changed.emit()
-            self.failed.emit(ssid, reason, message)
+            self.failed.emit(ssid, reason, message, action)
         elif event == "off":
             self._status.release()
             if self._connecting:

@@ -583,8 +583,10 @@ FocusScope {
     Connections {
         target: api.screens.network
         // Under a pairing question these say so in a notice: a dialog would take the question's place.
-        function onFailed(ssid, reason, message) {
-            if (reason === "password" && root.pairing)
+        function onFailed(ssid, reason, message, action) {
+            if (action === "forget")
+                Base.Notices.fail("Could not forget " + ssid + (message ? ": " + message : ""));
+            else if (reason === "password" && root.pairing)
                 Base.Notices.fail("Could not connect to " + ssid + ": the password was not accepted");
             else if (reason === "password")
                 root.dialogAsk({

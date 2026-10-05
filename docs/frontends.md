@@ -50,7 +50,7 @@ while one is open. `network`: `available` (NM and a Wi-Fi card), `enabled`, `lin
 `connectivity`, `networks` (`ssid`, `strength`, `bars`, `security`, `secured`, `joinable` — open,
 OWE and WPA2/3 personal, or any a desktop saved — `saved`, `active`), `connecting`, `error`, `checking`;
 `needsPassword(ssid)`, `join(ssid, password)`, `forget(ssid)`, `setEnabled(on)`, `check()`; signals
-`joined(ssid, connectivity)`, `forgot(ssid)`, `failed(ssid, reason, message)` (`password` asks for it again),
+`joined(ssid, connectivity)`, `forgot(ssid)`, `failed(ssid, reason, message, action)` (`action` `connect` or `forget`; a join's `password` asks for it again),
 `checked(connectivity)`. `bluetooth`: `available`, `powered`, `discovering`, `paired`, `found`
 (`address`, `name`, `kind`, `icon`, `paired`, `connected`, `battery`), `pairing`; `pair`,
 `connectDevice`, `disconnectDevice`, `forget` (an address each), `setPowered(on)`; `request`, the
