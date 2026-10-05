@@ -21,7 +21,8 @@ Universe looks extensions up in three places. On the same id, a later one wins:
    `$XDG_DATA_DIRS/universe/{modules,sources}`);
 3. your own, `$XDG_CONFIG_HOME/universe/{modules,sources}/<id>/`, the folder to work on one in.
 
-Installing an id that ships, or that your own folder holds, is refused.
+Installing an id that ships, or that your own folder holds, is refused, and so is an id the other
+kind holds: a module and a source never share one.
 
 ## API number
 
@@ -39,8 +40,9 @@ for api 2 bumps the number, and Universe then reads the range it still supports.
 needs a feature added later in the same api.
 
 A source's `[[tools]]` pins only stand in for its own programs: it pins nothing while it is off, a
-shipped source's pin wins over an extension's of the same id, and no source runs another source's
-pin.
+shipped source's pin wins over an extension's of the same id, and a pin is only fetched for the
+source that declares it. Once fetched, its program sits in `$XDG_DATA_HOME/universe/bin` like every
+fetched tool.
 
 ## Installing
 
@@ -57,7 +59,9 @@ universe extension remove now-playing
 An install asks first. It names the extension's kind, says it runs programs as you, and says where
 it comes from: the index, or Unlisted for a URL, an archive or a folder. `--yes` accepts without
 asking. An archive is a tar (plain, gzip or xz) or a zip, holding the folder at its root or in its
-one folder, as a release archive does. URLs are https:// only.
+one folder, as a release archive does. URLs are https:// only. A path holds a `/` (`./now-playing`):
+a bare word is always an id of the index. Replacing an installed extension waits until no game
+runs.
 
 Installing does not switch an extension on: `universe module enable <id>` or
 `universe source enable <id>` does, and so do the Modules and Sources pages. An update replaces the

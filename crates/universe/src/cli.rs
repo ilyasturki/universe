@@ -601,7 +601,7 @@ pub enum ExtensionCmd {
     /// The index's extensions and the installed ones
     #[command(alias = "list")]
     Ls,
-    /// Install an extension, asking first: an id from the index, an https:// URL, an archive (tar or zip) or a folder
+    /// Install an extension, asking first: an id from the index, an https:// URL, or the path (./x, ~/x, /x) of an archive (tar or zip) or a folder
     Install {
         what: String,
         /// Install without asking

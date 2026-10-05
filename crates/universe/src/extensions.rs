@@ -120,19 +120,25 @@ pub enum Origin {
     Path(PathBuf),
 }
 
-/// `what`: an https:// URL, a `file://` URL or a path that exists, else an id of the index.
+/// `what`: an https:// URL, a `file://` URL or a path holding a `/` (`./now-playing`), else an id of the index.
 pub async fn resolve(config: &Config, what: &str) -> Result<Origin> {
     let Some(path) = local(what)? else { return Ok(Origin::Url(what.into())) };
-    if path.exists() {
+    if what.starts_with("file://") || what.contains('/') {
+        if !path.exists() {
+            return Err(Error::NotFound(format!("{}: no such archive or folder", path.display())));
+        }
         return Ok(Origin::Path(std::fs::canonicalize(&path)?));
     }
-    if what.starts_with("file://") || what.contains('/') {
-        return Err(Error::NotFound(format!("{}: no such archive or folder", path.display())));
-    }
     let url = index_url(config);
-    let listed = fetch_index(&url).await?.extensions.into_iter().find(|e| e.id == what);
-    let listed = listed.ok_or_else(|| Error::NotFound(format!("{what} is not in the extension index ({url})")))?;
-    Ok(Origin::Listed(Box::new(listed), url))
+    let mut listed = fetch_index(&url).await?.extensions.into_iter().filter(|e| e.id == what);
+    match (listed.next(), listed.next()) {
+        (Some(_), Some(_)) => Err(Error::Invalid(format!("the extension index ({url}) lists {what} more than once"))),
+        (Some(one), None) => Ok(Origin::Listed(Box::new(one), url)),
+        (None, _) => {
+            let here = if path.exists() { format!("; ./{what} names the one in this folder") } else { String::new() };
+            Err(Error::NotFound(format!("{what} is not in the extension index ({url}){here}")))
+        }
+    }
 }
 
 fn work_dir() -> PathBuf {
@@ -271,6 +277,26 @@ fn held_ids(kind: &str) -> std::collections::BTreeSet<String> {
     crate::modules::read_manifests::<Header>(shipped.into_iter().chain([user]), &format!("{kind}.toml"), |m| &m.id).into_keys().collect()
 }
 
+fn other(kind: &str) -> &'static str {
+    if kind == "module" {
+        "source"
+    } else {
+        "module"
+    }
+}
+
+/// Every id the other kind holds, shipped, the user's own or installed: a module and a source never share one.
+fn other_ids(kind: &str, installed: &[Installed]) -> std::collections::BTreeSet<String> {
+    let other = other(kind);
+    let mut ids = held_ids(other);
+    ids.extend(installed.iter().filter(|i| i.kind == other).map(|i| i.id.clone()));
+    ids
+}
+
+fn other_kind_holds(kind: &str, id: &str) -> Option<String> {
+    other_ids(kind, &installed()).contains(id).then(|| format!("{id} is already a {}: a {kind} of that id cannot be installed", other(kind)))
+}
+
 fn valid_id(id: &str) -> bool {
     id.starts_with(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit())
         && id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
@@ -349,7 +375,7 @@ pub async fn prepare(origin: Origin, mut progress: Option<Progress<'_, '_>>, can
     if let Some(why) = unsupported(header.api) {
         return Err(Error::Invalid(format!("{id}: {why}")));
     }
-    if let Some(why) = held(kind, &id) {
+    if let Some(why) = held(kind, &id).or_else(|| other_kind_holds(kind, &id)) {
         return Err(Error::Invalid(why));
     }
     Ok(Staged {
@@ -472,7 +498,8 @@ impl Core {
             _ => config.sources.enabled.iter().any(|e| e == id),
         };
         let mine = installed();
-        let taken: std::collections::BTreeMap<&str, std::collections::BTreeSet<String>> = KINDS.into_iter().map(|k| (k, held_ids(k))).collect();
+        let taken: std::collections::BTreeMap<&str, std::collections::BTreeSet<String>> =
+            KINDS.into_iter().map(|k| (k, held_ids(k).into_iter().chain(other_ids(k, &mine)).collect())).collect();
         let shown: Vec<&Listed> =
             index.extensions.iter().filter(|l| valid_id(&l.id) && taken.get(l.kind.as_str()).is_some_and(|ids| !ids.contains(&l.id))).collect();
         let mut rows: Vec<serde_json::Value> =
@@ -496,6 +523,9 @@ impl Core {
     }
 
     pub async fn extension_place(&self, staged: Staged) -> Result<serde_json::Value> {
+        if let Some(c) = self.current().await.filter(|_| paths::extensions_dir(staged.kind).join(&staged.id).exists()) {
+            return Err(Error::Busy(format!("{} is running: replacing {} waits until it ends", c.title, staged.id)));
+        }
         let i = place(staged)?;
         self.reload_modules().await;
         self.reload_all().await;
@@ -734,6 +764,17 @@ mod tests {
         assert!(refused(core.extension_install(&bare.to_string_lossy(), true, None).await).contains("no extension api"));
         assert!(refused(core.extension_install("http://example.org/x.tar.gz", true, None).await).contains("https://"));
         assert!(refused(core.extension_remove("capture").await).contains("ships with Universe"));
+        let as_source = tree(&work, "source", "capture", "1.0.0", API);
+        assert!(
+            refused(core.extension_install(&as_source.to_string_lossy(), true, None).await).contains("already a module"),
+            "a source never takes a module's id"
+        );
+        std::fs::write(env.path().join("index.json"), r#"{"schema": 1, "extensions": []}"#).unwrap();
+        std::env::set_var("UNIVERSE_EXTENSIONS_INDEX", env.path().join("index.json"));
+        assert!(
+            refused(core.extension_install("capture", true, None).await).contains("not in the extension index"),
+            "a bare word is an id of the index, never a path"
+        );
         assert!(installed().is_empty(), "nothing refused is left behind");
         assert_eq!(std::fs::read_dir(work_dir()).map(|d| d.count()).unwrap_or(0), 0, "nor in the work dir");
     }
