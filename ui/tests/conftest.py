@@ -57,7 +57,8 @@ def app(xdg):
 
     # Every Qt request goes through this proxy, which answers none: the test that sent one fails with its request line.
     trap = QTcpServer(application)
-    trap.listen(QHostAddress.SpecialAddress.LocalHost, 0)
+    if not trap.listen(QHostAddress.SpecialAddress.LocalHost, 0):
+        raise RuntimeError(f"the network trap: {trap.errorString()}")
 
     def caught():
         while trap.hasPendingConnections():
@@ -68,6 +69,7 @@ def app(xdg):
             def read(sock=sock, request=request):
                 request[0] = bytes(sock.readLine()).decode(errors="replace").strip()
                 sock.abort()
+                sock.deleteLater()
 
             sock.readyRead.connect(read)
 
@@ -80,6 +82,10 @@ def app(xdg):
 def no_network():
     NETWORK.clear()
     yield
+    from PySide6.QtCore import QCoreApplication
+
+    if QCoreApplication.instance() is not None:
+        QCoreApplication.processEvents()
     if NETWORK:
         pytest.fail(f"the test reached for the network: {[r[0] for r in NETWORK]}", pytrace=False)
 

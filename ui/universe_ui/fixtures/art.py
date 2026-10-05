@@ -116,7 +116,6 @@ def paint_library(games, art_dir):
 
 
 def paint_store(data, art_dir):
-    """The stores' own pictures, painted in place of their web URLs."""
     os.makedirs(art_dir, exist_ok=True)
     for listing in ("source_library", "source_store"):
         for source, entries in (data.get(listing) or {}).items():
