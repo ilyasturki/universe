@@ -65,7 +65,7 @@ sudo dnf copr enable ilyasturki/universe
 sudo dnf install universe universe-desktop
 ```
 
-**SteamOS, Bazzite and other distros**: the latest release, installed for your user under `~/.local`. It asks for your password once, to put the pad rules under `/etc`; on a Steam Deck, set one with `passwd` first. Without sudo it prints the commands to run as root instead.
+**SteamOS, Bazzite and other distros**: the latest release, installed for your user under `~/.local`. It asks for your password once, to put the pad rules under `/etc` and the login session's files (its entry, and the helper that installs gamescope, MangoHud and gpu-screen-recorder in it with no prompt) in place; on a Steam Deck, set one with `passwd` first. Without sudo it prints the commands to run as root instead.
 
 ```sh
 curl -fsSL https://github.com/ilyasturki/universe/releases/latest/download/install.sh | sh

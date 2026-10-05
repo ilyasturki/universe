@@ -1000,7 +1000,8 @@ label, action, danger}`: install, update, `use:<build>` (`use:latest` follows th
 one build is held), `versions` (which opens `versionActions(id)` as a second menu), rollback,
 `remove:<version>`, uninstall (with the size of Universe's builds, there whenever Universe holds
 one, the one in use included), cancel while its job runs. `confirm(id, action)` is what to ask
-first or null — an install's size and the room left, the notice an install must show, a removal,
+first or null — an install's size and the room left, the notice an install must show, a system
+tool's packages and, outside the Universe session, that it asks for the password, a removal,
 an uninstall (what goes and what runs in its place), a rollback — and `act(id, action)` does it: an
 install or an update is a client job (`componentInstall`, `componentUpdate`, `job` the running one
 like the Install page's, drawn by the same bar on Settings › Runners), an install from a proposal

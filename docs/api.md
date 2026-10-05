@@ -411,15 +411,27 @@ again. gamescope exits 0 whatever its child did, so the launcher inside writes i
 the file `UNIVERSE_HOST_DONE` names when it quits on purpose; one that died instead is started
 again with `--no-boot`, and five runs in a row shorter than 60 s end the session. The startup
 animation plays once, at login. There is no lock screen, so a resume, or an autologin at boot,
-opens on the launcher. Nor is there a Wi-Fi, Bluetooth or polkit prompt yet: the session relies on
-the connections and pairings made from a desktop session.
+opens on the launcher. Nor is there a Wi-Fi or Bluetooth prompt yet: the session relies on
+the connections and pairings made from a desktop session. No polkit agent runs either, so nothing
+there can ask for a password: what the session needs root for goes through polkit actions it is
+granted outright while it is local and active. Its one such action is
+`io.github.ilyasturki.universe.system-install` (see Components › System tools); power, reboot and
+suspend are already granted to an active session by logind's own policy, and a block inhibitor held
+by another user (PackageKit or fwupd mid-write) keeps refusing them with logind's message, since
+overriding it is `*-ignore-inhibit`, which the session is not granted. A recording needs no prompt
+either: the capture module's check fails a `gsr-kms-server` without `cap_sys_admin`, which
+gpu-screen-recorder would otherwise run through pkexec.
 
 The AUR and RPM packages install it under `/usr/share/wayland-sessions`. `install.sh`, from a
 release or a checkout, puts it there through sudo with `Exec` pointing at its own `universe-ui`, under
 `/usr/local/share/wayland-sessions` where `/usr` is read-only (SDDM and GDM read both, LightDM only
-the first). On NixOS `programs.universe.session.enable` adds it to
+the first). The packages and `install.sh` ship the system-install helper and its policy with it.
+On NixOS `programs.universe.session.enable` adds it to
 `services.displayManager.sessionPackages`, running the flake's `universe-ui` (`session.package`);
 `services.displayManager.defaultSession = "universe"` with an autologin boots straight into it.
+It adds no helper nor policy: on NixOS the system tools come from the module's options
+(`gamescope.enable`, `capture.enable`, whose `programs.gpu-screen-recorder` gives `gsr-kms-server`
+its capability), so there is nothing for the session to install as root.
 
 #### Steam's Game Mode
 
@@ -954,8 +966,16 @@ binfmt, no steam-run. `doctor`'s `components-fhs` fails when Universe holds such
 come from the distribution's packages, installed through PackageKit on the system bus
 (its password prompt is the desktop's polkit agent): `component_install` resolves the family's
 package names (Arch `lib32-mangohud`, Fedora `mangohud.i686`, Debian `mangohud:i386`) and installs
-the ones missing. What needs root beyond the package — a setcap outside Arch —
-stays a doctor fix. With no PackageKit (NixOS, image-based systems) or no
+the ones missing. In the Universe session, where no agent answers that prompt, it runs
+`pkexec --disable-internal-agent universe-system-install <id>` instead: the helper
+(`/usr/lib/universe/` from the AUR and RPM packages, `/usr/local/lib/universe/` from `install.sh`)
+takes one id of the three and nothing else, resolves the packages itself and installs them through
+PackageKit as root, printing each percent on a line. Its polkit action
+`io.github.ilyasturki.universe.system-install` is `allow_active=yes` (no for inactive and remote
+sessions), so a local, active session needs no password, and no package beyond those three goes
+through it. In the session a row is `installable` only where that helper is in place. NixOS ships
+neither: it has no system tool to install this way (they come from the module's options). What
+needs root beyond the package — a setcap outside Arch — stays a doctor fix. With no PackageKit (NixOS, image-based systems) or no
 package for the family, the row carries the fix instead: on NixOS the module's option. A missing one
 is proposed when the configuration uses it: gamescope with `launch.gamescope`, MangoHud with a frame
 rate limit or the HUD, any of them while an enabled module names it in `[requires] system`

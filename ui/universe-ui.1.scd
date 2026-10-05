@@ -53,7 +53,11 @@ whatever has the focus.
 	launcher as its only client. A gamescope that fails ends the session instead
 	of opening a window; a launcher that dies comes back without the startup
 	animation, unless it dies five times in a row within a minute. Log out, in
-	the power menu, returns to the login screen. There is no lock screen.
+	the power menu, returns to the login screen. There is no lock screen, and
+	no polkit agent: nothing asks for a password. Settings › Components installs
+	gamescope, MangoHud and gpu-screen-recorder through
+	_universe-system-install_, whose polkit action is granted to the local,
+	active session.
 
 *--fake*
 	A fixture library instead of the core, for UI work.
