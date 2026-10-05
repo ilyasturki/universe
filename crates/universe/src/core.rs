@@ -122,10 +122,7 @@ fn runtime_of(c: &Current, r: &Resolved) -> Runtime {
 }
 
 fn change_runtime(c: &Current, r: &Resolved, f: impl FnOnce(&mut Runtime)) -> Result<Runtime> {
-    let mut rt = runtime_of(c, r);
-    f(&mut rt);
-    crate::session::set_runtime(&c.session_id, &rt)?;
-    Ok(rt)
+    crate::session::change_runtime(&c.session_id, || Runtime::of(&r.effective), f)?.ok_or_else(|| Error::NotFound("no session running".into()))
 }
 
 pub struct Core {
@@ -142,6 +139,8 @@ pub struct Core {
     nest: std::sync::OnceLock<Option<crate::nest::Nest>>,
     /// A freeze and the thaw behind it run in order: the hooks behind them toggle state.
     pub(crate) freezes: tokio::sync::Mutex<()>,
+    /// HOME's runtime changes run one at a time: each rewrites MangoHud's conf from the state the last one left.
+    runtime_changes: tokio::sync::Mutex<()>,
     media_stop: std::sync::atomic::AtomicBool,
     thumbs: crate::thumbs::Maker,
     pub(crate) host: Host,
@@ -166,6 +165,7 @@ impl Core {
             scope: std::sync::OnceLock::new(),
             nest: std::sync::OnceLock::new(),
             freezes: tokio::sync::Mutex::new(()),
+            runtime_changes: tokio::sync::Mutex::new(()),
             media_stop: std::sync::atomic::AtomicBool::new(false),
             thumbs: crate::thumbs::Maker::default(),
             host,
@@ -759,9 +759,14 @@ impl Core {
     pub async fn set_fps_limit(&self, value: &str) -> Result<()> {
         self.steam_owns("The frame rate limit")?;
         crate::launcher::parse_fps_limit(value)?;
+        let value = match value.trim() {
+            "" => "auto",
+            v => v,
+        };
+        let _changing = self.runtime_changes.lock().await;
         let Some(c) = self.current().await else { return Err(Error::NotFound("no session running".into())) };
         let r = self.get(&c.id).await?;
-        let rt = change_runtime(&c, &r, |rt| rt.fps_limit = value.trim().to_owned())?;
+        let rt = change_runtime(&c, &r, |rt| rt.fps_limit = value.to_owned())?;
         self.write_layer_conf(&c, &r, &rt).await
     }
 
@@ -779,15 +784,21 @@ impl Core {
     /// `None` flips it; returns the new state.
     pub async fn set_mangohud(&self, on: Option<bool>) -> Result<bool> {
         self.steam_owns("The performance overlay")?;
+        let _changing = self.runtime_changes.lock().await;
         let Some(c) = self.current().await else { return Err(Error::NotFound("no session running".into())) };
+        // The watcher's library is loaded once: the running game may have been added since.
+        self.reload_game(&c.id).await?;
         let r = self.get(&c.id).await?;
         let mangoapp = self.mangoapp_draws(&c, &r).await;
         if !mangoapp && crate::runners::on_path("mangohud").is_none() {
             return Err(Error::Unavailable("MangoHud is not installed: nothing draws the HUD".into()));
         }
-        let was = runtime_of(&c, &r).mangohud;
-        let on = on.unwrap_or(!was);
-        let rt = change_runtime(&c, &r, |rt| rt.mangohud = on)?;
+        let mut was = false;
+        let rt = change_runtime(&c, &r, |rt| {
+            was = rt.mangohud;
+            rt.mangohud = on.unwrap_or(!was);
+        })?;
+        let on = rt.mangohud;
         if mangoapp {
             self.apply_mangoapp(on, true)?;
         } else {
@@ -802,13 +813,18 @@ impl Core {
     }
 
     pub async fn nest_filter(&self, filter: &str, sharpness: Option<u32>) -> Result<()> {
+        let _changing = self.runtime_changes.lock().await;
         self.nest_or()?.set_filter(filter, sharpness)?;
         if let Some(c) = self.current().await {
             let r = self.get(&c.id).await?;
-            change_runtime(&c, &r, |rt| {
-                rt.gamescope_filter = filter.to_owned();
-                rt.gamescope_sharpness = sharpness;
-            })?;
+            crate::session::change_runtime(
+                &c.session_id,
+                || Runtime::of(&r.effective),
+                |rt| {
+                    rt.gamescope_filter = filter.to_owned();
+                    rt.gamescope_sharpness = sharpness;
+                },
+            )?;
         }
         Ok(())
     }

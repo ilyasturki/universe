@@ -89,6 +89,8 @@ class CoreClient(QObject):
         self._jobs = {}
         self._closed = False
         self._skipped_told = False
+        self._fps_limit = ""
+        self._fps_lock = threading.Lock()
         self._deliver.connect(lambda fn: None if self._closed else fn())
         self._dirty = set()
         self._debounce = QTimer(self)
@@ -337,7 +339,14 @@ class CoreClient(QObject):
         return self._guarded({"layout": "us", "variant": ""}, self._core.keyboard_layout)
 
     def setFpsLimit(self, value):
-        self._call_async(lambda: self._core.set_fps_limit(value))
+        self._fps_limit = value
+
+        # Read under the lock: whichever thread writes last writes the last step, whatever order they run in.
+        def latest():
+            with self._fps_lock:
+                return self._core.set_fps_limit(self._fps_limit)
+
+        self._call_async(latest)
 
     def runtime(self):
         return self._guarded({}, self._core.runtime)

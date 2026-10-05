@@ -113,21 +113,28 @@ fn remove_marker() {
 
 /// A change to the running session's marker, in place: a temp file renamed over it, so `session-end` never reads half a marker.
 fn update_marker(f: impl FnOnce(&mut Marker)) -> Result<()> {
+    static WRITES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let Some(mut m) = read_marker() else { return Ok(()) };
     f(&mut m);
     let p = paths::current_session_file();
-    let tmp = p.with_extension("json.tmp");
+    // Several processes and threads write it: one shared temp would be renamed half written.
+    let tmp = p.with_extension(format!("json.{}-{}.tmp", std::process::id(), WRITES.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
     std::fs::write(&tmp, serde_json::to_string(&m)?)?;
     std::fs::rename(&tmp, &p)?;
     Ok(())
 }
 
-pub(crate) fn set_runtime(session_id: &str, runtime: &Runtime) -> Result<()> {
+/// `None` when the marker is gone or another session's.
+pub(crate) fn change_runtime(session_id: &str, seed: impl FnOnce() -> Runtime, f: impl FnOnce(&mut Runtime)) -> Result<Option<Runtime>> {
+    let mut changed = None;
     update_marker(|m| {
         if m.current.session_id == session_id {
-            m.runtime = Some(runtime.clone());
+            let rt = m.runtime.get_or_insert_with(seed);
+            f(rt);
+            changed = Some(rt.clone());
         }
-    })
+    })?;
+    Ok(changed)
 }
 
 /// A control the running game's own just changed: the first value noted is the one its end puts back.
@@ -727,7 +734,7 @@ pub(crate) mod tests {
         assert!(text.contains("fps_limit=30\n") && !text.contains("no_display"), "a new limit keeps the HUD shown at runtime: {text}");
         assert!(matches!(core.set_fps_limit("fast").await, Err(Error::Invalid(_))));
 
-        set_runtime(&sid, &Runtime { mangohud: false, ..core.runtime().await.unwrap() }).unwrap();
+        change_runtime(&sid, Runtime::default, |rt| rt.mangohud = false).unwrap();
         assert!(core.set_mangohud(None).await.unwrap(), "what another process left in the marker is read before the flip");
         assert!(!core.set_mangohud(Some(false)).await.unwrap());
         assert!(read().contains("no_display\n"), "hidden");

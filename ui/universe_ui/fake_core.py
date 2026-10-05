@@ -1404,9 +1404,10 @@ class FakeCore:
     def set_fps_limit(self, value):
         if not self.current():
             raise UniverseError("NotFound", "no session running")
-        if value.strip() not in ("", "auto", "none") and not value.strip().isdigit():
+        value = value.strip() or "auto"
+        if value not in ("auto", "none") and not (value.isascii() and value.isdigit() and int(value) > 0):
             raise UniverseError("Invalid", f"fps_limit must be auto, none or frames per second, not '{value}'")
-        self._runtime["fps_limit"] = value.strip()
+        self._runtime["fps_limit"] = value
         self.fps_limit_writes += 1
 
     def set_mangohud(self, on=None):
