@@ -1,40 +1,68 @@
 # Extensions
 
-An extension is a module or a source that does not ship with Universe. The UI calls them
-add-ons. It is the same folder a shipped one is (`docs/api.md`, Module protocol and Source
-protocol): a `module.toml` or a `source.toml` at its root, and the programs it names. An extension
-runs as you, with your files and your accounts: nothing sandboxes it.
+An extension is a module, a source or a theme that does not ship with Universe. The UI calls them
+add-ons. A module or a source is the same folder a shipped one is (`docs/api.md`, Module protocol
+and Source protocol): a `module.toml` or a `source.toml` at its root, and the programs it names. A
+theme is a look for Universe Big Screen: a `theme.toml` and its own QML tree, whose root is
+`theme.qml` (`docs/frontends.md`, Themes). An extension runs as you, with your files and your
+accounts: nothing sandboxes it, and a theme's QML can reach them as well as a program can.
 
 ## Layout
 
 ```
 my-module/
-  module.toml        # or source.toml: one of the two, never both
+  module.toml        # or source.toml: one kind's manifest, never two
   bin/…              # the hooks or the source's exe the manifest names, executable
+
+my-theme/
+  theme.toml
+  theme.qml          # the look's root, loaded in place of a built-in one
+  screenshot.png     # what theme.toml's `screenshot` names: shown beside its name
+  …                  # the rest of its QML tree, its pictures and sounds
+```
+
+Every manifest starts with the same fields: `api`, `id`, `name`, `version`, `description`, and
+optionally `author`, `license` and `screenshot` (a picture inside the folder, by its path there).
+`examples/theme/` is a theme of a few files to start from:
+
+```toml
+api = 2
+id = "sample"
+name = "Sample"
+version = "1.0.0"
+description = "The smallest theme: the library as a row of covers, and every look a Start away."
+author = "Ilyas Turki"
+license = "MIT"
+screenshot = "screenshot.png"
 ```
 
 Universe looks extensions up in three places. On the same id, a later one wins:
 
-1. `$XDG_DATA_HOME/universe/extensions/<module|source>/<id>/`: what `universe extension install` put
-   there, with `<id>.json` beside each one (where it came from, which `update` fetches again);
+1. `$XDG_DATA_HOME/universe/extensions/<module|source|theme>/<id>/`: what `universe extension install`
+   put there, with `<id>.json` beside each one (where it came from, which `update` fetches again);
 2. the shipped ones (`$UNIVERSE_MODULES_PATH` / `$UNIVERSE_SOURCES_PATH`, then
    `$XDG_DATA_DIRS/universe/{modules,sources}`);
 3. your own, `$XDG_CONFIG_HOME/universe/{modules,sources}/<id>/`, the folder to work on one in.
 
-Installing an id that ships, or that your own folder holds, is refused, and so is an id the other
-kind holds: a module and a source never share one.
+A theme has only the first: the built-in looks (`reprise`, `switch2`, `ps5`) are not folders, and
+there is no folder of your own for themes.
+
+Installing an id that ships (a built-in look's, for a theme), or that your own folder holds, is
+refused, and so is an id another kind holds: two kinds never share one.
 
 ## API number
 
 The manifest's `api` names the extension API it was written for. This Universe reads **api 2**.
 An extension whose `api` it does not read, or that names none, is refused at install. Found later,
 after an update of Universe, it stays listed but unavailable: its hooks never run, its source
-verbs are refused, and `universe doctor` shows an `extension-api` line for it, whether it is on or
-off.
+verbs are refused, a theme is listed in Settings › Themes but cannot be picked, and
+`universe doctor` shows an `extension-api` line for it, whether it is on or off.
 
-The API grows without a bump while every change is an addition: a new hook, field, setting key or
-event that an older extension simply does not use. A change that would break an extension written
-for api 2 bumps the number, and Universe then reads the range it still supports.
+The API grows without a bump while every change is an addition: a new hook, field, setting key,
+event or `api` member that an older extension simply does not use. For a theme, the API is the part
+of the QML `api` object `docs/frontends.md` lists under What a theme can rely on. A change that
+would break an extension written for api 2 bumps the number, and Universe then reads the range it
+still supports.
 
 `[requires] core` (comparators on Universe's version) still applies on top, for an extension that
 needs a feature added later in the same api.
@@ -64,28 +92,31 @@ a bare word is always an id of the index. Replacing an installed extension waits
 runs.
 
 Installing does not switch an extension on: `universe module enable <id>` or
-`universe source enable <id>` does, and so do the Modules and Sources pages. An update replaces the
-folder in place. An index install takes the index's newer version. Any other install is fetched
-again from its URL, archive or folder. Removing switches the extension off, then deletes its folder.
-What it saved under `$XDG_DATA_HOME/universe/{modules,sources}/<id>/` stays.
+`universe source enable <id>` does, and so do the Modules and Sources pages. A theme is picked in
+Settings › Themes; one that fails to load puts the default look back, with a notice. An update
+replaces the folder in place. An index install takes the index's newer version. Any other install
+is fetched again from its URL, archive or folder. Removing switches a module or a source off, then
+deletes its folder; removing the theme in use puts the default look back. What it saved under
+`$XDG_DATA_HOME/universe/{modules,sources}/<id>/` stays.
 
-In the UI, the Modules and Sources pages of every look end on a "Get more…" row. It lists the
-index's add-ons of that kind and installs one after the same confirmation. The UI installs from the
-index only. An unlisted extension installed from the CLI shows an Unlisted tag in the lists and can
-be removed there.
+In the UI, the Modules and Sources pages of every look end on a "Get more…" row, and Settings ›
+Themes has one after the looks. It lists the index's add-ons of that kind and installs one after the
+same confirmation. The UI installs from the index only. An unlisted extension installed from the
+CLI shows an Unlisted tag in the lists and can be removed there.
 
 ## By hand
 
 The CLI is not needed:
 
-1. Put the folder under `$XDG_DATA_HOME/universe/extensions/module/<id>/` (or `source/<id>/`),
-   named after its manifest's `id`. Make its programs executable.
+1. Put the folder under `$XDG_DATA_HOME/universe/extensions/module/<id>/` (or `source/<id>/`,
+   `theme/<id>/`), named after its manifest's `id`. Make its programs executable.
 2. Switch it on: `universe module enable <id>`, or `enabled` in `config.toml`'s `[modules]` or
-   `[sources]`.
+   `[sources]`; a theme shows in Settings › Themes the next time it opens.
 
 Without a `<id>.json` beside it, it reads as unlisted and `update` leaves it alone. To work on an
 extension, use `$XDG_CONFIG_HOME/universe/modules/<id>/` instead: that folder wins over an
-installed copy.
+installed copy. A theme has no such folder: install it from the folder you work in, then
+`universe extension update <id>` copies it again, which the UI loads at its next start.
 
 ## The index
 
@@ -113,9 +144,9 @@ When empty it is the one the registry (below) publishes,
 }
 ```
 
-`kind` is `module` or `source`. `url` is the archive and `sha256` its digest: an archive whose
-digest differs is refused, and so is one whose manifest holds another id, kind or version than its
-entry. A `url` that names a file is only read from an index that is a file itself. An update that
+`kind` is `module`, `source` or `theme`. `url` is the archive and `sha256` its digest: an archive
+whose digest differs is refused, and so is one whose manifest holds another id, kind or version than
+its entry. A `url` that names a file is only read from an index that is a file itself. An update that
 the index lists for another `api` is not offered. The index is HTTPS plus these pins, with no
 signature. Universe reads schema 1 and refuses a newer one.
 

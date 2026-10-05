@@ -32,7 +32,7 @@ One context property, `api`:
 | `api.system` | what logind will do with the machine: `actions`, the ones of `suspend`, `reboot` and `power_off` it would carry out (the core's `power_actions()`, read once at startup), `run(action)` (`power(action)` off the UI thread; `reboot` and `power_off` stop a running session first, so its `session-end` runs before the machine goes down), `failed(action, message)` when logind refuses. `--fake` records the call and does nothing. `steam`: the launcher runs in Steam's Game Mode (the core's `under_steam()`): no power actions (the menu keeps Quit Universe alone, and says Steam's menu has the rest), no Sound section, no dock over a game, no MangoHud, frame limit or Pause on HOME rows. `session`: the launcher runs as the Universe session a display manager started (the core's `nest::session()`): its way out logs out, so every look's power menu says Log out for Quit Universe (action `logout`), and the PS5 Control Center's Power panel adds a Log Out of its own. `deck`: `lcd` or `oled` on a Steam Deck. `controls`: the core's `system_controls()`, read after `apply_system()` at startup, on `reload()` and as a session starts or ends (a game's own `[system]` goes on and off with it); `set(id, value)` (the machine's own), `setFor(game, id, value)` (the game's own, the machine's own for an empty `game`) and `setAll(game, id, value)` (the machine's own, the game letting its own go) show the value at once and write it off the UI thread, a refusal raising `controlFailed(id, message)` and reading the machine back; `control(id)` one of them. Reprise lists them under Settings › System and in the dock's System group (a step writes once the cursor rests, 400 ms), Switch 2 under System Settings › Performance, the PS5 look under Settings › Performance and in the Control Center's System panel; `ui/Controls.js` turns one into rows any look uses. `network` / `bluetooth`: NetworkManager lists a Wi-Fi card / BlueZ an adapter, outside Game Mode: the looks' Network and Bluetooth pages show. `--fake` lists an OLED Deck's under `UNIVERSE_DECK`, and plays Game Mode under `GAMESCOPE_WAYLAND_DISPLAY` with `UNIVERSE_FAKE_STEAM=1`, the Universe session with `UNIVERSE_FAKE_SESSION=1` |
 | `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written, a game's sessions and their logs, a game's data and the storage view, the changelog, Wi-Fi and Bluetooth) |
 | `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed` and `--size` turn it off) |
-| `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `overlay`, `osd`, `frame`, `ground`, `detail`), `current`, `frame`, `set(id)`, `landing` / `takeLanding()`, `fontPath` (the current look's own font file, stored under `<id>Font`: `switch2Font`, `ps5Font`), `soundsPath` (a folder of WAVs, stored under `<id>Sounds`) and `soundFiles` (`{name: url}` of the WAVs in it, the name lowercased: each replaces the look's bundled sound of that name, `sound/SoundPool.qml`'s `overrides`; Switch 2 offers it in Settings › Themes), `bootIntro` (the startup animation's switch, every look's: on until `ui-memory.json`'s `bootIntro` is false) |
+| `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `overlay`, `osd`, `frame`, `ground`, `accent`, `detail`, `unlocked`, `screenshot`, `installed`, `unavailable`; the built-in ones, then the installed themes, see "Themes"), `current`, `frame`, `set(id)` (false for one that is `unavailable`), `rescan()`, `failed()`, `takeNotice()`, `landing` / `takeLanding()`, `fontPath` (the current look's own font file, stored under `<id>Font`: `switch2Font`, `ps5Font`), `soundsPath` (a folder of WAVs, stored under `<id>Sounds`) and `soundFiles` (`{name: url}` of the WAVs in it, the name lowercased: each replaces the look's bundled sound of that name, `sound/SoundPool.qml`'s `overrides`; Switch 2 offers it in Settings › Themes), `bootIntro` (the startup animation's switch, every look's: on until `ui-memory.json`'s `bootIntro` is false) |
 | `api.home` | the HOME button over a running game (see "HOME and the dock"): `shown` (`game` / `launcher`), `underGame` (the game is on screen over the launcher, inside gamescope), `open`, `loading` (a session this client launched has no window up yet), `paused`, `pauseOnHome`, `flipped`, `frame`, `volumePercent`, `muted`, `outputs` (`loadOutputs()` fills it); `pressed()`, `stopping(title)`; `openDock()`, `closeDock()`, `dockClosed()`, `toGame()`, `toLauncher(landing?)` / `takeLanding()`, `covered()`, `stop()`, `setPauseOnHome(on)`, `screenshot()` (→ `screenshotTaken(path)`), `volume(change, value)`, `setOutput(id)`, `runtime()` / `setRuntime(key, value)` (the running game's HUD, frame limit and filter, for this session alone), `launchChoices(key)`, `setLaunchValueAll(key, value)` (every game's default, the game following it), `screenRefresh()` |
 | `api.boot` | the startup animation (see "Startup animation"): `running`, `started()` (its first frame is on screen), `skipped()`, `landed(skipped)` (the mark is done: each look builds its home), `land()`, `finish()` |
 
@@ -208,6 +208,47 @@ visible game (`loadAll()`, over `sessions("")`), which the Switch 2 look shows a
 and the PS5 look as its Media Gallery and Journal;
 the Album lays `api.screens.shots` (`loadAll()`) on the same grid, newest first, a Show pick
 narrowing it to screenshots or videos, A on a shot opening it full-screen (◀ ▶ step between shots).
+
+Beside the three built-in looks, `api.theme.themes` lists the installed themes
+([`extensions.md`](extensions.md)): a folder under `$XDG_DATA_HOME/universe/extensions/theme/<id>/`
+holding a `theme.toml` and a QML tree of its own whose root is `theme.qml`. `themes.py` reads them
+through the core's `themes()` at start and again on `rescan()`: after an add-on install, update or
+removal, and whenever a look opens its Settings › Themes. An installed theme's row carries
+`installed`, `screenshot` (the manifest's picture as a file URL: Reprise's Theme menu draws it by the
+name, the Switch 2 and PS5 rows in place of the swatch) and `unavailable` (why it cannot be picked:
+an `api` this Universe does not read, or no `theme.qml`); `set(id)` refuses such a one and the looks
+list it dimmed. It draws in the main window alone: its `overlay` is empty, so HOME over a game
+brings the launcher back as under Switch 2, its `osd` is the host's `ui/VolumePill.qml`, its `ground`
+black. A theme that fails to load (the `Loader`'s `status` turns `Error`; QML logs why) makes
+`main.qml` call `failed()`, which puts the default look back, writes it to `ui-memory.json` and leaves
+a notice that `main.qml` hands to `Notices.fail` once the default look has loaded (`takeNotice()`).
+So do a remembered theme found unusable at start and the current theme gone or unusable on a
+`rescan()`. Each look's Settings › Themes follows the looks with a "Get more…" row (`key: "more"`,
+`addons: "theme"`) that lists the index's themes, as Modules and Sources do (see "The launch and
+modules sections"). `examples/theme/` is a minimal theme, the one the tests install.
+
+### What a theme can rely on
+
+A theme imports none of the built-in looks' QML (`qml/core`, `qml/ui`, a look's own folders): Qt's
+modules, its own files and `api`. Of `api`, the extension API a `theme.toml` names (`api`, 2 today,
+see `extensions.md`) holds these, and an older theme keeps working while they only grow:
+
+| Member | What a theme gets |
+|---|---|
+| `api.keys` | `isAccept`, `isCancel`, `isDetails`, `isFilters`, `isPageUp`, `isPageDown`, `isPrevPage`, `isNextPage`, `isMenu`, `isScreenUp`, `isScreenDown`, `isFirst`, `isLast` (each over a key event), `cancelHeld()`, `mode` |
+| `api.allGames` | the library: `count`, `get(row)`, `byId(id)`, a `modelData` role; each `Game` as listed above, `launch()` included |
+| `api.collections` | one per platform: `id`, `name`, `games` (`count`, `get(row)`) |
+| `api.memory` | `get`, `set`, `has`, `unset`; a theme keeps its keys under its own id (`<id>.…`) |
+| `api.theme` | `themes`, `current`, `set(id)`, `landing` / `takeLanding()` (`themes` when a switch has just landed on it: it opens the looks it offers) |
+| `api.home` | `shown`, `underGame`, `toGame()`, `stop()` |
+| `api.power`, `api.network` | as above, read only |
+| `api.system` | `actions`, `run(action)`, `steam`, `session` |
+| `api.boot` | `running`, `landed(skipped)` |
+| `api.fullscreen` | as above |
+
+The rest (`api.screens`, `api.universe`, `api.focus`, `api.pad` and the members not listed) is the
+built-in looks' own, and changes with them. A theme offers a way to the other looks, as each built-in
+one does in Settings › Themes: the sample's Start lists `api.theme.themes` and A calls `set(id)`.
 
 ## Startup animation
 
@@ -947,7 +988,8 @@ which list it is), the ones running first, the others in an "Off" card. A opens 
 warning while it is off). `indexOf(id)` finds an entry's row for the cursor to land on again. An
 installed extension's `origin` reads `unlisted` as a `tag` and in `meta`. Each list ends on a
 "Get more…" row of its own card (`key: "more"`, `addons` the kind, `module` or `source`; no switch,
-`toggle` leaves it). Picking it opens `api.screens.addons` (`AddonsForm`, over the core's
+`toggle` leaves it); each look's Settings › Themes builds one of its own, `addons: "theme"` (see
+"Themes"). Picking it opens `api.screens.addons` (`AddonsForm`, over the core's
 `extensions()`, fetched again when a list loads, or at once after an install or a removal, once a
 minute at most) in the look's menu: `items(kind)` is one item per add-on of the kind, its `action`
 the add-on's id, an empty one picking nothing, its `state` saying why (`loading`, `error` as
@@ -960,7 +1002,8 @@ another version. A single action goes straight to its confirmation, more open a 
 root). `confirm(id, action)` is the question: an install's names the kind, that it runs programs as
 you, and its origin, the index's host (`kind`, `origin`, `runsAsYou` say the same to a test).
 `act(id, action)` installs or updates as a client job, or removes off the UI thread. Each one
-ends in a `message` and a `modulesChanged` plus `sourcesChanged` that reloads both lists. The UI
+ends in a `message`, a `modulesChanged` plus `sourcesChanged` that reloads both lists, and `settled`,
+on which `api.theme` reads the installed themes again. The UI
 installs from the index only: `universe extension install` takes a URL, an archive or a folder.
 `pages/FormPage.qml` with `{ module }` or `{ source }` (`theme.qml` `openSub`;
 `switch2/pages/FormPage.qml` on the stack; both lay the form out as the game settings page does, a
