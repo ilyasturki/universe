@@ -91,7 +91,7 @@ Item {
                     objectName: "osdPercent"
 
                     anchors.right: parent.right
-                    text: root.level + "%"
+                    text: api.home.volumePercent + "%"
                     color: root.muted ? Theme.textFaint : Theme.text
                     font.family: Theme.sans
                     font.weight: Font.DemiBold
