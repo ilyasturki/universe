@@ -66,15 +66,6 @@ FocusScope {
         add("Last played", last && !isNaN(last.getTime()) && last.getFullYear() > 1971 ? Format.lastPlayed(last) : "");
         if (g.extra["metacritic"] !== undefined)
             add("Metacritic", g.extra["metacritic"][0]);
-        var hours = function (v) {
-            return (Number(v) >= 10 ? Math.round(Number(v)) : Number(v).toFixed(1)) + " h";
-        };
-        var hltb = [["hltb-main", "Main"], ["hltb-extra", "Extra"], ["hltb-completionist", "100%"]].filter(function (p) {
-            return g.extra[p[0]] !== undefined;
-        }).map(function (p) {
-            return p[1] + " " + hours(g.extra[p[0]][0]);
-        });
-        add("How long to beat", hltb.join("  ·  "));
         add("Tags", g.tags.join(", "));
         var launch = record && record.launch ? record.launch : {};
         add("Program", launch.exe || "");

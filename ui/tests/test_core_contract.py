@@ -75,12 +75,8 @@ MAPS |= {"controller.axes", "controller.buttons", "settings.choice_labels"}
 # What a file sets as written, the config's or a game's own tables: no schema to hold either side to.
 OPAQUE = {"set", "modules", "sources", "runners", "proton"}
 
-HLTB = "the fixture's metadata.extra feeds HLTB and Metacritic rows the core has no field for"
-GAME_DRIFT = {
-    "metadata.extra only in the fake": HLTB,
-}
 # What the fake knowingly answers otherwise, per read, as globs of `<path> only in the fake|core` or `<path>: <core types> | <fake types>`.
-KNOWN = {"list": GAME_DRIFT, "get": GAME_DRIFT}
+KNOWN = {}
 # Reads of the machine: without a GPU or the default roots, the core answers nothing to compare.
 HOST = {"gpu", "disk_free"}
 

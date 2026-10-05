@@ -16,7 +16,7 @@
         "players": 1,
         "description": "Two hundred years after the first colonists arrived, Mars is ruled by corporations and short of water. Zachariah, a Technomancer of the Abundance army, flees the secret police across the red planet with a band of companions, from the domes of Ophir to the Noctis slums, trading, fighting and deciding who to trust.",
         "summary": "A science-fiction RPG set on a hostile Mars.",
-        "extra": {"metacritic": [62], "hltb-main": [26.5], "hltb-extra": [39], "hltb-completionist": [50]},
+        "metacritic": 62,
         "sgdb_id": "4287"
       },
       "stats": {"hours": 41.5, "play_count": 23, "last_played": "2026-09-09T22:41:00+02:00"},

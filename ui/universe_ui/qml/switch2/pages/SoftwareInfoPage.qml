@@ -72,19 +72,6 @@ FocusScope {
                 label: "Metacritic",
                 value: String(game.extra["metacritic"][0])
             });
-        var hours = function (v) {
-            return (Number(v) >= 10 ? Math.round(Number(v)) : Number(v).toFixed(1)) + " h";
-        };
-        var hltb = [["hltb-main", "Main"], ["hltb-extra", "Extra"], ["hltb-completionist", "100%"]].filter(function (p) {
-            return game.extra[p[0]] !== undefined;
-        }).map(function (p) {
-            return p[1] + " " + hours(game.extra[p[0]][0]);
-        });
-        if (hltb.length > 0)
-            out.push({
-                label: "How long to beat",
-                value: hltb.join("  ·  ")
-            });
         return out;
     }
 
