@@ -1,6 +1,6 @@
 import _eden
 from _controls import Context
-from controls_fixtures import EDGE, XBOX, twin
+from controls_fixtures import EDGE, PRO3_DINPUT, XBOX, twin
 
 # What Eden's own auto-mapping wrote for that Edge (input/dualsense-edge.ini).
 G = "engine:sdl,port:0,guid:050000004c050000f20d000000006800"
@@ -52,6 +52,14 @@ def test_positional_is_what_edens_own_mapping_writes_less_home():
         assert params(got[key]) == params(want), key
     assert got["button_screenshot"] == _eden.EMPTY
     assert got["connected"] == "true" and got["type"] == "0"
+
+
+def test_a_pro_3_in_d_input_puts_positionals_letters_on_the_printed_ones():
+    # SDL's HIDAPI 8BitDo driver numbers the face buttons by their print: 0 is the A on the right, 1 the B at the bottom.
+    for layout, abxy in (("positional", ["0", "1", "2", "3"]), ("xbox", ["1", "0", "3", "2"])):
+        got = player(_eden.values_for(Context([PRO3_DINPUT], layout)))
+        assert [params(got[f"button_{k}"])["button"] for k in "abxy"] == abxy
+    assert params(got["button_a"])["guid"] == "05000000c82d00000960000000006800"
 
 
 def test_an_xbox_pad_on_the_joystick_driver_has_axis_triggers_and_no_motion():

@@ -103,7 +103,7 @@ SWITCH_PRO_DIGITAL = Pad(**{**vars(SWITCH_PRO), "bindings": {**SWITCH_PRO.bindin
 # SDL3's HIDAPI 8BitDo driver on a Pro 3 in D-input mode over Bluetooth: raw buttons by printed label (b0 the A on the right), B at the bottom.
 PRO3_DINPUT = Pad(
     name="8BitDo Pro 3",
-    guid=bytes.fromhex("05000000c82d00000960000000006800"),
+    guid=bytes.fromhex("0500546cc82d00000960000000006800"),
     bindings={
         (B, 0): Input(B, 1),
         (B, 1): Input(B, 0),
@@ -123,9 +123,9 @@ PRO3_DINPUT = Pad(
     player_index=3,
     axes=6,
     labels=(2, 1, 4, 3),
-    mapping="05000000c82d00000960000000006800,*,a:b1,b:b0,back:b4,dpdown:h0.4,dpleft:h0.8,dpright:h0.2,dpup:h0.1,guide:b5,"
+    mapping="0500546cc82d00000960000000006800,*,a:b1,b:b0,back:b4,dpdown:h0.4,dpleft:h0.8,dpright:h0.2,dpup:h0.1,guide:b5,"
     "leftshoulder:b9,leftstick:b7,lefttrigger:a4,leftx:a0,lefty:a1,rightshoulder:b10,rightstick:b8,righttrigger:a5,rightx:a2,righty:a3,"
-    "start:b6,x:b3,y:b2,hint:!SDL_GAMECONTROLLER_USE_BUTTON_LABELS:=1,paddle1:b12,paddle2:b11,paddle3:b14,paddle4:b13,platform:Linux,",
+    "start:b6,x:b3,y:b2,hint:!SDL_GAMECONTROLLER_USE_BUTTON_LABELS:=1,paddle1:b12,paddle2:b11,paddle3:b14,paddle4:b13,crc:6c54,platform:Linux,",
 )
 
 # The Pro 3 in X-input mode is an Xbox 360 pad to xpad: the bottom button, printed B, is BTN_A and SDL labels it A.
