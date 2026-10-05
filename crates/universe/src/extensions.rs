@@ -680,6 +680,7 @@ mod tests {
             &Default::default(),
             "status",
             &[],
+            &[],
             |_| {},
             |ev| {
                 if let crate::sources::SourceEvent::LoggedIn { user: u } = ev {
