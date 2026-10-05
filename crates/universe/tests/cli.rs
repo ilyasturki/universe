@@ -232,6 +232,54 @@ async fn network_lists_what_networkmanager_on_the_system_bus_sees() {
     assert_eq!((&state["device"], &first["ssid"], &first["security"]), (&serde_json::json!("wlan0"), &serde_json::json!("Home"), &serde_json::json!("psk")));
 }
 
+fn echoes(fd: i32) -> bool {
+    // SAFETY: an all-zero termios is a valid value for tcgetattr to fill.
+    let mut t: libc::termios = unsafe { std::mem::zeroed() };
+    // SAFETY: `fd` is an open terminal.
+    assert_eq!(unsafe { libc::tcgetattr(fd, &mut t) }, 0);
+    t.c_lflag & libc::ECHO != 0
+}
+
+// Ctrl-C at the password prompt ends the CLI with the terminal's echo back on.
+#[tokio::test]
+async fn a_password_prompt_cut_short_puts_the_terminals_echo_back() {
+    use std::os::fd::FromRawFd;
+    let bus = testbus::Bus::start();
+    let nm = testbus::nm::Nm::serve(&bus, testbus::nm::Router::default()).await;
+    nm.access_point("Home", 70, "psk").await;
+    let (mut primary, mut terminal) = (0, 0);
+    // SAFETY: openpty fills both descriptors; no name, settings or size is asked for.
+    assert_eq!(unsafe { libc::openpty(&mut primary, &mut terminal, std::ptr::null_mut(), std::ptr::null(), std::ptr::null()) }, 0);
+    // SAFETY: the duplicate is the child's stdin alone.
+    let stdin = unsafe { std::fs::File::from_raw_fd(libc::dup(terminal)) };
+    let dir = tempfile::tempdir().unwrap();
+    let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_universe"))
+        .args(["network", "connect", "Home"])
+        .env("DBUS_SYSTEM_BUS_ADDRESS", &bus.address)
+        .env("HOME", dir.path())
+        .stdin(stdin)
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    let asking = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while echoes(terminal) {
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+    });
+    asking.await.expect("the prompt turns the echo off");
+    // SAFETY: the child is ours and still running.
+    unsafe { libc::kill(child.id().unwrap() as i32, libc::SIGINT) };
+    let status = tokio::time::timeout(std::time::Duration::from_secs(5), child.wait()).await.unwrap().unwrap();
+    assert!(!status.success());
+    assert!(echoes(terminal), "the echo is back");
+    // SAFETY: both descriptors are this test's.
+    unsafe {
+        libc::close(primary);
+        libc::close(terminal);
+    }
+}
+
 // The launcher's side of the stream: commands on stdin, a pairing's question out and its answer back in, on the watch's own agent.
 #[tokio::test]
 async fn bluetooth_watch_pairs_through_its_own_agent_over_stdin() {

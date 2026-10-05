@@ -2110,6 +2110,63 @@ fn watch_out(json: bool) -> impl FnMut(Value) -> bool {
     }
 }
 
+// The terminal as a password prompt found it, for a signal arriving mid-prompt to put back.
+static ECHOING: std::sync::OnceLock<libc::termios> = std::sync::OnceLock::new();
+const ENDING: [libc::c_int; 3] = [libc::SIGINT, libc::SIGTERM, libc::SIGHUP];
+
+extern "C" fn echo_back_and_end(sig: libc::c_int) {
+    // SAFETY: tcsetattr, signal and raise are async-signal-safe, and ECHOING is set before this handler is.
+    unsafe {
+        if let Some(saved) = ECHOING.get() {
+            libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, saved);
+        }
+        libc::signal(sig, libc::SIG_DFL);
+        libc::raise(sig);
+    }
+}
+
+/// The echo of `fd` off until dropped (an error, a panic). With `signals`, on stdin, Ctrl-C and the like put it back too.
+struct NoEcho {
+    fd: libc::c_int,
+    saved: libc::termios,
+    handlers: Option<[libc::sighandler_t; 3]>,
+}
+
+impl NoEcho {
+    fn on(fd: libc::c_int, signals: bool) -> Option<NoEcho> {
+        // SAFETY: an all-zero termios is a valid value for tcgetattr to fill.
+        let mut saved: libc::termios = unsafe { std::mem::zeroed() };
+        // SAFETY: tcgetattr writes `saved` or fails on a fd that is no terminal.
+        if unsafe { libc::tcgetattr(fd, &mut saved) } != 0 {
+            return None;
+        }
+        let handlers = signals.then(|| {
+            let _ = ECHOING.set(saved);
+            // SAFETY: the handler only calls async-signal-safe functions.
+            ENDING.map(|sig| unsafe { libc::signal(sig, echo_back_and_end as extern "C" fn(libc::c_int) as libc::sighandler_t) })
+        });
+        let mut quiet = saved;
+        quiet.c_lflag &= !libc::ECHO;
+        // SAFETY: `quiet` is the terminal's own settings, one flag off.
+        unsafe { libc::tcsetattr(fd, libc::TCSANOW, &quiet) };
+        Some(NoEcho { fd, saved, handlers })
+    }
+}
+
+impl Drop for NoEcho {
+    fn drop(&mut self) {
+        // SAFETY: the settings and handlers put back are the ones `on` found.
+        unsafe {
+            libc::tcsetattr(self.fd, libc::TCSANOW, &self.saved);
+            if let Some(handlers) = self.handlers {
+                for (sig, handler) in ENDING.into_iter().zip(handlers) {
+                    libc::signal(sig, handler);
+                }
+            }
+        }
+    }
+}
+
 /// A secret read from the terminal without echo, else a line of stdin.
 fn secret(prompt: &str) -> String {
     use std::io::IsTerminal;
@@ -2120,16 +2177,10 @@ fn secret(prompt: &str) -> String {
         return s.trim_end_matches(['\n', '\r']).to_string();
     }
     eprint!("{prompt} ");
-    let saved = rustix::termios::tcgetattr(&stdin).ok();
-    if let Some(mut quiet) = saved.clone() {
-        quiet.local_modes.remove(rustix::termios::LocalModes::ECHO);
-        let _ = rustix::termios::tcsetattr(&stdin, rustix::termios::OptionalActions::Now, &quiet);
-    }
+    let quiet = NoEcho::on(libc::STDIN_FILENO, true);
     let mut s = String::new();
     let _ = stdin.read_line(&mut s);
-    if let Some(saved) = saved {
-        let _ = rustix::termios::tcsetattr(&stdin, rustix::termios::OptionalActions::Now, &saved);
-    }
+    drop(quiet);
     eprintln!();
     s.trim_end_matches(['\n', '\r']).to_string()
 }
@@ -3025,6 +3076,37 @@ async fn pick(core: &Core, name: &str) -> anyhow::Result<String> {
             }
             let n: usize = ask(&format!("which one? [1-{}]", ids.len())).parse().unwrap_or(0);
             ids.get(n.wrapping_sub(1)).cloned().ok_or_else(|| anyhow::anyhow!("no choice"))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::NoEcho;
+
+    fn echoes(fd: libc::c_int) -> bool {
+        // SAFETY: an all-zero termios is a valid value for tcgetattr to fill.
+        let mut t: libc::termios = unsafe { std::mem::zeroed() };
+        // SAFETY: `fd` is an open terminal.
+        assert_eq!(unsafe { libc::tcgetattr(fd, &mut t) }, 0);
+        t.c_lflag & libc::ECHO != 0
+    }
+
+    #[test]
+    fn a_password_prompt_puts_the_echo_back_when_it_ends_early() {
+        let (mut primary, mut terminal) = (0, 0);
+        // SAFETY: openpty fills both descriptors; no name, settings or size is asked for.
+        assert_eq!(unsafe { libc::openpty(&mut primary, &mut terminal, std::ptr::null_mut(), std::ptr::null(), std::ptr::null()) }, 0);
+        assert!(echoes(terminal));
+        let quiet = NoEcho::on(terminal, false).expect("a pty is a terminal");
+        assert!(!echoes(terminal));
+        drop(quiet);
+        assert!(echoes(terminal), "an error or a panic drops the guard on its way out");
+        assert!(NoEcho::on(-1, false).is_none());
+        // SAFETY: both descriptors are this test's.
+        unsafe {
+            libc::close(primary);
+            libc::close(terminal);
         }
     }
 }
