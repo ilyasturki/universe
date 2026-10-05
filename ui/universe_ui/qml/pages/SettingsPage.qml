@@ -6,6 +6,7 @@ import "../ui"
 import "../ui/Controls.js" as Controls
 import "../ui/Macros.js" as Macros
 import "../ui/Sections.js" as Sections
+import "../ui/Wifi.js" as Wifi
 
 FocusScope {
     id: page
@@ -38,7 +39,14 @@ FocusScope {
 
     readonly property var sections: Sections.shown(api.system)
     property int section: 0
-    readonly property string sectionId: sections[section].id
+    readonly property string sectionId: sections[Math.min(section, sections.length - 1)].id
+    // The section picked, kept by id: a Network or Bluetooth entry coming or going moves the others.
+    property string pickedId: ""
+
+    onSectionsChanged: {
+        var at = sectionIndex(pickedId);
+        section = at >= 0 ? at : Math.min(section, sections.length - 1);
+    }
 
     function sectionIndex(id) {
         var to = Sections.aliases[id] || id;
@@ -460,6 +468,120 @@ FocusScope {
                 groups: groups
             };
         }
+        if (sectionId === "network") {
+            var wifi = api.screens.network;
+            rows.push({
+                section: "Network",
+                key: "status",
+                label: "Connection",
+                type: "static",
+                display: Wifi.link(wifi),
+                detail: Wifi.connectivity(wifi.connectivity),
+                icon: wifi.link === "wired" ? "screen" : "wifi"
+            });
+            rows.push({
+                section: "Network",
+                key: "check",
+                label: "Test connection",
+                type: "action",
+                display: wifi.checking ? "Testing…" : "",
+                detail: "Asks NetworkManager whether the internet answers.",
+                action: wifi.checking ? "" : "Test"
+            });
+            rows.push({
+                section: "Network",
+                key: "wifi",
+                label: "Wi-Fi",
+                type: "bool",
+                value: wifi.enabled,
+                detail: "A cable needs nothing set up: plug it in."
+            });
+            groups.push({
+                title: "Status",
+                rows: [0, 1]
+            });
+            groups.push({
+                title: "Wi-Fi",
+                rows: [2]
+            });
+            var nets = wifi.networks;
+            for (var w = 0; w < nets.length; w++)
+                rows.push(Wifi.row(nets[w], wifi.connecting));
+            if (wifi.enabled && nets.length === 0)
+                rows.push({
+                    section: "Network",
+                    key: "searching",
+                    label: "Looking for networks…",
+                    type: "info",
+                    value: false,
+                    detail: ""
+                });
+            if (rows.length > 3)
+                groups.push({
+                    title: "Networks",
+                    meta: nets.length > 0 ? Format.plural(nets.length, "network", "networks") + " in range" : "",
+                    rows: rows.slice(3).map(function (r, i) {
+                        return i + 3;
+                    })
+                });
+            return {
+                rows: rows,
+                groups: groups
+            };
+        }
+        if (sectionId === "bluetooth") {
+            var bt = api.screens.bluetooth;
+            rows.push({
+                section: "Bluetooth",
+                key: "power",
+                label: "Bluetooth",
+                type: "bool",
+                value: bt.powered,
+                detail: "Plug a controller in by USB to use it at once; pair it here to go without the cable."
+            });
+            groups.push({
+                title: "Bluetooth",
+                rows: [0]
+            });
+            var lists = [
+                {
+                    title: "Paired",
+                    devices: bt.paired
+                },
+                {
+                    title: "Found",
+                    devices: bt.found
+                }
+            ];
+            lists.forEach(function (list) {
+                var start = rows.length;
+                list.devices.forEach(function (d) {
+                    rows.push(page.deviceRow(d, bt.pairing));
+                });
+                if (list.title === "Found" && list.devices.length === 0 && bt.discovering)
+                    rows.push({
+                        section: "Bluetooth",
+                        key: "searching",
+                        label: "Searching…",
+                        type: "info",
+                        value: false,
+                        wraps: true,
+                        detail: "Put the device in pairing mode: hold its pairing button until its light blinks."
+                    });
+                if (rows.length > start)
+                    groups.push({
+                        title: list.title,
+                        meta: list.title === "Found" && bt.discovering ? "Searching" : "",
+                        rows: rows.slice(start).map(function (r, i) {
+                            return start + i;
+                        })
+                    });
+            });
+            return {
+                rows: rows,
+                groups: groups
+            };
+        }
         if (sectionId === "storage") {
             api.screens.storage.rows.forEach(function (r) {
                 if (r.heading) {
@@ -574,6 +696,182 @@ FocusScope {
         return looks.map(function (t) {
             return t.name;
         });
+    }
+
+    readonly property var deviceIcons: ({
+            pad: "gamepad",
+            audio: "headphones",
+            keyboard: "keyboard",
+            mouse: "cursor"
+        })
+
+    function deviceRow(d, pairing) {
+        return {
+            section: "Bluetooth",
+            key: "device",
+            label: d.name,
+            type: "action",
+            display: pairing === d.address ? "Pairing…" : d.connected ? "Connected" : d.paired ? "Not connected" : "",
+            detail: d.battery !== null && d.battery !== undefined ? "Battery " + d.battery + "%" : "",
+            icon: deviceIcons[d.kind] || "bluetooth",
+            accent: d.connected,
+            action: d.paired ? "Options" : "Pair",
+            address: d.address,
+            paired: d.paired,
+            connected: d.connected,
+            kind: d.kind,
+            battery: d.battery
+        };
+    }
+
+    // The network this page asked to join, forget or test: its outcome is told here, not by every page that lists networks.
+    property string joining: ""
+    property string forgetting: ""
+    property bool checking: false
+
+    function askPassword(ssid) {
+        Sound.panel();
+        prompts.prompt(Wifi.passwordTitle(ssid), "", function (password) {
+            if (password === "")
+                return;
+            page.joining = ssid;
+            api.screens.network.join(ssid, password);
+        }, "secret");
+    }
+
+    function networkAction(row) {
+        var wifi = api.screens.network;
+        if (row.key === "wifi") {
+            Sound.favourite(!row.value);
+            wifi.setEnabled(!row.value);
+        } else if (row.key === "check") {
+            checking = wifi.check();
+            checking ? Sound.enter() : Sound.edge();
+        } else if (row.key !== "network") {
+            Sound.edge();
+        } else if (Wifi.step(wifi, row) === "refuse") {
+            Sound.edge();
+            Notices.fail(Wifi.refusal(row));
+        } else if (Wifi.step(wifi, row) === "forget") {
+            Sound.panel();
+            confirm.ask({
+                message: "Forget " + row.ssid + "?",
+                detail: "Universe stops joining it on its own; joining it again takes its password.",
+                no: "Cancel",
+                yes: "Forget"
+            }, function (yes) {
+                if (yes && wifi.forget(row.ssid))
+                    page.forgetting = row.ssid;
+            });
+        } else if (Wifi.step(wifi, row) === "password") {
+            askPassword(row.ssid);
+        } else if (wifi.join(row.ssid, "")) {
+            Sound.enter();
+            joining = row.ssid;
+        } else {
+            Sound.edge();
+        }
+    }
+
+    function deviceAction(row) {
+        var bt = api.screens.bluetooth;
+        if (row.key === "power") {
+            Sound.favourite(!row.value);
+            bt.setPowered(!row.value);
+        } else if (row.key !== "device") {
+            Sound.edge();
+        } else if (!row.paired) {
+            bt.pair(row.address) ? Sound.enter() : Sound.edge();
+        } else {
+            Sound.panel();
+            confirm.choose(row.label, row.detail, [
+                {
+                    icon: row.connected ? "close" : "bluetooth",
+                    label: row.connected ? "Disconnect" : "Connect",
+                    action: "link"
+                },
+                {
+                    icon: "trash",
+                    label: "Forget",
+                    action: "forget",
+                    danger: true
+                }
+            ], function (action) {
+                if (action === "link")
+                    row.connected ? bt.disconnectDevice(row.address) : bt.connectDevice(row.address);
+                else if (action === "forget")
+                    bt.forget(row.address);
+            });
+        }
+    }
+
+    readonly property string searching: visible && (sectionId === "network" || sectionId === "bluetooth") ? sectionId : ""
+    property string searched: ""
+
+    function followSearch() {
+        if (searched === searching)
+            return;
+        if (searched !== "")
+            api.screens[searched].close();
+        searched = searching;
+        if (searched !== "")
+            api.screens[searched].open();
+        // The password sheet built ahead of the A that asks for it.
+        if (searched === "network")
+            prompts.sheetsOf();
+    }
+
+    onSearchingChanged: followSearch()
+    Component.onDestruction: {
+        if (searched !== "")
+            api.screens[searched].close();
+    }
+
+    Connections {
+        target: api.screens.network
+        function onJoined(ssid, connectivity) {
+            if (ssid !== page.joining)
+                return;
+            page.joining = "";
+            Notices.show(Wifi.joined(ssid, connectivity));
+        }
+        function onFailed(ssid, reason, message) {
+            if (ssid === page.forgetting) {
+                page.forgetting = "";
+                Notices.fail(message);
+                return;
+            }
+            if (ssid !== page.joining)
+                return;
+            page.joining = "";
+            if (reason !== "password") {
+                Notices.fail(message);
+                return;
+            }
+            confirm.ask({
+                message: ssid + " did not take that password",
+                detail: "",
+                no: "Cancel",
+                yes: "Try Again"
+            }, function (yes) {
+                if (yes)
+                    page.askPassword(ssid);
+            });
+        }
+        function onChecked(connectivity) {
+            if (!page.checking)
+                return;
+            page.checking = false;
+            Notices.show(Wifi.connectivity(connectivity));
+        }
+    }
+
+    Connections {
+        target: api.screens.bluetooth
+        function onFailed(action, address, reason, message) {
+            if (page.sectionId === "bluetooth" && reason !== "canceled")
+                Notices.fail(message);
+        }
     }
 
     function leave() {
@@ -820,6 +1118,10 @@ FocusScope {
                         api.system.set(row.key, Controls.values(row.control)[at]);
                 });
             }
+        } else if (sectionId === "network") {
+            page.networkAction(row);
+        } else if (sectionId === "bluetooth") {
+            page.deviceAction(row);
         } else if (sectionId === "storage" && row.gameId) {
             var game = api.allGames.byId(row.gameId);
             if (game)
@@ -1165,10 +1467,13 @@ FocusScope {
             section = sectionIndex("themes");
         else
             refresh();
+        pickedId = sectionId;
+        followSearch();
     }
 
     // The cards' rows rebind on the same signal; the cursor resets once they have. A section opens with its Advanced row closed.
     onSectionChanged: {
+        pickedId = sections[section].id;
         var mainHad = !side.activeFocus;
         launch.showAdvanced = false;
         controller.showAdvanced = false;
@@ -1480,7 +1785,7 @@ FocusScope {
         columns: 1
         rows: page.content.rows
         groups: page.content.groups
-        dimmed: editor.open
+        dimmed: editor.open || prompts.open
         opacity: page.artShown || page.sectionId === "artwork" ? 0.0 : 1.0
         visible: opacity > 0.01
 

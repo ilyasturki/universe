@@ -2,6 +2,7 @@ import QtQuick
 import "../core"
 import "../sound"
 import "../ui"
+import "../ui/Wifi.js" as Wifi
 
 // First-run setup as a dialog over the launcher: one card list per step (found, stores, preferences, done) over a Back / Continue button pair.
 FocusScope {
@@ -24,7 +25,7 @@ FocusScope {
     readonly property string backLabel: form.step > 0 ? "Back" : form.added ? "Close" : "Skip setup"
     readonly property string nextLabel: last ? "Finish" : "Continue"
     readonly property string acceptLabel: nav.activeFocus ? (nav.index === 1 ? nextLabel : backLabel) : selectLabel(cards.currentRow)
-    readonly property var hints: editor.open ? editor.hints : confirm.open ? confirm.hints : [acceptLabel !== "" && {
+    readonly property var hints: prompts.open ? prompts.hints : editor.open ? editor.hints : confirm.open ? confirm.hints : [acceptLabel !== "" && {
             glyph: "A",
             label: acceptLabel,
             dim: !nav.activeFocus && !cards.currentRow
@@ -62,6 +63,8 @@ FocusScope {
             editor.prompt(row.prompt, "", function (code) {
                 login.submit(code);
             });
+        } else if (row.key === "network") {
+            joinNetwork(row);
         } else if (row.via !== undefined) {
             form.runImport(index) ? Sound.enter() : Sound.edge();
         } else if (row.type === "bool") {
@@ -71,6 +74,67 @@ FocusScope {
             Sound.panel();
             editor.edit(row, function (value) {
                 form.setValue(index, value);
+            });
+        }
+    }
+
+    // The network this step asked to join: its outcome is told here.
+    property string joining: ""
+
+    function joinNetwork(row) {
+        var wifi = api.screens.network;
+        var step = Wifi.step(wifi, row);
+        if (step === "refuse") {
+            Sound.edge();
+            page.message(Wifi.refusal(row));
+        } else if (step === "forget") {
+            Sound.edge();
+        } else if (step === "password") {
+            askPassword(row.ssid);
+        } else if (wifi.join(row.ssid, "")) {
+            Sound.enter();
+            joining = row.ssid;
+        } else {
+            Sound.edge();
+        }
+    }
+
+    function askPassword(ssid) {
+        Sound.panel();
+        prompts.prompt(Wifi.passwordTitle(ssid), "", function (password) {
+            if (password === "")
+                return;
+            page.joining = ssid;
+            api.screens.network.join(ssid, password);
+        }, "secret");
+    }
+
+    Connections {
+        target: api.screens.network
+        function onJoined(ssid, connectivity) {
+            if (ssid !== page.joining)
+                return;
+            page.joining = "";
+            page.message(Wifi.joined(ssid, connectivity));
+        }
+        function onFailed(ssid, reason, message) {
+            if (ssid !== page.joining)
+                return;
+            page.joining = "";
+            if (reason !== "password") {
+                page.message(message);
+                return;
+            }
+            confirm.ask({
+                message: ssid + " did not take that password",
+                detail: "",
+                no: "Cancel",
+                yes: "Try Again"
+            }, function (yes) {
+                if (yes)
+                    page.askPassword(ssid);
+                else
+                    cards.forceActiveFocus();
             });
         }
     }
@@ -108,7 +172,7 @@ FocusScope {
     }
 
     Keys.onPressed: function (event) {
-        if (event.isAutoRepeat || editor.open || confirm.open)
+        if (event.isAutoRepeat || editor.open || prompts.open || confirm.open)
             return;
         if (api.keys.isCancel(event)) {
             event.accepted = true;
@@ -228,7 +292,7 @@ FocusScope {
                     return page.form.rows[i].module === page.source;
                 });
             }) : page.form.groups
-            dimmed: editor.open || confirm.open
+            dimmed: editor.open || prompts.open || confirm.open
 
             onActivated: function (index, row) {
                 page.activate(index, row);

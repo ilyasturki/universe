@@ -1033,7 +1033,7 @@ FocusScope {
             anchors.right: parent.right
             opacity: root.subOpen && root.subArgs.setup ? 0.0 : root.chromeReveal
             visible: opacity > 0.01
-            hints: confirm.open ? confirm.hints : root.menuOpen ? gameMenu.hints : root.focusOwner === "chrome" ? tabBar.hints : root.focusOwner === "search" ? (searchLoader.item ? searchLoader.item.hints : []) : !root.activePage ? [] : root.activePage.modal ? root.activePage.hints : root.activePage.hints.concat([
+            hints: prompts.open ? prompts.hints : confirm.open ? confirm.hints : root.menuOpen ? gameMenu.hints : root.focusOwner === "chrome" ? tabBar.hints : root.focusOwner === "search" ? (searchLoader.item ? searchLoader.item.hints : []) : !root.activePage ? [] : root.activePage.modal ? root.activePage.hints : root.activePage.hints.concat([
                 {
                     glyph: "LB RB",
                     label: "Tabs"
@@ -1213,7 +1213,101 @@ FocusScope {
         id: confirm
         objectName: "confirm"
         anchors.fill: parent
-        onClosed: root.restoreFocus()
+        onClosed: {
+            root.restoreFocus();
+            if (root.pairingWaits)
+                Qt.callLater(root.askPairing);
+        }
+    }
+
+    // Text typed over whatever page is up: a Wi-Fi password, a code or PIN the pairing agent asks for.
+    ValueEditor {
+        id: prompts
+        objectName: "prompts"
+        anchors.fill: parent
+        overhang: 0
+
+        onClosed: {
+            root.restoreFocus();
+            // A cancelled sheet never calls back: a code still asked for after it closed is a no.
+            var asked = root.pairingId;
+            Qt.callLater(function () {
+                if (asked !== 0 && root.pairingId === asked && root.pairingTyped) {
+                    root.pairingId = 0;
+                    api.screens.bluetooth.answer(false);
+                }
+            });
+        }
+    }
+
+    // The pairing agent's question on screen (its id, 0 for none; typed on the sheet or answered on the dialog), and whether one
+    // waits for another question to leave the dialog.
+    property int pairingId: 0
+    property bool pairingTyped: false
+    property bool pairingWaits: false
+
+    Connections {
+        target: api.screens.bluetooth
+        function onRequestChanged() {
+            root.askPairing();
+        }
+    }
+
+    function askPairing() {
+        var bt = api.screens.bluetooth;
+        var request = bt.request;
+        pairingWaits = false;
+        if (request === null || request === undefined) {
+            var shown = pairingId;
+            pairingId = 0;
+            if (shown !== 0 && pairingTyped) {
+                prompts.hide();
+                restoreFocus();
+            } else if (shown !== 0 && confirm.open) {
+                confirm.pending = null;
+                confirm.hide();
+                restoreFocus();
+            }
+            return;
+        }
+        if (pairingId === 0 && confirm.open) {
+            pairingWaits = true;
+            return;
+        }
+        var id = request.id;
+        pairingId = id;
+        pairingTyped = request.kind === "passkey" || request.kind === "pin";
+        var answered = function (yes) {
+            if (root.pairingId !== id)
+                return;
+            root.pairingId = 0;
+            bt.answer(yes);
+        };
+        if (pairingTyped) {
+            prompts.prompt(request.title, "", function (value) {
+                if (root.pairingId !== id)
+                    return;
+                root.pairingId = 0;
+                bt.answerText(value);
+            }, request.kind === "passkey" ? "number" : "text");
+        } else if (request.kind === "display") {
+            confirm.choose(request.title + " · " + request.code, request.detail, [
+                {
+                    icon: "close",
+                    label: "Cancel",
+                    action: "cancel"
+                }
+            ], function () {
+                answered(false);
+            });
+        } else {
+            confirm.ask({
+                message: request.title,
+                detail: request.kind === "confirm" ? request.code + " · " + request.detail : request.detail,
+                no: "Cancel",
+                yes: "Pair"
+            }, answered);
+        }
     }
 
     LaunchOverlay {

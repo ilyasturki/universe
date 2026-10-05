@@ -43,6 +43,16 @@ var list = [
         icon: "sun"
     },
     {
+        id: "network",
+        name: "Network",
+        icon: "wifi"
+    },
+    {
+        id: "bluetooth",
+        name: "Bluetooth",
+        icon: "bluetooth"
+    },
+    {
         id: "sound",
         name: "Sound",
         icon: "volume-up"
@@ -77,9 +87,10 @@ var aliases = {
     power: "about"
 };
 
-// The sections `api.system` leaves: under Steam's Game Mode sound is Steam's, and System needs a control to show.
+// The sections `api.system` leaves: under Steam's Game Mode sound is Steam's, System needs a control to show, Network and
+// Bluetooth the machine's NetworkManager and adapter.
 function shown(system) {
     return list.filter(function (s) {
-        return !(s.id === "sound" && system.steam) && !(s.id === "system" && system.controls.length === 0);
+        return !(s.id === "sound" && system.steam) && !(s.id === "system" && system.controls.length === 0) && !(s.id === "network" && !system.network) && !(s.id === "bluetooth" && !system.bluetooth);
     });
 }
