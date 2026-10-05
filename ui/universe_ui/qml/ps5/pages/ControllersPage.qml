@@ -112,6 +112,15 @@ FocusScope {
                     hold: r.hold
                 });
         }
+        if (api.system.bluetooth)
+            out.push({
+                key: "pair",
+                label: "Pair a Controller",
+                type: "action",
+                display: "",
+                detail: "Hold its pairing button until the light blinks: PS and Create together on a DualSense.",
+                icon: "bluetooth"
+            });
         if (buttons.length > 0) {
             out.push({
                 heading: true,
@@ -224,8 +233,19 @@ FocusScope {
         holdOut.stop();
     }
 
+    // Accessories' search for pads. The first pad comes by USB cable, as on the console: no other pad is there to press A with.
+    function pairController() {
+        Sound.play("ok");
+        shell.push("pages/SettingsPage.qml", {
+            section: "bluetooth",
+            pads: true
+        });
+    }
+
     function activate(index, row) {
-        if (row.key === "advanced") {
+        if (row.key === "pair") {
+            pairController();
+        } else if (row.key === "advanced") {
             Sound.play("ok");
             controller.showAdvanced = !controller.showAdvanced;
             if (controller.showAdvanced)
@@ -684,6 +704,22 @@ FocusScope {
             text: page.controller.connected ? "Connected" : "Connect a controller"
             color: Theme.textMuted
             font.pixelSize: Theme.dp(Theme.fontSmall)
+        }
+
+        Label {
+            objectName: "pairController"
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: parent.width
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.WordWrap
+            visible: !page.walking && api.system.bluetooth
+            text: page.controller.connected ? "Pair a Controller over Bluetooth" : "With a USB cable, or pair one over Bluetooth"
+            color: Theme.textSecondary
+            font.pixelSize: Theme.dp(Theme.fontSmall)
+
+            Touch {
+                onPicked: page.pairController()
+            }
         }
 
         Repeater {

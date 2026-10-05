@@ -6,6 +6,7 @@ import "ui"
 import "pages"
 import "pages/Sections.js" as Sections
 import "pages/Home.js" as Home
+import "pages/Radio.js" as Radio
 
 FocusScope {
     id: root
@@ -474,6 +475,106 @@ FocusScope {
 
     function showToast(text) {
         Base.Notices.show(text);
+    }
+
+    // The agent's question on the dialog or the sheet, wherever the user is: `pairing` is the one shown, `pairingOn` where.
+    property var pairing: null
+    property string pairingOn: ""
+
+    function askPairing(r) {
+        var bt = api.screens.bluetooth;
+        if (pairing && pairing.id === r.id && r.kind === "display") {
+            pairing = r;
+            dialog.detail = r.code + "\n\n" + r.detail + (r.entered > 0 ? "\n\n" + r.entered + " typed" : "");
+            return;
+        }
+        pairing = r;
+        var answered = function (shown) {
+            return root.pairing !== null && root.pairing.id === shown.id;
+        };
+        if (r.kind === "passkey" || r.kind === "pin") {
+            pairingOn = "sheet";
+            sheet.show({
+                title: r.title + " · " + r.detail,
+                value: "",
+                numeric: r.kind === "passkey",
+                max: r.kind === "passkey" ? 6 : 16
+            }, after(function (v) {
+                if (!answered(r))
+                    return;
+                root.pairing = null;
+                v === null || v === "" ? bt.answer(false) : bt.answerText(v);
+            }));
+            return;
+        }
+        pairingOn = "dialog";
+        var display = r.kind === "display";
+        dialog.show({
+            message: r.title,
+            detail: display || r.kind === "confirm" ? r.code + "\n\n" + r.detail : r.detail,
+            buttons: display ? ["Cancel"] : ["Cancel", "Pair"]
+        }, after(function (i) {
+            if (!answered(r))
+                return;
+            root.pairing = null;
+            bt.answer(!display && i === 1);
+        }));
+    }
+
+    // BlueZ took the question back (paired, timed out, cancelled): its dialog or sheet goes without an answer.
+    function dropPairing() {
+        if (!pairing)
+            return;
+        pairing = null;
+        if (pairingOn === "dialog" && dialog.open)
+            dialog.finish(-1);
+        else if (pairingOn === "sheet" && sheet.open)
+            sheet.finish(null);
+    }
+
+    Connections {
+        target: api.screens.bluetooth
+        function onRequestChanged() {
+            var r = api.screens.bluetooth.request;
+            if (r)
+                root.askPairing(r);
+            else
+                root.dropPairing();
+        }
+    }
+
+    Connections {
+        target: api.screens.network
+        function onFailed(ssid, reason, message) {
+            if (reason === "password")
+                root.dialogAsk({
+                    message: "Could not connect to " + ssid,
+                    detail: "The password was not accepted.",
+                    buttons: ["Cancel", "Try Again"]
+                }, function (i) {
+                    if (i === 1)
+                        Radio.askPassword(root, api.screens.network, ssid);
+                });
+            else
+                Base.Notices.fail("Could not connect to " + ssid + (message ? ": " + message : ""));
+        }
+        function onJoined(ssid, connectivity) {
+            Base.Notices.show("Connected to " + ssid + (connectivity === "full" ? "" : connectivity === "portal" ? " · sign in to it from a browser" : " · no internet"));
+        }
+        function onChecked(connectivity) {
+            root.dialogAsk({
+                message: "Test Internet Connection",
+                detail: Radio.connectivityText(connectivity),
+                buttons: ["OK"]
+            }, null);
+        }
+    }
+
+    Connections {
+        target: api.system
+        function onRadiosChanged() {
+            api.screens.search.sections = Sections.forSearch(api.system);
+        }
     }
 
     Rectangle {

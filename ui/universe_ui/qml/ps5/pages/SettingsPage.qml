@@ -6,6 +6,7 @@ import "../../ui/Controls.js" as Controls
 import "../../core/Format.js" as Format
 import "Details.js" as Details
 import "Forms.js" as Forms
+import "Radio.js" as Radio
 import "Sections.js" as Sections
 
 // The console's Settings: a list of sections, each opening on two columns, its sub-sections left and their rows right.
@@ -41,10 +42,43 @@ FocusScope {
             out.detail = components.pending > 0 ? components.pending + " to look at" : "";
         else if (s.id === "artwork")
             out.detail = artworkOverview.missingGames > 0 ? artworkOverview.missingGames + (artworkOverview.missingGames === 1 ? " game misses art" : " games miss art") : "";
+        else if (s.id === "network")
+            out.detail = Radio.statusText(wifi);
         return out;
     })
+    readonly property var wifi: api.screens.network
+    readonly property var bt: api.screens.bluetooth
+    property bool pads: false
+    function play(name) {
+        Sound.play(name);
+    }
+    readonly property var scanning: level !== "section" ? null : sectionId === "network" ? wifi : sectionId === "bluetooth" ? bt : null
+    property var scanned: null
+    onScanningChanged: {
+        if (scanned)
+            scanned.close();
+        scanned = scanning;
+        if (scanned)
+            scanned.open();
+    }
+    Component.onDestruction: {
+        if (scanned)
+            scanned.close();
+        artworkOverview.unload();
+    }
     property int section: 1
-    readonly property string sectionId: sections[section].id
+    readonly property var current: sections[Math.max(0, Math.min(section, sections.length - 1))]
+    readonly property string sectionId: current.id
+    // Network and Accessories come and go with the radios: the cursor keeps to its section.
+    property string kept: ""
+    onSectionIdChanged: kept = sectionId
+    onSectionsChanged: {
+        var at = sections.findIndex(function (s) {
+            return s.id === kept;
+        });
+        if (at >= 0 && at !== section)
+            section = at;
+    }
     // "root": the list of sections; "section": one open, its two columns.
     property string level: "root"
     property int part: 0
@@ -237,6 +271,7 @@ FocusScope {
     }
 
     onArgsChanged: {
+        pads = args && args.pads === true;
         if (args && args.section) {
             section = sectionIndex(args.section);
             roots.index = section;
@@ -441,6 +476,10 @@ FocusScope {
                     detail: c.detail
                 };
             });
+        if (sectionId === "network")
+            return Radio.networkContent(wifi);
+        if (sectionId === "bluetooth")
+            return Radio.deviceContent(bt, pads);
         if (sectionId === "sound") {
             var outs = api.home.outputs.map(function (o) {
                 return {
@@ -585,7 +624,7 @@ FocusScope {
         return [];
     }
 
-    readonly property var parts: Forms.parts(content, sections[section].first || sections[section].label)
+    readonly property var parts: Forms.parts(content, current.first || current.label)
     readonly property var partRows: parts[Math.max(0, Math.min(part, parts.length - 1))].rows
 
     function activate(index, row) {
@@ -708,6 +747,16 @@ FocusScope {
         } else if (row.action === "boot") {
             Sound.play("select");
             api.theme.bootIntro = !row.value;
+        } else if (row.action === "wifi") {
+            Sound.play(wifi.setEnabled(!row.value) ? "select" : "edge");
+        } else if (row.action === "network") {
+            Radio.joinNetwork(shell, wifi, row, page.play);
+        } else if (row.action === "check") {
+            Sound.play(wifi.check() ? "ok" : "edge");
+        } else if (row.action === "bt-power") {
+            Sound.play(bt.setPowered(!row.value) ? "select" : "edge");
+        } else if (row.action === "device") {
+            Radio.device(shell, bt, row, page.play);
         }
     }
 
@@ -763,8 +812,6 @@ FocusScope {
             page.shell.showToast(text);
         }
     }
-
-    Component.onDestruction: artworkOverview.unload()
 
     Keys.onPressed: function (event) {
         if (event.isAutoRepeat)
@@ -882,7 +929,7 @@ FocusScope {
             id: sectionTitle
             anchors.left: parent.left
             anchors.right: parent.right
-            title: page.sections[page.section].label
+            title: page.current.label
         }
 
         SectionList {

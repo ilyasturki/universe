@@ -3,6 +3,7 @@ import "../core"
 import "../sound"
 import "../ui"
 import "Forms.js" as Forms
+import "Radio.js" as Radio
 
 // First-run setup, as the console's setup screens: a centred column over the system background, the step's rows,
 // Back and Continue under them.
@@ -52,7 +53,10 @@ FocusScope {
     }) : form.groups, form.rows, function (src, i) {
         return Object.assign({}, src, {
             form: i
-        });
+        }, src.key === "network" ? {
+            icon: "wifi" + Math.max(1, src.bars),
+            dim: !src.joinable
+        } : {});
     })
 
     function activate(index, row) {
@@ -70,6 +74,10 @@ FocusScope {
             }, function (value) {
                 if (value !== null && value !== "")
                     login.submit(value);
+            });
+        } else if (row.key === "network") {
+            Radio.joinNetwork(shell, api.screens.network, row, function (name) {
+                Sound.play(name);
             });
         } else if (row.via !== undefined) {
             Sound.play(form.runImport(row.form) ? "ok" : "edge");
