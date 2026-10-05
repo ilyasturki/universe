@@ -101,7 +101,7 @@ programs.universe.enable = true;
 
 ## The Universe session
 
-The Arch and Fedora packages and `install.sh` add a **Universe** session to the login screen (GDM, SDDM and the others). Log in to it and the launcher has the whole screen, like SteamOS's Game Mode, with no desktop behind it; Log out, in its power menu, returns to the login screen. It has no lock screen, and no Wi-Fi or Bluetooth settings yet, so connect and pair from a desktop session first. On NixOS, set `programs.universe.session.enable`; `services.displayManager.defaultSession = "universe"` with an autologin boots straight into it.
+The Arch and Fedora packages and `install.sh` add a **Universe** session to the login screen (GDM, SDDM and the others). Log in to it and the launcher has the whole screen, like SteamOS's Game Mode, with no desktop behind it; Log out, in its power menu, returns to the login screen. It has no lock screen. Wi-Fi and Bluetooth are in its Settings: join a network and pair a controller, a keyboard or headphones with the pad. The first controller comes by USB cable, as on a PS5; a DualSense or DualShock 4 plugged in is offered for Bluetooth pairing right there. On NixOS, set `programs.universe.session.enable`; `services.displayManager.defaultSession = "universe"` with an autologin boots straight into it.
 
 ## First run
 

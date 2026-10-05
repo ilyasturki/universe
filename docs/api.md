@@ -51,7 +51,9 @@ operation; a dash means the surface doesn't expose it.
   (`universe-controller-<session>`, `BindsTo=` the game), and a lock (`$XDG_RUNTIME_DIR/universe/
   controller.lock`) hands the pads over between them. Once both are gone nothing runs. It notes the
   pad a button was last pressed on in `$XDG_RUNTIME_DIR/universe/active-pad` (the sysfs device its
-  evdev node hangs off), the pad the controls module makes player 1.
+  evdev node hangs off), the pad the controls module makes player 1. The launcher's
+  `universe network watch` and `universe bluetooth watch` live with it the same way (see Network
+  and Bluetooth).
 - The other is `universe keep-awake`, started by a launch as `universe-awake-<session>` (`BindsTo=`
   the game, `desktop.keep_awake`): it holds every inhibit the session offers, each standing only
   as long as the connection that took it, so it is a unit rather than a step undone at the end:
@@ -420,9 +422,9 @@ again. gamescope exits 0 whatever its child did, so the launcher inside writes i
 the file `UNIVERSE_HOST_DONE` names when it quits on purpose; one that died instead is started
 again with `--no-boot`, and five runs in a row shorter than 60 s end the session. The startup
 animation plays once, at login. There is no lock screen, so a resume, or an autologin at boot,
-opens on the launcher. Nor is there a Wi-Fi or Bluetooth prompt yet: the session relies on
-the connections and pairings made from a desktop session. No polkit agent runs either, so nothing
-there can ask for a password: what the session needs root for goes through polkit actions it is
+opens on the launcher. Wi-Fi and Bluetooth are the launcher's own pages (see Network and
+Bluetooth), and there its Bluetooth watcher is BlueZ's default agent. No polkit agent runs, so
+nothing there can ask for a password: what the session needs root for goes through polkit actions it is
 granted outright while it is local and active. Its one such action is
 `io.github.ilyasturki.universe.system-install` (see Components › System tools); power, reboot and
 suspend are already granted to an active session by logind's own policy, and a block inhibitor held
@@ -1648,6 +1650,65 @@ watcher also reloads by itself when `config.toml`'s mtime moves (checked on the 
 bind from a terminal or from a launcher whose own watcher is waiting reaches the one holding the
 pads. Either reload rereads config.toml and the module list only, never the library, so pad
 events are not held up behind a rescan.
+
+## Network and Bluetooth
+
+Wi-Fi through NetworkManager and Bluetooth through BlueZ, both on the system bus, for a frontend
+running outside Steam (in Game Mode Steam's own pages have them). A machine without NetworkManager
+(iwd, connman or networkd alone) or without a Bluetooth adapter reads `available: false`, as does
+one with no system bus.
+
+| Rust | Python | CLI | Role |
+|---|---|---|---|
+| `network::state()` | `network()` | `universe network [ls]` | `{available, enabled, device, link, ssid, strength, connectivity, networks: [{ssid, strength, security, saved, active}]}`: `device` the Wi-Fi interface (empty without one), `link` `wifi`, `wired` (a cable wins) or empty offline, `ssid`/`strength` (0-100) the joined network's, `connectivity` NM's last check (`full`, `limited`, `portal`, `none`, `unknown`); the networks in range one per name at its strongest, the joined one first, then by signal; `security` `open`, `owe`, `wep`, `psk`, `sae` or `enterprise` |
+| `network::scan(conn)` | — | `universe network scan` | `RequestScan` on the Wi-Fi card |
+| `network::connect(conn, ssid, password)` | — | `universe network connect <ssid>` | joins: a saved network as saved (given a password it is saved again with it, `psk-flags` 0), a new one added with `AddAndActivateConnection`, open, OWE, WPA2-PSK or WPA3-SAE. The CLI reads a password from the terminal without echo, else from stdin |
+| `network::forget(conn, ssid)` | — | `universe network forget <ssid>` | deletes every saved connection to it |
+| `network::set_enabled(conn, on)` | — | `universe network wifi on\|off` | `WirelessEnabled` |
+| `network::check(conn)` | — | `universe network check` | `CheckConnectivity`, run now |
+| `bluetooth::state()` | `bluetooth()` | `universe bluetooth [ls]` | `{available, powered, discovering, devices: [{address, name, kind, icon, paired, connected, trusted, battery}]}`: the first adapter, its paired devices and those discovery found that tell a name (a nameless one is a beacon), paired first; `kind` from BlueZ's icon, `pad`, `audio`, `keyboard`, `mouse`, `phone` or `other`; `battery` a percent from `Battery1`, else null |
+| `bluetooth::pair(conn, address)` | — | `universe bluetooth pair <address>` | `Pair`, then `Trusted` (it reconnects without asking), then `Connect`; a passkey or PIN is asked on the terminal |
+| `bluetooth::connect` · `disconnect` · `remove` · `set_powered` · `discover` | — | `universe bluetooth connect\|disconnect\|remove <address>` · `power on\|off` · `scan [--seconds N]` | `remove` unpairs and forgets (`Adapter1.RemoveDevice`); discovery is the caller's own and stops when its connection goes |
+| — | — | `universe network watch [--json]` · `universe bluetooth watch [--json]` | the streams the launcher's pages run on |
+
+A new Wi-Fi connection keeps its password in the connection (`psk-flags` 0): the session has no
+secret agent to hand it over later. It is saved for everyone when NetworkManager's
+`GetPermissions` grants `settings.modify.system` without a password (NixOS's `networkmanager`
+group, wheel on Fedora and SteamOS since NM 1.56), else for this user alone
+(`connection.permissions = ["user:<name>"]`, which `settings.modify.own` allows any active
+session). No call carries D-Bus's interactive-authorization flag, so where NM wants an admin it
+refuses at once instead of waiting on a polkit agent that may not exist. A network a desktop
+saved with its secret in its keyring fails as `password` and is saved again with the password typed.
+
+**Watch streams.** `--json` speaks one object per line; stdin's end stops the watcher. Both send
+the whole state as `{"event": "state", …}` on start and after every change NM or BlueZ signals
+(each burst read once), and answer each command with `done {action, …}` or `failed {action,
+reason, message, …}`. `network watch`: out `ready`, `state`, `connecting {ssid}`, `done {action:
+connect, ssid, connectivity}` (the connection test run once the link is up), `done`/`failed` for
+`scan`, `wifi`, `forget {ssid}`, `check {connectivity}`; a failed join's `reason` is `password`
+(NM had no secret it took: the half-made connection is deleted), `permission`, `notfound`,
+`timeout` or `failed`. In — `{"cmd": "scan", "on"}` (a scan now and every 20 s while on),
+`connect {ssid, password?}`, `forget {ssid}`, `wifi {on}`, `check`, `refresh`, `quit`.
+
+`bluetooth watch` is also BlueZ's agent (`org.bluez.Agent1` at `/org/universe/agent`,
+`KeyboardDisplay`), and every pairing it starts runs on its own connection, which BlueZ asks ahead of
+the default agent. Inside the Universe session (`nest::session()`) it asks to be the default agent
+too, so that a device's own request reaches it: BlueZ's cable pairing of a DualShock 4 or DualSense
+plugged in by USB asks the default agent's `AuthorizeService`. Elsewhere the desktop's agent stays
+the default. Out — `ready {agent, default}`, `state`, `request {id, kind, address, name,
+device_kind, code, entered}` with `kind` `confirm` (both ends show `code`), `authorize` (a device
+asks to pair or to use a service), `passkey` or `pin` (typed here) or `display` (type `code` on the
+device; `entered` keys so far), `cancel` (BlueZ withdrew its question), `done {action, address,
+connected?}`, `failed {action, address, reason, message}` with a pairing's `reason` `rejected`,
+`canceled`, `timeout` or `failed`. In — `scan {on}`, `power {on}`, `pair`/`connect`/`disconnect`/
+`remove {address}`, `cancel {address}` (stops a pairing under way), `answer {id, yes}` or
+`answer {id, value}` (the code or PIN), `refresh`, `quit`. A question unanswered for 60 s is
+refused, as BlueZ would. Nothing pairs on its own: a pad in pairing mode nearby is only listed.
+
+The launcher runs `network watch` from its start (its link drives `api.network`), and in the
+Universe session `bluetooth watch` too; elsewhere that one starts with the first Bluetooth page.
+Under Steam it runs neither. A question that comes while a game holds the screen is refused with a
+notice ("Plug <name> in again from HOME").
 
 ## System
 
