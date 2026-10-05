@@ -318,7 +318,6 @@ FocusScope {
             root.componentAction(ident, action);
         });
     }
-    // The "Get more…" row's list, then the picked add-on's confirmation, or its menu when it has more than one thing to do.
     function addonsMenu(kind) {
         var addons = api.screens.addons;
         Sound.play("ok");

@@ -670,7 +670,6 @@ FocusScope {
         listForm.toggle(cards.index);
     }
 
-    // The "Get more…" row's list, then the picked add-on's confirmation, or its menu when it has more than one thing to do.
     function addonsMenu(kind) {
         Sound.panel();
         menu.show(addons.items(kind), cards, cards.focusRect, "Add-ons", function (ident) {
