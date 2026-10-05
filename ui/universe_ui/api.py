@@ -552,6 +552,7 @@ class Api(QObject):
         self._focus = Focus(client, parent=self)
         self._focus.changed.connect(self._on_focus)
         self._home = Home(client, controller, self.screenMode, self, frames=lambda: self._theme.frame, focus=self._focus, boot=self._boot)
+        self._home.escapeHeld.connect(self._theme.escape)
         self._window = None
         self._fullscreen = fullscreen
 

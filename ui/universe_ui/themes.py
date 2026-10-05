@@ -148,6 +148,12 @@ class ThemeSelector(QObject):
         else:
             self._current = now
 
+    # The way out of an installed theme that leaves none: HOME held, read by the host whatever the theme's QML does.
+    @Slot()
+    def escape(self):
+        if self._current["installed"]:
+            self._fall_back(f"Left {self._current['name']} with HOME held")
+
     @Slot()
     def failed(self):
         """main.qml's Loader could not load the current look: QML has logged why."""

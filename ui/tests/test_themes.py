@@ -238,3 +238,36 @@ def test_the_sample_theme_installs_from_a_folder_switches_falls_back_when_broken
         assert "sample" not in [t["id"] for t in api.theme.themes]
     finally:
         look.close()
+
+
+@pytest.mark.slow
+def test_home_held_on_the_pad_leaves_an_installed_theme_that_offers_no_way_back(api, fake, tmp_path, monkeypatch):
+    from universe_ui import home
+
+    monkeypatch.setattr(home, "ESCAPE_MS", 300)
+    trap = tmp_path / "trap"
+    shutil.copytree(SAMPLE, trap)
+    (trap / "theme.toml").write_text((SAMPLE / "theme.toml").read_text().replace('id = "sample"', 'id = "trap"'))
+    (trap / "theme.qml").write_text(
+        'import QtQuick\nItem {\n    objectName: "trap"\n    focus: true\n    Keys.onPressed: function (event) { event.accepted = true; }\n}\n'
+    )
+    fake.core.extension_install(str(trap), True)
+    api.theme.rescan()
+    look = Look(api, "reprise")
+    try:
+        look.switch("trap")
+        until(lambda: look.root.objectName() == "trap")
+        pad = api.screens.controller
+        pad.buttonPressed.emit("pad", "guide", True)
+        pad.buttonPressed.emit("pad", "guide", False)
+        assert api.theme.current == "trap", "a press is the theme's"
+        pad.buttonPressed.emit("pad", "guide", True)
+        until(lambda: api.theme.current == "reprise", "held, it gives way to the default look")
+        pad.buttonPressed.emit("pad", "guide", False)
+        assert api.memory.get("theme") == "reprise", "and is forgotten"
+        assert until(lambda: notice(look), "with a notice")[1] is True
+        api.theme.set("switch2")
+        api.theme.escape()
+        assert api.theme.current == "switch2", "a built-in look is never left so"
+    finally:
+        look.close()

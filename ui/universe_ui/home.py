@@ -11,6 +11,8 @@ from .screens.achievements import UnlockWatch
 OPAQUE = 0xFFFFFFFF
 POLL_MS = 250
 HOLD_MS = 600
+# HOME held this long leaves an installed theme for the default look, whatever its QML does.
+ESCAPE_MS = 5000
 # The overlay stays painted over the game this long for the flash the theme draws on a shot.
 CUE_MS = 450
 OSD_MS = 1500
@@ -35,6 +37,7 @@ class Home(QObject):
     achievementUnlocked = Signal(QVARIANT)
     bannersWaitingChanged = Signal()
     stopping = Signal(str)
+    escapeHeld = Signal()
 
     def __init__(self, client, controller, screen_mode: Callable[[], dict] = dict, parent=None, frames=lambda: True, focus=None, boot=None):
         super().__init__(parent)
@@ -84,6 +87,9 @@ class Home(QObject):
         self._hold.setSingleShot(True)
         self._hold.timeout.connect(self._on_hold)
         self._hold_from_game = False
+        self._escape = QTimer(self)
+        self._escape.setSingleShot(True)
+        self._escape.timeout.connect(self.escapeHeld)
         self._swap = QTimer(self)
         self._swap.setSingleShot(True)
         self._swap.timeout.connect(self._show_launcher)
@@ -120,7 +126,7 @@ class Home(QObject):
         return True
 
     def shutdown(self):
-        for timer in (self._poll, self._hold, self._swap, self._cue, self._osd_timer):
+        for timer in (self._poll, self._hold, self._escape, self._swap, self._cue, self._osd_timer):
             timer.stop()
 
     def _overlay_state(self, input, opacity):
@@ -248,9 +254,11 @@ class Home(QObject):
             if self._hold_from_game:
                 self._capture()
             self._hold.start(int((self._controller.state or {}).get("hold_ms") or HOLD_MS))
+            self._escape.start(ESCAPE_MS)
             self.pressed.emit()
         else:
             self._hold.stop()
+            self._escape.stop()
             if self._thaw_on_release:
                 self._thaw_on_release = False
                 self._set_paused(False)

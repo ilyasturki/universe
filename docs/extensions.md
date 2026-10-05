@@ -93,11 +93,16 @@ runs.
 
 Installing does not switch an extension on: `universe module enable <id>` or
 `universe source enable <id>` does, and so do the Modules and Sources pages. A theme is picked in
-Settings › Themes; one that fails to load puts the default look back, with a notice. An update
-replaces the folder in place. An index install takes the index's newer version. Any other install
-is fetched again from its URL, archive or folder. Removing switches a module or a source off, then
+Settings › Themes. An update replaces the folder in place. An index install takes the index's
+newer version. Any other install is fetched again from its URL, archive or folder. Removing
+switches a module or a source off, then
 deletes its folder; removing the theme in use puts the default look back. What it saved under
 `$XDG_DATA_HOME/universe/{modules,sources}/<id>/` stays.
+
+A theme that fails to load puts the default look back, with a notice. One that loads but leaves no
+way out, because it breaks once running or offers no other look, is left by holding HOME on the
+pad for 5 s: Universe reads that hold itself, whatever the theme's QML does, puts the default look
+back with the same notice, and no longer remembers the theme as the look to start on.
 
 In the UI, the Modules and Sources pages of every look end on a "Get more…" row, and Settings ›
 Themes has one after the looks. It lists the index's add-ons of that kind and installs one after the
