@@ -35,6 +35,16 @@ def record(signal):
     return seen
 
 
+def descendant(item, name):
+    """The first item named `name` under `item`, a Repeater's delegates too: they are no QObject's children, so findChild misses them."""
+    for child in item.childItems():
+        if child.objectName() == name:
+            return child
+        if found := descendant(child, name):
+            return found
+    return None
+
+
 def settle(screen, timeout_ms=5000):
     until(lambda: not screen.busy, "still busy", timeout_ms)
 

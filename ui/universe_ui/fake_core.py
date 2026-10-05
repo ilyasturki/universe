@@ -1410,6 +1410,7 @@ class FakeCore:
         step = int((self._config.get("controller") or {}).get("volume_step") or 2)
         if change == "up":
             self.level = min(100, self.level + step)
+            self.muted = False
         elif change == "down":
             self.level = max(0, self.level - step)
         elif change == "mute":

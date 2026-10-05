@@ -5,7 +5,7 @@ import pytest
 from looks import Look, invoke, lit_fraction, read, settle
 from PySide6.QtCore import QObject, Qt
 from PySide6.QtTest import QTest
-from uitest import record, until
+from uitest import descendant, record, until
 
 from universe_ui import host
 
@@ -645,6 +645,38 @@ def test_the_docks_output_row_switches_once_the_cursor_rests(api, fake, reprise,
     if os.environ.get("UNIVERSE_TEST_SHOTS"):
         overlay.grabWindow().save(str(tmp_path / "dock-output.png"))
     stop(api)
+
+
+# Each look's dock, and the property and list its cursor takes the Sound group from.
+SOUND = {"reprise": ("dock", "index", "buttons"), "ps5": ("controlCenter", "icon", "icons")}
+
+
+@pytest.mark.parametrize("look", list(SOUND), indirect=True)
+def test_the_volume_row_keeps_the_level_dimmed_under_the_mute_and_up_unmutes(api, fake, look):
+    overlay = host.create_overlay(look.engine, look.window.size())
+    api.home.attachOverlay(overlay)
+    overlay.show()
+    settle(overlay)
+    name, cursor, buttons = SOUND[look.name]
+    fake.launch("mirrors-edge", "")
+    until(lambda: api.home.shown == "game")
+    fake.core.level, fake.core.muted = 60, True
+    api.home.openDock()
+    dock = until(lambda: overlay.findChild(QObject, name))
+    until(lambda: (api.home.volumePercent, api.home.muted) == (60, True), "the dock reads the level as it opens")
+    dock.setProperty(cursor, ids(read(dock, buttons)).index("sound"))
+    if look.name == "ps5":
+        dock.setProperty("zone", "panel")
+    level = until(lambda: descendant(overlay.contentItem(), "volumeLevel"))
+    fill, glyph = descendant(level, "volumeFill"), descendant(overlay.contentItem(), "volumeGlyph")
+    until(lambda: glyph.property("kind") == "mute" and level.property("opacity") < 1)
+    assert fill.property("width") > 0, "the level stays drawn under the mute"
+    api.home.volume("up", 0)
+    until(lambda: (api.home.volumePercent, api.home.muted) == (62, False), "up unmutes as it steps")
+    until(lambda: glyph.property("kind") != "mute" and level.property("opacity") == 1)
+    api.home.stop()
+    until(lambda: api.universe.currentSession is None)
+    overlay.close()
 
 
 def test_home_over_the_poster_raises_home_and_quit_and_home_drops_the_poster(api, fake, reprise, tmp_path, monkeypatch, held):

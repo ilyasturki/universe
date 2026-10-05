@@ -275,7 +275,7 @@ FocusScope {
         case "sharp":
             return item.names[Math.max(0, item.options.indexOf(v[item.id]))];
         case "vol":
-            return v.mute ? "Muted" : v.vol + "%";
+            return v.vol + "%";
         case "output":
             return outputName(v.output);
         }
@@ -901,6 +901,7 @@ FocusScope {
 
                         readonly property bool focused: dock.opened && index === dock.sub
                         readonly property bool checked: modelData.kind === "toggle" && dock.isOn(modelData)
+                        readonly property bool hushed: modelData.kind === "range" && dock.vals.mute === true
                         readonly property color ink: focused ? Theme.onLight : Theme.text
 
                         width: rows.width
@@ -920,12 +921,13 @@ FocusScope {
 
                         MenuGlyph {
                             id: lineGlyph
+                            objectName: modelData.kind === "range" ? "volumeGlyph" : ""
                             anchors.left: parent.left
                             anchors.leftMargin: Theme.dp(16)
                             anchors.verticalCenter: parent.verticalCenter
                             width: Theme.dp(25)
                             height: width
-                            kind: modelData.icon
+                            kind: line.hushed ? "mute" : modelData.icon
                             tint: line.ink
                         }
 
@@ -952,11 +954,13 @@ FocusScope {
                         }
 
                         Row {
+                            objectName: modelData.kind === "range" ? "volumeLevel" : ""
                             visible: modelData.kind === "range"
                             anchors.right: parent.right
                             anchors.rightMargin: Theme.dp(16)
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: Theme.dp(12)
+                            opacity: line.hushed ? 0.4 : 1
 
                             Rectangle {
                                 anchors.verticalCenter: parent.verticalCenter
@@ -966,7 +970,8 @@ FocusScope {
                                 color: line.focused ? Qt.rgba(0.063, 0.067, 0.086, 0.18) : Qt.rgba(1, 1, 1, 0.14)
 
                                 Rectangle {
-                                    width: dock.vals.mute ? 0 : parent.width * Math.max(0, Math.min(100, dock.vals.vol || 0)) / 100
+                                    objectName: modelData.kind === "range" ? "volumeFill" : ""
+                                    width: parent.width * Math.max(0, Math.min(100, dock.vals.vol || 0)) / 100
                                     height: parent.height
                                     radius: height / 2
                                     color: line.focused ? Theme.onLight : Theme.text

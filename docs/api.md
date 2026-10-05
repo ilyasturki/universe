@@ -293,7 +293,7 @@ every 10 s, since the 30-minute timeout writes no file.
 | `focus_session()` / `focus_pid(pid)` | `focus_session()` / `focus_pid(pid)` | — | `Activate` on the game's window / on the largest window of a process (a frontend's own, once the game is gone). On the launcher's gamescope (see Gamescope) `focus_session` shows the game again and `focus_pid(own pid)` takes the screen back from it |
 | `host_focus()` / `summon()` | `host_focus()` / `summon()` | — | `{launcher, session}`: whether the desktop's focused window is the launcher's or its running game's; `summon` raises the launcher's window (gamescope's when it runs nested). See Desktop |
 | `freeze(on)` | `freeze(on)` | — | `FreezeUnit` / `ThawUnit` on the running game's unit: every process of it stops in place, then the `freeze` / `thaw` hooks run (the capture module pauses its recorder). A stop job thaws on its own, so `stop` works on a frozen game |
-| `volume(change, value)` | `volume(change, value=0)` | — | the default sink through `wpctl`: `up` / `down` by `controller.volume_step`, `mute` toggles, `set` to `value` percent, `get`; returns `{percent, muted, output}` |
+| `volume(change, value)` | `volume(change, value=0)` | — | the default sink through `wpctl`: `up` / `down` by `controller.volume_step` (`up` unmutes, as GNOME's and KDE's keys do; `down` leaves the mute alone), `mute` toggles, `set` to `value` percent, `get`; returns `{percent, muted, output}`, `percent` the sink's level whether muted or not. `output` is read from `pw-dump` on a `get` and on the first change after a second without one; the changes in between reuse it |
 | `outputs()` / `set_output(id)` | `outputs()` / `set_output(id)` | `universe output [<id>] [--json]` | the playback outputs, from one `pw-dump`: each output route of a card whose `available` is not `no` (jacks without detection say `unknown`) that the card's current profile plays or an available profile could, then each sink no route stands for (a filter, a pro-audio profile). `[{id, label, device, current}]`: `id` is `<device.name>/<route name>`, or the sink's `node.name`; `label` the route's description, `device` the card's; `current` marks the effective default sink's route (`default.audio.sink`, not the configured one, which can name a sink of a profile gone). `set_output` switches the card's profile when the route needs it (the one keeping the current input, else the highest priority), waits up to 3 s for the sink to come up, sets its route with `wpctl set-route`, then `wpctl set-default`: WirePlumber keeps it, the desktop follows. Returns the new sink's `volume("get")`; `Invalid` for an id not listed |
 | `set_fps_limit()` | `set_fps_limit()` | — | rewrites the running game's `<state>/MangoHud.conf` from its `fps_limit` as launch resolves it: the layer watches that file (inotify) and rereads it by itself, a frozen game on the thaw, so no key is typed and no uinput is needed |
 | `set_mangohud(on)` | `set_mangohud(on=None)` | — | the running game's HUD: `None` flips it. Written as the game's `launch.mangohud` (reread from disk first: the dock and the watcher each hold a library), then applied in the game — mangoapp told over its control queue where one draws (see MangoHud), the layer over its control socket elsewhere, each also through its conf, which it rereads — and the new state returned. `NotFound` without a session; `Unavailable`, nothing written, when nothing can draw the HUD (no mangoapp where one would, no `mangohud` for the layer) |
@@ -1560,13 +1560,17 @@ written as `<key>.<name>` (`entry_key`), `""` removing it.
 `volume_down` repeat while held (400 ms, then every 100 ms), unless the slot also carries a hold.
 A slot with only a press macro fires on the key down; with a hold macro too, press fires on a release
 before `hold_ms` and hold once at `hold_ms`. `volume_up`, `volume_down` and `mute` go straight to
-WirePlumber through `wpctl`: the default sink's volume moves by `volume_step` percent, clamped to
-[0, 100 %], `mute` toggles the sink; no key is typed, so nothing reaches the game. The new level
-is reported as a `volume` event (`{"event": "volume", "percent", "muted", "output"}`, the output
-labelled as GNOME's own volume keys print it: the sink's active route, else the sink, as
-`outputs()` labels it). Inside the launcher's gamescope the launcher's overlay draws it over the
-game, whatever the desktop; on the desktop it shows on the desktop's OSD (see Desktop), and where
-there is none the macro runs silently. `screenshot` is `screenshot()`, reported back as a `screenshot` event
+WirePlumber through `wpctl`, as `volume()` does: the default sink's volume moves by `volume_step`
+percent, clamped to [0, 100 %], `volume_up` unmutes, `mute` toggles the sink; no key is typed, so
+nothing reaches the game. One worker applies them in turn: the presses that came while one ran are
+applied next as one step each run of the same macro (three `volume_up` repeats move 3 ×
+`volume_step` at once), so none is lost and the levels come out in order. Each step's new level is
+reported as a `volume` event (`{"event": "volume", "percent", "muted", "output"}`, `percent` the
+level kept under the mute, the output labelled as GNOME's own volume keys print it: the sink's
+active route, else the sink, as `outputs()` labels it). Inside the launcher's gamescope the
+launcher's overlay draws it over the game, whatever the desktop; on the desktop it shows on the
+desktop's OSD (see Desktop), the latest level only, and where there is none the macro runs
+silently. `screenshot` is `screenshot()`, reported back as a `screenshot` event
 (`{"event": "screenshot", "path"}`) that the launcher turns into its flash and shutter. `keys` types through uinput; `mangohud` is `set_mangohud(None)` — no key: the running
 game's `launch.mangohud` flipped and the HUD told (see MangoHud) — and the watcher reports the
 outcome as a `hud` event, which the launcher toasts: "MangoHud shown · <title>", "MangoHud hidden ·

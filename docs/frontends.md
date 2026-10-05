@@ -354,9 +354,10 @@ outside the theme's loader, answers a non-empty path with a white flash. Inside 
 holding it up; on the desktop there is no window over the game, so only the shutter is heard (the
 hook answers before either, see api.md § Screenshots). A failed shot emits an empty path: the dock
 toasts it, the flash stays off.
-Its volume row is the controller's macro by another route (◀ ▶ `volume("up" | "down")`, A `"mute"`,
+Its volume row is the controller's macro by another route (◀ ▶ `volume("up" | "down")`, ▶ unmuting, A `"mute"`,
 `controller.volume_step` per step, GNOME's OSD through `desktop::show_osd` on every change but a
-`get`). Its Output row steps through `api.home.outputs` and switches once the cursor has rested
+`get`). Muted, the row keeps the level, dimmed beside the mute glyph, as the PS5 Control Center's
+Volume row and the overlay's OSD do. Its Output row steps through `api.home.outputs` and switches once the cursor has rested
 500 ms (`setOutput(id)`: a switch can change a card's profile); the reply is the new sink's level.
 Quit asks, then `api.home.stop()`.
 

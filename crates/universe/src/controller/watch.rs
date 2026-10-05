@@ -13,6 +13,7 @@ use tokio::sync::{mpsc, Mutex};
 
 use super::engine::{Binding, Engine, Fire};
 use super::keys::{self, Source};
+use super::volume::{self, Change, Level};
 use super::{axis_roles, detect_family, detect_family_on, resolve_slots, sdl_axis, sdl_element, shown_pads, steam_copy, ControllerConfig, Family};
 use crate::core::Core;
 use crate::paths;
@@ -560,6 +561,7 @@ struct Watcher {
     copies: BTreeSet<PathBuf>,
     tx: mpsc::Sender<DevEvent>,
     typist: Arc<Mutex<Typist>>,
+    volume: mpsc::UnboundedSender<(Change, u8)>,
     suspended: bool,
     // Under the dock: the docked presets still fire.
     docked: bool,
@@ -816,20 +818,11 @@ impl Watcher {
         match m.action.as_str() {
             "volume_up" | "volume_down" | "mute" => {
                 let change = match m.action.as_str() {
-                    "volume_up" => super::volume::Change::Up,
-                    "volume_down" => super::volume::Change::Down,
-                    _ => super::volume::Change::ToggleMute,
+                    "volume_up" => Change::Up,
+                    "volume_down" => Change::Down,
+                    _ => Change::ToggleMute,
                 };
-                let percent = self.cfg.volume_step;
-                let out = self.out;
-                tokio::spawn(async move {
-                    match super::volume::change(change, percent, core.desktop().await).await {
-                        Ok(level) => {
-                            out.emit(serde_json::json!({"event": "volume", "percent": level.percent, "muted": level.muted, "output": level.output}));
-                        }
-                        Err(e) => tracing::warn!("{change:?}: {e}"),
-                    }
-                });
+                let _ = self.volume.send((change, self.cfg.volume_step));
             }
             "mangohud" => {
                 let out = self.out;
@@ -970,6 +963,42 @@ impl Watcher {
     }
 }
 
+/// One worker applies the volume macros in turn, the presses queued meanwhile folded into one step each, so none is lost
+/// and no level lands out of order. The desktop's OSD shows the latest level apart: its answer can take seconds.
+fn spawn_volume(core: Arc<Core>, out: Out) -> mpsc::UnboundedSender<(Change, u8)> {
+    let (tx, mut rx) = mpsc::unbounded_channel::<(Change, u8)>();
+    let (shown, mut showing) = tokio::sync::watch::channel(None::<Level>);
+    let desktop = core.clone();
+    tokio::spawn(async move {
+        while showing.changed().await.is_ok() {
+            let level = showing.borrow_and_update().clone();
+            if let Some(level) = level {
+                volume::osd(&level, desktop.desktop().await).await;
+            }
+        }
+    });
+    tokio::spawn(async move {
+        while let Some(first) = rx.recv().await {
+            let mut pressed = vec![first];
+            while let Ok(next) = rx.try_recv() {
+                pressed.push(next);
+            }
+            for batch in volume::coalesce(pressed) {
+                match tokio::task::spawn_blocking(move || volume::apply(batch)).await.map_err(|e| e.to_string()).and_then(|r| r) {
+                    Ok(level) => {
+                        out.emit(serde_json::json!({"event": "volume", "percent": level.percent, "muted": level.muted, "output": level.output}));
+                        if volume::shows_osd(batch.change) {
+                            shown.send_replace(Some(level));
+                        }
+                    }
+                    Err(e) => tracing::warn!("{:?}: {e}", batch.change),
+                }
+            }
+        }
+    });
+    tx
+}
+
 pub async fn watch(core: Arc<Core>, opts: WatchOptions) -> crate::Result<()> {
     let out = Out { json: opts.json };
     let Some(_lock) = take_lock(opts.wait, &out).await? else {
@@ -979,6 +1008,7 @@ pub async fn watch(core: Arc<Core>, opts: WatchOptions) -> crate::Result<()> {
     let cfg = core.config.read().await.controller.clone();
     let (tx, mut rx) = mpsc::channel::<DevEvent>(256);
     let mut w = Watcher {
+        volume: spawn_volume(core.clone(), out),
         core,
         engine: Engine::new(cfg.hold_ms),
         cfg,

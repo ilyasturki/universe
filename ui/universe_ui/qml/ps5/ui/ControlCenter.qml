@@ -363,7 +363,7 @@ FocusScope {
         case "sharp":
             return item.names[Math.max(0, item.options.indexOf(v[item.id]))];
         case "vol":
-            return v.mute ? "Muted" : v.vol + "%";
+            return v.vol + "%";
         case "output":
             return outputName(v.output);
         }
@@ -1044,6 +1044,7 @@ FocusScope {
 
                         readonly property bool focused: index === cc.row
                         readonly property bool checked: modelData.kind === "toggle" && cc.isOn(modelData)
+                        readonly property bool hushed: modelData.kind === "range" && cc.vals.mute === true
 
                         width: rowsColumn.width
                         height: Theme.dp(70)
@@ -1058,11 +1059,12 @@ FocusScope {
 
                         Glyph {
                             id: lineGlyph
+                            objectName: modelData.kind === "range" ? "volumeGlyph" : ""
                             x: Theme.dp(18)
                             anchors.verticalCenter: parent.verticalCenter
                             width: Theme.dp(30)
                             height: width
-                            kind: modelData.glyph
+                            kind: line.hushed ? "mute" : modelData.glyph
                         }
 
                         Label {
@@ -1081,11 +1083,13 @@ FocusScope {
                         }
 
                         Row {
+                            objectName: modelData.kind === "range" ? "volumeLevel" : ""
                             visible: modelData.kind === "range"
                             anchors.right: parent.right
                             anchors.rightMargin: Theme.dp(18)
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: Theme.dp(14)
+                            opacity: line.hushed ? 0.4 : 1
 
                             Rectangle {
                                 anchors.verticalCenter: parent.verticalCenter
@@ -1095,7 +1099,8 @@ FocusScope {
                                 color: Qt.rgba(1, 1, 1, 0.18)
 
                                 Rectangle {
-                                    width: cc.vals.mute ? 0 : parent.width * Math.max(0, Math.min(100, cc.vals.vol || 0)) / 100
+                                    objectName: modelData.kind === "range" ? "volumeFill" : ""
+                                    width: parent.width * Math.max(0, Math.min(100, cc.vals.vol || 0)) / 100
                                     height: parent.height
                                     radius: height / 2
                                     color: Theme.text

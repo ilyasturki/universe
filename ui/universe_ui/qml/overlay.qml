@@ -217,8 +217,9 @@ Window {
             anchors.rightMargin: 28 * overlay.unit
             anchors.top: parent.top
             anchors.topMargin: 15 * overlay.unit
-            text: osd.silent ? "Muted" : api.home.volumePercent + "%"
+            text: api.home.volumePercent + "%"
             color: "#b8ffffff"
+            opacity: api.home.muted ? 0.45 : 1
             font.pixelSize: 16 * overlay.unit
         }
 
@@ -234,10 +235,11 @@ Window {
             color: "#40ffffff"
 
             Rectangle {
-                width: parent.width * (osd.silent ? 0 : Math.min(api.home.volumePercent, 100) / 100)
+                width: parent.width * Math.min(api.home.volumePercent, 100) / 100
                 height: parent.height
                 radius: parent.radius
                 color: "#ffffff"
+                opacity: api.home.muted ? 0.4 : 1
 
                 Behavior on width {
                     NumberAnimation {
