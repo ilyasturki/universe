@@ -279,14 +279,14 @@ def gamescope_once(command, argv, ready_s=READY_S, extra_env=None):
 
 
 def run_in_gamescope(command, argv, ready_s=READY_S):
-    """gamescope's exit code once the launcher inside it came up; None to run on the desktop instead."""
+    """The launcher's exit code once it came up inside gamescope, gamescope's when it died; None to run on the desktop instead."""
     log = logging.getLogger("universe.host")
     if not command:
         log.warning("no gamescope: running on the desktop")
         return None
     run = gamescope_once(command, argv, ready_s)
     if run.up or run.stopped:
-        return run.code
+        return run.code if run.done is None else run.done
     log.warning("running on the desktop")
     return None
 

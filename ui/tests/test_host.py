@@ -65,6 +65,8 @@ def gamescope(monkeypatch, tmp_path, launcher):
 def test_the_exit_code_of_a_gamescope_that_came_up_is_the_launchers(monkeypatch, gamescope):
     monkeypatch.setenv("FAKE_GAMESCOPE", "up")
     assert host.run_in_gamescope(gamescope, []) == 7, "quitting gamescope after the launcher came up quits, not a restart on the desktop"
+    monkeypatch.setenv("FAKE_GAMESCOPE", "quits")
+    assert host.run_in_gamescope(gamescope, []) == 3, "gamescope exits 0 whatever the launcher quit with"
 
 
 @pytest.mark.parametrize(("display", "own"), [("wayland-0", "nested"), ("", "drm")])
