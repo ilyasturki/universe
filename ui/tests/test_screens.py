@@ -168,7 +168,7 @@ def test_source_form(api, fake):
     assert card("logged_in") == ["logged_in", "link", "code"]
     assert rows[index_of(form, "logged_in")]["type"] == "info" and rows[index_of(form, "logged_in")]["detail"] == "yasso"
     assert card("enabled") == ["enabled", "games_dir", "platform", "with_dlcs"], "every setting: a source's are all global; the advanced ones behind Y"
-    assert card("achievements") == ["achievements"], "the game settings every game takes, a card of their own"
+    assert card("achievements") == ["achievements", "cloud_saves"], "the game settings every game takes, a card of their own"
     assert [rows[i]["key"] for g in form.advancedGroups for i in g["rows"]] == ["scan_dirs", "auth_path", "install_timeout_s"]
     platform = index_of(form, "platform")
     assert rows[platform]["choiceValues"] == ["", "windows", "linux"], "the first choice drops config.toml's own"
