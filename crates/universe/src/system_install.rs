@@ -20,8 +20,7 @@ pub fn requested(args: &[String]) -> Result<&'static SystemTool> {
     }
 }
 
-/// The helper and pkexec, in the Universe session only: no polkit agent answers there, and the helper's action is
-/// allow_active=yes, while a desktop keeps PackageKit's own prompt.
+/// In the Universe session only, where no polkit agent answers PackageKit's prompt; a desktop keeps that prompt.
 pub fn helper() -> Option<PathBuf> {
     if !crate::nest::session() || crate::runners::on_system_path("pkexec").is_none() {
         return None;
@@ -29,7 +28,12 @@ pub fn helper() -> Option<PathBuf> {
     PLACES.iter().map(PathBuf::from).find(|p| p.is_file())
 }
 
-/// The helper prints each percent on a line of its own; its last stderr line is the reason it failed.
+/// PackageKit, and in the session the helper in front of it.
+pub async fn available() -> bool {
+    crate::packagekit::available().await && (!crate::nest::session() || helper().is_some())
+}
+
+/// The helper prints each percent on a line of its own; its first stderr line is the reason it failed.
 pub async fn install(helper: &Path, tool: &SystemTool, mut progress: Option<Progress<'_, '_>>) -> Result<()> {
     let failed = |e: String| Error::Unavailable(format!("{}: {e}", tool.name));
     let mut child = tokio::process::Command::new("pkexec")
@@ -59,7 +63,8 @@ pub async fn install(helper: &Path, tool: &SystemTool, mut progress: Option<Prog
     if status.success() {
         return Ok(());
     }
-    let reason = errors.lines().map(str::trim).rfind(|l| !l.is_empty()).map(str::to_string);
+    // pkexec's refusal ends on "This incident has been reported.", after the reason.
+    let reason = errors.lines().map(str::trim).find(|l| !l.is_empty()).map(str::to_string);
     Err(failed(reason.unwrap_or_else(|| format!("the install helper ended with {status}"))))
 }
 

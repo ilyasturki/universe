@@ -1183,8 +1183,7 @@ impl Core {
         let generated_at = catalogue.generated_at.clone();
         let games = self.games.read().await.clone();
         let running = self.current().await.map(|c| c.id);
-        // In the session no polkit agent answers PackageKit's prompt: only the helper installs there.
-        let packagekit = crate::packagekit::available().await && (!crate::nest::session() || crate::system_install::helper().is_some());
+        let packagekit = crate::system_install::available().await;
         let asked: Vec<String> = self.modules.read().await.iter().filter(|m| m.enabled).flat_map(|m| m.manifest.requires.system.clone()).collect();
         let listed = crate::core::blocking(move || Ok(list(&config, &catalogue, &games, running.as_deref(), &asked, packagekit))).await?;
         Ok(serde_json::json!({

@@ -616,7 +616,7 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
     // A hook's line replaces the core's of the same id for its module, a required binary's: the module words its own fix.
     out.retain(|c| !reported.iter().any(|r| r.module == c.module && r.check == c.check));
     out.extend(reported);
-    attach_components(&mut out, config, crate::packagekit::available().await);
+    attach_components(&mut out, config, crate::system_install::available().await);
     out
 }
 
