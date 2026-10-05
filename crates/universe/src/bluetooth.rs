@@ -213,6 +213,12 @@ pub async fn connect(conn: &zbus::Connection, address: &str) -> Result<()> {
     timed(PAIRING, async { proxy(conn, path, DEVICE).await?.call::<_, _, ()>("Connect", &()).await }).await.map_err(failed)
 }
 
+/// Stops a pairing under way: its Pair fails as canceled, its question to the agent is withdrawn.
+pub async fn cancel_pairing(conn: &zbus::Connection, address: &str) -> Result<()> {
+    let path = device(conn, address).await?;
+    timed(CALL, async { proxy(conn, path, DEVICE).await?.call::<_, _, ()>("CancelPairing", &()).await }).await.map_err(failed)
+}
+
 pub async fn disconnect(conn: &zbus::Connection, address: &str) -> Result<()> {
     let path = device(conn, address).await?;
     timed(CALL, async { proxy(conn, path, DEVICE).await?.call::<_, _, ()>("Disconnect", &()).await }).await.map_err(failed)
@@ -445,6 +451,7 @@ impl<E: FnMut(serde_json::Value) -> bool> Watch<E> {
         let outcome = match v["cmd"].as_str().unwrap_or("") {
             "scan" => discover(&self.conn, on).await,
             "power" => set_powered(&self.conn, on).await,
+            "cancel" => cancel_pairing(&self.conn, &address).await,
             "pair" => self.spawn("pair", address),
             "connect" => self.spawn("connect", address),
             "disconnect" => self.spawn("disconnect", address),
@@ -680,6 +687,21 @@ mod tests {
         s.send(json!({"cmd": "answer", "id": ask["id"], "yes": true}));
         let failed = s.until(|v| v["event"] == "failed").await;
         assert_eq!(failed["reason"], "canceled", "{failed}");
+    }
+
+    // The user backs out of a pairing that shows a code: the pairing stops, and BlueZ withdraws its question.
+    #[tokio::test]
+    async fn a_pairing_the_user_cancels_stops() {
+        let bus = Bus::start();
+        let bluez = Bluez::serve(&bus).await;
+        bluez.add(KEYBOARD, Some("K380"), "input-keyboard", false, Pairing::Confirm(1)).await;
+        let mut s = Session::start(&bus, false).await;
+        s.send(json!({"cmd": "pair", "address": KEYBOARD}));
+        s.until(|v| v["event"] == "request").await;
+        s.send(json!({"cmd": "cancel", "address": KEYBOARD}));
+        s.until(|v| v["event"] == "cancel").await;
+        let failed = s.until(|v| v["event"] == "failed").await;
+        assert_eq!((&failed["action"], &failed["reason"]), (&json!("pair"), &json!("canceled")), "{failed}");
     }
 
     // In the Universe session the watch is the default agent: BlueZ's cable pairing of a plugged-in DualSense asks it.

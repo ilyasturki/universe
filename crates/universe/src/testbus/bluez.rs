@@ -178,6 +178,13 @@ impl Device {
         Ok(())
     }
 
+    async fn cancel_pairing(&self, #[zbus(connection)] conn: &zbus::Connection) -> Result<(), BluezError> {
+        let asked = self.agents.lock().unwrap().asked.clone();
+        let (dest, path) = asked.ok_or_else(|| BluezError::DoesNotExist("No pairing in progress".into()))?;
+        conn.call_method(Some(dest.as_str()), &path, Some("org.bluez.Agent1"), "Cancel", &()).await?;
+        Ok(())
+    }
+
     async fn connect(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) -> Result<(), BluezError> {
         self.flags.lock().unwrap().connected = true;
         self.connected_changed(&emitter).await?;
