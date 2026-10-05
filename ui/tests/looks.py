@@ -11,6 +11,10 @@ LOOKS = ["reprise", "switch2", "ps5"]
 # What each look calls its question and its list of choices.
 DIALOG = {"reprise": "confirm", "switch2": "dialog", "ps5": "dialog"}
 MENU = {"reprise": "gameMenu", "switch2": "picker", "ps5": "popup"}
+# On the text sheet: the key that gives the text (Enter under Reprise's keyboard mode, where F types an f; + and Options on the
+# consoles'), and the one that shows a password.
+SUBMIT = {"reprise": Qt.Key.Key_Return, "switch2": Qt.Key.Key_F1, "ps5": Qt.Key.Key_F1}
+REVEAL = {"reprise": Qt.Key.Key_F1, "switch2": Qt.Key.Key_E, "ps5": Qt.Key.Key_E}
 TABS = {"homePage", "mediaPage", "settingsPage", "libraryPage"}
 
 
@@ -70,6 +74,18 @@ def invoke(obj, method, *args):
 def call(obj, method, *args):
     value = QMetaObject.invokeMethod(obj, method, Qt.DirectConnection, Q_RETURN_ARG("QVariant"), *(Q_ARG("QVariant", a) for a in args))
     return value.toVariant() if hasattr(value, "toVariant") else value
+
+
+def content_rows(page):
+    """A Settings page's rows for its open section: Reprise's `content` holds them with its groups, the others' is the list."""
+    content = read(page, "content")
+    return content["rows"] if isinstance(content, dict) else content
+
+
+def activate(page, rows, **want):
+    """A on the first of `rows` whose keys hold `want`, through the page's own `activate(index, row)`."""
+    i = next(i for i, r in enumerate(rows) if all(r.get(k) == v for k, v in want.items()))
+    invoke(page, "activate", i, {**rows[i], "form": i})
 
 
 def current_row(page):

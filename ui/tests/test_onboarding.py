@@ -2,9 +2,11 @@ import json
 import threading
 
 import pytest
-from looks import Look, page_name
+from looks import SUBMIT, Look, activate, page_name
 from PySide6.QtCore import QObject, Qt
 from uitest import index_of, record, rows_by_key, until
+
+from universe_ui.fake_radios import PASSWORD
 
 
 @pytest.fixture
@@ -245,6 +247,51 @@ def test_preferences_write_the_family_and_hdr(empty_api, empty):
     assert empty.core.settings()["launch"]["hdr"] is True
 
 
+@pytest.fixture
+def offline(monkeypatch):
+    """The fake machine starting off every network: asked for before the fake core, which reads it once."""
+    monkeypatch.setenv("UNIVERSE_FAKE_NETWORK", "offline")
+
+
+def test_an_offline_start_joins_a_network_first(offline, empty_api, empty):
+    form = loaded(empty_api.screens.onboarding)
+    assert [s["id"] for s in form.steps][:2] == ["network", "found"], "the stores and the art need the internet: it comes first"
+    until(lambda: [r for r in form.rows if r["key"] == "network"])
+    rows = {r["ssid"]: r for r in form.rows if r["key"] == "network"}
+    assert (rows["Home"]["saved"], rows["Home"]["active"], rows["Atelier"]["secured"], rows["Campus"]["joinable"]) == (True, False, True, False)
+    assert {"cmd": "scan", "on": True} in empty.core.wifi.commands, "the card scans while the step is up"
+    empty_api.screens.network.join("Home", "")
+    until(lambda: next(r for r in form.rows if r.get("ssid") == "Home")["active"])
+    form.next()
+    assert form.stepId == "found"
+    until(lambda: empty.core.wifi.commands[-1] == {"cmd": "scan", "on": False})
+
+
+def test_wifi_switched_off_offers_its_switch(offline, empty_api, empty):
+    empty.core.wifi.enabled = False
+    form = loaded(empty_api.screens.onboarding)
+    assert form.stepId == "network"
+    form.toggle(index_of(form, "wifi"))
+    until(lambda: empty_api.screens.network.enabled)
+
+
+@pytest.mark.parametrize("mode", ["", "none"])
+def test_online_or_without_networkmanager_the_setup_starts_at_the_machine(monkeypatch, mode, app, xdg, tmp_path):
+    from universe_ui.api import Api
+    from universe_ui.fake_core import FIXTURE, FakeCore
+    from universe_ui.screens.power import FAKE
+    from universe_ui.universe_client import CoreClient
+
+    monkeypatch.setenv("UNIVERSE_FAKE_NETWORK", mode)
+    client = CoreClient(FakeCore(FIXTURE, tmp_path / "core"))
+    api = Api(client, memory_path=str(tmp_path / "memory.json"), power_root=FAKE)
+    try:
+        assert loaded(api.screens.onboarding).steps[0]["id"] == "found"
+    finally:
+        api.shutdown()
+        client.shutdown()
+
+
 @pytest.mark.parametrize(("config_owner", "owner"), [("home-manager", "home-manager"), ("", "config.toml")])
 def test_read_only_config_skips_preferences(empty_api, empty, config_owner, owner):
     empty.core._config["config_writable"] = False
@@ -349,6 +396,19 @@ def test_the_setup_in_each_look(stores_signed_out, look, empty_api, empty):
         until(lambda: page.property("tileSelected") is True, "Down leaves the hero pills for the rail, Right past the last game reaches the Library tile")
         look.press(Qt.Key.Key_Left)
         until(lambda: page.property("tileSelected") is False and page.property("currentGame") is not None)
+
+
+def test_the_offline_setup_joins_a_network_in_each_look(offline, look, empty_api, empty):
+    form = empty_api.screens.onboarding
+    until(lambda: opened(look) and not form.loading and form.stepId == "network")
+    until(lambda: any(r.get("ssid") == "Atelier" for r in form.rows))
+    activate(look.page("onboardingPage"), form.rows, key="network", ssid="Atelier")
+    sheet = look.find("textSheet")
+    until(lambda: sheet.property("open") is True and sheet.property("secret") is True)
+    sheet.setProperty("text", PASSWORD)
+    look.press(SUBMIT[look.name])
+    until(lambda: empty_api.screens.network.ssid == "Atelier")
+    until(lambda: next(r for r in form.rows if r.get("ssid") == "Atelier")["active"], "the step shows it joined")
 
 
 def test_a_step_with_nothing_to_do_lands_on_its_button(look, empty_api, empty):
