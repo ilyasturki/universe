@@ -963,8 +963,7 @@ impl Watcher {
     }
 }
 
-/// One worker applies the volume macros in turn, the presses queued meanwhile folded into one step each, so none is lost
-/// and no level lands out of order. The desktop's OSD shows the latest level apart: its answer can take seconds.
+/// Presses applied in order, a queued run of one macro as one step; the desktop's OSD, seconds to answer, shows the latest level alone.
 fn spawn_volume(core: Arc<Core>, out: Out) -> mpsc::UnboundedSender<(Change, u8)> {
     let (tx, mut rx) = mpsc::unbounded_channel::<(Change, u8)>();
     let (shown, mut showing) = tokio::sync::watch::channel(None::<Level>);
