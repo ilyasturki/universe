@@ -583,6 +583,59 @@
    "kind": "tool",
    "name": "legendary-gl"
   },
+  "ludusavi": {
+   "bin": "ludusavi",
+   "builds": [
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "tar.gz",
+       "member": "ludusavi",
+       "sha256": "7322ff45d41eae7ae064a80d8c9ecccc5b8fb6fc090a603a66369cd4b054068d",
+       "size": 14389479,
+       "url": "https://github.com/mtkennerly/ludusavi/releases/download/v0.31.0/ludusavi-v0.31.0-linux.tar.gz"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-04-04T20:56:28Z",
+     "version": "0.31.0"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "tar.gz",
+       "member": "ludusavi",
+       "sha256": "bc9437da7f80b67f9d1907b5bff549885a81097cce5e7b83bcedc5faf7986083",
+       "size": 11974368,
+       "url": "https://github.com/mtkennerly/ludusavi/releases/download/v0.30.0/ludusavi-v0.30.0-linux.tar.gz"
+      }
+     ],
+     "channel": "stable",
+     "date": "2025-11-10T05:09:30Z",
+     "version": "0.30.0"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "tar.gz",
+       "member": "ludusavi",
+       "sha256": "80b52aeb4124b769cfddb23d3f7da2070b68434cfd4006fc49fba7e615b5bf65",
+       "size": 12013805,
+       "url": "https://github.com/mtkennerly/ludusavi/releases/download/v0.29.1/ludusavi-v0.29.1-linux.tar.gz"
+      }
+     ],
+     "channel": "stable",
+     "date": "2025-04-18T01:26:30Z",
+     "version": "0.29.1"
+    }
+   ],
+   "homepage": "https://github.com/mtkennerly/ludusavi",
+   "kind": "tool",
+   "name": "ludusavi"
+  },
   "melonds": {
    "builds": [
     {
@@ -812,6 +865,35 @@
       {
        "arch": "x86_64",
        "format": "tar.xz",
+       "sha256": "096bfe73b506d6565b04ecc45214197a4091818f16ed91f5324b4d2082d0a263",
+       "size": 346993320,
+       "url": "https://github.com/CachyOS/proton-cachyos/releases/download/cachyos-11.0-20261005-slr/proton-cachyos-11.0-20261005-slr-x86_64.tar.xz"
+      },
+      {
+       "arch": "x86_64",
+       "format": "tar.xz",
+       "sha256": "ba52a4f31a060ffca2b8e05fc00e51bc39e4c1501928eb5a9218b0fa07bfc8c7",
+       "size": 347026136,
+       "url": "https://github.com/CachyOS/proton-cachyos/releases/download/cachyos-11.0-20261005-slr/proton-cachyos-11.0-20261005-slr-x86_64_v3.tar.xz",
+       "variant": "x86_64_v3"
+      },
+      {
+       "arch": "aarch64",
+       "format": "tar.xz",
+       "sha256": "e59b646e73de4af21ff2f6c795b28e7b6c889214b3c6daf8e65a56634cd06c37",
+       "size": 356312716,
+       "url": "https://github.com/CachyOS/proton-cachyos/releases/download/cachyos-11.0-20261005-slr/proton-cachyos-11.0-20261005-slr-arm64.tar.xz"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-10-04T21:30:56Z",
+     "version": "proton-cachyos-11.0-20261005-slr"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "tar.xz",
        "sha256": "62ff4b2750180723cc00538608fe687e21d1d91a31ef64ce1a7c9f46c3db310b",
        "size": 335059640,
        "url": "https://github.com/CachyOS/proton-cachyos/releases/download/cachyos-11.0-20260703-slr/proton-cachyos-11.0-20260703-slr-x86_64.tar.xz"
@@ -957,6 +1039,20 @@
       {
        "arch": "x86_64",
        "format": "appimage",
+       "sha256": "0a892bb02791e3b93e6c05829de0018e89e1e1421d1e58eea302901cc60d6edd",
+       "size": 94056736,
+       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-ba4a4b561edb562d9fd58268edaf927fa436f408/rpcs3-v0.0.43-20217-ba4a4b56_linux64.AppImage"
+      }
+     ],
+     "channel": "rolling",
+     "date": "2026-10-05T09:24:41Z",
+     "version": "0.0.43-20217-ba4a4b56"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "appimage",
        "sha256": "b3053fc060eb4a7e093b9b4ad0aabe0eb740b2ca39d62a3e087fd60e83a5653f",
        "size": 94062895,
        "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-46aee28f85b9cecc8fd0e5dee0c771f9c88cd27a/rpcs3-v0.0.43-20206-46aee28f_linux64.AppImage"
@@ -1021,20 +1117,6 @@
      "channel": "rolling",
      "date": "2026-09-30T09:17:25Z",
      "version": "0.0.42-20113-fb4a0921"
-    },
-    {
-     "assets": [
-      {
-       "arch": "x86_64",
-       "format": "appimage",
-       "sha256": "252156a9c4f6d35d040b095bbad119371584f9cca3fc064eecf81ad6f91ff320",
-       "size": 94048176,
-       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-d9a72d6ca7537e798a9d822ed4ef9f90567a3708/rpcs3-v0.0.42-20081-d9a72d6c_linux64.AppImage"
-      }
-     ],
-     "channel": "rolling",
-     "date": "2026-09-29T10:41:29Z",
-     "version": "0.0.42-20081-d9a72d6c"
     }
    ],
    "homepage": "https://github.com/RPCS3/rpcs3-binaries-linux",
@@ -1267,21 +1349,21 @@
       {
        "arch": "x86_64",
        "format": "appimage",
-       "sha256": "949fed1c4989403821f567157f95182bc667786491f998aefcd903187edc2e0d",
+       "sha256": "ccb98572d781292f212593af86b2e919b79d77a7835606c0c0f3780e1fdf1d50",
        "size": 70232568,
        "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-x86_64.AppImage"
       },
       {
        "arch": "aarch64",
        "format": "appimage",
-       "sha256": "fb9faa0085ecc441ffbaf9569ffd9bbbed2fe4169f691b52e0c95e886e162287",
-       "size": 70638088,
+       "sha256": "0d0b5abf2d81863b70de0c8f3a0698b908809924472704a60f56d8e26441dcfa",
+       "size": 70629896,
        "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-aarch64.AppImage"
       }
      ],
      "channel": "rolling",
-     "date": "2026-10-03T08:25:49Z",
-     "version": "2026.10.03"
+     "date": "2026-10-05T11:35:42Z",
+     "version": "2026.10.05"
     }
    ],
    "homepage": "https://github.com/Vita3K/Vita3K",
@@ -1422,6 +1504,6 @@
    "name": "xemu"
   }
  },
- "generated_at": "2026-10-04T11:10:40Z",
+ "generated_at": "2026-10-05T12:24:36Z",
  "schema": 1
 }
