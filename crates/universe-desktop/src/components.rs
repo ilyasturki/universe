@@ -279,7 +279,7 @@ pub fn ask(c: &Value, action: &str) -> Option<Ask> {
 }
 
 /// On the preferences dialog the widget sits in, else the window.
-fn toast(anchor: &gtk::Widget, line: &str) {
+pub(crate) fn toast(anchor: &gtk::Widget, line: &str) {
     if let Some(dialog) = anchor.ancestor(adw::PreferencesDialog::static_type()).and_downcast::<adw::PreferencesDialog>() {
         dialog.add_toast(crate::dialogs::toast(line));
     } else if let Some(win) = anchor.root().and_downcast::<Window>() {

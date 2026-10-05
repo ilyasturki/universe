@@ -1,4 +1,5 @@
 mod actions;
+mod addons;
 mod app;
 mod backend;
 mod components;

@@ -83,8 +83,11 @@ fn push_form(dialog: &adw::PreferencesDialog, title: &str, view: Rc<FormView>) -
     page
 }
 
-fn list_row(title: &str, subtitle: &str, enabled: bool) -> adw::ActionRow {
+fn list_row(title: &str, subtitle: &str, enabled: bool, unlisted: bool) -> adw::ActionRow {
     let row = crate::rows::marked(adw::ActionRow::builder().activatable(true).build(), title, subtitle);
+    if unlisted {
+        row.add_suffix(&gtk::Label::builder().label(gettext("Unlisted")).valign(gtk::Align::Center).css_classes(["caption", "dimmed"]).build());
+    }
     if !enabled {
         row.add_suffix(&gtk::Label::builder().label(gettext("Off")).valign(gtk::Align::Center).css_classes(["dimmed"]).build());
     }
@@ -96,7 +99,8 @@ fn chevron() -> gtk::Image {
     gtk::Image::from_icon_name("go-next-symbolic")
 }
 
-/// `page`: `launch`, `runners`, `stores`, `modules`, `controller` or `system` (a Steam Deck's); empty for the first.
+/// `page`: `launch`, `runners`, `stores`, `modules`, `controller` or `system` (a Steam Deck's), or `addons-module` and
+/// `addons-source`, the add-ons over their list; empty for the first.
 pub fn present(win: &Window, page: &str) {
     if !win.app().is_ready() {
         return;
@@ -146,6 +150,11 @@ pub fn present(win: &Window, page: &str) {
         }
     });
 
+    let addons = match page {
+        "addons-module" => Some(("module", Rc::downgrade(&modules), Listed::Modules, "modules")),
+        "addons-source" => Some(("source", Rc::downgrade(&stores), Listed::Stores, "stores")),
+        _ => None,
+    };
     let (app, job) = (win.app().downgrade(), RefCell::new(Some(component_job)));
     dialog.connect_closed(move |_| {
         let _ = (&launch, &runners, &stores, &modules, &controller, &system);
@@ -153,10 +162,21 @@ pub fn present(win: &Window, page: &str) {
             app.disconnect(handler);
         }
     });
-    if !page.is_empty() {
+    if let Some((_, _, _, name)) = addons.as_ref() {
+        dialog.set_visible_page_name(name);
+    } else if !page.is_empty() {
         dialog.set_visible_page_name(page);
     }
     dialog.present(Some(win));
+    if let Some((kind, weak_list, listed, _)) = addons {
+        let (weak_dialog, conn) = (dialog.downgrade(), connector.clone());
+        let changed: Rc<dyn Fn()> = Rc::new(move || {
+            if let (Some(dialog), Some(list)) = (weak_dialog.upgrade(), weak_list.upgrade()) {
+                load_list(&dialog, &list, &conn, listed);
+            }
+        });
+        crate::addons::present(&dialog, kind, changed);
+    }
 }
 
 /// The Deck's own controls but the backlight, which the desktop sets.
@@ -416,7 +436,7 @@ fn load_list(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, connector: &s
                 Listed::Stores => text(&entry, "description"),
                 Listed::Modules => module_status(&entry),
             };
-            let row = list_row(&text(&entry, "name"), &line, enabled);
+            let row = list_row(&text(&entry, "name"), &line, enabled, text(&entry, "origin") == "unlisted");
             page.keep(&text(&entry, "id"), &row);
             let (weak_dialog, weak_page, conn) = (dialog.downgrade(), Rc::downgrade(&page), connector.clone());
             row.connect_activated(move |_| {
@@ -435,6 +455,24 @@ fn load_list(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, connector: &s
             });
             group.add(&row);
         }
+        let (kind, subtitle) = match listed {
+            Listed::Stores => ("source", gettext("Add-ons: stores others made")),
+            Listed::Modules => ("module", gettext("Add-ons: modules others made")),
+        };
+        let more = list_row(&gettext("Get more…"), &subtitle, true, false);
+        page.keep("more", &more);
+        let (weak_dialog, weak_page, conn) = (dialog.downgrade(), Rc::downgrade(&page), connector.clone());
+        more.connect_activated(move |_| {
+            let Some(dialog) = weak_dialog.upgrade() else { return };
+            let (again, weak_page, conn) = (dialog.downgrade(), weak_page.clone(), conn.clone());
+            let changed: Rc<dyn Fn()> = Rc::new(move || {
+                if let (Some(dialog), Some(page)) = (again.upgrade(), weak_page.upgrade()) {
+                    load_list(&dialog, &page, &conn, listed);
+                }
+            });
+            crate::addons::present(&dialog, kind, changed);
+        });
+        page.group("", "").add(&more);
         crate::components::refocus(&page.rows.borrow(), focus);
     });
 }
