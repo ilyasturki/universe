@@ -164,6 +164,10 @@ impl Core {
     fn saves_restore(&self, py: Python<'_>, id: String, backup: String) -> PyResult<Py<PyAny>> {
         self.value(py, |c| async move { c.saves_restore(&id, &backup).await })
     }
+    #[pyo3(signature = (id, action = "status".to_string()))]
+    fn saves_cloud(&self, py: Python<'_>, id: String, action: String) -> PyResult<Py<PyAny>> {
+        self.value(py, |c| async move { c.saves_cloud(&id, &action).await })
+    }
     fn saves_export(&self, py: Python<'_>, id: String, to: String) -> PyResult<String> {
         self.run(py, |c| async move { c.saves_export(&id, &to).await.map(|p| p.to_string_lossy().into_owned()) })
     }

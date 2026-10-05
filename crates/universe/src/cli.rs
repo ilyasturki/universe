@@ -519,6 +519,26 @@ pub enum SavesCmd {
         #[arg(default_value = ".")]
         to: String,
     },
+    /// The game's cloud saves through its store: their state, a sync now, or the side a conflict keeps
+    Cloud {
+        /// Game: exact id, then whole word, substring or path
+        name: String,
+        /// Bring the cloud's saves down, as before a session
+        #[arg(long, group = "cloud_action")]
+        download: bool,
+        /// Send the saves up, as after a session
+        #[arg(long, group = "cloud_action")]
+        upload: bool,
+        /// Settle a conflict with the saves on this device: the cloud's are replaced
+        #[arg(long, group = "cloud_action")]
+        keep_local: bool,
+        /// Settle a conflict with the cloud's saves: the ones here are backed up, then replaced
+        #[arg(long, group = "cloud_action")]
+        keep_cloud: bool,
+        /// Do not ask for confirmation
+        #[arg(long, short)]
+        yes: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -1270,6 +1290,26 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             SavesCmd::Export { name, to } => {
                 let id = pick(&core, &name).await?;
                 finish(json, core.saves_export(&id, &to).await.map(|zip| zip.to_string_lossy().into_owned()));
+            }
+            SavesCmd::Cloud { name, download, upload, keep_local, keep_cloud, yes } => {
+                let id = pick(&core, &name).await?;
+                let action = [(download, "download"), (upload, "upload"), (keep_local, "keep-local"), (keep_cloud, "keep-cloud")]
+                    .into_iter()
+                    .find_map(|(on, action)| on.then_some(action))
+                    .unwrap_or("status");
+                let replaced = match action {
+                    "keep-local" => Some("the cloud's saves are replaced by the ones on this device"),
+                    "keep-cloud" => Some("the saves on this device are backed up, then replaced by the cloud's"),
+                    _ => None,
+                };
+                if replaced.is_some_and(|what| !yes && !confirm(&format!("{id}: {what}?"))) {
+                    return Ok(());
+                }
+                let cloud = core.saves_cloud(&id, action).await?;
+                if json {
+                    return print_json(&cloud);
+                }
+                println!("{id}: {}", cloud_text(&cloud));
             }
         },
         Cmd::Add { file, runner, title, platform, media } => {
@@ -2279,6 +2319,7 @@ const POSITIONALS: &[(&str, usize, &str)] = &[
     ("saves restore", 1, "games"),
     ("saves export", 1, "games"),
     ("saves export", 2, "FILES"),
+    ("saves cloud", 1, "games"),
     ("sessions", 1, "games"),
     ("screenshots", 1, "games"),
     ("achievements", 1, "games"),
@@ -2424,6 +2465,18 @@ fn files_text(n: usize) -> String {
     }
 }
 
+fn cloud_text(cloud: &Value) -> String {
+    let s = |k: &str| cloud[k].as_str().unwrap_or_default().to_string();
+    let state = match s("state").as_str() {
+        "" => "never synced".to_string(),
+        "synced" => format!("synced {}", s("at")),
+        other => other.to_string(),
+    };
+    let off = if cloud["enabled"].as_bool() == Some(true) { "" } else { " (off: sessions do not sync)" };
+    let message = if s("message").is_empty() { String::new() } else { format!(": {}", s("message")) };
+    format!("{state}{off}{message}")
+}
+
 fn backup_text(done: &crate::saves::Outcome) -> String {
     match done.change.as_str() {
         "same" => "unchanged since the last backup".into(),
@@ -2493,6 +2546,9 @@ fn print_saves(saves: &Value, loc: &Locale) {
     }
     println!("{t}");
     println!("{}", format!("kept in {} · the last {} · after each session: {}", s(saves, "dir"), saves["keep"], flag(&saves["auto"])).dimmed());
+    if saves["cloud"].is_object() {
+        println!("cloud saves: {}", cloud_text(&saves["cloud"]));
+    }
 }
 
 fn print_storage(st: &Value) {

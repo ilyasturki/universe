@@ -535,7 +535,7 @@ impl Core {
     }
 
     /// The active source the game was installed or found by.
-    async fn game_source(&self, game: &Game) -> Option<Source> {
+    pub(crate) async fn game_source(&self, game: &Game) -> Option<Source> {
         self.sources.read().await.iter().find(|s| s.active() && s.id() == game.source.kind).cloned()
     }
 
@@ -1630,24 +1630,52 @@ impl Core {
     }
 
     async fn run_verb(&self, m: &Source, verb: &str, args: &[String], mut progress: Option<Progress<'_, '_>>) -> Result<Vec<SourceEvent>> {
-        let cfg = self.config.read().await.clone();
-        let settings = m.merged_settings(&cfg, None);
+        for bin in &m.manifest.requires.bins {
+            crate::tools::ensure(bin).await?;
+        }
+        let settings = m.merged_settings(&*self.config.read().await, None);
+        self.verb_events(m, verb, args, &settings, &[], |done, total, message| {
+            if let Some(p) = progress.as_mut() {
+                p(done, total, message);
+            }
+        })
+        .await
+    }
+
+    /// The game's settings and hook environment, as its hooks get them. Like the hooks, no tool is fetched first: that future holds a
+    /// progress callback no thread can take, and this one is sent to another by a frontend.
+    pub(crate) async fn run_verb_for(&self, m: &Source, verb: &str, args: &[String], game: &Resolved) -> Result<Vec<SourceEvent>> {
+        let settings = m.merged_settings(&*self.config.read().await, Some(&game.game));
+        let env = self.hook_env_base(game).vars;
+        self.verb_events(m, verb, args, &settings, &env, |_, _, _| {}).await
+    }
+
+    async fn verb_events(
+        &self,
+        m: &Source,
+        verb: &str,
+        args: &[String],
+        settings: &serde_json::Map<String, serde_json::Value>,
+        env: &[(String, String)],
+        mut progress: impl FnMut(u64, u64, &str),
+    ) -> Result<Vec<SourceEvent>> {
         let mut events = Vec::new();
         let key = (matches!(verb, "install" | "update") && !args.is_empty()).then(|| format!("{}:{}", m.id(), args[0]));
         let (ask, asked) = tokio::sync::watch::channel(None::<(String, String)>);
         let run = sources::run(
             m,
-            &settings,
+            settings,
             verb,
             args,
+            env,
             |pid| {
                 if let Some(k) = &key {
                     self.source_jobs.lock().unwrap().insert(k.clone(), pid);
                 }
             },
             |ev| {
-                if let (SourceEvent::Progress { done, total, message }, Some(p)) = (&ev, progress.as_mut()) {
-                    p(*done, *total, message);
+                if let SourceEvent::Progress { done, total, message } = &ev {
+                    progress(*done, *total, message);
                 }
                 if let SourceEvent::Window { class, title } = &ev {
                     ask.send_replace(Some((class.clone(), title.clone())));
@@ -2719,6 +2747,30 @@ achievements) [ "$2" = 1 ] || exit 3; echo "$2" >> "$SOURCE_DATA_DIR/asked"; ech
         let list = core.achievements("old", true).await.unwrap();
         assert_eq!(asked(), 2);
         assert_eq!(list["items"][1]["unlocked_at"], "2026-09-24T20:30:00+02:00", "the store has not synced it yet");
+    }
+
+    #[tokio::test]
+    async fn cloud_saves_ask_the_games_source_with_its_settings_and_its_hook_environment() {
+        let _dir = fake_source(
+            r#"scan) echo '{"event":"game","id":"1","title":"Old","owned":true,"installed":true,"dir":"/g/Old","exe":"old.exe"}' ;;
+cloud-saves) [ "$2" = 1 ] || exit 3
+  case "$SOURCE_SETTINGS_JSON" in *'"cloud_saves":true'*) on=true ;; *) on=false ;; esac
+  case "$UNIVERSE_GAME_JSON" in *'"id":"old"'*) ;; *) exit 4 ;; esac
+  echo "{\"event\":\"cloud\",\"enabled\":$on,\"state\":\"$3\",\"message\":\"$GAME_ID\",\"at\":\"\",\"locations\":[]}" ;;"#,
+        );
+        let toml = PathBuf::from(std::env::var_os("UNIVERSE_SOURCES_PATH").unwrap()).join("fake/source.toml");
+        let text = std::fs::read_to_string(&toml).unwrap();
+        let setting = "[[settings]]\nkey = \"cloud_saves\"\ntype = \"bool\"\ndefault = false\nscope = \"game\"\n";
+        std::fs::write(&toml, format!("{text}capabilities = [\"cloud-saves\"]\n{setting}")).unwrap();
+        let core = open().await;
+        core.source_scan("fake", None).await.unwrap();
+
+        let data = core.game_data("old").await.unwrap();
+        assert_eq!(data["saves"]["cloud"], serde_json::json!({"enabled": false, "state": "status", "message": "old", "at": "", "locations": []}));
+        core.set_source_setting("fake", "old", "cloud_saves", "true").await.unwrap();
+        let cloud = core.saves_cloud("old", "keep-cloud").await.unwrap();
+        assert_eq!((cloud["enabled"].as_bool(), cloud["state"].as_str()), (Some(true), Some("keep-cloud")), "the game's own setting");
+        assert!(matches!(core.saves_cloud("old", "sideways").await, Err(Error::Invalid(_))));
     }
 
     #[tokio::test]

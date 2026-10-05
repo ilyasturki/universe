@@ -203,6 +203,7 @@ pub enum SourceEvent {
     },
     Update(serde_json::Map<String, serde_json::Value>),
     Achievement(serde_json::Map<String, serde_json::Value>),
+    Cloud(serde_json::Map<String, serde_json::Value>),
     Window {
         class: String,
         #[serde(default)]
@@ -213,12 +214,13 @@ pub enum SourceEvent {
     Unknown,
 }
 
-/// `spawned` gets the process id as soon as there is one, so a `cancel` can SIGTERM it.
+/// `spawned` gets the process id as soon as there is one, so a `cancel` can SIGTERM it; `env` is a game's hook environment, for a verb about one game.
 pub async fn run<F>(
     source: &Source,
     settings: &serde_json::Map<String, serde_json::Value>,
     verb: &str,
     args: &[String],
+    env: &[(String, String)],
     spawned: impl FnOnce(u32),
     mut on_event: F,
 ) -> crate::Result<()>
@@ -226,13 +228,11 @@ where
     F: FnMut(SourceEvent),
 {
     use tokio::io::AsyncBufReadExt;
-    for bin in &source.manifest.requires.bins {
-        crate::tools::ensure(bin).await?;
-    }
     let exe = source.dir.join(&source.manifest.exe);
     let mut child = modules::command(&exe, &source.dir, &source.data_dir(), "SOURCE")?
         .arg(verb)
         .args(args)
+        .envs(env.iter().map(|(k, v)| (k, v)))
         .env("SOURCE_SETTINGS_JSON", serde_json::Value::Object(settings.clone()).to_string())
         .env("UNIVERSE_BIN", paths::self_exe())
         .spawn()

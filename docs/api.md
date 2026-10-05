@@ -157,6 +157,7 @@ out its own compatdata instead, which stays Steam's), and each game's backups go
 | `saves_backup(id)` | `saves_backup(id)` | `universe saves backup <name>` | a backup now, below; `Outcome {change, files: [{path, bytes}], bytes}`, `change` ludusavi's `new`, `different` or `same` (unchanged saves make no backup), `none` when it found nothing |
 | `saves_restore(id, backup)` | `saves_restore(id, backup="")` | `universe saves restore <name> [backup]` | a backup's saves put back, the latest when `backup` is empty; refused while the game runs |
 | `saves_export(id, to)` | `saves_export(id, to)` | `universe saves export <name> [dir]` | every backup of the game zipped into `<to>/<id>-saves-<stamp>.zip`, laid out as ludusavi lays them out: unpacked, any ludusavi restores from it |
+| `saves_cloud(id, action)` | `saves_cloud(id, action="status")` | `universe saves cloud <name> [--download\|--upload\|--keep-local\|--keep-cloud] [-y]` | the game's cloud saves through its source's `cloud-saves` verb (see Cloud saves): `status` reads the last sync's state, `download` and `upload` sync now, `keep-local` and `keep-cloud` settle a conflict. A `cloud` object; `Unavailable` for a game whose source has no `cloud-saves` capability; any action but `status` is refused while the game runs |
 | — | — | `universe saves list <name>` | the saves found and the backups kept: `game_data`'s `saves` |
 
 `game_data(id)`:
@@ -169,7 +170,8 @@ out its own compatdata instead, which stays Steam's), and each game's backups go
  "saves": {"engine": "ludusavi", "name": "Hollow Knight", "files": [{"path": "…/user1.dat", "bytes": 120000}],
            "bytes": 5100000, "error": "", "folder": "", "title_id": "", "dir": "~/.local/share/universe/saves/hollow-knight",
            "backups": [{"id": "backup-20261004T100051Z", "name": "Hollow Knight", "when": "RFC3339", "bytes": 5100000, "path": "…"}],
-           "backups_bytes": 5100000, "auto": true, "keep": 5},
+           "backups_bytes": 5100000, "auto": true, "keep": 5,
+           "cloud": {"enabled": true, "state": "synced", "message": "", "at": "RFC3339", "locations": [{"name": "saves", "path": "…"}]}},
  "universe": {"path": "…/games/hollow-knight", "bytes": 3100000, "parts": {"media": 3000000, "screenshots": 0, "journal": 0, "sessions": 2048}},
  "recordings": {"path": "~/Videos/universe/hollow-knight", "bytes": 0, "exists": false, "archived": false},
  "logs": {"path": "…/logs/hollow-knight", "bytes": 0, "exists": false}}
@@ -183,7 +185,8 @@ never moved, `lutris` for an import, else `elsewhere`; `shared_with` names the o
 `move_prefix` would take it. `saves.engine` is `ludusavi` for a PC game, `emulator` for an emulated
 title whose saves are known one by one, and empty where only the emulator's `folder` is known;
 `error` says why the saves could not be listed (ludusavi not installed yet, a title it does not
-know). Sizes walk the folders, and the saves ask ludusavi (about a second): a frontend calls it off
+know). `saves.cloud` is `saves_cloud(id, "status")`, `null` for a game whose source syncs no cloud
+saves. Sizes walk the folders, and the saves ask ludusavi (about a second): a frontend calls it off
 its UI thread. `total` adds the parts and the backups.
 
 `storage()`:
@@ -745,7 +748,9 @@ up in `post-process`, while the game-scope `cloud_saves` setting is on (off by d
 switch is `universe source set <id> cloud_saves=true`, a game's own `--game <name>`). Only a Windows
 build run through Proton or Wine syncs. A sync never settles a conflict by itself: when the saves
 changed on both sides since the last sync, the game launches on the saves it has, the state becomes
-`conflict`, and the player keeps one side through the verb's `keep-local` or `keep-cloud`. The
+`conflict`, and the player keeps one side (`saves_cloud(id, "keep-local")` or `"keep-cloud"`, on the
+game's Data page in every frontend). The verb runs with the game's hook environment and settings and
+fetches no tool first, as the hooks do. The
 ludusavi backup (see Saves) is taken before a game's first sync and before `keep-cloud`, and a
 failed backup stops the sync.
 

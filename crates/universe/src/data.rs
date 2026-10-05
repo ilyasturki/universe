@@ -14,6 +14,8 @@ use crate::runners::{self, Kind};
 use crate::saves;
 use crate::{Error, Result};
 
+pub const CLOUD_ACTIONS: [&str; 5] = ["status", "download", "upload", "keep-local", "keep-cloud"];
+
 /// Bytes of the files under `path` (or of the file itself); a symlink counts for nothing and is never followed.
 pub fn disk_usage(path: &Path) -> u64 {
     let Ok(meta) = path.symlink_metadata() else { return 0 };
@@ -235,6 +237,15 @@ impl Core {
             blocking(move || Ok(index(&game, &games, &config, uninstaller))).await?
         };
         data["saves"] = self.saves_status(&r.game, &config).await;
+        data["saves"]["cloud"] = match self.saves_cloud_of(&r, "status").await {
+            Ok(cloud) => cloud,
+            Err(e) => {
+                if !matches!(e, Error::Unavailable(_)) {
+                    tracing::warn!("{id}: cloud saves: {e}");
+                }
+                Value::Null
+            }
+        };
         let total: u64 = ["install", "prefix", "universe", "recordings", "logs"].iter().map(|k| data[k]["bytes"].as_u64().unwrap_or(0)).sum::<u64>()
             + data["saves"]["backups_bytes"].as_u64().unwrap_or(0);
         data["total"] = total.into();
@@ -398,6 +409,33 @@ impl Core {
         let config = self.config.read().await.clone();
         let ask = self.saves_ask(&r.game, &config, true).await?;
         saves::restore(&ask, &config, id, backup).await
+    }
+
+    /// The game's cloud saves through its source's `cloud-saves` verb: `status`, `download`, `upload`, `keep-local` or `keep-cloud`.
+    pub async fn saves_cloud(&self, id: &str, action: &str) -> Result<Value> {
+        let r = self.get(id).await?;
+        if !CLOUD_ACTIONS.contains(&action) {
+            return Err(Error::Invalid(format!("{action}: not one of {}", CLOUD_ACTIONS.join(", "))));
+        }
+        if action != "status" {
+            self.running(&[id.to_string()]).await?;
+        }
+        self.saves_cloud_of(&r, action).await
+    }
+
+    async fn saves_cloud_of(&self, r: &Resolved, action: &str) -> Result<Value> {
+        let Some(m) = self.game_source(&r.game).await.filter(|s| s.can("cloud-saves")) else {
+            return Err(Error::Unavailable(format!("{}: its store keeps no cloud saves Universe syncs", r.game.title)));
+        };
+        if r.game.source.id.is_empty() {
+            return Err(Error::Unavailable(format!("{}: {} does not know its id", r.game.title, m.name())));
+        }
+        let args = [r.game.source.id.clone(), action.to_string()];
+        let events = self.run_verb_for(&m, "cloud-saves", &args, r).await?;
+        events
+            .into_iter()
+            .find_map(|e| if let crate::sources::SourceEvent::Cloud(c) = e { Some(Value::Object(c)) } else { None })
+            .ok_or_else(|| Error::Io(format!("{} cloud-saves printed no cloud event", m.id())))
     }
 
     /// Every backup of the game zipped into the folder `to`; returns the zip.
