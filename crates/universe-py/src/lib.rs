@@ -236,6 +236,27 @@ impl Core {
         self.core.component_cancel(&id)
     }
 
+    fn extensions(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.value(py, |c| c.extensions())
+    }
+    #[pyo3(signature = (what, accepted=false, progress=None))]
+    fn extension_install(&self, py: Python<'_>, what: String, accepted: bool, progress: Option<Py<PyAny>>) -> PyResult<Py<PyAny>> {
+        self.value(py, |c| async move {
+            let mut p = progress_of(&progress);
+            c.extension_install(&what, accepted, p.as_deref_mut()).await
+        })
+    }
+    #[pyo3(signature = (id=String::new(), progress=None))]
+    fn extension_update(&self, py: Python<'_>, id: String, progress: Option<Py<PyAny>>) -> PyResult<Py<PyAny>> {
+        self.value(py, |c| async move {
+            let mut p = progress_of(&progress);
+            c.extension_update(&id, p.as_deref_mut()).await
+        })
+    }
+    fn extension_remove(&self, py: Python<'_>, id: String) -> PyResult<()> {
+        self.run(py, |c| async move { c.extension_remove(&id).await })
+    }
+
     fn current(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.value_infallible(py, |c| c.current())
     }

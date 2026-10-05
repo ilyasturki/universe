@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "extensions": [
+    {
+      "id": "now-playing",
+      "kind": "module",
+      "name": "Now Playing",
+      "version": "1.2.0",
+      "description": "Shares the game you play as your chat status, and clears it when the session ends.",
+      "api": 2,
+      "url": "https://example.org/now-playing-1.2.0.tar.gz",
+      "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d",
+      "size": 48000,
+      "homepage": "https://example.org/now-playing"
+    },
+    {
+      "id": "stream-scenes",
+      "kind": "module",
+      "name": "Stream Scenes",
+      "version": "0.4.1",
+      "description": "Switches your streaming software to its game scene while you play.",
+      "api": 2,
+      "url": "https://example.org/stream-scenes-0.4.1.tar.gz",
+      "sha256": "a3f5e1d2c4b6a8f0e2d4c6b8a0f2e4d6c8b0a2f4e6d8c0b2a4f6e8d0c2b4a6f8",
+      "size": 120000,
+      "homepage": ""
+    },
+    {
+      "id": "jam-games",
+      "kind": "source",
+      "name": "Jam Games",
+      "version": "2.0.0",
+      "description": "Installs the games of the game jams you follow.",
+      "api": 2,
+      "url": "https://example.org/jam-games-2.0.0.tar.gz",
+      "sha256": "0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c",
+      "size": 860000,
+      "homepage": "https://example.org/jam-games"
+    },
+    {
+      "id": "retro-shop",
+      "kind": "source",
+      "name": "Retro Shop",
+      "version": "1.0.3",
+      "description": "Installs the games you bought at the Retro Shop.",
+      "api": 2,
+      "url": "https://example.org/retro-shop-1.0.3.zip",
+      "sha256": "9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e",
+      "size": 310000,
+      "homepage": ""
+    },
+    {
+      "id": "arcade-vault",
+      "kind": "source",
+      "name": "Arcade Vault",
+      "version": "0.9.0",
+      "description": "Installs the arcade sets of your Arcade Vault account.",
+      "api": 1,
+      "url": "https://example.org/arcade-vault-0.9.0.tar.gz",
+      "sha256": "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b",
+      "size": 90000,
+      "homepage": ""
+    }
+  ]
+}

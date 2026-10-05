@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from universe_ui.errors import UniverseError
-from universe_ui.fake_core import FIXTURE, LAUNCH_KEYS, FakeCore
+from universe_ui.fake_core import EXTENSIONS, FIXTURE, LAUNCH_KEYS, FakeCore
 
 universe_core = pytest.importorskip("universe_core")
 
@@ -48,6 +48,7 @@ READS = {
     "source_settings": ("source_settings", "gog"),
     "runners": ("runners",),
     "components": ("components",),
+    "extensions": ("extensions",),
     "sessions": ("sessions", ""),
     "journal": ("journal", "the-technomancer"),
     "media": ("media", "the-technomancer"),
@@ -147,8 +148,11 @@ def cores(app, tmp_path_factory):
             if shutil.which(name) is None:
                 (stubs / name).write_text("#!/bin/sh\nexit 1\n")
                 (stubs / name).chmod(0o755)
+    index = root / "index.json"
+    index.write_text(json.dumps({"schema": 1, "extensions": json.loads(EXTENSIONS.read_text())["extensions"][:1]}))
     with pytest.MonkeyPatch.context() as env:
         env.setenv("PATH", f"{os.environ['PATH']}{os.pathsep}{stubs}")
+        env.setenv("UNIVERSE_EXTENSIONS_INDEX", str(index))
         for kind in ("data", "config", "state", "cache"):
             env.setenv(f"UNIVERSE_{kind.upper()}_HOME", str(root / kind))
         for kind in ("modules", "sources"):
@@ -182,6 +186,9 @@ ERRORS = [
     ("Invalid", "add_game", {"runner": "nope", "exe": "/x"}),
     ("NotFound", "session_log", "the-technomancer", "20990101-000000"),
     ("Unavailable", "achievements", "the-technomancer"),
+    ("Invalid", "extension_install", "now-playing"),
+    ("NotFound", "extension_remove", "nope"),
+    ("Invalid", "extension_remove", "capture"),
 ]
 
 

@@ -21,6 +21,9 @@ LAUNCH_KEYS = Path(__file__).parent / "fixtures" / "launch_keys.json"
 # A rate stays the text config.toml holds it as: `auto` or `60`.
 RATE_KEYS = {f"launch.{k['key']}" for k in json.loads(LAUNCH_KEYS.read_text()) if k["type"] in ("refresh", "fps")}
 COMPONENTS = Path(__file__).parent / "fixtures" / "components.json"
+EXTENSIONS = Path(__file__).parent / "fixtures" / "extensions.json"
+EXTENSION_INDEX = "https://raw.githubusercontent.com/ilyasturki/universe-extensions/index/index.json"
+EXTENSION_API = 2
 GPU = {
     "vendor": "amd",
     "name": "AMD Radeon RX 7900 GRE",
@@ -522,6 +525,10 @@ class FakeCore:
         with open(COMPONENTS) as f:
             self._components = json.load(f)
         self._component_cancel = ""
+        with open(EXTENSIONS) as f:
+            self._index = json.load(f)["extensions"]
+        # Installed extensions by id, as their sidecars hold them.
+        self._extensions = {}
         for c in self._components["components"]:
             if c.get("recent"):
                 c["recent"]["at"] = _now()
@@ -2256,6 +2263,94 @@ class FakeCore:
     def component_cancel(self, ident):
         self._component_cancel = ident
         return True
+
+    def _extension_row(self, listed, mine):
+        either = mine or listed
+        api = (mine or {}).get("api", (listed or {}).get("api", 0))
+        incompatible = "" if api == EXTENSION_API else f"written for extension api {api}: this Universe reads api {EXTENSION_API}"
+        update = listed["version"] if listed and mine and mine["origin"] == "registry" and listed["version"] != mine["version"] else ""
+        enabled = any(e["id"] == either["id"] and e.get("enabled") for e in self._data.get(either["kind"] + "s", []))
+        return {
+            **{k: either[k] for k in ("id", "kind", "name", "description")},
+            "version": (listed or mine)["version"],
+            "homepage": (listed or {}).get("homepage", ""),
+            "size": (listed or {}).get("size", 0),
+            "listed": listed is not None,
+            "installed": mine is not None,
+            "installed_version": (mine or {}).get("version", ""),
+            "origin": (mine or {}).get("origin", ""),
+            "from": (mine or {}).get("from", ""),
+            "update": update,
+            "enabled": enabled,
+            "incompatible": incompatible,
+        }
+
+    def extensions(self):
+        with self._lock:
+            rows = [self._extension_row(listed, self._extensions.get(listed["id"])) for listed in self._index]
+            listed = {e["id"] for e in self._index}
+            rows += [self._extension_row(None, mine) for ident, mine in self._extensions.items() if ident not in listed]
+        rows.sort(key=lambda r: (r["kind"], r["name"].lower()))
+        return {"index": {"url": EXTENSION_INDEX, "error": ""}, "extensions": copy.deepcopy(rows)}
+
+    def extension_install(self, what, accepted=False, progress=None):
+        if not accepted:
+            raise UniverseError("Invalid", f"{what} runs programs as you: its install waits to be accepted")
+        listed = next((e for e in self._index if e["id"] == what), None)
+        if listed is None and "/" not in what:
+            raise UniverseError("NotFound", f"{what} is not in the extension index ({EXTENSION_INDEX})")
+        if listed is not None and listed["api"] != EXTENSION_API:
+            raise UniverseError("Invalid", f"{what}: written for extension api {listed['api']}: this Universe reads api {EXTENSION_API}")
+        for step in range(1, 5):
+            if progress is not None:
+                progress(step, 4, f"Downloading {(listed or {}).get('name', what)}")
+            time.sleep(0.05)
+        if listed is None:
+            ident = what.rstrip("/").rpartition("/")[2]
+            listed = {"id": ident, "kind": "module", "name": ident.replace("-", " ").title(), "version": "1.0.0", "description": "", "api": EXTENSION_API}
+        origin = "unlisted" if "/" in what else "registry"
+        with self._lock:
+            self._place_extension(listed, origin, what if origin == "unlisted" else EXTENSION_INDEX)
+        return {"id": listed["id"], "kind": listed["kind"], "name": listed["name"], "version": listed["version"], "origin": origin}
+
+    def _place_extension(self, listed, origin, source):
+        kind = listed["kind"] + "s"
+        mine = {**{k: listed[k] for k in ("id", "kind", "name", "version", "description", "api")}, "origin": origin, "from": source}
+        self._extensions[listed["id"]] = mine
+        entries = self._data.setdefault(kind, [])
+        was = next((e for e in entries if e["id"] == listed["id"]), None)
+        entry = {"id": listed["id"], "name": listed["name"], "version": listed["version"], "description": listed["description"]}
+        entry.update(enabled=bool(was and was.get("enabled")), available=True, missing=[], settings=[])
+        if kind == "sources":
+            entry.update(capabilities=[], games_dir="", library_at="", logged_in=False, user="")
+            entry["login"] = {"kind": "code", "hint": "Open the link, sign in, then enter the code it shows.", "purpose": "install games"}
+        entries[:] = [e for e in entries if e["id"] != listed["id"]] + [entry]
+
+    def extension_update(self, ident="", progress=None):
+        if ident and ident not in self._extensions:
+            raise UniverseError("NotFound", f"{ident} is not an installed extension")
+        out = []
+        for row in self.extensions()["extensions"]:
+            if (ident and row["id"] != ident) or not row["update"]:
+                continue
+            listed = next(e for e in self._index if e["id"] == row["id"])
+            if progress is not None:
+                progress(1, 1, f"Downloading {listed['name']}")
+            with self._lock:
+                self._place_extension(listed, "registry", EXTENSION_INDEX)
+            out.append({"id": row["id"], "kind": row["kind"], "name": row["name"], "version": listed["version"]})
+        return out
+
+    def extension_remove(self, ident):
+        with self._lock:
+            mine = self._extensions.pop(ident, None)
+            if mine is None:
+                shipped = any(e["id"] == ident for e in self._data.get("modules", []) + self._data.get("sources", []))
+                if shipped:
+                    raise UniverseError("Invalid", f"{ident} ships with Universe; turn it off instead")
+                raise UniverseError("NotFound", f"{ident} is not an installed extension")
+            kind = mine["kind"] + "s"
+            self._data[kind] = [e for e in self._data.get(kind, []) if e["id"] != ident]
 
     def discover(self):
         report = copy.deepcopy(self._data.get("discover") or {"launchers": [], "gog_dirs": []})
