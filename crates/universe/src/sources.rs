@@ -155,10 +155,8 @@ pub fn default_value(key: &str, default: &serde_json::Value, config: &Config) ->
     default.clone()
 }
 
-/// User sources override system sources on the same id.
 pub fn discover(config: &Config) -> Vec<Source> {
-    let roots = paths::system_source_dirs().into_iter().rev().chain([paths::user_sources_dir()]);
-    modules::read_manifests::<Manifest>(roots, "source.toml", |m| &m.id)
+    modules::read_manifests::<Manifest>(modules::roots("source", paths::system_source_dirs(), paths::user_sources_dir()), "source.toml", |m| &m.id)
         .into_values()
         .filter(|(dir, m)| {
             if m.exe.is_empty() {
@@ -167,8 +165,10 @@ pub fn discover(config: &Config) -> Vec<Source> {
             !m.exe.is_empty()
         })
         .map(|(dir, m)| {
-            let missing = modules::missing_bins(&m.requires);
-            let incompatible = modules::incompatible(&m.requires);
+            // A disabled source's pins are left out of the catalogue: its own still keep it available.
+            let pins = |bin: &String| m.tools.iter().any(|t| t.entry.bin == *bin && t.entry.latest().is_some());
+            let missing: Vec<String> = modules::missing_bins(&m.requires, &m.id).into_iter().filter(|b| !pins(b)).collect();
+            let incompatible = modules::incompatible(m.api, &m.requires);
             let enabled = config.sources.enabled.iter().any(|e| e == &m.id);
             Source { available: missing.is_empty() && incompatible.is_empty(), missing, incompatible, enabled, dir, manifest: m }
         })

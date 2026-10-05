@@ -115,6 +115,9 @@ pub struct Catalogue {
     pub schema: u32,
     pub generated_at: String,
     pub components: BTreeMap<String, Entry>,
+    /// A source's pin by its id: the source that declared it, the only one it runs for.
+    #[serde(skip)]
+    pub owners: BTreeMap<String, String>,
 }
 
 fn builtin() -> Catalogue {
@@ -135,28 +138,44 @@ fn builtin() -> Catalogue {
     .expect("the built-in catalogue")
 }
 
-/// What stands in for the catalogue where it lacks an entry: the core's own, then each source's `[[tools]]`.
-pub fn pinned() -> Catalogue {
+/// What stands in for the catalogue where it lacks an entry: the core's own, then the `[[tools]]` of the enabled sources,
+/// the shipped ones' before the user's and the installed ones'.
+pub fn pinned(config: &Config) -> Catalogue {
     let mut out = builtin();
-    let roots = paths::system_source_dirs().into_iter().rev().chain([paths::user_sources_dir()]);
-    for (_, manifest) in crate::modules::read_manifests::<crate::sources::Manifest>(roots, "source.toml", |m| &m.id).into_values() {
-        for tool in manifest.tools {
-            out.components.entry(tool.id).or_insert(tool.entry);
+    let shipped: Vec<PathBuf> = paths::system_source_dirs().into_iter().rev().collect();
+    let others = vec![paths::extensions_dir("source"), paths::user_sources_dir()];
+    for roots in [shipped, others] {
+        let found = crate::modules::read_manifests::<crate::sources::Manifest>(roots.into_iter(), "source.toml", |m| &m.id);
+        let enabled = found.into_values().filter(|(_, m)| config.sources.enabled.contains(&m.id) && crate::extensions::unsupported(m.api).is_none());
+        for (_, manifest) in enabled {
+            for tool in manifest.tools {
+                if !out.components.contains_key(&tool.id) {
+                    out.owners.insert(tool.id.clone(), manifest.id.clone());
+                    out.components.insert(tool.id, tool.entry);
+                }
+            }
         }
     }
     out
 }
 
 impl Catalogue {
-    fn over_pinned(mut self) -> Catalogue {
-        for (id, entry) in pinned().components {
-            self.components.entry(id).or_insert(entry);
+    fn over_pinned(mut self, config: &Config) -> Catalogue {
+        let pinned = pinned(config);
+        for (id, entry) in pinned.components {
+            if let std::collections::btree_map::Entry::Vacant(slot) = self.components.entry(id.clone()) {
+                slot.insert(entry);
+                if let Some(owner) = pinned.owners.get(&id) {
+                    self.owners.insert(id, owner.clone());
+                }
+            }
         }
         self
     }
 
-    pub(crate) fn tool(&self, bin: &str) -> Option<(&String, &Entry)> {
-        self.components.iter().find(|(_, e)| e.kind == Kind::Tool && e.bin == bin)
+    /// `owner`: the source asking, empty for the core and the modules; another source's pin never answers it.
+    pub(crate) fn tool(&self, bin: &str, owner: &str) -> Option<(&String, &Entry)> {
+        self.components.iter().find(|(id, e)| e.kind == Kind::Tool && e.bin == bin && self.owners.get(*id).is_none_or(|o| o == owner))
     }
 }
 
@@ -239,13 +258,13 @@ pub struct Loaded {
 }
 
 pub fn cached(config: &Config) -> Catalogue {
-    read_cache(&catalogue_url(config)).map(|(c, _)| c.catalogue).unwrap_or_default().over_pinned()
+    read_cache(&catalogue_url(config)).map(|(c, _)| c.catalogue).unwrap_or_default().over_pinned(config)
 }
 
 pub async fn load(config: &Config, refresh: bool) -> Loaded {
     let url = catalogue_url(config);
     let cache = match read_cache(&url) {
-        Some((c, true)) if !refresh => return Loaded { catalogue: c.catalogue.over_pinned(), url, fetched_at: c.fetched_at, error: String::new() },
+        Some((c, true)) if !refresh => return Loaded { catalogue: c.catalogue.over_pinned(config), url, fetched_at: c.fetched_at, error: String::new() },
         other => other,
     };
     match fetch_catalogue(&url).await {
@@ -254,11 +273,11 @@ pub async fn load(config: &Config, refresh: bool) -> Loaded {
             if let Err(e) = serde_json::to_vec(&cached).map_err(Error::from).and_then(|b| write_atomic(&cache_file(), &b)) {
                 tracing::warn!("catalogue cache: {e}");
             }
-            Loaded { catalogue: cached.catalogue.over_pinned(), url, fetched_at: cached.fetched_at, error: String::new() }
+            Loaded { catalogue: cached.catalogue.over_pinned(config), url, fetched_at: cached.fetched_at, error: String::new() }
         }
         Err(e) => {
             let (catalogue, fetched_at) = cache.map(|(c, _)| (c.catalogue, c.fetched_at)).unwrap_or_default();
-            Loaded { catalogue: catalogue.over_pinned(), url, fetched_at, error: e.to_string() }
+            Loaded { catalogue: catalogue.over_pinned(config), url, fetched_at, error: e.to_string() }
         }
     }
 }
@@ -1678,6 +1697,7 @@ mod tests {
             schema: SCHEMA,
             generated_at: String::new(),
             components: BTreeMap::from([("eden".into(), image("Eden")), ("cemu".into(), image("Cemu"))]),
+            ..Catalogue::default()
         };
         let file = env.path().join("catalogue.json");
         std::fs::write(&file, serde_json::to_vec(&catalogue).unwrap()).unwrap();
@@ -1738,11 +1758,12 @@ mod tests {
     #[test]
     fn the_shipped_sources_pin_their_tools_and_the_core_umu_run_and_ludusavi() {
         let _env = crate::paths::test_env();
-        assert_eq!(pinned().components.values().filter(|e| e.kind == Kind::Tool).map(|e| e.bin.as_str()).collect::<Vec<_>>(), ["ludusavi", "umu-run"]);
+        let config: Config = toml::from_str("[sources]\nenabled = [\"gog\", \"epic\", \"itch\"]").unwrap();
+        assert_eq!(pinned(&config).components.values().filter(|e| e.kind == Kind::Tool).map(|e| e.bin.as_str()).collect::<Vec<_>>(), ["ludusavi", "umu-run"]);
         std::env::set_var("UNIVERSE_SOURCES_PATH", concat!(env!("CARGO_MANIFEST_DIR"), "/../../sources"));
-        let catalogue = pinned();
+        let catalogue = pinned(&config);
         for (bin, source) in [("gogdl", "gog"), ("legendary", "epic"), ("butler", "itch")] {
-            let (_, entry) = catalogue.tool(bin).unwrap_or_else(|| panic!("sources/{source} pins no {bin}"));
+            let (_, entry) = catalogue.tool(bin, source).unwrap_or_else(|| panic!("sources/{source} pins no {bin}"));
             assert!(entry.latest().is_some_and(|b| b.asset().is_some_and(|a| a.sha256.len() == 64)), "{bin}: a build with a checked asset");
         }
     }

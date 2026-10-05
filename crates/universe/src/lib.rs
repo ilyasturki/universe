@@ -12,6 +12,7 @@ pub mod desktop;
 pub mod discover;
 pub mod distro;
 pub mod doctor;
+pub mod extensions;
 pub mod forms;
 pub mod frames;
 pub mod game;

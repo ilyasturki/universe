@@ -1668,7 +1668,7 @@ impl Core {
 
     async fn run_verb(&self, m: &Source, verb: &str, args: &[String], mut progress: Option<Progress<'_, '_>>) -> Result<Vec<SourceEvent>> {
         for bin in &m.manifest.requires.bins {
-            crate::tools::ensure(bin).await?;
+            crate::tools::ensure(bin, m.id()).await?;
         }
         let settings = m.merged_settings(&*self.config.read().await, None);
         self.verb_events(m, verb, args, &settings, &[], |done, total, message| {

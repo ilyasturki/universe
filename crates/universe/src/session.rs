@@ -235,7 +235,7 @@ impl Core {
         let cfg = self.config.read().await.clone();
         let spec = crate::runners::spec(&r.effective.runner);
         if spec.is_some_and(|s| (s.kind == crate::runners::Kind::Proton && r.game.launch.runner_exe.is_empty()) || s.via_proton) {
-            crate::tools::ensure(&cfg.launch.umu_run).await?;
+            crate::tools::ensure(&cfg.launch.umu_run, "").await?;
         }
         let started = chrono::Local::now();
         let session_id = sessions::session_id(started);

@@ -356,8 +356,11 @@ pub fn core_fits(range: &str, running: &str) -> Result<bool, String> {
     Ok(fits)
 }
 
-/// Why `[requires] core` rules out the running Universe, empty when it fits.
-pub fn incompatible(requires: &Requires) -> String {
+/// Why the manifest's `api`, else `[requires] core`, rules out the running Universe; empty when both fit.
+pub fn incompatible(api: u32, requires: &Requires) -> String {
+    if let Some(why) = crate::extensions::unsupported(api) {
+        return why;
+    }
     match core_fits(&requires.core, crate::VERSION) {
         Ok(true) => String::new(),
         Ok(false) => format!("needs Universe {}, this is {}", requires.core.trim(), crate::VERSION),
@@ -365,13 +368,14 @@ pub fn incompatible(requires: &Requires) -> String {
     }
 }
 
-pub fn missing_bins(requires: &Requires) -> Vec<String> {
-    requires.bins.iter().filter(|b| crate::runners::on_path(b).is_none() && crate::tools::find(b).is_none()).cloned().collect()
+/// `owner`: the source asking, whose own `[[tools]]` count; empty for a module.
+pub fn missing_bins(requires: &Requires, owner: &str) -> Vec<String> {
+    requires.bins.iter().filter(|b| crate::runners::on_path(b).is_none() && crate::tools::find(b, owner).is_none()).cloned().collect()
 }
 
 /// The manifest's bins, plus the ones the chosen value of a `requires_bins` setting asks for; and the `required` settings left empty.
 fn wants(m: &Manifest, chosen: Option<&toml::Table>) -> (Vec<String>, Vec<String>) {
-    let mut missing = missing_bins(&m.requires);
+    let mut missing = missing_bins(&m.requires, "");
     let mut unset = Vec::new();
     for s in &m.settings {
         let value = match chosen.and_then(|t| t.get(&s.key)).unwrap_or(&s.default) {
@@ -390,14 +394,17 @@ fn wants(m: &Manifest, chosen: Option<&toml::Table>) -> (Vec<String>, Vec<String
     (missing, unset)
 }
 
-/// User modules override system modules on the same id.
+/// The installed, then the shipped, then the user's own: a later root wins on the same id.
+pub fn roots(kind: &str, shipped: Vec<PathBuf>, user: PathBuf) -> impl Iterator<Item = PathBuf> {
+    std::iter::once(paths::extensions_dir(kind)).chain(shipped.into_iter().rev()).chain([user])
+}
+
 pub fn discover(config: &Config) -> Vec<Module> {
-    let roots = paths::system_module_dirs().into_iter().rev().chain([paths::user_modules_dir()]);
-    read_manifests::<Manifest>(roots, "module.toml", |m| &m.id)
+    read_manifests::<Manifest>(roots("module", paths::system_module_dirs(), paths::user_modules_dir()), "module.toml", |m| &m.id)
         .into_values()
         .map(|(dir, m)| {
             let (missing, unset) = wants(&m, config.modules.settings.get(&m.id));
-            let incompatible = incompatible(&m.requires);
+            let incompatible = incompatible(m.api, &m.requires);
             let enabled = config.modules.enabled.iter().any(|e| e == &m.id);
             Module { available: missing.is_empty() && incompatible.is_empty(), missing, incompatible, unset, enabled, dir, manifest: m }
         })
@@ -689,13 +696,15 @@ scope = "config"
         assert_eq!(core_fits(">=0.0.5, <0.0.9", "0.0.9"), Ok(false));
         assert_eq!(core_fits("=0.0.9", "0.0.9"), Ok(true));
         assert!(core_fits("^0.1", "0.0.9").is_err() && core_fits(">=zero", "0.0.9").is_err(), "a range it cannot read never fits");
-        let module = |core: &str| {
-            let m: Manifest = toml::from_str(&format!("id = \"m\"\n[requires]\ncore = \"{core}\"\n")).unwrap();
-            incompatible(&m.requires)
+        let module = |api: u32, core: &str| {
+            let m: Manifest = toml::from_str(&format!("api = {api}\nid = \"m\"\n[requires]\ncore = \"{core}\"\n")).unwrap();
+            incompatible(m.api, &m.requires)
         };
-        assert_eq!(module(""), "");
-        assert_eq!(module(">=99.0.0"), format!("needs Universe >=99.0.0, this is {}", crate::VERSION));
-        assert!(module("~1").contains("no comparator"), "a malformed range is the reason, not a crash");
+        let api = crate::extensions::API;
+        assert_eq!(module(api, ""), "");
+        assert_eq!(module(api, ">=99.0.0"), format!("needs Universe >=99.0.0, this is {}", crate::VERSION));
+        assert!(module(api, "~1").contains("no comparator"), "a malformed range is the reason, not a crash");
+        assert!(module(api + 1, "").contains("extension api"), "an api this Universe does not read rules it out first");
     }
 
     #[tokio::test]

@@ -568,7 +568,7 @@ async fn stop_wine(prefix: &Path) -> Result<usize> {
 async fn tool_program(program: &str) -> Result<String> {
     if runners::on_path(program).is_none() && !program.contains('/') {
         let name = program.to_string();
-        blocking(move || tokio::runtime::Builder::new_current_thread().enable_all().build()?.block_on(crate::tools::ensure(&name))).await?;
+        blocking(move || tokio::runtime::Builder::new_current_thread().enable_all().build()?.block_on(crate::tools::ensure(&name, ""))).await?;
     }
     runners::on_path(program)
         .map(|p| p.to_string_lossy().into_owned())

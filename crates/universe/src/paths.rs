@@ -207,6 +207,11 @@ pub fn user_sources_dir() -> PathBuf {
     config_home().join("sources")
 }
 
+/// `module` or `source`: what `universe extension install` put there, looked up before the shipped and the user's own, which win.
+pub fn extensions_dir(kind: &str) -> PathBuf {
+    data_home().join("extensions").join(kind)
+}
+
 pub fn expand(p: &str) -> PathBuf {
     if let Some(rest) = p.strip_prefix("~/") {
         home().join(rest)

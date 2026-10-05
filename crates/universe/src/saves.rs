@@ -210,7 +210,7 @@ pub async fn program() -> Result<PathBuf> {
         return Ok(bin);
     }
     // The fetch's future is not Send (its progress callback): on a thread and a runtime of its own, a caller's future still is.
-    crate::core::blocking(|| tokio::runtime::Builder::new_current_thread().enable_all().build()?.block_on(crate::tools::ensure(BIN))).await?;
+    crate::core::blocking(|| tokio::runtime::Builder::new_current_thread().enable_all().build()?.block_on(crate::tools::ensure(BIN, ""))).await?;
     runners::on_path(BIN).ok_or_else(|| Error::Unavailable("ludusavi is not installed and Universe has no build of it to fetch".into()))
 }
 

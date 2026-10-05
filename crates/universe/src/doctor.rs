@@ -102,7 +102,7 @@ fn attach_components(out: &mut [Check], config: &Config, packagekit: bool) {
             _ if !named.is_empty() => named,
             "proton" if missing => proton.clone().unwrap_or_default(),
             "mangohud-32bit" if !c.ok => system("mangohud"),
-            check if missing && catalogue.tool(check).is_some() => catalogue.tool(check).map(|(id, _)| id.clone()).unwrap_or_default(),
+            check if missing && catalogue.tool(check, &c.module).is_some() => catalogue.tool(check, &c.module).map(|(id, _)| id.clone()).unwrap_or_default(),
             check if !c.ok && crate::components::SYSTEM.iter().any(|t| t.bin == check) => system(check),
             check => check.strip_prefix("runner-").filter(|_| !c.ok).unwrap_or_default().to_string(),
         };
@@ -227,7 +227,7 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
         "restart Universe: it creates the folder on start".into(),
         "core",
     );
-    match (which("umu-run"), crate::tools::find("umu-run")) {
+    match (which("umu-run"), crate::tools::find("umu-run", "")) {
         (Some(path), _) => push("umu-run", "Proton launcher (umu-run)", true, path, String::new(), "core"),
         (None, Some((package, version))) => {
             let python = which("python3").is_some();
@@ -498,9 +498,18 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
         "a key from steamgriddb.com/profile/preferences/api in keys.sgdb adds its community art".into(),
         "media",
     );
+    let apis = modules
+        .iter()
+        .map(|m| (m.id(), &m.manifest.name, m.manifest.api, "module"))
+        .chain(sources.iter().map(|s| (s.id(), &s.manifest.name, s.manifest.api, "source")));
+    for (id, name, api, kind) in apis {
+        if let Some(why) = crate::extensions::unsupported(api) {
+            push("extension-api", "Extension API", false, why, format!("update the {name} {kind} to one this Universe reads, or remove it"), id);
+        }
+    }
     let mut reported = Vec::new();
     for m in modules {
-        if !m.enabled {
+        if !m.enabled || crate::extensions::unsupported(m.manifest.api).is_some() {
             continue;
         }
         if !m.incompatible.is_empty() {
@@ -527,14 +536,14 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
             );
         }
     }
-    for m in sources.iter().filter(|m| m.enabled) {
+    for m in sources.iter().filter(|m| m.enabled && crate::extensions::unsupported(m.manifest.api).is_none()) {
         if !m.incompatible.is_empty() {
             let fix = format!("update Universe or the {} source, or turn it off", m.manifest.name);
             push("requires-core", "Universe version", false, m.incompatible.clone(), fix, m.id());
             continue;
         }
         for b in &m.manifest.requires.bins {
-            let (ok, detail) = match (which(b), crate::tools::find(b)) {
+            let (ok, detail) = match (which(b), crate::tools::find(b, m.id())) {
                 (Some(path), _) => (true, path),
                 (None, Some((package, version))) => {
                     (true, format!("not installed: Universe fetches {package} {version} into {} on first use", crate::components::root().display()))
