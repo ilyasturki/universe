@@ -480,7 +480,7 @@ def test_sources_browser_flags_each_game_by_where_it_stands(api):
     }
     assert [r["title"] for r in browser.updates] == ["Mini Metro"]
     assert rows["Dead Cells"]["game_id"] == "dead-cells" and rows["Stardew Valley"]["game_id"] == ""
-    assert rows["Stardew Valley"]["image"].startswith("https://")
+    assert os.path.isfile(rows["Stardew Valley"]["image"]), "the store's picture, painted locally"
     assert (rows["The Technomancer"]["size"], rows["The Technomancer"]["sizeKind"]) == (8100000000, "disk")
     assert (rows["Stardew Valley"]["size"], rows["Stardew Valley"]["sizeKind"]) == (0, ""), "unknown until peeked"
     assert (rows["Disco Elysium"]["size"], rows["Disco Elysium"]["partial_bytes"]) == (15400000000, 6100000000)

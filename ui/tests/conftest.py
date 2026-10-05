@@ -44,14 +44,44 @@ def posted_keys_cleared():
     gamepad.POSTED.clear()
 
 
+NETWORK = []
+
+
 @pytest.fixture(scope="session")
 def app(xdg):
     from PySide6.QtGui import QGuiApplication
+    from PySide6.QtNetwork import QHostAddress, QNetworkProxy, QTcpServer
 
     application = QGuiApplication.instance() or QGuiApplication([])
     from universe_ui import models  # noqa: F401  (registers the Universe QML module)
 
+    # Every Qt request goes through this proxy, which answers none: the test that sent one fails with its request line.
+    trap = QTcpServer(application)
+    trap.listen(QHostAddress.SpecialAddress.LocalHost, 0)
+
+    def caught():
+        while trap.hasPendingConnections():
+            sock = trap.nextPendingConnection()
+            request = ["a request"]
+            NETWORK.append(request)
+
+            def read(sock=sock, request=request):
+                request[0] = bytes(sock.readLine()).decode(errors="replace").strip()
+                sock.abort()
+
+            sock.readyRead.connect(read)
+
+    trap.newConnection.connect(caught)
+    QNetworkProxy.setApplicationProxy(QNetworkProxy(QNetworkProxy.ProxyType.HttpProxy, "127.0.0.1", trap.serverPort()))
     return application
+
+
+@pytest.fixture(autouse=True)
+def no_network():
+    NETWORK.clear()
+    yield
+    if NETWORK:
+        pytest.fail(f"the test reached for the network: {[r[0] for r in NETWORK]}", pytrace=False)
 
 
 # A FakeCore paints the fixture's art into the cache when it finds none: once a run, each xdist worker taking a copy, rather than in a first test's 2 s.
@@ -62,14 +92,16 @@ def fixture_art(app, xdg, tmp_path_factory):
     import shutil
 
     from universe_ui.fake_core import FIXTURE
-    from universe_ui.fixtures.art import paint_library
+    from universe_ui.fixtures.art import paint_library, paint_store
 
     base = tmp_path_factory.getbasetemp()
     painted = (base.parent if os.environ.get("PYTEST_XDIST_WORKER") else base) / "fake-art"
     with open(f"{painted}.lock", "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         with open(FIXTURE) as f:
-            paint_library(json.load(f)["games"], str(painted))
+            data = json.load(f)
+        paint_library(data["games"], str(painted))
+        paint_store(data, str(painted))
     shutil.copytree(painted, os.path.join(os.environ["XDG_CACHE_HOME"], "universe", "fake-art"), dirs_exist_ok=True)
 
 

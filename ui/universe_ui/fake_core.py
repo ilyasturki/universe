@@ -549,10 +549,11 @@ class FakeCore:
         return self._root / "data" / "games" / ident
 
     def _lay_out(self):
-        from .fixtures.art import paint_library
+        from .fixtures.art import paint_library, paint_store
 
         (self._root / "state").mkdir(parents=True, exist_ok=True)
         paint_library(self._data["games"], self._cache)
+        paint_store(self._data, self._cache)
         for game in self._data["games"]:
             self._write_game(game)
             media = game.setdefault("media", {})

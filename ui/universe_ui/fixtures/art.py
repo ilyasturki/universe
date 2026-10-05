@@ -113,3 +113,15 @@ def paint_library(games, art_dir):
             path = os.path.join(art_dir, f"{ident}-{slot}.png")
             _paint(path, size, ident, title, slot)
             media[slot] = path
+
+
+def paint_store(data, art_dir):
+    """The stores' own pictures, painted in place of their web URLs."""
+    os.makedirs(art_dir, exist_ok=True)
+    for listing in ("source_library", "source_store"):
+        for source, entries in (data.get(listing) or {}).items():
+            for entry in entries:
+                if entry.get("image"):
+                    path = os.path.join(art_dir, f"store-{source}-{entry['id']}.png")
+                    _paint(path, SLOTS["banner"], f"{source}/{entry['id']}", entry.get("title", entry["id"]), "banner")
+                    entry["image"] = path
