@@ -388,7 +388,6 @@ FocusScope {
                 type: "enum",
                 value: api.theme.name,
                 display: api.theme.name,
-                choices: themeNames(),
                 detail: ""
             });
             rows.push({
@@ -702,13 +701,6 @@ FocusScope {
         }).length;
     }
 
-    function themeNames() {
-        var looks = api.theme.themes;
-        return looks.map(function (t) {
-            return t.name;
-        });
-    }
-
     readonly property var deviceIcons: ({
             pad: "gamepad",
             audio: "headphones",
@@ -890,7 +882,6 @@ FocusScope {
         }
     }
 
-    // One that can't be used picks nothing and says why.
     function themeItems() {
         return api.theme.themes.map(function (t) {
             return {

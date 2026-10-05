@@ -2324,6 +2324,8 @@ class FakeCore:
         except tomllib.TOMLDecodeError as e:
             raise UniverseError("Invalid", f"theme.toml: {e}") from None
         ident = manifest.get("id") or ""
+        if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", str(ident)):
+            raise UniverseError("Invalid", f"theme.toml: id {ident!r} is not lowercase letters, digits, - and _")
         if not (folder / THEME_ENTRY).is_file():
             raise UniverseError("Invalid", f"a theme starts at its {THEME_ENTRY}, which it lacks")
         if ident in BUILTIN_THEMES:

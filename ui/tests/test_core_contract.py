@@ -10,6 +10,7 @@ import pytest
 
 from universe_ui.errors import UniverseError
 from universe_ui.fake_core import EXTENSIONS, FIXTURE, LAUNCH_KEYS, FakeCore
+from universe_ui.themes import THEMES
 
 universe_core = pytest.importorskip("universe_core")
 
@@ -201,7 +202,7 @@ ERRORS = [
     ("Invalid", "extension_install", "now-playing"),
     ("NotFound", "extension_remove", "nope"),
     ("Invalid", "extension_remove", "capture"),
-    ("Invalid", "extension_remove", "reprise"),
+    *[("Invalid", "extension_remove", t["id"]) for t in THEMES],
 ]
 
 

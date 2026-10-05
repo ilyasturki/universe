@@ -31,8 +31,11 @@ Item {
     }
 
     Component.onCompleted: {
-        if (api.boot.running)
-            chime.source = api.theme.soundFiles.boot || Qt.resolvedUrl("../" + api.theme.entry.replace(/[^\/]*$/, "") + "assets/sounds/boot.wav");
+        if (!api.boot.running)
+            return;
+        // An installed theme's entry is a file: URL outside qml/: it takes the default look's chime.
+        var look = api.theme.entry.indexOf("file:") === 0 ? "" : api.theme.entry.replace(/[^\/]*$/, "");
+        chime.source = api.theme.soundFiles.boot || Qt.resolvedUrl("../" + look + "assets/sounds/boot.wav");
     }
 
     Connections {

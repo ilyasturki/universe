@@ -91,11 +91,18 @@ class ThemeSelector(QObject):
         self._themes = self._read()
         self._landing = ""
         self._notice = ""
-        wanted = self._by_id(initial) or self._by_id(memory.get(MEMORY_KEY))
-        if wanted is not None and wanted["unavailable"]:
-            self._notice = f"{wanted['name']} can't be used: {wanted['unavailable']}"
-            wanted = None
-        self._current = wanted or self._by_id(DEFAULT) or self._themes[0]
+        remembered = memory.get(MEMORY_KEY)
+        current = None
+        for ident in (initial, remembered):
+            theme = self._by_id(ident)
+            if theme is not None and not theme["unavailable"]:
+                current = theme
+                break
+            if theme is not None:
+                self._notice = self._notice or f"{theme['name']} can't be used: {theme['unavailable']}"
+                if ident == remembered:
+                    memory.unset(MEMORY_KEY)
+        self._current = current or self._by_id(DEFAULT) or self._themes[0]
 
     def _read(self):
         builtin = {t["id"] for t in BUILT_IN}
@@ -131,9 +138,10 @@ class ThemeSelector(QObject):
 
     @Slot()
     def rescan(self):
-        """The installed themes read again, after an install or a removal; the current one gone, the default look takes over."""
-        self._themes = self._read()
-        self.listChanged.emit()
+        themes = self._read()
+        if themes != self._themes:
+            self._themes = themes
+            self.listChanged.emit()
         now = self._by_id(self._current["id"])
         if now is None or now["unavailable"]:
             self._fall_back(f"{self._current['name']} is no longer installed" if now is None else f"{now['name']} can't be used")

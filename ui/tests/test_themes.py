@@ -150,6 +150,9 @@ def test_an_installed_theme_lists_beside_the_looks_and_one_for_another_universe_
     assert next(t for t in selector.themes if t["id"] == "old")["unavailable"]
     assert selector.current == "reprise" and selector.takeNotice(), "remembered but unusable: the default look, with a notice"
     assert selector.takeNotice() == "", "said once"
+    assert not memory.has("theme"), "and the next start does not try it again"
+    memory.set("theme", "switch2")
+    assert ThemeSelector(memory, "old", installed=lambda: [OLD]).current == "switch2", "an unusable --theme leaves the remembered look"
     assert selector.set("old") is False and selector.current == "reprise"
     assert selector.set("dusk") is True
     assert selector.entry == QUrl.fromLocalFile(DUSK["entry"]).toString()
