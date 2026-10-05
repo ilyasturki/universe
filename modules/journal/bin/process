@@ -160,7 +160,7 @@ def deliver(entry, journal_dir):
         raise Failed("the core rejected the entry")
     path = os.path.join(journal_dir, f"{sid}.json")
     write_json(path, entry)
-    log(f"warning: {'the game left the library' if outcome == 'gone' else 'core unavailable'}, wrote {path} directly")
+    log(f"warning: {'the core knows no such game or session' if outcome == 'gone' else 'core unavailable'}, wrote {path} directly")
 
 
 def clear_session_frames(attachments, sid):

@@ -238,7 +238,7 @@ def _journal_add(sid, entry_json):
 
 
 def add_entry_via_core(sid, entry_json):
-    """`ok`, `invalid` (the core read the entry and refused it), `gone` (its game left the library) or `unavailable` after every try."""
+    """`ok`, `invalid` (the core read the entry and refused it), `gone` (the core knows no such game or session) or `unavailable` after every try."""
     for attempt in range(1, CORE_ATTEMPTS + 1):
         outcome = _journal_add(sid, entry_json)
         if outcome != "unavailable" or attempt == CORE_ATTEMPTS:
