@@ -58,6 +58,28 @@ def test_a_games_data_lists_its_saves_its_prefix_and_its_files_and_runs_their_ac
     assert done[-1][:2] == ("kill", True)
 
 
+def test_a_cloud_conflict_on_the_data_page_ends_on_the_side_the_player_keeps(api, fake):
+    store = api.screens.gameData
+    store.load("the-technomancer")
+    until(lambda: "keep_cloud" in keys(store))
+    assert "cloud_status" in keys(store) and "keep_local" in keys(store)
+    assert store.question("keep_cloud")["danger"] is True and store.question("keep_local")["confirm"]
+    done = record(store.finished)
+    assert store.act("keep_cloud") is True
+    until(lambda: done)
+    assert done[-1][:2] == ("keep_cloud", True)
+    assert fake.core.cloud_calls == [("the-technomancer", "keep-cloud")]
+    until(lambda: "keep_cloud" not in keys(store) and not store.loading, "settled, the page reloads without the choice")
+    assert "cloud_status" in keys(store)
+
+
+def test_a_game_whose_store_syncs_no_saves_shows_no_cloud_row(api, fake):
+    store = api.screens.gameData
+    store.load("dishonored")
+    until(lambda: store.count > 0 and not store.loading)
+    assert "cloud_status" not in keys(store)
+
+
 def test_an_emulator_without_a_title_id_shows_its_save_folder_and_no_backup(api, fake):
     store = api.screens.gameData
     store.load("mini-metro")
@@ -87,6 +109,7 @@ def test_every_look_opens_a_games_data_page_and_the_storage_view(api, fake, look
     look.open("pages/DataPage.qml", look.game("the-technomancer"))
     store = api.screens.gameData
     until(lambda: store.gameId == "the-technomancer" and "backup" in keys(store))
+    assert {"cloud_status", "keep_local", "keep_cloud"} <= set(keys(store)), "a conflict's choice in every look"
     fake.core.failing_tools["winetricks"] = "winetricks failed with exit status 127"
     shown = notices(look.engine)
     assert store.act("winetricks") is True

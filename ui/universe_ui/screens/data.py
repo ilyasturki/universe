@@ -34,7 +34,18 @@ QUESTIONS = {
     "restore": ("Restore this backup?", "The saves on disk now are replaced.", "Restore"),
     "move": ("Move the prefix into Universe's prefixes?", "Every game using it follows. Across drives this copies it, which can take a while.", "Move"),
     "trash": ("Move this to the trash?", "It can be brought back from the trash until it is emptied.", "Move to Trash"),
+    "keep_local": ("Keep the saves on this device?", "The cloud's saves are replaced by these.", "Keep These"),
+    "keep_cloud": ("Keep the cloud's saves?", "The saves on this device are backed up, then replaced.", "Keep the Cloud's"),
 }
+CLOUD_STATES = {
+    "": "Not synced yet",
+    "synced": "Synced",
+    "conflict": "Changed on both sides",
+    "offline": "Store out of reach",
+    "error": "Not synced",
+    "unsupported": "Not kept",
+}
+CLOUD_KEEPS = {"keep_local": "keep-local", "keep_cloud": "keep-cloud"}
 KEEPS = {"lutris": "Lutris", "elsewhere": "Any other launcher using it"}
 TOOLS = ("winecfg", "winetricks", "kill")
 
@@ -89,9 +100,10 @@ def game_rows(data):
         rows.append(_action("backup", "Back Up Now", last, detail))
         rows.append(_action("restore", "Restore the Latest Backup", "", "The saves on disk now are replaced.", disabled=not backups))
         rows.append(_action("export", "Export the Backups", "", "One zip in your home folder.", disabled=not backups))
-        if backups:
-            rows.append(_head("Backups", _size(saves.get("backups_bytes"))))
-            rows.extend(_action(f"restore:{b['id']}", _day(b["when"]), _size(b["bytes"]), "") for b in backups)
+    rows.extend(_cloud_rows(saves.get("cloud")))
+    if saves.get("engine") and backups:
+        rows.append(_head("Backups", _size(saves.get("backups_bytes"))))
+        rows.extend(_action(f"restore:{b['id']}", _day(b["when"]), _size(b["bytes"]), "") for b in backups)
     prefix = data.get("prefix")
     if prefix:
         rows.append(_head("Wine Prefix", _size(prefix.get("bytes"))))
@@ -121,6 +133,26 @@ def game_rows(data):
     logs = data.get("logs") or {}
     if logs.get("bytes"):
         rows.append(_static("logs", "Logs", _size(logs.get("bytes")), _home(logs.get("path"))))
+    return rows
+
+
+def _cloud_rows(cloud):
+    if not isinstance(cloud, dict):
+        return []
+    state = str(cloud.get("state") or "")
+    display = CLOUD_STATES.get(state, state)
+    if state == "synced" and cloud.get("at"):
+        display = f"Synced {_day(cloud['at'])}"
+    if not cloud.get("enabled") and state != "conflict":
+        display = "Off"
+    places = [_home(p.get("path")) for p in cloud.get("locations") or [] if isinstance(p, dict)]
+    detail = cloud.get("message") or " · ".join(places)
+    if not cloud.get("enabled"):
+        detail = "Sessions sync once Cloud saves is on in the store's settings, for every game or this one."
+    rows = [_static("cloud_status", "Cloud Saves", display, detail)]
+    if state == "conflict":
+        rows.append(_action("keep_local", "Keep the Saves on This Device", "", "The cloud's saves are replaced."))
+        rows.append(_action("keep_cloud", "Keep the Cloud's Saves", "", "The saves here are backed up, then replaced."))
     return rows
 
 
@@ -210,7 +242,7 @@ class GameData(QObject):
         if kind not in QUESTIONS:
             return None
         title, detail, confirm = QUESTIONS[kind]
-        asked = {"title": title, "detail": detail, "confirm": confirm, "danger": kind in ("reset", "restore")}
+        asked = {"title": title, "detail": detail, "confirm": confirm, "danger": kind in ("reset", "restore", *CLOUD_KEEPS)}
         prefix = self._data.get("prefix") or {}
         who = KEEPS.get(str(prefix.get("owner") or ""))
         if kind == "move" and who:
@@ -259,6 +291,9 @@ class GameData(QObject):
             return self._run(key, c.resetPrefixAsync, lambda r: "Prefix reset, saves backed up" if r.get("backup") else "Prefix reset")
         if key in TOOLS:
             return self._run(key, lambda i, d, f: c.prefixToolAsync(i, key, [], d, f), _tool_done)
+        if key in CLOUD_KEEPS:
+            kept = "Kept the saves on this device" if key == "keep_local" else "Kept the cloud's saves"
+            return self._run(key, lambda i, d, f: c.savesCloudAsync(i, CLOUD_KEEPS[key], d, f), lambda _: kept)
         return False
 
     @Slot(str, result=bool)

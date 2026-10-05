@@ -19,6 +19,9 @@ FocusScope {
     readonly property var icons: ({
             saves_status: "file",
             saves_folder: "folder",
+            cloud_status: "cloud",
+            keep_local: "display",
+            keep_cloud: "cloud",
             backup: "download",
             restore: "restart",
             export: "folder",

@@ -451,6 +451,9 @@ class CoreClient(QObject):
     def savesRestoreAsync(self, ident, backup, on_reply, on_error=None):
         self._call_async(lambda: self._core.saves_restore(ident, backup), on_reply, on_error)
 
+    def savesCloudAsync(self, ident, action, on_reply, on_error=None):
+        self._call_async(lambda: self._core.saves_cloud(ident, action), on_reply, on_error)
+
     def savesExportAsync(self, ident, to, on_reply, on_error=None):
         self._call_async(lambda: self._core.saves_export(ident, to), on_reply, on_error)
 

@@ -415,6 +415,16 @@ class FakeCore:
         self._media_stop = False
         self.library_calls = []
         self._backups = {}
+        self._cloud = {
+            "the-technomancer": {
+                "enabled": True,
+                "state": "conflict",
+                "message": "The saves changed on this device and in the cloud since they last synced.",
+                "at": "2026-09-30T21:04:00+02:00",
+                "locations": [{"name": "saves", "path": "/mnt/games/gog/the-technomancer/pfx/drive_c/users/steamuser/Documents/The Technomancer"}],
+            }
+        }
+        self.cloud_calls = []
         self.prefix_tools, self.restored, self.trashed = [], [], []
         self.failing_tools = {}
         self._leftovers = [
@@ -942,6 +952,7 @@ class FakeCore:
             saves = {"engine": "ludusavi", "folder": "", "title_id": "", "files": files, "bytes": sum(f["bytes"] for f in files), "error": ""}
         saves.update(name=game["title"], dir=os.path.join(saves_root, ident), backups=backups, backups_bytes=sum(b["bytes"] for b in backups))
         saves.update(auto=bool(self._config.get("saves", {}).get("auto_backup", True)), keep=int(self._config.get("saves", {}).get("keep", 5)))
+        saves["cloud"] = self._cloud_of(ident) if kind in ("proton", "wine") and self._syncs(ident) else None
         parts = {
             "media": self._bytes(ident, "media", 30_000),
             "screenshots": self._bytes(ident, "shots", 40_000),
@@ -1051,6 +1062,23 @@ class FakeCore:
             raise UniverseError("NotFound", f"{ident} has no backup {backup}".strip())
         self.restored.append((ident, backup))
         return {"change": "same", "files": data["saves"]["files"], "bytes": data["saves"]["bytes"]}
+
+    def _syncs(self, ident):
+        source = self._game(ident).get("source")
+        return (source.get("kind") if isinstance(source, dict) else source) in ("gog", "epic")
+
+    def _cloud_of(self, ident):
+        return copy.deepcopy(self._cloud.get(ident) or {"enabled": False, "state": "", "message": "", "at": "", "locations": []})
+
+    def saves_cloud(self, ident, action="status"):
+        if action not in ("status", "download", "upload", "keep-local", "keep-cloud"):
+            raise UniverseError("Invalid", f"{action}: not a cloud saves action")
+        if not self._syncs(ident):
+            raise UniverseError("Unavailable", f"{ident}: its store keeps no cloud saves Universe syncs")
+        if action != "status":
+            self.cloud_calls.append((ident, action))
+            self._cloud[ident] = {**self._cloud_of(ident), "state": "synced", "message": "", "at": datetime.now(UTC).isoformat(timespec="seconds")}
+        return self._cloud_of(ident)
 
     def saves_export(self, ident, to):
         if not self.game_data(ident)["saves"]["backups"]:

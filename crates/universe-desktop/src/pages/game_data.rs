@@ -107,6 +107,57 @@ fn backed_up(done: universe::saves::Outcome) -> String {
     }
 }
 
+fn cloud_row(id: &str, cloud: &Value, reload: Reload) -> adw::ActionRow {
+    let state = text(cloud, "state");
+    let enabled = cloud["enabled"].as_bool() == Some(true);
+    let status = match state.as_str() {
+        _ if !enabled && state != "conflict" => gettext("Off: sessions sync once Cloud saves is on in the store's settings"),
+        "" => gettext("Not synced yet"),
+        "synced" => gettext("Synced {}").replace("{}", &day(&text(cloud, "at"))),
+        "conflict" => gettext("Changed here and in the cloud since the last sync: keep one side"),
+        "offline" => gettext("The store was out of reach"),
+        "unsupported" => gettext("The store keeps no cloud saves of this game"),
+        _ => text(cloud, "message"),
+    };
+    let row = crate::rows::plain(adw::ActionRow::builder().build(), gettext("Cloud Saves"), status);
+    row.add_prefix(&gtk::Image::from_icon_name("weather-overcast-symbolic"));
+    if !text(cloud, "message").is_empty() {
+        row.set_tooltip_text(Some(&text(cloud, "message")));
+    }
+    if state != "conflict" {
+        return row;
+    }
+    let keeps = [
+        (
+            "keep-local",
+            gettext("Keep These"),
+            gettext("Keep the Saves on This Device?"),
+            gettext("The cloud's saves are replaced by these."),
+            gettext("Kept the saves on this device"),
+        ),
+        (
+            "keep-cloud",
+            gettext("Keep the Cloud's"),
+            gettext("Keep the Cloud's Saves?"),
+            gettext("The saves on this device are backed up, then replaced."),
+            gettext("Kept the cloud's saves"),
+        ),
+    ];
+    for (action, label, heading, body, said) in keeps {
+        let button = gtk::Button::builder().label(&label).valign(gtk::Align::Center).build();
+        let (gid, again) = (id.to_string(), reload.clone());
+        button.connect_clicked(move |button| {
+            let (gid, again, said, anchor) = (gid.clone(), again.clone(), said.clone(), button.clone().upcast::<gtk::Widget>());
+            confirm(button.upcast_ref(), &heading, &body, &label, move || {
+                let (gid, said) = (gid.clone(), said.clone());
+                act(&anchor, move |core| async move { core.saves_cloud(&gid, action).await }, move |_| said.clone(), again.clone());
+            });
+        });
+        row.add_suffix(&button);
+    }
+    row
+}
+
 pub fn fill(list: &gtk::ListBox, data: &Value, reload: Reload) {
     list.remove_all();
     let id = text(data, "id");
@@ -178,6 +229,10 @@ pub fn fill(list: &gtk::ListBox, data: &Value, reload: Reload) {
         });
         kept.add_row(&export);
         list.append(&kept);
+    }
+
+    if saves["cloud"].is_object() {
+        list.append(&cloud_row(&id, &saves["cloud"], reload.clone()));
     }
 
     let prefix = &data["prefix"];
