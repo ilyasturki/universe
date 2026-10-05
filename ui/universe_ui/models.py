@@ -65,7 +65,6 @@ KNOWN_METADATA = {
     "players",
     "description",
     "summary",
-    "extra",
 }
 
 
@@ -110,8 +109,6 @@ def _extras(meta):
         if key in KNOWN_METADATA or key.endswith(("_id", "_appid")) or value in (None, "", 0, [], {}):
             continue
         out[key.replace("_", "-")] = list(value) if isinstance(value, (list, tuple)) else [value]
-    for key, value in (meta.get("extra") or {}).items():
-        out[key] = list(value) if isinstance(value, (list, tuple)) else [value]
     return out
 
 

@@ -35,7 +35,7 @@ def test_a_game_decodes_every_shape_the_core_sends(app):
             "title": "X",
             "favorite": True,
             "stats": {"hours": 1.5, "play_count": "3", "last_played": "2026-09-09T22:41:00+02:00"},
-            "metadata": {"developer": "A, B", "genres": ["Action"], "release_year": "2016", "extra": {"metacritic": 61}},
+            "metadata": {"developer": "A, B", "genres": ["Action"], "release_year": "2016", "metacritic": 61},
             "media": {"box_front": "/tmp/box.png", "square": "/tmp/sq.png", "screenshots": ["/tmp/a.png", "http://x/b.png"]},
             "tags": "rpg, sci-fi",
         },
