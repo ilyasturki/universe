@@ -65,8 +65,25 @@ FocusScope {
 
     focus: true
 
+    function pairController() {
+        Sound.play("ok");
+        shell.push("pages/SettingsPage.qml", {
+            section: "bluetooth",
+            pads: true
+        });
+    }
+
     readonly property var entries: {
-        var out = [], source = controller.rows, buttons = [];
+        var out = api.system.bluetooth ? [
+            {
+                key: "pair",
+                label: "Pair New Controller",
+                type: "action",
+                display: "",
+                detail: "Hold its pairing button until the lights blink",
+                icon: "bluetooth"
+            }
+        ] : [], source = controller.rows, buttons = [];
         for (var i = 0; i < source.length; i++) {
             var r = source[i];
             if (r.key === "test" || r.key === "walk")
@@ -243,6 +260,8 @@ FocusScope {
                 Sound.play("edge");
         } else if (row.key === "walk") {
             startWalk();
+        } else if (row.key === "pair") {
+            pairController();
         } else if (row.key === "device") {
             Sound.play("ok");
             var choices = row.choices || [];
@@ -619,6 +638,38 @@ FocusScope {
             text: page.controller.connected ? "Controllers" : "Connect a controller"
             color: Theme.textSecondary
             font.pixelSize: Theme.dp(Theme.fontSmall)
+        }
+
+        Item {
+            objectName: "pairController"
+            anchors.horizontalCenter: parent.horizontalCenter
+            visible: !page.walking && !page.controller.connected && api.system.bluetooth
+            width: pairRow.width
+            height: pairRow.height
+
+            Row {
+                id: pairRow
+                spacing: Theme.dp(12)
+
+                Glyph {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Theme.dp(32)
+                    height: width
+                    kind: "bluetooth"
+                    tint: Theme.accent
+                }
+
+                Label {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "Pair New Controller · or plug one in with a USB cable"
+                    color: Theme.accent
+                    font.pixelSize: Theme.dp(Theme.fontSmall)
+                }
+            }
+
+            Touch {
+                onPicked: page.pairController()
+            }
         }
 
         Repeater {

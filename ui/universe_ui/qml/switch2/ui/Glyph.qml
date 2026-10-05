@@ -210,6 +210,14 @@ Canvas {
                 ctx.fill();
             }
             ctx.globalAlpha = 1;
+        } else if (kind === "bluetooth") {
+            ctx.moveTo(6.5 * s, 7.5 * s);
+            ctx.lineTo(16.5 * s, 16 * s);
+            ctx.lineTo(12 * s, 20 * s);
+            ctx.lineTo(12 * s, 4 * s);
+            ctx.lineTo(16.5 * s, 8 * s);
+            ctx.lineTo(6.5 * s, 16.5 * s);
+            ctx.stroke();
         } else if (kind === "wired") {
             rr(8, 3.5, 8, 6.5, 1.2);
             ctx.stroke();

@@ -79,10 +79,24 @@ FocusScope {
             groupLabel: "Extras"
         },
         {
+            id: "network",
+            label: "Internet",
+            group: 4,
+            groupLabel: "System",
+            detail: api.screens.network.link === "wired" ? "Wired" : api.screens.network.ssid
+        },
+        {
             id: "sound",
             label: "Sound",
             group: 4,
             groupLabel: "System"
+        },
+        {
+            id: "bluetooth",
+            label: "Bluetooth",
+            group: 4,
+            groupLabel: "System",
+            detail: "Headphones, speakers and keyboards"
         },
         {
             id: "performance",
@@ -111,13 +125,67 @@ FocusScope {
             groupLabel: "System"
         }
     ].filter(function (s) {
-        // Steam's Game Mode keeps the sound; Performance needs a control this machine has.
-        return !(s.id === "sound" && api.system.steam) && !(s.id === "performance" && api.system.controls.length === 0);
+        // Steam's Game Mode keeps the sound; Performance needs a control this machine has; Internet and Bluetooth, what the machine has.
+        return !(s.id === "sound" && api.system.steam) && !(s.id === "performance" && api.system.controls.length === 0) && !(s.id === "network" && !api.system.network) && !(s.id === "bluetooth" && !api.system.bluetooth);
     })
     property int section: 1
-    readonly property string sectionId: sections[section].id
+    readonly property string sectionId: sections[Math.min(section, sections.length - 1)].id
+    // The section shown, by id: its index moves as Internet and Bluetooth come and go.
+    property string shownId: ""
     property string zone: "list"
     property var reopen: null
+    // A section asked for before the machine said it has it: Internet and Bluetooth appear once NetworkManager and BlueZ answer.
+    property string pending: ""
+
+    readonly property var network: api.screens.network
+    readonly property var bluetooth: api.screens.bluetooth
+    readonly property bool padsOnly: args && args.pads === true
+    readonly property bool onTop: shell !== null && shell.topPage === page
+    readonly property string searching: onTop && (sectionId === "network" || sectionId === "bluetooth") ? sectionId : ""
+    property string searched: ""
+
+    onSearchingChanged: {
+        if (searched !== "")
+            radio(searched).close();
+        searched = searching;
+        if (searched !== "")
+            radio(searched).open();
+    }
+    Component.onDestruction: {
+        if (searched !== "")
+            radio(searched).close();
+    }
+
+    function radio(id) {
+        return id === "network" ? network : bluetooth;
+    }
+
+    function publishSections() {
+        api.screens.search.sections = sections.map(function (s) {
+            return {
+                id: s.id,
+                label: s.label
+            };
+        });
+    }
+
+    onSectionsChanged: {
+        publishSections();
+        var ids = sections.map(function (s) {
+            return s.id;
+        });
+        var want = shownId;
+        if (pending !== "" && ids.indexOf(pending) >= 0) {
+            want = pending;
+            pending = "";
+        }
+        var at = ids.indexOf(want);
+        if (at < 0)
+            at = Math.min(section, sections.length - 1);
+        if (at !== section)
+            section = at;
+        list.index = section;
+    }
 
     readonly property var loaders: ({
             runners: function () {
@@ -193,6 +261,11 @@ FocusScope {
                 glyph: "X",
                 label: "Hide progress"
             });
+        else if (sectionId === "network" && zone === "rows" && row && row.key === "network" && row.saved)
+            out.push({
+                glyph: "X",
+                label: "Forget"
+            });
         out.push({
             glyph: "B",
             label: "Back"
@@ -254,7 +327,7 @@ FocusScope {
 
     // Read from `section`: the derived `sectionId` is still stale inside onSectionChanged.
     function loadSection() {
-        var id = sections[section].id;
+        var id = sections[Math.min(section, sections.length - 1)].id;
         if (loaded[id] || !loaders[id])
             return;
         loaded[id] = true;
@@ -263,18 +336,16 @@ FocusScope {
 
     onArgsChanged: {
         if (args && args.section) {
+            pending = sections.some(function (s) {
+                return s.id === args.section;
+            }) ? "" : args.section;
             section = sectionIndex(args.section);
             list.index = section;
         }
     }
 
     Component.onCompleted: {
-        api.screens.search.sections = sections.map(function (s) {
-            return {
-                id: s.id,
-                label: s.label
-            };
-        });
+        publishSections();
         list.index = section;
         sources.load();
         loadSection();
@@ -464,6 +535,10 @@ FocusScope {
                 }
             ];
         }
+        if (sectionId === "network")
+            return networkRows();
+        if (sectionId === "bluetooth")
+            return bluetoothRows();
         var looks = api.theme.themes;
         if (sectionId === "themes")
             return looks.map(function (t) {
@@ -569,6 +644,159 @@ FocusScope {
         return [];
     }
 
+    function networkRows() {
+        var link = network.link;
+        var internet = ({
+                full: "Connected to the internet.",
+                limited: "Connected, without access to the internet.",
+                portal: "The network wants a sign-in from a web browser first.",
+                none: "No internet."
+            })[network.connectivity] || "";
+        var out = [
+            {
+                key: "check",
+                label: "Test Connection",
+                type: "action",
+                display: network.checking ? "Testing…" : "",
+                detail: "Checks that the internet answers through this connection."
+            },
+            {
+                key: "status",
+                label: "Connection Status",
+                type: "static",
+                display: link === "wired" ? "Wired" : link === "wifi" ? network.ssid : "Not connected",
+                detail: link !== "" ? internet : ""
+            },
+            {
+                key: "wifi",
+                label: "Wi-Fi",
+                type: "bool",
+                value: network.enabled,
+                display: "",
+                detail: ""
+            },
+            {
+                heading: true,
+                label: "Internet Settings",
+                display: network.enabled ? "Networks found" : ""
+            }
+        ];
+        var found = network.networks.map(function (n) {
+            return Object.assign({}, n, {
+                key: "network",
+                label: n.ssid,
+                type: "action",
+                icon: "wifi",
+                display: network.connecting === n.ssid ? "Connecting…" : n.active ? "Connected" : n.saved ? "Saved" : "",
+                secondary: !n.joinable ? "Set up from a desktop" : n.secured ? "Secured" : "Open",
+                dim: !n.joinable
+            });
+        });
+        return out.concat(found.length > 0 ? found : [
+            {
+                key: "none",
+                label: network.enabled ? "Searching for networks…" : "Wi-Fi is off",
+                type: "static",
+                display: "",
+                detail: ""
+            }
+        ]);
+    }
+
+    function deviceRow(d) {
+        return {
+            key: "device",
+            label: d.name,
+            type: "action",
+            icon: d.kind === "pad" ? "gamepad" : "bluetooth",
+            address: d.address,
+            paired: d.paired,
+            connected: d.connected,
+            kind: d.kind,
+            battery: d.battery,
+            display: bluetooth.pairing === d.address ? "Pairing…" : d.connected ? "Connected" : d.paired ? "Not Connected" : "Pair",
+            secondary: d.battery !== null && d.battery !== undefined ? d.battery + "% battery" : ""
+        };
+    }
+
+    function bluetoothRows() {
+        var keep = function (d) {
+            return !padsOnly || d.kind === "pad";
+        };
+        var paired = bluetooth.paired.filter(keep), found = bluetooth.found.filter(keep);
+        var out = [];
+        if (padsOnly)
+            out.push({
+                key: "hint",
+                label: "Pair New Controller",
+                type: "static",
+                display: "",
+                wraps: true,
+                detail: "Hold the controller's pairing button (SYNC, or PS and Create, or Xbox and the pair button) until its lights blink. With no controller connected yet, plug one in with a USB cable first."
+            });
+        if (!padsOnly || !bluetooth.powered)
+            out.push({
+                key: "power",
+                label: "Bluetooth",
+                type: "bool",
+                value: bluetooth.powered,
+                display: "",
+                detail: ""
+            });
+        if (paired.length > 0)
+            out = out.concat([
+                {
+                    heading: true,
+                    label: padsOnly ? "Paired Controllers" : "Paired Devices",
+                    display: ""
+                }
+            ], paired.map(deviceRow));
+        out.push({
+            heading: true,
+            label: padsOnly ? "Controllers Found" : "Devices Found",
+            display: bluetooth.discovering ? "Searching…" : ""
+        });
+        return out.concat(found.length > 0 ? found.map(deviceRow) : [
+            {
+                key: "searching",
+                label: !bluetooth.powered ? "Bluetooth is off" : bluetooth.discovering ? "Searching…" : "Nothing found",
+                type: "static",
+                display: "",
+                detail: ""
+            }
+        ]);
+    }
+
+    function deviceAction(row) {
+        if (!row.paired) {
+            Sound.play(bluetooth.pair(row.address) ? "ok" : "edge");
+            return;
+        }
+        Sound.play("ok");
+        shell.dialogAsk({
+            message: row.label,
+            detail: row.connected ? "Connected." : "Paired, not connected.",
+            buttons: ["Cancel", "Forget", row.connected ? "Disconnect" : "Connect"],
+            danger: 1
+        }, function (i) {
+            if (i === 1)
+                bluetooth.forget(row.address);
+            else if (i === 2 && row.connected)
+                bluetooth.disconnectDevice(row.address);
+            else if (i === 2)
+                bluetooth.connectDevice(row.address);
+        });
+    }
+
+    function forgetRow() {
+        var row = rows.currentRow;
+        if (sectionId !== "network" || zone !== "rows" || !row || row.key !== "network" || !row.saved) {
+            Sound.play("edge");
+            return;
+        }
+        shell.forgetNetwork(row.ssid);
+    }
+
     function activate(index, row) {
         if (sectionId === "search") {
             openSearch();
@@ -649,6 +877,26 @@ FocusScope {
         } else if (sectionId === "data") {
             Sound.play("ok");
             shell.push("pages/StoragePage.qml", {});
+        } else if (sectionId === "network") {
+            if (row.key === "wifi") {
+                Sound.play("select");
+                network.setEnabled(!row.value);
+            } else if (row.key === "check") {
+                Sound.play(network.check() ? "ok" : "edge");
+            } else if (row.key === "network") {
+                shell.joinNetwork(row);
+            } else {
+                Sound.play("edge");
+            }
+        } else if (sectionId === "bluetooth") {
+            if (row.key === "power") {
+                Sound.play("select");
+                bluetooth.setPowered(!row.value);
+            } else if (row.key === "device") {
+                deviceAction(row);
+            } else {
+                Sound.play("edge");
+            }
         } else if (row.action === "system") {
             if (row.type === "bool") {
                 Sound.play("select");
@@ -719,6 +967,7 @@ FocusScope {
 
     // A section opens with its Advanced row closed.
     onSectionChanged: {
+        shownId = sections[Math.min(section, sections.length - 1)].id;
         launch.showAdvanced = false;
         loadSection();
         Qt.callLater(rows.reset);
@@ -751,6 +1000,9 @@ FocusScope {
         } else if (api.keys.isDetails(event) && page.canHideJob) {
             event.accepted = true;
             page.hideJob();
+        } else if (api.keys.isDetails(event) && page.sectionId === "network") {
+            event.accepted = true;
+            page.forgetRow();
         }
     }
 

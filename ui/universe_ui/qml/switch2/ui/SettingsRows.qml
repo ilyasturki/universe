@@ -408,6 +408,7 @@ FocusScope {
                             width: Theme.dp(40)
                             height: width
                             kind: row.hasIcon ? String(row.entry.icon) : ""
+                            level: row.entry.bars !== undefined ? row.entry.bars : 3
                             tint: row.ink
                         }
 

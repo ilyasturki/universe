@@ -4,7 +4,7 @@ import "../sound"
 import "../ui"
 import "Forms.js" as Forms
 
-// First-run setup as a dialog over the shell: one row list per step (found, stores, preferences, done) over a Back / Continue button pair.
+// First-run setup as a dialog over the shell: one row list per step (network, found, stores, preferences, done) over a Back / Continue button pair.
 FocusScope {
     id: page
 
@@ -43,7 +43,9 @@ FocusScope {
     }) : form.groups, form.rows, function (src, i) {
         return Object.assign({}, src, {
             form: i
-        });
+        }, src.key === "network" ? {
+            icon: "wifi"
+        } : {});
     })
 
     function activate(index, row) {
@@ -62,6 +64,8 @@ FocusScope {
                 if (value !== null && value !== "")
                     login.submit(value);
             });
+        } else if (row.key === "network") {
+            shell.joinNetwork(row);
         } else if (row.via !== undefined) {
             Sound.play(form.runImport(row.form) ? "ok" : "edge");
         } else if (row.type === "bool") {

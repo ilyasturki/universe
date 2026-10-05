@@ -283,6 +283,88 @@ FocusScope {
     function pick(spec, done) {
         picker.show(spec, after(done));
     }
+
+    function joinNetwork(n) {
+        var wifi = api.screens.network;
+        if (!n.joinable) {
+            Sound.play("edge");
+            Base.Notices.fail(n.ssid + " uses " + (n.security === "wep" ? "WEP" : "WPA Enterprise") + " security, which Universe does not set up: join it from a desktop's settings.");
+            return;
+        }
+        if (n.active) {
+            forgetNetwork(n.ssid);
+            return;
+        }
+        if (wifi.needsPassword(n.ssid)) {
+            askPassword(n.ssid);
+            return;
+        }
+        Sound.play("ok");
+        wifi.join(n.ssid, "");
+    }
+
+    function askPassword(ssid) {
+        prompt({
+            title: "Enter the password for " + ssid,
+            value: "",
+            secret: true,
+            max: 63
+        }, function (v) {
+            if (v !== null && v !== "")
+                api.screens.network.join(ssid, v);
+        });
+    }
+
+    function forgetNetwork(ssid) {
+        Sound.play("ok");
+        dialogAsk({
+            message: "Forget " + ssid + "?",
+            detail: "This system will no longer connect to it on its own. Connecting again needs its password.",
+            buttons: ["Cancel", "Forget"],
+            danger: 1
+        }, function (i) {
+            if (i === 1)
+                api.screens.network.forget(ssid);
+        });
+    }
+
+    property var pairing: null
+
+    function askPairing(request) {
+        var bt = api.screens.bluetooth;
+        pairing = request;
+        var answered = function () {
+            var mine = root.pairing !== null && root.pairing.id === request.id;
+            if (mine)
+                root.pairing = null;
+            return mine;
+        };
+        if (request.kind === "passkey" || request.kind === "pin") {
+            prompt({
+                title: request.title,
+                value: "",
+                numeric: request.kind === "passkey",
+                max: request.kind === "passkey" ? 6 : 16
+            }, function (v) {
+                if (!answered())
+                    return;
+                if (v === null || v === "")
+                    bt.answer(false);
+                else
+                    bt.answerText(v);
+            });
+            return;
+        }
+        var display = request.kind === "display";
+        dialogAsk({
+            message: request.title,
+            detail: request.detail,
+            buttons: display ? ["Cancel"] : ["Cancel", "Pair"]
+        }, function (i) {
+            if (answered())
+                bt.answer(!display && i === 1);
+        });
+    }
     function browse(spec, done) {
         folder.show(spec, after(done));
     }
@@ -776,6 +858,74 @@ FocusScope {
                         walk: true
                     });
             });
+        }
+    }
+
+    Connections {
+        target: api.screens.network
+        function onFailed(ssid, reason, message) {
+            if (reason !== "password") {
+                Base.Notices.fail(message !== "" ? message : "Could not connect to " + ssid);
+                return;
+            }
+            root.dialogAsk({
+                message: "Could not connect to " + ssid,
+                detail: "The password was not accepted.",
+                buttons: ["Cancel", "Try Again"]
+            }, function (i) {
+                if (i === 1)
+                    root.askPassword(ssid);
+            });
+        }
+        function onJoined(ssid, connectivity) {
+            if (connectivity === "full")
+                Base.Notices.show("Connected to " + ssid);
+            else
+                Base.Notices.fail("Connected to " + ssid + (connectivity === "portal" ? ", which wants a sign-in from a web browser" : ", without access to the internet"));
+        }
+        function onChecked(connectivity) {
+            root.dialogAsk({
+                message: "Connection Test",
+                detail: ({
+                        full: "Connected to the internet.",
+                        limited: "Connected to the network, without access to the internet.",
+                        portal: "The network wants a sign-in from a web browser first.",
+                        none: "Not connected to the internet."
+                    })[connectivity] || "The test could not run.",
+                buttons: ["OK"]
+            }, null);
+        }
+    }
+
+    Connections {
+        target: api.screens.bluetooth
+        function onRequestChanged() {
+            var request = api.screens.bluetooth.request;
+            if (request) {
+                root.askPairing(request);
+                return;
+            }
+            var was = root.pairing;
+            if (was === null)
+                return;
+            root.pairing = null;
+            if ((was.kind === "passkey" || was.kind === "pin") && sheet.open)
+                sheet.finish(null);
+            else if (dialog.open)
+                dialog.finish(-1);
+        }
+        function onDone(action, address) {
+            if (action !== "pair")
+                return;
+            var d = api.screens.bluetooth.paired.find(function (p) {
+                return p.address === address;
+            });
+            Base.Notices.show("Paired " + (d ? d.name : address));
+        }
+        // A no from the user, or BlueZ withdrawing its question, needs no notice.
+        function onFailed(action, address, reason, message) {
+            if (reason !== "canceled" && reason !== "rejected")
+                Base.Notices.fail(action === "pair" ? "Could not pair: " + message : message);
         }
     }
 
