@@ -126,6 +126,8 @@ FocusScope {
     readonly property var focusTarget: searchOpen && searchLoader.item ? searchLoader.item : activePage
     readonly property var focusedGame: subOpen ? (subArgs.game || null) : detailOpen ? detailGame : (activePage ? activePage.currentGame : null)
     readonly property bool menuOpen: gameMenu.open
+    // Read by a key script's Expect: the id Return launches, "" for none, null while a dialog, menu or page over the row takes the key.
+    readonly property var returnLaunches: launching || launchOverlay.running || confirm.open || detailOpen || subOpen || menuOpen ? null : focusOwner !== "chrome" && focusTarget && focusTarget.currentGame ? String(focusTarget.currentGame.id) : ""
     readonly property var session: api.universe.currentSession
     readonly property bool sessionRunning: session != null && session.session_id !== undefined
     readonly property string playingId: sessionRunning ? session.id : ""

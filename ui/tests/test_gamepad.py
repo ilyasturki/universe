@@ -263,6 +263,19 @@ def test_expect_quits_unless_return_would_launch_that_game(look, monkeypatch):
     assert exits == [gamepad.EXPECT_FAILED] and script._queue == [], "nothing after it plays"
     look.press(Qt.Key.Key_End)
     until(lambda: gamepad.launch_target(look.window) == "", "the library tile launches nothing")
+    look.press(Qt.Key.Key_Left)
+    until(lambda: gamepad.launch_target(look.window), "no game left of the library tile")
+    look.press(Qt.Key.Key_I)
+    until(lambda: gamepad.launch_target(look.window) is None, "the detail page over the row takes Return")
+
+
+@pytest.mark.parametrize("look", ["switch2", "ps5"], indirect=True)
+def test_expect_quits_on_a_look_that_does_not_say_what_return_launches(look, monkeypatch):
+    exits = []
+    monkeypatch.setattr(gamepad, "QCoreApplication", SimpleNamespace(exit=exits.append))
+    look.home()
+    gamepad.KeyScript("Expect:", 1, look.window)._step()
+    assert exits == [gamepad.EXPECT_FAILED], "its Return may launch the tile it is on"
 
 
 def test_a_mark_logs_its_name_with_the_time(app, caplog, monkeypatch):
@@ -270,3 +283,12 @@ def test_a_mark_logs_its_name_with_the_time(app, caplog, monkeypatch):
     with caplog.at_level("INFO", logger="universe.gamepad"):
         gamepad.KeyScript("Mark:launch", 1, None)._step()
     assert "mark launch 1234.500" in caplog.messages
+
+
+def test_return_in_homes_dock_launches_nothing_and_another_window_is_unknown(monkeypatch):
+    focused = SimpleNamespace(objectName=lambda: "homeOverlay")
+    monkeypatch.setattr(gamepad, "QGuiApplication", SimpleNamespace(focusWindow=lambda: focused))
+    assert gamepad.launch_target(object()) == ""
+    focused.objectName = lambda: "dialog"
+    assert gamepad.launch_target(object()) is None
+

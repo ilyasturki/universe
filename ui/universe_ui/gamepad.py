@@ -410,15 +410,14 @@ def post_wheel(window, x, y, steps, sideways=False, pixels=False):
 EXPECT_FAILED = 3
 
 
-# The id of the game Reprise's Return would launch: its focus target's, "" while the tab bar holds the keys or on another look.
+# The id of the game Reprise's Return would launch, "" for none, as in HOME's dock; None, which no Expect matches, on another look, window or dialog.
 def launch_target(window):
+    focus = QGuiApplication.focusWindow()
+    if focus not in (None, window):
+        return "" if focus.objectName() == "homeOverlay" else None
     look = window.findChild(QObject, "look")
     root = look.property("item") if look is not None else None
-    if root is None or root.property("focusOwner") in (None, "chrome"):
-        return ""
-    target = root.property("focusTarget")
-    game = target.property("currentGame") if target is not None else None
-    return str(game.property("id") or "") if game is not None else ""
+    return root.property("returnLaunches") if root is not None else None
 
 
 # `--keys`, one name per gap: `Wait`, `Wait:N`, `Hold:A`/`Release:A`, `Stick:rightX=0.6`, `Shot:path.png`, `Guide`; `Pad:A`/`PadHold:A`/`PadRelease:A` through the
@@ -472,7 +471,7 @@ class KeyScript(QObject):
         if phase == "Expect":
             target = launch_target(self._window)
             if target != bare:
-                log.error("expected Return to launch %s, not %s: quitting", bare or "nothing", target or "nothing")
+                log.error("expected Return to launch %s, not %s: quitting", bare or "nothing", "unknown" if target is None else target or "nothing")
                 self._queue.clear()
                 QCoreApplication.exit(EXPECT_FAILED)
             return

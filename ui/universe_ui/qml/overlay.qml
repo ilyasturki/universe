@@ -5,6 +5,7 @@ import "ui"
 
 Window {
     id: overlay
+    objectName: "homeOverlay"
 
     readonly property real unit: Math.max(0.66, height / 1080)
 
