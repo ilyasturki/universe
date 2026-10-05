@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "Universe: a gamepad-first game launcher core (library and CLI)"
+default-run = "universe"
 
 [dependencies]
 anyhow = "1"

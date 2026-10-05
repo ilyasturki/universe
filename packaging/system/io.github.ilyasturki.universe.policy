@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1.0/policyconfig.dtd">
+<policyconfig>
+  <vendor>Universe</vendor>
+  <vendor_url>https://github.com/ilyasturki/universe</vendor_url>
+
+  <!-- pkexec matches exec.path against the helper's realpath; install.sh rewrites it to where it puts the helper. -->
+  <action id="io.github.ilyasturki.universe.system-install">
+    <description>Install gamescope, MangoHud or gpu-screen-recorder from the distribution's packages</description>
+    <message>Authentication is required to install a system tool for Universe</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/universe/universe-system-install</annotate>
+  </action>
+</policyconfig>

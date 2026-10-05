@@ -55,6 +55,10 @@
               "extension"
               "extension/extension.js"
               "extension/metadata.json"
+              # the install helper's tests read the polkit policy that names it
+              "packaging"
+              "packaging/system"
+              "packaging/system/io.github.ilyasturki.universe.policy"
             ]
           );
       };
@@ -122,7 +126,9 @@
           pkgs.pkg-config
           pkgs.installShellFiles
         ];
+        # The helper installs from the distribution's packages, which NixOS gives no system tool.
         postInstall = ''
+          rm $out/bin/universe-system-install
           $out/bin/universe __generate gen
           installShellCompletion --cmd universe --fish gen/universe.fish --bash gen/universe.bash --zsh gen/_universe
           installManPage gen/man/*.1

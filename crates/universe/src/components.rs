@@ -1183,7 +1183,8 @@ impl Core {
         let generated_at = catalogue.generated_at.clone();
         let games = self.games.read().await.clone();
         let running = self.current().await.map(|c| c.id);
-        let packagekit = crate::packagekit::available().await;
+        // In the session no polkit agent answers PackageKit's prompt: only the helper installs there.
+        let packagekit = crate::packagekit::available().await && (!crate::nest::session() || crate::system_install::helper().is_some());
         let asked: Vec<String> = self.modules.read().await.iter().filter(|m| m.enabled).flat_map(|m| m.manifest.requires.system.clone()).collect();
         let listed = crate::core::blocking(move || Ok(list(&config, &catalogue, &games, running.as_deref(), &asked, packagekit))).await?;
         Ok(serde_json::json!({
@@ -1204,7 +1205,10 @@ impl Core {
     pub async fn component_install(&self, id: &str, version: &str, accepted: bool, progress: Option<Progress<'_, '_>>) -> Result<String> {
         if let Some(tool) = system_tool(id) {
             let _job = self.component_job(id)?;
-            crate::packagekit::install(tool.packages(crate::distro::detect()), tool.name, progress).await?;
+            match crate::system_install::helper() {
+                Some(helper) => crate::system_install::install(&helper, tool, progress).await?,
+                None => crate::packagekit::install(tool.packages(crate::distro::detect()), tool.name, progress).await?,
+            }
             return Ok(runners::on_system_path(tool.bin).map(|p| system_version(&p)).unwrap_or_default());
         }
         let config = self.config.read().await.clone();

@@ -43,6 +43,7 @@ pub mod slug;
 pub mod sound;
 pub mod sources;
 pub mod splash;
+pub mod system_install;
 pub mod thumbs;
 pub mod timeline;
 pub mod tools;
