@@ -100,6 +100,60 @@ SWITCH_PRO = Pad(
 # A Pro Controller whose ZL and ZR read as buttons, as on a driver without analog triggers.
 SWITCH_PRO_DIGITAL = Pad(**{**vars(SWITCH_PRO), "bindings": {**SWITCH_PRO.bindings, (A, 4): Input(B, 17), (A, 5): Input(B, 18)}})
 
+# SDL3's HIDAPI 8BitDo driver on a Pro 3 in D-input mode over Bluetooth: raw buttons by printed label (b0 the A on the right), B at the bottom.
+PRO3_DINPUT = Pad(
+    name="8BitDo Pro 3",
+    guid=bytes.fromhex("05000000c82d00000960000000006800"),
+    bindings={
+        (B, 0): Input(B, 1),
+        (B, 1): Input(B, 0),
+        (B, 2): Input(B, 3),
+        (B, 3): Input(B, 2),
+        **{(B, i): Input(B, i) for i in range(4, 11)},
+        **_dpad(),
+        (B, 16): Input(B, 12),
+        (B, 17): Input(B, 11),
+        (B, 18): Input(B, 14),
+        (B, 19): Input(B, 13),
+        **_axes(range(6)),
+    },
+    gyro=True,
+    index=3,
+    joystick_name="8BitDo Pro 3",
+    player_index=3,
+    axes=6,
+    labels=(2, 1, 4, 3),
+    mapping="05000000c82d00000960000000006800,*,a:b1,b:b0,back:b4,dpdown:h0.4,dpleft:h0.8,dpright:h0.2,dpup:h0.1,guide:b5,"
+    "leftshoulder:b9,leftstick:b7,lefttrigger:a4,leftx:a0,lefty:a1,rightshoulder:b10,rightstick:b8,righttrigger:a5,rightx:a2,righty:a3,"
+    "start:b6,x:b3,y:b2,hint:!SDL_GAMECONTROLLER_USE_BUTTON_LABELS:=1,paddle1:b12,paddle2:b11,paddle3:b14,paddle4:b13,platform:Linux,",
+)
+
+# The Pro 3 in X-input mode is an Xbox 360 pad to xpad: the bottom button, printed B, is BTN_A and SDL labels it A.
+PRO3_XINPUT = Pad(
+    name="Xbox 360 Controller",
+    guid=bytes.fromhex("030000005e0400008e02000014010000"),
+    bindings={
+        **{(B, i): Input(B, i) for i in range(4)},
+        (B, 4): Input(B, 6),
+        (B, 5): Input(B, 8),
+        (B, 6): Input(B, 7),
+        (B, 7): Input(B, 9),
+        (B, 8): Input(B, 10),
+        (B, 9): Input(B, 4),
+        (B, 10): Input(B, 5),
+        **_dpad(),
+        **_axes((0, 1, 3, 4, 2, 5)),
+    },
+    index=4,
+    joystick_name="Xbox 360 Controller",
+    player_index=4,
+    axes=6,
+    labels=(1, 2, 3, 4),
+    mapping="030000005e0400008e02000014010000,Xbox 360 Controller,a:b0,b:b1,back:b6,dpdown:h0.4,dpleft:h0.8,dpright:h0.2,dpup:h0.1,guide:b8,"
+    "leftshoulder:b4,leftstick:b9,lefttrigger:a2,leftx:a0,lefty:a1,rightshoulder:b5,rightstick:b10,righttrigger:a5,rightx:a3,righty:a4,"
+    "start:b7,x:b2,y:b3,platform:Linux,",
+)
+
 
 def twin(pad):
     return Pad(**{**vars(pad), "index": pad.index + 10, "player_index": pad.player_index + 10})

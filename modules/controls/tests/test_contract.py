@@ -9,9 +9,11 @@ from dataclasses import dataclass, field
 
 import pytest
 from _controls import TAKEN, Context, Skip, ini_section, section_values, sections, taken_buttons
-from controls_fixtures import BIN_DIR, EDGE, SWITCH_PRO_DIGITAL, script
+from controls_fixtures import BIN_DIR, EDGE, PRO3_DINPUT, PRO3_XINPUT, SWITCH_PRO_DIGITAL, script
 
-PADS = [SWITCH_PRO_DIGITAL, EDGE]
+PADS = [SWITCH_PRO_DIGITAL, EDGE, PRO3_DINPUT, PRO3_XINPUT]
+# Nintendo labels on positional raw buttons, Nintendo labels on raw buttons in label order, and a Nintendo print SDL reads as an Xbox pad.
+HELD = {"switch-pro": SWITCH_PRO_DIGITAL, "pro3-dinput": PRO3_DINPUT, "pro3-xinput": PRO3_XINPUT}
 SETTINGS = {s["key"]: s for s in tomllib.loads((BIN_DIR.parent / "module.toml").read_text())["settings"]}
 UNIVERSE = taken_buttons(EDGE)
 RAW = "|".join(map(str, sorted(UNIVERSE)))
@@ -257,14 +259,15 @@ def test_what_the_writer_does_not_own_survives(seeded, tmp_path):
     assert [line for line in WRITERS[seeded].kept if line not in after] == []
 
 
+@pytest.mark.parametrize("held", HELD)
 @pytest.mark.parametrize(("seeded", "setting"), [(name, setting) for name in WRITERS for setting in ("layout", "shoulders")], indirect=["seeded"])
-def test_a_setting_moves_only_the_bindings_it_names(seeded, setting):
+def test_a_setting_moves_only_the_bindings_it_names(seeded, setting, held):
     writer, offered = WRITERS[seeded], SETTINGS[setting]
     moves = getattr(writer, setting)
     assert (moves is not None) == (seeded in offered["runners"])
     (other,) = set(offered["choices"]) - {offered["default"]}
     before, after = (
-        {(path, *k): v for path, text in plan(seeded, [SWITCH_PRO_DIGITAL], **{setting: choice}).items() for k, v in writer.read(text).items()}
+        {(path, *k): v for path, text in plan(seeded, [HELD[held]], **{setting: choice}).items() for k, v in writer.read(text).items()}
         for choice in (offered["default"], other)
     )
     changed = {k for k in before.keys() | after.keys() if before.get(k) != after.get(k)}
