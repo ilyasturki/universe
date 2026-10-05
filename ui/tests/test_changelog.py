@@ -58,10 +58,12 @@ def look(request, upgraded, tmp_path):
     api.shutdown()
 
 
+@pytest.mark.slow
 def test_an_update_opens_whats_new_once_and_about_opens_the_changelog(look):
     changelog = look.api.screens.changelog
     page = look.page("changelogPage")
-    assert page.property("fresh") is True and versions(read(page, "releases")) == ["0.0.3", "0.0.2"], "the start opens what's new"
+    until(lambda: page.property("fresh") is True, "the start opens what's new")
+    assert versions(read(page, "releases")) == ["0.0.3", "0.0.2"]
     look.press(Qt.Key.Key_Escape)
     until(lambda: changelog.pending == [], "B closes it, seen")
 
