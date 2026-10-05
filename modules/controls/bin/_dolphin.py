@@ -226,7 +226,7 @@ def plan(ctx: Context):
     if not (config / "Dolphin.ini").is_file():
         raise Skip(f"no Dolphin.ini in {config}: start Dolphin once, then its controls are written")
     pads = ctx.pads[:PORTS]
-    names = devices(pads)
+    names = devices(ctx.pads)[:PORTS]
     platform = ctx.platform
     gamecube, wii = "GameCube" in platform or not platform, "Wii" in platform or not platform
 

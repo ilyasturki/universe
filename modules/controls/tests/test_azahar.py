@@ -1,7 +1,7 @@
 import _azahar
 from _controls import Context, ini_section
 from _gamepads import BIND_AXIS, Input
-from controls_fixtures import EDGE, XBOX
+from controls_fixtures import EDGE, XBOX, twin
 
 G = "engine:sdl,guid:0500e0274c050000f20d000000006800,port:0"
 
@@ -29,6 +29,10 @@ def test_guide_passed_through_binds_home_and_a_pad_without_gyro_gets_emulated_mo
     assert params(got["button_home"])["button"] == "8"
     assert params(got["button_zr"])["axis"] == "5"
     assert got["motion_device"] == "engine:motion_emu,sensitivity:0.01,tilt_clamp:90.0,update_period:100"
+
+
+def test_a_twin_made_player_1_keeps_the_port_sdl_gave_it():
+    assert params(_azahar.values_for(Context([twin(EDGE), XBOX, EDGE]))["button_a"])["port"] == "1"
 
 
 def test_a_half_axis_trigger_presses_past_the_middle():

@@ -93,7 +93,7 @@ def entry(pad, pad_id, player, ctx: Context, old):
 def rewrite(doc, ctx: Context):
     pads = ctx.pads[:PLAYERS]
     old = {e.get("player_index"): e for e in doc.get("input_config") or [] if isinstance(e, dict)}
-    entries = [entry(pad, pad_id, n, ctx, old.get(f"Player{n}") or {}) for n, (pad, pad_id) in enumerate(zip(pads, ids(pads), strict=True), 1)]
+    entries = [entry(pad, pad_id, n, ctx, old.get(f"Player{n}") or {}) for n, (pad, pad_id) in enumerate(zip(pads, ids(ctx.pads)[:PLAYERS], strict=True), 1)]
     doc["input_config"] = entries
     doc["player_input_assignments"] = [
         {"player_index": e["player_index"], "enable_dynamic_input_swap": False, "devices": [{"type": "Controller", "id": e["id"], "profile_name": None}]}

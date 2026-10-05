@@ -114,7 +114,7 @@ def player_values(player, pad, port, ctx: Context):
 def values_for(ctx: Context):
     pads = ctx.pads[:PLAYERS]
     out = {}
-    for player, (pad, port) in enumerate(zip(pads, ports(pads), strict=True)):
+    for player, (pad, port) in enumerate(zip(pads, ports(ctx.pads)[:PLAYERS], strict=True)):
         out.update(player_values(player, pad, port, ctx))
     for player in range(len(pads), PLAYERS):
         out[f"player_{player}_connected"] = "false"

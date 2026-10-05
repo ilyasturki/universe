@@ -117,8 +117,8 @@ def plan(ctx: Context):
     if not config.is_dir():
         raise Skip(f"no {config}: start Cemu once, then its controls are written")
     profiles = config / "controllerProfiles"
-    pads = [p for p in ctx.pads if p.gamepad_type][:PLAYERS]
-    ids = uuids(pads)
+    gamepads = [p for p in ctx.pads if p.gamepad_type]
+    pads, ids = gamepads[:PLAYERS], uuids(gamepads)[:PLAYERS]
     out = {}
     for player, (pad, uuid) in enumerate(zip(pads, ids, strict=True)):
         path = profiles / f"controller{player}.xml"

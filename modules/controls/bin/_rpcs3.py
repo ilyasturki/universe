@@ -78,7 +78,7 @@ def active_name(input_configs):
 def render(ctx: Context):
     q = json.dumps
     out = []
-    for n, device in enumerate(devices(ctx.pads[:PLAYERS]), 1):
+    for n, device in enumerate(devices(ctx.pads)[:PLAYERS], 1):
         out += [f"Player {n} Input:", "  Handler: SDL", f"  Device: {q(device)}", "  Config:"]
         config = swap_names(ctx, CONFIG, "LB", "RB", "LT", "RT")
         out += [f"    {k}: {q(v)}" for k, v in {**config, "PS Button": "Guide" if ctx.guide else ""}.items()]
@@ -121,7 +121,7 @@ def plan(ctx: Context):
         raise Skip("no RPCS3 settings yet: start RPCS3 once, then its controls are written")
     input_configs = base / "input_configs"
     target = input_configs / "global" / f"{active_name(input_configs)}.yml"
-    names = devices(ctx.pads[:PLAYERS])
+    names = devices(ctx.pads)[:PLAYERS]
     files = {target: render(ctx)}
     others = [*(input_configs / "global").glob("*.yml"), *input_configs.glob("*/Default.yml")] if input_configs.is_dir() else []
     for path in sorted(set(others)):

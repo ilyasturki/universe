@@ -76,6 +76,11 @@ def test_devices_count_pads_of_the_same_name():
     )
 
 
+def test_a_twin_past_the_ports_still_counts_toward_player_1s_number(dolphin):
+    edges = [Pad(**{**vars(EDGE), "index": n}) for n in range(5)]
+    assert ini_section(run(Context([edges[4], *edges[:4]]))["GCPadNew.ini"], "GCPad1")["Device"] == "SDL/4/DualSense Edge Wireless Controller"
+
+
 def test_gamecube_follows_the_layout_and_keeps_the_users_settings(dolphin):
     gc = ini_section(run(Context([EDGE], "positional"))["GCPadNew.ini"], "GCPad1")
     assert gc["Device"] == "SDL/0/DualSense Edge Wireless Controller"

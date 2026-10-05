@@ -19,6 +19,7 @@ from _controls import (
     first_pad,
     ini_rewrite,
     ini_section,
+    ordinals,
     pad_shoulders,
 )
 from _gamepads import BIND_AXIS, BIND_BUTTON, BIND_HAT
@@ -74,7 +75,7 @@ def _stick(device, pad, x, y):
 
 def values_for(ctx: Context):
     pad = first_pad(ctx)
-    device = {"engine": "sdl", "guid": pad.guid.hex(), "port": 0}
+    device = {"engine": "sdl", "guid": pad.guid.hex(), "port": ordinals(ctx.pads, lambda p: p.guid)[0]}
     values = {f"button_{k}": _param(device, button(pad, b)) for k, b in {**ctx.face, **BUTTONS}.items()}
     held = dict(zip(("button_l", "button_r", "button_zl", "button_zr"), pad_shoulders(ctx, pad), strict=True))
     values.update({k: _param(device, b) for k, b in held.items()})
