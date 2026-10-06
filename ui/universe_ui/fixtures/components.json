@@ -22,7 +22,7 @@
       "update": "", "proposal": "", "used_by": 0, "setting": "", "recent": null, "skipped": []
     },
     {
-      "id": "wine", "name": "Wine (staging)", "kind": "wine", "family": "", "bin": "", "homepage": "https://github.com/Kron4ek/Wine-Builds", "runner": "wine",
+      "id": "wine", "name": "Wine", "kind": "wine", "family": "", "bin": "", "homepage": "https://github.com/Kron4ek/Wine-Builds", "runner": "wine",
       "builds": [{"version": "11.8", "origin": "nix", "program": "/nix/store/fake-wine-wow64-staging-11.8/bin/wine", "managed": false, "in_use": true, "pinned": false, "disk": 0, "size": 0, "date": "", "installed_at": "", "auto": false}],
       "latest": {"version": "11.18", "date": "2026-09-19T18:30:25Z", "channel": "stable", "size": 61000000},
       "available": [

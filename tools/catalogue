@@ -87,9 +87,7 @@ UPSTREAMS = (
         family="umu-proton",
         version="asset",
     ),
-    Upstream(
-        "wine", "Wine (staging)", "wine", "github:Kron4ek/Wine-Builds", (Pick(r"^wine-[\d.]+-staging-amd64-wow64\.tar\.xz$"),), tags=r"^\d+\.\d+(\.\d+)?$"
-    ),
+    Upstream("wine", "Wine", "wine", "github:Kron4ek/Wine-Builds", (Pick(r"^wine-[\d.]+-staging-amd64-wow64\.tar\.xz$"),), tags=r"^\d+\.\d+(\.\d+)?$"),
     Upstream(
         "eden",
         "Eden",
