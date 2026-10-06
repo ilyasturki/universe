@@ -177,12 +177,8 @@ FocusScope {
 
     function reveal() {
         var slot = slots.itemAt(index);
-        var top = scroller.contentY;
-        if (slot && slot.y < top)
-            top = slot.y;
-        else if (slot && slot.y + slot.height > top + scroller.height)
-            top = slot.y + slot.height - scroller.height;
-        scroller.contentY = Math.max(0, Math.min(top, scroller.contentHeight - scroller.height));
+        if (slot)
+            rowsScroll.reveal(slot.y, slot.y + slot.height);
     }
 
     Rectangle {
@@ -317,10 +313,8 @@ FocusScope {
             onHeightChanged: menu.reveal()
             onContentHeightChanged: menu.reveal()
 
-            Behavior on contentY {
-                Ease {
-                    duration: Theme.durQuick
-                }
+            Scroller {
+                id: rowsScroll
             }
 
             Column {
@@ -371,9 +365,10 @@ FocusScope {
 
     Keys.onPressed: function (event) {
         event.accepted = true;
-        if (event.isAutoRepeat)
+        var vertical = event.key === Qt.Key_Up || event.key === Qt.Key_Down;
+        if (event.isAutoRepeat && !vertical)
             return;
-        if (event.key === Qt.Key_Up || event.key === Qt.Key_Down)
+        if (vertical)
             index = Sound.stepped(index, event.key === Qt.Key_Up ? -1 : 1, items.length);
         else if (api.keys.isFirst(event) || api.keys.isLast(event))
             index = Sound.stepped(index, api.keys.isFirst(event) ? -items.length : items.length, items.length);

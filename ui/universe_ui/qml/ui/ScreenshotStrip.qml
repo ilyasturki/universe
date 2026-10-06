@@ -42,15 +42,14 @@ Column {
         clip: true
         currentIndex: strip.index
         boundsBehavior: Flickable.StopAtBounds
-        highlightRangeMode: ListView.ApplyRange
-        preferredHighlightBegin: (width - strip.sideMargin - strip.shotWidth) / 2
-        preferredHighlightEnd: preferredHighlightBegin + strip.shotWidth
-        highlightMoveDuration: Theme.durNudge
+        highlightFollowsCurrentItem: false
 
-        Wheel {
+        Scroller {
             horizontal: true
             nested: true
             step: strip.shotWidth + list.spacing
+            rangeBegin: (list.width - strip.sideMargin - strip.shotWidth) / 2
+            rangeEnd: rangeBegin + strip.shotWidth
         }
 
         delegate: Item {

@@ -587,7 +587,9 @@ These cost real time to discover; they are properties of Qt 6.11 / PySide6 6.11,
 - **Gamepad.** SDL2 in a `QThread`, `SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS=1`, hot-plug. Each
   button becomes the keyboard key Pegasus already bound to that action, so the theme's key logic is
   untouched. Axes use hysteresis — 0.5 to press, 0.3 to release — and arrows repeat after 350 ms
-  every 90 ms. Nothing is read while the game is on screen or another app has the focus
+  every 90 ms. A held arrow keeps moving the cursor in every list, grid, menu and text of every
+  look; it stops at the end of what it scrolls, and only a fresh press goes on to the next part of
+  the page (a journal entry's cards, a game page's next section). Nothing is read while the game is on screen or another app has the focus
   (`setCovered`, see "Focus").
 
 | Pad | Key | Action |
@@ -684,11 +686,17 @@ ring reads, so a click on an idle-ringed cover focuses instead of launching. `ac
 makes a click that picks and never presses (the article of a journal entry, so the wheel reads
 it). Every pick also raises `Theme.pointed(item)`: `theme.qml` hands the focus between the tab
 bar and the page by it.
-`ui/Wheel.qml` scrolls its parent `Flickable` (`horizontal` for a strip, `nested` for a strip
-inside a page that scrolls — plain y then goes to the page — `ease` the view's own Behavior on
-its contentX/Y, held off while the wheel or a drag drives it, `halt()` from a move of the view's own),
-its `DragHandler` taking the axis the view scrolls on, so a vertical drag on a sideways strip goes
-to the page;
+`ui/Scroller.qml` moves its parent `Flickable`'s content, whoever asks — the cursor, the wheel, a
+finger — so none of them fights another (`horizontal` for a strip, `nested` for a strip inside a
+page that scrolls — plain y then goes to the page), its `DragHandler` taking the axis the view
+scrolls on, so a vertical drag on a sideways strip goes to the page. The cursor's moves slide in
+`Theme.durView` (300 ms) OutQuint on every Reprise page, each step setting off from where the
+content is, so a held key never leaves the cursor behind. In a `ListView` or `GridView` it follows
+`currentIndex` by itself, keeping the item between `rangeBegin` and `rangeEnd` (the view sets
+`highlightFollowsCurrentItem: false`, or Qt also drifts it after the cursor at 400 px/s); a cursor
+moved in the same turn as the model or the view's size lands at once. A view whose cursor is its
+own calls `reveal(start, end)` (Settings' cards, a menu), `to`, `by` and `heading()` (a text read
+by steps), `place` to jump;
 `CoverCard` and `LibraryTile` carry their own Pointer inside the scaled art (`pointable`,
 `current`, `picked`), hovering lifting the idle dimming rather than washing the card;
 `ui/WheelKeys.qml` is the wheel as keys, for a surface with nothing to scroll (the dock's value

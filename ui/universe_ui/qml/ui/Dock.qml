@@ -1078,17 +1078,20 @@ FocusScope {
             return;
         }
         event.accepted = true;
-        if (event.isAutoRepeat && event.key !== Qt.Key_Left && event.key !== Qt.Key_Right)
+        var arrow = event.key === Qt.Key_Left || event.key === Qt.Key_Right;
+        var vertical = event.key === Qt.Key_Up || event.key === Qt.Key_Down;
+        var inGroup = opened && current.kind === "group";
+        if (event.isAutoRepeat && !arrow && !(vertical && inGroup))
             return;
-        if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
+        if (arrow) {
             var dir = event.key === Qt.Key_Left ? -1 : 1;
             if (opened) {
                 step(target, dir);
                 return;
             }
             index = Sound.stepped(index, dir, buttons.length);
-        } else if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
-            if (opened && current.kind === "group")
+        } else if (vertical) {
+            if (inGroup)
                 sub = Sound.stepped(sub, event.key === Qt.Key_Up ? -1 : 1, current.children.length);
             else if (event.key === Qt.Key_Down)
                 openTray("shots");

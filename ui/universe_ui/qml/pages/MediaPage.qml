@@ -225,7 +225,10 @@ FocusScope {
     GridView {
         id: grid
 
-        Wheel {}
+        Scroller {
+            rangeBegin: Theme.dp(40)
+            rangeEnd: grid.height - Theme.dp(40)
+        }
 
         anchors.top: titleText.bottom
         anchors.topMargin: Theme.dp(34) - page.inset
@@ -245,11 +248,7 @@ FocusScope {
         cellHeight: page.cellHeight
         currentIndex: page.index
         interactive: false
-        highlightFollowsCurrentItem: true
-        preferredHighlightBegin: Theme.dp(40)
-        preferredHighlightEnd: height - Theme.dp(40)
-        highlightRangeMode: GridView.ApplyRange
-        highlightMoveDuration: Theme.durView
+        highlightFollowsCurrentItem: false
 
         delegate: Item {
             width: grid.cellWidth

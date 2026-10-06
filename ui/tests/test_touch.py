@@ -32,7 +32,7 @@ Rectangle {
                 onPicked: { root.picks++; tile.current = true; }
             }
         }
-        Wheel {}
+        Scroller {}
     }
 }
 """

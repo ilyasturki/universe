@@ -72,19 +72,15 @@ FocusScope {
         actionIndex = 0;
         shotIndex = 0;
         lightbox = false;
-        flick.contentY = 0;
+        pageScroll.place(0);
     }
 
     function sectionTop(which) {
         return which === 1 ? body.y + about.y - page.ledge : which === 2 ? body.y + shots.y - page.ledge : 0;
     }
 
-    function maxScroll() {
-        return Math.max(0, flick.contentHeight - flick.height);
-    }
-
     function scrollTo(y) {
-        flick.contentY = Math.max(0, Math.min(y, maxScroll()));
+        pageScroll.to(y);
     }
 
     function goTo(which) {
@@ -92,8 +88,10 @@ FocusScope {
         scrollTo(sectionTop(which));
     }
 
-    function stepDown() {
+    function stepDown(held) {
         if (section === 0) {
+            if (held)
+                return "";
             if (hasAbout) {
                 goTo(1);
                 return "section";
@@ -106,12 +104,12 @@ FocusScope {
         }
         if (section === 1) {
             var aboutBottom = body.y + about.y + about.height + Theme.dp(40);
-            var viewBottom = flick.contentY + flick.height - hintBar.height;
+            var viewBottom = pageScroll.heading() + flick.height - hintBar.height;
             if (aboutBottom > viewBottom + 1) {
-                scrollTo(Math.min(flick.contentY + Theme.dp(320), aboutBottom - flick.height + hintBar.height));
+                scrollTo(Math.min(pageScroll.heading() + Theme.dp(320), aboutBottom - flick.height + hintBar.height));
                 return "scroll";
             }
-            if (hasShots) {
+            if (hasShots && !held) {
                 goTo(2);
                 return "section";
             }
@@ -119,16 +117,20 @@ FocusScope {
         return "";
     }
 
-    function stepUp() {
+    function stepUp(held) {
+        if (held && section !== 1)
+            return "";
         if (section === 2) {
             goTo(hasAbout ? 1 : 0);
             return "section";
         }
         if (section === 1) {
-            if (flick.contentY > sectionTop(1) + 1) {
-                scrollTo(Math.max(sectionTop(1), flick.contentY - Theme.dp(320)));
+            if (pageScroll.heading() > sectionTop(1) + 1) {
+                scrollTo(Math.max(sectionTop(1), pageScroll.heading() - Theme.dp(320)));
                 return "scroll";
             }
+            if (held)
+                return "";
             goTo(0);
             return "section";
         }
@@ -166,18 +168,10 @@ FocusScope {
         contentWidth: width
         contentHeight: content.height
         interactive: false
-        // The default overshoot fixup fights the contentY Behavior.
         boundsBehavior: Flickable.StopAtBounds
 
-        Behavior on contentY {
-            id: pageEase
-            Ease {
-                duration: Theme.durView
-            }
-        }
-
-        Wheel {
-            ease: pageEase
+        Scroller {
+            id: pageScroll
         }
 
         Item {
@@ -413,9 +407,9 @@ FocusScope {
         } else if (api.keys.isCancel(event)) {
             page.closeRequested();
         } else if (event.key === Qt.Key_Down) {
-            page.stepSound(page.stepDown());
+            page.stepSound(page.stepDown(event.isAutoRepeat));
         } else if (event.key === Qt.Key_Up) {
-            page.stepSound(page.stepUp());
+            page.stepSound(page.stepUp(event.isAutoRepeat));
         } else if (arrow) {
             var step = event.key === Qt.Key_Left ? -1 : 1;
             if (page.section === 0)
@@ -428,11 +422,9 @@ FocusScope {
             if (!page.game)
                 return;
             // The menu sits beside the logo: a scrolled page snaps back under it.
-            if (flick.contentY > 0) {
-                pageEase.enabled = false;
+            if (pageScroll.heading() > 0) {
                 page.section = 0;
-                flick.contentY = 0;
-                pageEase.enabled = true;
+                pageScroll.place(0);
             }
             page.menuRequested(page.game, heroLogo);
         }

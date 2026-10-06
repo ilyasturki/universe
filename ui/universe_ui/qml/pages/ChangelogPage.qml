@@ -33,18 +33,8 @@ FocusScope {
     Component.onDestruction: if (fresh)
         store.dismiss()
 
-    function maxScroll() {
-        return Math.max(0, flick.contentHeight - flick.height);
-    }
-
     function scrollTo(y) {
-        var next = Math.max(0, Math.min(maxScroll(), y));
-        if (next === flick.contentY) {
-            Sound.edge();
-            return;
-        }
-        Sound.tick();
-        flick.contentY = next;
+        notesScroll.to(y) ? Sound.tick() : Sound.edge();
     }
 
     Keys.onPressed: function (event) {
@@ -56,11 +46,11 @@ FocusScope {
         if (api.keys.isCancel(event))
             page.closeRequested();
         else if (vertical)
-            scrollTo(flick.contentY + (event.key === Qt.Key_Up ? -1 : 1) * Theme.dp(160));
+            scrollTo(notesScroll.heading() + (event.key === Qt.Key_Up ? -1 : 1) * Theme.dp(160));
         else if (screen)
-            scrollTo(flick.contentY + screen * flick.height * 0.85);
+            scrollTo(notesScroll.heading() + screen * flick.height * 0.85);
         else if (api.keys.isFirst(event) || api.keys.isLast(event))
-            scrollTo(api.keys.isFirst(event) ? 0 : maxScroll());
+            scrollTo(api.keys.isFirst(event) ? notesScroll.low() : notesScroll.high());
         else
             event.accepted = false;
     }
@@ -100,15 +90,8 @@ FocusScope {
         interactive: false
         clip: true
 
-        Behavior on contentY {
-            id: notesEase
-            Ease {
-                duration: Theme.durView
-            }
-        }
-
-        Wheel {
-            ease: notesEase
+        Scroller {
+            id: notesScroll
         }
 
         Column {

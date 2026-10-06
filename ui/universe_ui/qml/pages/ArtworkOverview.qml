@@ -207,8 +207,10 @@ FocusScope {
     ListView {
         id: list
 
-        Wheel {
+        Scroller {
             step: view.rowHeight
+            rangeBegin: Theme.dp(14)
+            rangeEnd: list.height - Theme.dp(14)
         }
 
         anchors.top: rule.bottom
@@ -220,11 +222,7 @@ FocusScope {
         interactive: false
         model: view.rows
         currentIndex: view.row
-        preferredHighlightBegin: Theme.dp(14)
-        preferredHighlightEnd: height - Theme.dp(14)
-        highlightRangeMode: ListView.ApplyRange
-        highlightFollowsCurrentItem: true
-        highlightMoveDuration: Theme.durView
+        highlightFollowsCurrentItem: false
 
         delegate: Item {
             readonly property var game: modelData

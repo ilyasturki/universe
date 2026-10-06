@@ -126,7 +126,7 @@ FocusScope {
     }
 
     onCurrentChanged: {
-        flick.contentY = 0;
+        articleScroll.place(0);
         shotIndex = 0;
     }
 
@@ -144,18 +144,13 @@ FocusScope {
         index = Sound.paged(index, d, 1, pitch > 0 ? Math.floor(list.height / pitch) : 1, rows.length);
     }
 
-    function maxScroll() {
-        return Math.max(0, flick.contentHeight - flick.height);
-    }
-
-    function scroll(d) {
-        var next = Math.max(0, Math.min(maxScroll(), flick.contentY + d * Theme.dp(260)));
-        if (next === flick.contentY) {
-            d > 0 ? (recording ? openRecordingCard() : openShots()) : Sound.edge();
-            return;
-        }
-        Sound.tick();
-        flick.contentY = next;
+    function scroll(d, held) {
+        if (articleScroll.by(d * Theme.dp(260)))
+            Sound.tick();
+        else if (d > 0 && !held)
+            recording ? openRecordingCard() : openShots();
+        else
+            Sound.edge();
     }
 
     function openShots() {
@@ -165,13 +160,13 @@ FocusScope {
         }
         Sound.panel();
         mode = 2;
-        flick.contentY = maxScroll();
+        articleScroll.to(articleScroll.high());
     }
 
     function openRecordingCard() {
         Sound.panel();
         mode = 3;
-        flick.contentY = Math.max(0, Math.min(maxScroll(), recordingCard.y + recordingCard.height + Theme.dp(60) - flick.height));
+        articleScroll.to(recordingCard.y + recordingCard.height + Theme.dp(60) - flick.height);
     }
 
     function stepShot(d) {
@@ -332,8 +327,9 @@ FocusScope {
 
     Keys.onPressed: function (event) {
         var arrow = event.key === Qt.Key_Left || event.key === Qt.Key_Right;
+        var vertical = event.key === Qt.Key_Up || event.key === Qt.Key_Down;
         var screen = api.keys.isScreenUp(event) ? -1 : api.keys.isScreenDown(event) ? 1 : 0;
-        if (event.isAutoRepeat && !(lightbox && arrow) && !(mode === 2 && arrow) && !screen)
+        if (event.isAutoRepeat && !(lightbox && arrow) && !(mode === 2 && arrow) && !(!lightbox && mode <= 1 && vertical) && !screen)
             return;
 
         event.accepted = true;
@@ -368,7 +364,7 @@ FocusScope {
                 Sound.panel();
                 mode = 1;
             } else if (mode === 1) {
-                scroll(-1);
+                scroll(-1, event.isAutoRepeat);
             } else {
                 step(-1);
             }
@@ -378,7 +374,7 @@ FocusScope {
             else if (mode === 2)
                 Sound.edge();
             else if (mode === 1)
-                scroll(1);
+                scroll(1, event.isAutoRepeat);
             else
                 step(1);
         } else if (event.key === Qt.Key_Right) {
@@ -426,7 +422,7 @@ FocusScope {
     ListView {
         id: list
 
-        Wheel {
+        Scroller {
             step: Theme.dp(96) + list.spacing
         }
 
@@ -442,10 +438,7 @@ FocusScope {
         clip: true
         spacing: Theme.dp(12)
         opacity: page.reading ? 0.55 : 1.0
-        highlightFollowsCurrentItem: true
-        preferredHighlightBegin: 0
-        preferredHighlightEnd: height
-        highlightRangeMode: ListView.ApplyRange
+        highlightFollowsCurrentItem: false
 
         Behavior on opacity {
             Ease {
@@ -516,13 +509,6 @@ FocusScope {
         clip: true
         visible: page.current !== null
 
-        Behavior on contentY {
-            id: articleEase
-            Ease {
-                duration: Theme.durView
-            }
-        }
-
         // A click on the article reads it; the wheel scrolls the text. Its cards below take the mode of their own.
         Pointer {
             accept: false
@@ -531,8 +517,8 @@ FocusScope {
                 page.mode = 1
         }
 
-        Wheel {
-            ease: articleEase
+        Scroller {
+            id: articleScroll
         }
 
         Column {

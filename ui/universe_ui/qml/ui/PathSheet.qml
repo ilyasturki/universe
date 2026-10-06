@@ -200,7 +200,7 @@ Sheet {
     ListView {
         id: list
 
-        Wheel {
+        Scroller {
             step: sheet.rowHeight
         }
 
@@ -213,10 +213,7 @@ Sheet {
         currentIndex: sheet.index
         interactive: false
         clip: true
-        highlightRangeMode: ListView.ApplyRange
-        preferredHighlightBegin: 0
-        preferredHighlightEnd: height
-        highlightMoveDuration: Theme.durQuick
+        highlightFollowsCurrentItem: false
 
         delegate: Item {
             id: row

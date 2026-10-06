@@ -387,7 +387,7 @@ FocusScope {
             interactive: false
             // interactive:false would otherwise take arrow-key navigation with it.
             keyNavigationEnabled: true
-            // The default overshoot fixup fights the contentX Behavior and settles short of originX.
+            // The default overshoot fixup settles short of originX.
             boundsBehavior: Flickable.StopAtBounds
             highlightFollowsCurrentItem: false
             cacheBuffer: page.cellSize * 3
@@ -420,10 +420,11 @@ FocusScope {
                 }
             }
 
-            Wheel {
+            Scroller {
+                id: railScroll
                 horizontal: true
+                follow: false
                 step: rail.pitch
-                ease: railEase
             }
 
             function slideToCurrent() {
@@ -432,8 +433,7 @@ FocusScope {
                 // page.focusIndex still holds the old index inside onCurrentIndexChanged.
                 var index = page.tileSelected ? count : currentIndex;
                 var target = index * pitch - page.spread - width * 0.25;
-                var maxX = Math.max(0, contentWidth - width);
-                contentX = Math.max(0, Math.min(target, maxX));
+                railScroll.to(target);
             }
 
             onCurrentIndexChanged: slideToCurrent()
@@ -490,14 +490,6 @@ FocusScope {
                 }
                 Sound.tick();
                 page.pointToTile(to);
-            }
-
-            Behavior on contentX {
-                id: railEase
-                Ease {
-                    duration: Theme.durNudge
-                    easing.type: Easing.OutQuint
-                }
             }
 
             delegate: Item {

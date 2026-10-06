@@ -560,19 +560,11 @@ FocusScope {
         function scrollToCurrent() {
             var s = cards.stopOf(cards.index);
             if (s && height > 0)
-                Theme.reveal(view, s.top, s.bottom, height);
+                slide.reveal(s.top, s.bottom);
         }
 
-        Behavior on contentY {
-            id: slideEase
-            Ease {
-                duration: Theme.durView
-                easing.type: Easing.OutQuint
-            }
-        }
-
-        Wheel {
-            ease: slideEase
+        Scroller {
+            id: slide
         }
 
         Repeater {

@@ -319,8 +319,10 @@ FocusScope {
 
     Keys.onPressed: function (event) {
         var arrow = event.key === Qt.Key_Left || event.key === Qt.Key_Right;
+        var vertical = event.key === Qt.Key_Up || event.key === Qt.Key_Down;
         var screen = api.keys.isScreenUp(event) ? -1 : api.keys.isScreenDown(event) ? 1 : 0;
-        if (event.isAutoRepeat && !(page.videoFocused && arrow) && !screen)
+        var onList = !page.videoFocused && !page.journalFocused;
+        if (event.isAutoRepeat && !(page.videoFocused && arrow) && !(onList && vertical) && !screen)
             return;
         if (page.journalFocused) {
             event.accepted = true;
@@ -364,7 +366,7 @@ FocusScope {
         } else if (api.keys.isFilters(event)) {
             event.accepted = true;
             openJournal();
-        } else if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
+        } else if (vertical) {
             event.accepted = true;
             if (!page.videoFocused)
                 step(event.key === Qt.Key_Up ? -1 : 1);
@@ -429,7 +431,7 @@ FocusScope {
     ListView {
         id: list
 
-        Wheel {
+        Scroller {
             step: Theme.dp(120) + list.spacing
         }
 
@@ -445,10 +447,7 @@ FocusScope {
         clip: true
         spacing: Theme.dp(12)
         opacity: page.videoFocused || page.journalFocused ? 0.55 : 1.0
-        highlightFollowsCurrentItem: true
-        preferredHighlightBegin: 0
-        preferredHighlightEnd: height
-        highlightRangeMode: ListView.ApplyRange
+        highlightFollowsCurrentItem: false
 
         Behavior on opacity {
             Ease {

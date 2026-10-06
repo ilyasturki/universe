@@ -93,7 +93,7 @@ Item {
     ListView {
         id: view
 
-        Wheel {
+        Scroller {
             step: list.rowHeight + view.spacing
         }
 
@@ -108,11 +108,7 @@ Item {
         interactive: false
         clip: true
         spacing: Theme.dp(8)
-        highlightFollowsCurrentItem: true
-        highlightMoveDuration: Theme.durNudge
-        preferredHighlightBegin: 0
-        preferredHighlightEnd: height
-        highlightRangeMode: ListView.ApplyRange
+        highlightFollowsCurrentItem: false
 
         delegate: SessionRow {
             id: entry

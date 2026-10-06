@@ -2,7 +2,8 @@ import os
 
 import pytest
 from looks import LOOKS, MENU, Look, call, content_rows, current_row, invoke, lit_fraction, read, render, settle
-from PySide6.QtCore import QObject, Qt
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, Qt
+from PySide6.QtGui import QKeyEvent
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QTest
 from uitest import descendant, own, pump, record, until
@@ -168,6 +169,30 @@ def test_the_screenshots_page_puts_the_running_sessions_shots_first(look, api, f
     assert len(rows) == len(earlier) + 1 and rows[0]["name"] not in {r["name"] for r in earlier}, "the new shot leads"
     api.universe.stop(api.universe.currentSession["session_id"])
     until(lambda: page.property("since") == "", "the session over, one run again")
+
+
+def held(window, key):
+    QCoreApplication.sendEvent(window, QKeyEvent(QEvent.Type.KeyPress, key, Qt.KeyboardModifier.NoModifier, "", True))
+
+
+@reprise
+@pytest.mark.parametrize("source", ["pages/RecordingsPage.qml", "pages/JournalPage.qml"])
+def test_a_held_arrow_keeps_stepping_down_a_game_s_list(look, api, source):
+    page = look.open(source, {"game": api.allGames.byId("the-technomancer"), "session": ""})
+    until(lambda: len(read(page, "rows")) > 1)
+    held(look.window, Qt.Key.Key_Down)
+    until(lambda: page.property("index") == 1, "the repeat of a held ▼ steps as its press did")
+
+
+@reprise
+def test_a_held_arrow_keeps_stepping_down_the_game_menu(look):
+    menu = look.find("gameMenu")
+    look.home()
+    look.press(Qt.Key.Key_F1)
+    until(lambda: menu.property("open") is True)
+    at = menu.property("index")
+    held(look.window, Qt.Key.Key_Down)
+    until(lambda: menu.property("index") == at + 1, "the repeat of a held ▼ steps as its press did")
 
 
 @switch2

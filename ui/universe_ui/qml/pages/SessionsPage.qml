@@ -93,18 +93,8 @@ FocusScope {
         index = next;
     }
 
-    function maxScroll() {
-        return Math.max(0, flick.contentHeight - flick.height);
-    }
-
     function scroll(d) {
-        var next = Math.max(0, Math.min(maxScroll(), flick.contentY + d * Theme.dp(300)));
-        if (next === flick.contentY) {
-            Sound.edge();
-            return;
-        }
-        Sound.tick();
-        flick.contentY = next;
+        logScroll.by(d * Theme.dp(300)) ? Sound.tick() : Sound.edge();
     }
 
     Keys.onPressed: function (event) {
@@ -124,7 +114,7 @@ FocusScope {
             if (current && !reading) {
                 Sound.enter();
                 mode = 1;
-                flick.contentY = maxScroll();
+                logScroll.to(logScroll.high());
             } else {
                 Sound.edge();
             }
@@ -172,7 +162,7 @@ FocusScope {
     ListView {
         id: list
 
-        Wheel {
+        Scroller {
             step: Theme.dp(96) + list.spacing
         }
 
@@ -188,10 +178,7 @@ FocusScope {
         clip: true
         spacing: Theme.dp(12)
         opacity: page.reading ? 0.55 : 1.0
-        highlightFollowsCurrentItem: true
-        preferredHighlightBegin: 0
-        preferredHighlightEnd: height
-        highlightRangeMode: ListView.ApplyRange
+        highlightFollowsCurrentItem: false
 
         Behavior on opacity {
             Ease {
@@ -286,15 +273,8 @@ FocusScope {
             clip: true
             visible: page.log.length > 0 && !page.store.logLoading
 
-            Behavior on contentY {
-                id: logEase
-                Ease {
-                    duration: Theme.durView
-                }
-            }
-
-            Wheel {
-                ease: logEase
+            Scroller {
+                id: logScroll
             }
 
             Column {

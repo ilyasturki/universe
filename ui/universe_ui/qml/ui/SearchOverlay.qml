@@ -192,7 +192,7 @@ FocusScope {
     onQueryChanged: {
         search.query = query;
         results.currentIndex = 0;
-        results.contentX = -results.leftMargin;
+        resultsScroll.place(resultsScroll.low());
         if (zone !== "keys" && (zone === "games" ? !hasGames : !hasSettings))
             goTo("keys");
     }
@@ -294,9 +294,12 @@ FocusScope {
                 anchors.fill: parent
                 visible: overlay.hasGames
 
-                Wheel {
+                Scroller {
+                    id: resultsScroll
                     horizontal: true
                     step: overlay.cardWidth + results.spacing
+                    rangeBegin: (results.width - overlay.cardWidth) / 2
+                    rangeEnd: rangeBegin + overlay.cardWidth
                 }
 
                 model: matches
@@ -305,10 +308,7 @@ FocusScope {
                 interactive: false
                 keyNavigationEnabled: false
                 cacheBuffer: overlay.cardWidth * 3
-                highlightRangeMode: ListView.ApplyRange
-                preferredHighlightBegin: (width - overlay.cardWidth) / 2
-                preferredHighlightEnd: preferredHighlightBegin + overlay.cardWidth
-                highlightMoveDuration: Theme.durView
+                highlightFollowsCurrentItem: false
 
                 leftMargin: Math.max(Theme.dp(80), (width - (matches.count * overlay.cardWidth + Math.max(0, matches.count - 1) * spacing)) / 2)
                 rightMargin: Theme.dp(80)

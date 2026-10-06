@@ -79,7 +79,10 @@ Item {
     ListView {
         id: list
 
-        Wheel {}
+        Scroller {
+            rangeBegin: grid.topPadding
+            rangeEnd: list.height - Theme.dp(40)
+        }
 
         anchors.fill: parent
         anchors.leftMargin: grid.sideMargin - grid.gap / 2
@@ -88,11 +91,7 @@ Item {
         model: grid.lines
         currentIndex: grid.line
         interactive: false
-        highlightFollowsCurrentItem: true
-        preferredHighlightBegin: grid.topPadding
-        preferredHighlightEnd: height - Theme.dp(40)
-        highlightRangeMode: ListView.ApplyRange
-        highlightMoveDuration: Theme.durView
+        highlightFollowsCurrentItem: false
         header: Item { height: grid.topPadding }
 
         section.property: "group"

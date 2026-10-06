@@ -553,7 +553,7 @@ FocusScope {
         GridView {
             id: grid
 
-            Wheel {}
+            Scroller {}
 
             anchors.top: candHead.bottom
             anchors.topMargin: Theme.dp(14)
@@ -566,11 +566,7 @@ FocusScope {
             currentIndex: page.browsing ? page.candIndex : -1
             cellWidth: Math.floor(width / page.columns)
             cellHeight: Math.round((cellWidth - Theme.dp(20)) / page.currentAspect) + Theme.dp(20)
-            preferredHighlightBegin: 0
-            preferredHighlightEnd: height
-            highlightRangeMode: GridView.ApplyRange
-            highlightFollowsCurrentItem: true
-            highlightMoveDuration: Theme.durView
+            highlightFollowsCurrentItem: false
 
             delegate: Item {
                 readonly property bool isMore: index === page.moreIndex
@@ -734,7 +730,8 @@ FocusScope {
 
         Keys.onPressed: function (event) {
             event.accepted = true;
-            if (event.isAutoRepeat)
+            var vertical = event.key === Qt.Key_Up || event.key === Qt.Key_Down;
+            if (event.isAutoRepeat && !vertical)
                 return;
             var list = page.form.hits;
             if (api.keys.isAccept(event)) {
@@ -752,7 +749,7 @@ FocusScope {
                 hits.close();
                 page.typing = "search";
                 keyboard.show("Search " + page.form.catalogue, page.form.title, "text");
-            } else if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
+            } else if (vertical) {
                 page.hitIndex = Sound.stepped(page.hitIndex, event.key === Qt.Key_Up ? -1 : 1, list.length);
             }
         }
@@ -773,7 +770,7 @@ FocusScope {
         ListView {
             id: hitsList
 
-            Wheel {
+            Scroller {
                 step: Theme.dp(96)
             }
             anchors.top: note.bottom
@@ -785,11 +782,7 @@ FocusScope {
             currentIndex: page.hitIndex
             interactive: false
             clip: true
-            preferredHighlightBegin: 0
-            preferredHighlightEnd: height
-            highlightRangeMode: ListView.ApplyRange
-            highlightFollowsCurrentItem: true
-            highlightMoveDuration: Theme.durView
+            highlightFollowsCurrentItem: false
 
             delegate: Item {
                 readonly property bool lit: index === page.hitIndex && hits.open

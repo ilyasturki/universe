@@ -23,6 +23,7 @@ GridView {
     readonly property real edgeFade: Theme.dp(80)
     readonly property real hiddenAbove: Math.max(0, contentY - originY + topMargin)
     readonly property real hiddenBelow: Math.max(0, originY + contentHeight + bottomMargin - contentY - height)
+    property bool steering: false
 
     cellHeight: coverWidth * 1.5 + gap
     topMargin: inset
@@ -41,34 +42,21 @@ GridView {
     readonly property int lastRow: cells > 0 ? Math.floor((cells - 1) / columns) : 0
     readonly property int visibleRows: cellHeight > 0 ? Math.max(1, Math.floor(height / cellHeight)) : 1
 
-    function targetY(index) {
-        // A Flickable whose content fits rests at -topMargin, not 0.
-        if (contentHeight + topMargin + bottomMargin <= height)
-            return -topMargin;
+    function reveal(index, now) {
+        if (height <= 0 || cellHeight <= 0)
+            return;
         var row = Math.floor(index / columns);
-        var rowTop = row * cellHeight;
+        var top = row * cellHeight;
         // A row with more past it keeps its cover out of the fade.
-        var above = row > 0 ? edgeFade : inset;
-        var below = row < lastRow ? edgeFade : inset;
-        var target = contentY;
-        if (rowTop - above < contentY)
-            target = rowTop - above;
-        else if (rowTop + cellHeight + below > contentY + height)
-            target = rowTop + cellHeight + below - height;
-        var maxY = contentHeight - height + bottomMargin;
-        return Math.max(-topMargin, Math.min(target, maxY));
+        scroller.reveal(top - (row > 0 ? edgeFade : inset), top + cellHeight + (row < lastRow ? edgeFade : inset), now);
     }
 
     function scrollToCurrent() {
-        scroller.stop();
-        wheel.halt();
-        if (height <= 0 || cellHeight <= 0)
-            return;
         // Not `cursor`: its binding still holds the old index inside onCurrentIndexChanged.
-        contentY = targetY(addSelected ? count : currentIndex);
+        reveal(addSelected ? count : currentIndex, true);
     }
 
-    // Setting currentIndex moves contentY synchronously, past any Behavior: snapshot, restore, animate. A click's tick is the Pointer's.
+    // A click's tick is the Pointer's.
     function moveCurrent(index, silent) {
         if (index < 0 || index >= cells || index === cursor) {
             if (!silent)
@@ -77,32 +65,19 @@ GridView {
         }
         if (!silent)
             Sound.tick();
-        var from = contentY;
+        steering = true;
         if (index === count) {
             addPicked = true;
-            contentY = targetY(index);
         } else {
             addPicked = false;
             currentIndex = index;
         }
-        var to = contentY;
-        if (Math.abs(to - from) < 0.5)
-            return;
-        contentY = from;
-        scroller.from = from;
-        scroller.to = to;
-        scroller.start();
+        steering = false;
+        reveal(index, false);
     }
 
-    NumberAnimation {
-        id: scroller
-        target: grid
-        property: "contentY"
-        duration: Theme.durView
-        easing.type: Easing.OutQuint
-    }
-
-    onCurrentIndexChanged: scrollToCurrent()
+    onCurrentIndexChanged: if (!steering)
+        scrollToCurrent()
     onHeightChanged: scrollToCurrent()
     onCountChanged: scrollToCurrent()
 
@@ -156,8 +131,9 @@ GridView {
     // A click on a cell: the ring lands there, and the page's focus comes along.
     signal pointed(int index)
 
-    Wheel {
-        id: wheel
+    Scroller {
+        id: scroller
+        follow: false
     }
 
     readonly property Component fadeEffect: Component {
