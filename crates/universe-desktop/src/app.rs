@@ -161,7 +161,8 @@ impl Default for Application {
 impl Application {
     pub fn new() -> Self {
         let script = script::from_env();
-        let flags = if script.is_some() { gio::ApplicationFlags::NON_UNIQUE } else { gio::ApplicationFlags::empty() };
+        let service = std::env::args().any(|arg| arg == "--gapplication-service");
+        let flags = if script.is_some() && !service { gio::ApplicationFlags::NON_UNIQUE } else { gio::ApplicationFlags::empty() };
         let app: Self = glib::Object::builder()
             .property("application-id", config::APP_ID)
             .property("resource-base-path", "/io/github/ilyasturki/UniverseDesktop")

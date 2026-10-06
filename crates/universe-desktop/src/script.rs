@@ -7,10 +7,11 @@ use gtk::{gdk, gio, glib};
 // An AdwDialog presented during one frame is drawn from the next.
 const SETTLE_FRAMES: u32 = 2;
 const FRAME_TIMEOUT: Duration = Duration::from_secs(10);
+const LOADING_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// `UNIVERSE_DESKTOP_SCRIPT`: steps run once the library is up, animations off so each lands in a frame, then the app
 /// quits, with status 1 when a step failed; `~` in an action stands for a space. The app runs apart from a running one
-/// then, adopts no scope and sweeps no journal.
+/// then, unless started as a service, adopts no scope and sweeps no journal.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Step {
     Wait(Duration),
@@ -71,6 +72,7 @@ async fn run_step(window: &gtk::Window, step: Step) -> Result<(), String> {
             }
         }
         Step::Shot(path) => {
+            loaded(window).await?;
             drawn(window).await?;
             shot(window, &path).map_err(|e| format!("shot {}: {e}", path.display()))?;
             println!("shot: {}", path.display());
@@ -96,6 +98,36 @@ async fn drawn(window: &gtk::Window) -> Result<(), String> {
         glib::ControlFlow::Break
     });
     glib::future_with_timeout(FRAME_TIMEOUT, rx).await.map(drop).map_err(|_| format!("the window drew no frames in {} s", FRAME_TIMEOUT.as_secs()))
+}
+
+async fn loaded(window: &gtk::Window) -> Result<(), String> {
+    let started = std::time::Instant::now();
+    loop {
+        let Some(stack) = loading(window.upcast_ref()) else { return Ok(()) };
+        if started.elapsed() >= LOADING_TIMEOUT {
+            let owner = std::iter::successors(stack.parent(), |w| w.parent()).find(|w| w.type_().name().starts_with("Universe"));
+            let owner = owner.map_or_else(|| "the window".to_string(), |w| w.type_().name().to_string());
+            return Err(format!("{owner} still loading after {} s", LOADING_TIMEOUT.as_secs()));
+        }
+        glib::timeout_future(Duration::from_millis(50)).await;
+    }
+}
+
+fn loading(root: &gtk::Widget) -> Option<adw::ViewStack> {
+    let mut widgets = vec![root.clone()];
+    while let Some(widget) = widgets.pop() {
+        if let Some(stack) = widget.downcast_ref::<adw::ViewStack>().filter(|s| s.visible_child_name().as_deref() == Some("loading")) {
+            return Some(stack.clone());
+        }
+        let mut child = widget.first_child();
+        while let Some(c) = child {
+            child = c.next_sibling();
+            if c.is_mapped() {
+                widgets.push(c);
+            }
+        }
+    }
+    None
 }
 
 /// Runs the action from the first widget on screen that reaches it: a page's own group (`store.`, a grid's `list.`) sits

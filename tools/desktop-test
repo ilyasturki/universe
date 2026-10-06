@@ -7,12 +7,15 @@ usage: tools/desktop-test
 
 The GTK app in a headless weston, on a throwaway profile holding two games added
 through the CLI: it shows the library, a platform, the hidden games, Media, the
-Store, a game's page and Preferences, shoots each, and quits by itself. Fails when weston or the
-app does not start, a script step fails (an action missing, a shot failed or
-blank), two surfaces come out as the same picture, or the app runs past
-DESKTOP_TEST_TIMEOUT seconds (default 60). Shots and logs land in
-DESKTOP_TEST_OUT (default target/desktop-test). Needs the debug build:
-`just test desktop` builds first.
+Store, a game's page and Preferences, shoots each, and quits by itself. Then it
+starts the app again as the shell does, a D-Bus service on a private bus asked
+for a search before its window opens, and shoots the library. Fails when weston
+or the app does not start, a script step fails (an action missing, a shot failed
+or blank, a page still loading), the search misses a game, two surfaces come out
+as the same picture, or a run goes past DESKTOP_TEST_TIMEOUT seconds (default
+60). Shots and logs land in DESKTOP_TEST_OUT (default target/desktop-test). Runs
+the debug build, which `just test desktop` builds first, or the app at
+UNIVERSE_DESKTOP and the CLI at UNIVERSE_BIN.
 USAGE
 }
 
@@ -23,7 +26,7 @@ case "${1:-}" in
 esac
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-app="$repo/target/debug/universe-desktop"
+app="${UNIVERSE_DESKTOP:-$repo/target/debug/universe-desktop}"
 cli="${UNIVERSE_BIN:-$repo/target/debug/universe}"
 limit="${DESKTOP_TEST_TIMEOUT:-60}"
 out="${DESKTOP_TEST_OUT:-$repo/target/desktop-test}"
@@ -37,14 +40,17 @@ fail() {
 
 tmp="$(mktemp -d)"
 weston_pid=
+bus_pid=
 cleanup() {
     [ -n "$weston_pid" ] && kill "$weston_pid" 2>/dev/null
+    [ -n "$bus_pid" ] && kill "$bus_pid" 2>/dev/null
     rm -rf "$tmp"
 }
 trap cleanup EXIT
 shots=(media platform library hidden store game preferences)
 mkdir -p "$out" "$tmp"/{data,config,state,cache,games,run}
-for shot in "${shots[@]}"; do rm -f "$out/$shot.png"; done
+service_shots=(service service-media service-store)
+for shot in "${shots[@]}" "${service_shots[@]}"; do rm -f "$out/$shot.png"; done
 chmod 700 "$tmp/run"
 started=$SECONDS
 
@@ -109,4 +115,53 @@ for shot in "${shots[@]}"; do
 done
 same="$(cd "$out" && sha256sum "${shots[@]/%/.png}" | sort | uniq -w 64 -D | cut -c 67-)"
 [ -z "$same" ] || fail "the same picture twice, a step showed nothing new: ${same//$'\n'/ }"
-echo "desktop-test: ${#shots[@]} surfaces shot in $out ($((SECONDS - started)) s)"
+
+# No service directory: nothing on this bus is activated, the portals GTK asks for included.
+cat >"$tmp/bus.conf" <<EOF
+<busconfig>
+  <type>session</type>
+  <listen>unix:path=$tmp/run/bus</listen>
+  <auth>EXTERNAL</auth>
+  <policy context="default">
+    <allow send_destination="*" eavesdrop="true"/>
+    <allow eavesdrop="true"/>
+    <allow own="*"/>
+  </policy>
+</busconfig>
+EOF
+dbus-daemon --config-file="$tmp/bus.conf" --nofork --nopidfile >"$out/bus.log" 2>&1 &
+bus_pid=$!
+for _ in $(seq 100); do
+    [ -S "$tmp/run/bus" ] && break
+    sleep 0.1
+done
+[ -S "$tmp/run/bus" ] || fail "dbus-daemon opened no socket in 10 s ($out/bus.log)"
+export DBUS_SESSION_BUS_ADDRESS="unix:path=$tmp/run/bus"
+name=io.github.ilyasturki.UniverseDesktop
+path=/io/github/ilyasturki/UniverseDesktop
+
+timeout -k 5 "$limit" env -u DISPLAY WAYLAND_DISPLAY="$socket" GDK_BACKEND=wayland GDK_DISABLE=offload,dmabuf \
+    UNIVERSE_DESKTOP_SCRIPT="action:win.view::all shot:$out/service.png action:win.view::media shot:$out/service-media.png action:win.view::store shot:$out/service-store.png" "$app" --gapplication-service >"$out/service.log" 2>&1 &
+app_pid=$!
+gdbus wait --session --timeout 10 "$name" || fail "the service took no bus name in 10 s ($out/service.log)"
+found="$(gdbus call --session --timeout 10 --dest "$name" --object-path "$path/SearchProvider" \
+    --method org.gnome.Shell.SearchProvider2.GetInitialResultSet "['smoke']")" || fail "the search provider did not answer ($out/service.log)"
+for id in "$game" "${pocket%%$'\t'*}"; do
+    [[ "$found" == *"'$id'"* ]] || fail "the search for smoke missed $id: $found"
+done
+gdbus call --session --timeout 10 --dest "$name" --object-path "$path" --method org.freedesktop.Application.Activate "{}" >/dev/null ||
+    fail "the service did not activate ($out/service.log)"
+status=0
+wait "$app_pid" || status=$?
+case "$status" in
+    0) ;;
+    124 | 137) fail "the service did not quit by itself within $limit s ($out/service.log)" ;;
+    *)
+        grep '^script: ' "$out/service.log" >&2 || tail -n 20 "$out/service.log" >&2
+        fail "the service exited $status ($out/service.log)"
+        ;;
+esac
+for shot in "${service_shots[@]}"; do
+    [ -s "$out/$shot.png" ] || fail "no $shot.png: the script did not run ($out/service.log)"
+done
+echo "desktop-test: $((${#shots[@]} + ${#service_shots[@]})) surfaces shot in $out ($((SECONDS - started)) s)"

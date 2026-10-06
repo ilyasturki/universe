@@ -415,6 +415,29 @@
         meta.mainProgram = "universe";
       };
 
+      desktopTest =
+        pkgs.runCommand "universe-desktop-test"
+          {
+            nativeBuildInputs = with pkgs; [
+              weston
+              dbus
+              glib
+              python3
+            ];
+            env = {
+              UNIVERSE_DESKTOP = lib.getExe desktop;
+              UNIVERSE_BIN = lib.getExe universe;
+              FONTCONFIG_FILE = pkgs.makeFontsConf { fontDirectories = [ pkgs.cantarell-fonts ]; };
+              GSK_RENDERER = "cairo";
+              XDG_DATA_DIRS = "${pkgs.adwaita-icon-theme}/share";
+            };
+          }
+          ''
+            export HOME=$TMPDIR XDG_RUNTIME_DIR=$TMPDIR/runtime
+            mkdir -m 700 $XDG_RUNTIME_DIR
+            DESKTOP_TEST_OUT=$out bash ${./tools/desktop-test}
+          '';
+
       pytestOf =
         {
           name,
@@ -604,6 +627,7 @@
       checks.${system} = {
         core = core;
         desktop = desktop;
+        desktop-test = desktopTest;
         lint = lint;
         rust-lint = rustLint;
         pytest-ui = pytestUi;

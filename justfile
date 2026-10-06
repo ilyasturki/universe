@@ -119,13 +119,13 @@ desktop-shot dir *steps: build env
 logs:
     journalctl --user -f -u 'universe-*'
 
-# Every suite, or the ones named: rust, python, or one of python's ui, modules, sources, bindings; desktop (named only) runs the GTK app in a headless weston
+# Every suite, or the ones named: rust, python, or one of python's ui, modules, sources, bindings; desktop runs the GTK app in a headless weston
 test *suites: build develop env
     #!/usr/bin/env -S nix develop --quiet --command bash
     set -euo pipefail
     cd "{{ justfile_directory() }}"
     suites="{{ suites }}"
-    [ -n "$suites" ] || suites="rust python"
+    [ -n "$suites" ] || suites="rust python desktop"
     # A third of the cores, at most 8: more workers wait on each other and push tests past their 2 s.
     workers=$(( $(nproc) / 3 )); workers=$(( workers < 1 ? 1 : workers > 8 ? 8 : workers ))
     for suite in $suites; do
