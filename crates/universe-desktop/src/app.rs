@@ -48,6 +48,7 @@ mod imp {
     #[derive(Default)]
     pub struct Application {
         pub ready: Cell<bool>,
+        pub stage: RefCell<String>,
         pub failure: RefCell<Option<String>>,
         pub watch: RefCell<Option<changes::Watch>>,
         pub script: RefCell<Option<Vec<Step>>>,
@@ -604,6 +605,14 @@ impl Application {
         self.imp().ready.get()
     }
 
+    pub fn stage(&self) -> String {
+        self.imp().stage.borrow().clone()
+    }
+
+    fn set_stage(&self, stage: String) {
+        self.imp().stage.replace(stage);
+    }
+
     pub fn failure(&self) -> Option<String> {
         self.imp().failure.borrow().clone()
     }
@@ -616,6 +625,7 @@ impl Application {
     fn open_core(&self) {
         let app = self.clone();
         glib::spawn_future_local(async move {
+            app.set_stage(gettext("opening the core"));
             if let Err(e) = backend::open().await {
                 app.imp().failure.replace(Some(e.to_string()));
                 app.emit_by_name::<()>("core-failed", &[&e.to_string()]);
@@ -623,11 +633,13 @@ impl Application {
             }
             let scripted = app.scripted();
             if !scripted {
+                app.set_stage(gettext("moving into its launcher scope"));
                 if let Err(e) = backend::call(|core| async move { core.adopt_scope().await }).await {
                     tracing::warn!("adopt_scope: {e}");
                 }
                 glib::spawn_future_local(backend::pinned(|core| async move { core.apply_system().await }));
             }
+            app.set_stage(gettext("watching for library changes"));
             let options = changes::Options { journal_sweep: !scripted, ..changes::Options::default() };
             let core = backend::core();
             let events = match backend::run(changes::watch(core, options)).await {
@@ -644,7 +656,9 @@ impl Application {
             app.library().connect_updated(move || {
                 weak.upgrade().inspect(|app| app.mark_updatable());
             });
+            app.set_stage(gettext("reading the library"));
             app.library().refresh(&[]).await;
+            app.set_stage(gettext("reading the recordings"));
             app.start_frames().await;
             app.imp().ready.set(true);
             app.emit_by_name::<()>("core-ready", &[]);

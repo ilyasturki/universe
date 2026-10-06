@@ -131,6 +131,10 @@ impl LibraryPage {
         self.imp().search.get()
     }
 
+    pub fn is_loading(&self) -> bool {
+        !self.imp().loaded.get()
+    }
+
     pub fn sidebar_button(&self) -> gtk::Button {
         self.imp().sidebar_button.get()
     }

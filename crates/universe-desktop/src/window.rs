@@ -16,6 +16,8 @@ use crate::script;
 use crate::state::State;
 use crate::widgets::NowPlaying;
 
+const LOADING_LIMIT_S: u32 = 30;
+
 /// What the sidebar lists besides the fixed items; rebuilt only when it changes, so the selection stays put.
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Shape {
@@ -386,6 +388,24 @@ impl Window {
                 None
             });
         }
+        let win = self.downgrade();
+        glib::timeout_add_seconds_local_once(LOADING_LIMIT_S, move || {
+            win.upgrade().inspect(|win| win.give_up_loading());
+        });
+    }
+
+    fn give_up_loading(&self) {
+        let imp = self.imp();
+        let limit = LOADING_LIMIT_S.to_string();
+        let stuck = match imp.stack.visible_child_name().as_deref() {
+            Some("loading") => gettext("Universe Desktop has been {stage} for {limit} seconds.").replace("{stage}", &self.app().stage()),
+            Some("library") if imp.library_page.is_loading() => gettext("The library was read, but this window has not shown it after {limit} seconds."),
+            _ => return,
+        }
+        .replace("{limit}", &limit);
+        tracing::error!("{stuck}");
+        imp.failed_page.set_description(Some(&glib::markup_escape_text(&stuck)));
+        imp.stack.set_visible_child_name("failed");
     }
 
     fn core_ready(&self) {
