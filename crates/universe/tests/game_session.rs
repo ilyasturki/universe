@@ -70,7 +70,6 @@ fn prop<T: TryFrom<OwnedValue>>(props: &[(String, OwnedValue)], name: &str) -> O
     props.iter().find(|(k, _)| k == name).and_then(|(_, v)| T::try_from(v.try_clone().ok()?).ok())
 }
 
-/// The game's unit as systemd runs it: `ExecStart` in its own environment, then `ExecStopPost` told how it ended, then gone.
 async fn run_game(conn: zbus::Connection, units: Shared, name: String, props: Vec<(String, OwnedValue)>) {
     let env: Vec<String> = prop(&props, "Environment").unwrap_or_default();
     let env: Vec<(String, String)> = env.iter().filter_map(|kv| kv.split_once('=')).map(|(k, v)| (k.into(), v.into())).collect();
@@ -224,6 +223,7 @@ impl Gamescope {
             libc::close(fds[1]);
             std::io::Read::read_to_string(&mut <std::fs::File as std::os::fd::FromRawFd>::from_raw_fd(fds[0]), &mut number).unwrap();
         }
+        assert!(!number.trim().is_empty(), "Xvfb exited before naming its display");
         let display = format!(":{}", number.trim());
         let (conn, screen) = x11rb::connect(Some(&display)).unwrap();
         let root = conn.setup().roots[screen].root;
@@ -258,7 +258,6 @@ impl Drop for Gamescope {
     }
 }
 
-/// The game's MangoHud layer: what reaches the control socket it binds.
 fn layer(game: &str) -> Arc<Mutex<Vec<String>>> {
     use std::os::linux::net::SocketAddrExt;
     let addr = std::os::unix::net::SocketAddr::from_abstract_name(universe::mangoapp::layer_control(game)).unwrap();
@@ -346,8 +345,8 @@ fn runtime(mangohud: bool, fps_limit: &str, filter: &str, sharpness: Option<u32>
     Runtime { mangohud, fps_limit: fps_limit.into(), gamescope_filter: filter.into(), gamescope_sharpness: sharpness }
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn hud_limit_and_filter_changed_in_game_last_the_session_and_leave_the_settings_alone() {
+#[test]
+fn hud_limit_and_filter_changed_in_game_last_the_session_and_leave_the_settings_alone() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
     let stubs = root.join("bin");
@@ -394,58 +393,61 @@ async fn hud_limit_and_filter_changed_in_game_last_the_session_and_leave_the_set
          gamescope_filter = \"nis\"\ngamescope_sharpness = 7\n",
     )
     .unwrap();
-    let added: serde_json::Value =
-        serde_json::from_str(&universe(&["--json", "add", game.to_str().unwrap(), "--runner", "linux", "--title", "Session Quest"])).unwrap();
+    // The id names the layer's abstract socket, which every run on the machine shares.
+    let title = format!("Session Quest {}", std::process::id());
+    let added: serde_json::Value = serde_json::from_str(&universe(&["--json", "add", game.to_str().unwrap(), "--runner", "linux", "--title", &title])).unwrap();
     let id = added["id"].as_str().unwrap().to_string();
     universe(&["set", &id, "mangohud=true", "fps_limit=60", "gamescope_filter=fsr", "gamescope_sharpness=3"]);
     let game_toml = root.join("data/games").join(&id).join("game.toml");
     let settings = || (std::fs::read_to_string(&game_toml).unwrap(), std::fs::read_to_string(&config).unwrap());
     let before = settings();
 
-    let units = Shared::default();
-    let manager = bus.connect().await;
-    manager.object_server().at(MANAGER, Manager { units: units.clone() }).await.unwrap();
-    manager.request_name("org.freedesktop.systemd1").await.unwrap();
-    let toggles = layer(&id);
-    let hud_conf = universe::launcher::layer_conf_path();
-    let read_conf = || std::fs::read_to_string(&hud_conf).unwrap();
+    tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap().block_on(async {
+        let units = Shared::default();
+        let manager = bus.connect().await;
+        manager.object_server().at(MANAGER, Manager { units: units.clone() }).await.unwrap();
+        manager.request_name("org.freedesktop.systemd1").await.unwrap();
+        let toggles = layer(&id);
+        let hud_conf = universe::launcher::layer_conf_path();
+        let read_conf = || std::fs::read_to_string(&hud_conf).unwrap();
 
-    let core = Core::open().await.unwrap();
-    core.launch(&id, "", "").await.unwrap();
-    let launched = read_conf();
-    assert!(launched.contains("fps_limit=60\n") && !launched.contains("no_display"), "the game's own HUD and limit: {launched}");
-    let (unit, argv) = units.lock().unwrap().started.last().cloned().unwrap();
-    assert!(unit.starts_with(&format!("universe-game-{id}-")) && argv[0] == mangohud.to_str().unwrap(), "{unit}: {argv:?}");
-    assert_eq!(core.runtime().await.unwrap(), runtime(true, "60", "nis", Some(7)), "the game's HUD and limit, the filter the launcher's gamescope holds");
-    assert_eq!(gamescope.filter(), (None, None), "the launcher's gamescope keeps the filter it was started with");
+        let core = Core::open().await.unwrap();
+        core.launch(&id, "", "").await.unwrap();
+        let launched = read_conf();
+        assert!(launched.contains("fps_limit=60\n") && !launched.contains("no_display"), "the game's own HUD and limit: {launched}");
+        let (unit, argv) = units.lock().unwrap().started.last().cloned().unwrap();
+        assert!(unit.starts_with(&format!("universe-game-{id}-")) && argv[0] == mangohud.to_str().unwrap(), "{unit}: {argv:?}");
+        assert_eq!(core.runtime().await.unwrap(), runtime(true, "60", "nis", Some(7)), "the game's HUD and limit, the filter the launcher's gamescope holds");
+        assert_eq!(gamescope.filter(), (None, None), "the launcher's gamescope keeps the filter it was started with");
 
-    assert!(!core.set_mangohud(Some(false)).await.unwrap(), "the dock hides the HUD");
-    let mut watcher = Watcher::start().await;
-    assert_eq!(watcher.macro_("mangohud").await["shown"], true, "the pad's macro flips the HUD the dock left");
-    assert_eq!(watcher.macro_("mangohud").await["shown"], false);
-    core.set_fps_limit("30").await.unwrap();
-    core.nest_filter("integer", None).await.unwrap();
-    assert_eq!(core.runtime().await.unwrap(), runtime(false, "30", "integer", None));
-    let changed = read_conf();
-    assert!(changed.contains("no_display\n") && changed.contains("fps_limit=30\n"), "a new limit keeps the HUD the macro hid: {changed}");
-    assert_eq!(until("three toggles reach the layer", || Some(toggles.lock().unwrap().clone()).filter(|t| t.len() == 3)).await, [":hud;"; 3]);
-    assert_eq!(gamescope.filter(), (Some(2), None), "integer scaling, gamescope's own sharpness");
-    assert_eq!(settings(), before, "nothing changed in game is a setting");
+        assert!(!core.set_mangohud(Some(false)).await.unwrap(), "the dock hides the HUD");
+        let mut watcher = Watcher::start().await;
+        assert_eq!(watcher.macro_("mangohud").await["shown"], true, "the pad's macro flips the HUD the dock left");
+        assert_eq!(watcher.macro_("mangohud").await["shown"], false);
+        core.set_fps_limit("30").await.unwrap();
+        core.nest_filter("integer", None).await.unwrap();
+        assert_eq!(core.runtime().await.unwrap(), runtime(false, "30", "integer", None));
+        let changed = read_conf();
+        assert!(changed.contains("no_display\n") && changed.contains("fps_limit=30\n"), "a new limit keeps the HUD the macro hid: {changed}");
+        assert_eq!(until("three toggles reach the layer", || Some(toggles.lock().unwrap().clone()).filter(|t| t.len() == 3)).await, [":hud;"; 3]);
+        assert_eq!(gamescope.filter(), (Some(2), None), "integer scaling, gamescope's own sharpness");
+        assert_eq!(settings(), before, "nothing changed in game is a setting");
 
-    core.stop("").await.unwrap();
-    until("the session ends", || units.lock().unwrap().loaded.is_empty().then_some(())).await;
-    assert!(core.current().await.is_none(), "the marker is gone");
-    assert_eq!(gamescope.filter(), (Some(4), Some(7)), "the end puts the launcher's gamescope back on Settings › Launch's NIS at 7");
-    assert_eq!(settings(), before, "game.toml and config.toml as they were");
-    let rows = std::fs::read_to_string(root.join("data/games").join(&id).join("sessions.jsonl")).unwrap();
-    assert_eq!(rows.lines().count(), 1, "{rows}");
+        core.stop("").await.unwrap();
+        until("the session ends", || units.lock().unwrap().loaded.is_empty().then_some(())).await;
+        assert!(core.current().await.is_none(), "the marker is gone");
+        assert_eq!(gamescope.filter(), (Some(4), Some(7)), "the end puts the launcher's gamescope back on Settings › Launch's NIS at 7");
+        assert_eq!(settings(), before, "game.toml and config.toml as they were");
+        let rows = std::fs::read_to_string(root.join("data/games").join(&id).join("sessions.jsonl")).unwrap();
+        assert_eq!(rows.lines().count(), 1, "{rows}");
 
-    core.launch(&id, "", "").await.unwrap();
-    assert_eq!(core.runtime().await.unwrap(), runtime(true, "60", "nis", Some(7)), "the relaunch starts from the settings");
-    assert_eq!(read_conf(), launched, "the HUD shown and the game's limit again");
-    core.stop("").await.unwrap();
-    until("the second session ends", || units.lock().unwrap().loaded.is_empty().then_some(())).await;
-    assert_eq!(settings(), before);
-    drop(watcher.stdin);
-    let _ = watcher.child.wait().await;
+        core.launch(&id, "", "").await.unwrap();
+        assert_eq!(core.runtime().await.unwrap(), runtime(true, "60", "nis", Some(7)), "the relaunch starts from the settings");
+        assert_eq!(read_conf(), launched, "the HUD shown and the game's limit again");
+        core.stop("").await.unwrap();
+        until("the second session ends", || units.lock().unwrap().loaded.is_empty().then_some(())).await;
+        assert_eq!(settings(), before);
+        drop(watcher.stdin);
+        let _ = watcher.child.wait().await;
+    });
 }

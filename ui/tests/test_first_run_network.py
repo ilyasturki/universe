@@ -15,7 +15,6 @@ OPEN, WPA2_PSK = 0, 0x100
 
 @pytest.fixture
 def networkmanager(monkeypatch):
-    """NetworkManager mocked on a private system bus, from the start offline."""
     monkeypatch.delenv("DBUS_SYSTEM_BUS_ADDRESS", raising=False)
     with PrivateDBus(BusType.SYSTEM) as bus:
         monkeypatch.setenv("DBUS_SYSTEM_BUS_ADDRESS", bus.address)
@@ -36,7 +35,6 @@ def wifi(networkmanager):
 
 @pytest.fixture
 def first_run(app, xdg, tmp_path, monkeypatch):
-    """The setup on the real core in an empty profile, its network watch the real `universe network watch`."""
     import universe_core
     from universe_ui.api import Api
     from universe_ui.screens.network import FAKE as FAKE_NET

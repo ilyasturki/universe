@@ -67,7 +67,7 @@ def universe(tmp_path_factory):
 
 @pytest.fixture
 def launch(universe, tmp_path):
-    """The pre-launch hook in its own process, given what the core gives it at a launch: `pads` is SDL's list (sitecustomize)."""
+    """`pads` is SDL's list, which launch/sitecustomize.py serves the hook."""
     config = tmp_path / ".config"
     (config / "dolphin-emu").mkdir(parents=True)
     (config / "dolphin-emu" / "Dolphin.ini").write_text("[Core]\nSIDevice0 = 6\n")

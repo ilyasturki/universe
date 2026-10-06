@@ -170,7 +170,6 @@ impl Watcher {
         self.until(|l| l["event"] == "volume").expect("no volume event")
     }
 
-    /// Each volume event up to one at `percent`, in the order they came.
     fn volumes_until(&mut self, percent: u64) -> Vec<Value> {
         let mut seen = vec![];
         while let Some(level) = self.until(|l| l["event"] == "volume") {
@@ -181,6 +180,10 @@ impl Watcher {
             }
         }
         panic!("never at {percent} %, after {:?}", percents(&seen));
+    }
+
+    fn drain(&mut self) {
+        while self.lines.try_recv().is_ok() {}
     }
 }
 
@@ -241,6 +244,8 @@ fn volume_keys_step_under_the_mute_unmute_going_up_and_name_the_output_picked() 
     pw.make_default("headphones");
     pw.wpctl(&["set-volume", "@DEFAULT_AUDIO_SINK@", "0.5"]);
     std::thread::sleep(PAUSE);
+    // The presses past 0 may land in a later batch, each with its own event at 0.
+    w.drain();
     w.press("volume_up");
     assert_eq!(w.volume(), level(52, false, "Headphones"), "the first press after a switch names the new output");
 }
