@@ -1,5 +1,49 @@
 # Changelog
 
+## [0.0.11] - 2026-10-07
+
+### Added
+
+- Add-ons: modules, sources and themes from the universe-extensions index, installed, updated and removed from a Get more row in every look, in Universe Desktop, or with `universe extension`.
+- Themes: an installed theme is a look of its own in Settings › Themes, and HOME held 5 s on the pad leaves it for a built-in one.
+- Wi-Fi and Bluetooth in Settings, in every look: join a network, test the connection, pair a pad or headphones; first run asks for a network when it starts offline.
+- GOG and Epic cloud saves sync around each session, and a game's data page shows them and settles a conflict.
+- The on-screen keyboards mask passwords.
+- Reprise's game page shows play time, last played and sessions.
+- Universe Desktop: a right-click or long-press game menu, one main menu on every page, achievements split into unlocked and locked, sessions that say how each ended, and add-ons from the stores and modules pages.
+
+### Changed
+
+- MangoHud, the frame limit and the scaling filter changed from HOME apply to the running game alone: its next launch starts from its settings again.
+- In emulators, player 1 is the pad you last pressed a button on, the one driving Universe.
+- System tools such as gpu-screen-recorder install from inside the Universe session without a password prompt, through a helper and polkit policy every package ships.
+- The PS5 look shows DualSense glyphs until a pad is seen, its store card has one action and the game's … menu, and its trophies open their whole text.
+- The PS5 and Switch 2 lists scroll in their look's own motion, held arrows repeat, and a held scrub through a recording speeds up.
+- The library grid fades its edge rows instead of cutting them.
+- Reprise's and the PS5 look's themes take a sound folder, as Switch 2's do.
+- A Universe Desktop window still loading after 30 s says where it stalled.
+
+### Fixed
+
+- Volume up unmutes, Reprise draws its own volume level, and a level past 100 % reads right.
+- A GameCube-faced pad keeps its printed face in Dolphin, the GameCube pad and Wii remote follow the layout, and shoulders show only where they do something.
+- Epic's save path is put back after a staged download.
+- A gpu-screen-recorder KMS server missing its capability is reported with the `setcap` fix.
+- Wine prefixes: kill stops the wineserver inside umu's sandbox, a prefix with a read-only folder moves across filesystems, winetricks with no verbs opens its GUI, and a tool failing at start is reported.
+- An installed game outside the library offers Add to library, and a newer build than the system's reads Install beside it.
+- Reprise's library follows home's order, ties A to Z.
+- A Universe Desktop window opened after startup shows the library and game, and preferences and About wait for the core.
+- The PS5 look: dozens of fixes to its hub, hero, control center, store menu, power menu, settings and trophy dates.
+- The password prompt puts the terminal's echo back on Ctrl-C.
+
+### Performance
+
+- A game's data page asks ludusavi and the cloud status at once.
+
+### Removed
+
+- The HowLongToBeat rows: no source provides that data.
+
 ## [0.0.10] - 2026-10-04
 
 ### Breaking
@@ -251,6 +295,7 @@
 
 - The search row on the Reprise look's store page.
 
+[0.0.11]: https://github.com/ilyasturki/universe/compare/v0.0.10...v0.0.11
 [0.0.10]: https://github.com/ilyasturki/universe/compare/v0.0.9...v0.0.10
 [0.0.9]: https://github.com/ilyasturki/universe/compare/v0.0.8...v0.0.9
 [0.0.8]: https://github.com/ilyasturki/universe/compare/v0.0.7...v0.0.8

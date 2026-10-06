@@ -1,7 +1,7 @@
 api = 2
 id = "screenshot"
 name = "Screenshots"
-version = "0.0.10"
+version = "0.0.11"
 description = "Takes the screenshots asked for from the dock, a pad button or `universe screenshot`: gamescope's own inside the launcher's gamescope, else the desktop's (the GNOME extension, spectacle, grim, the X server); gpu-screen-recorder when neither can."
 
 [hooks]

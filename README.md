@@ -28,7 +28,7 @@ Art, screenshots, play time, achievements, saves and what it takes on disk.
 
 ## Three looks
 
-Reprise, a port of my [Pegasus theme](https://github.com/ilyasturki/pegasus-theme-reprise), a Switch 2 style HOME menu, or a PS5 style home. Switch live from the settings.
+Reprise, a port of my [Pegasus theme](https://github.com/ilyasturki/pegasus-theme-reprise), a Switch 2 style HOME menu, or a PS5 style home. Switch live from the settings, or install a theme as an add-on.
 
 ![The Switch 2 look](docs/images/switch2.jpg)
 
@@ -45,7 +45,8 @@ HOME opens over the game and pauses it. From there, take a screenshot, show Mang
 - Opt-in session recording; recordings and screenshots land in the Media tab.
 - Pad, keyboard, mouse or touch, with a guided button setup; each emulator gets its own pad per player.
 - Achievements, with unlock banners in game.
-- Save backups after every session, restored or exported from the game's page, and a storage page of what each game takes.
+- Save backups after every session, GOG and Epic cloud saves synced, restored or exported from the game's page, and a storage page of what each game takes.
+- Add-ons: modules, sources and themes from an index, installed from the settings or `universe extension`.
 - Runner builds and tools installed, updated and rolled back from the settings.
 - Steam Deck controls, and it runs inside Steam's Game Mode.
 - Hold B for the power menu: suspend, reboot, power off.
@@ -116,7 +117,7 @@ Open **Universe** from your app menu. With an empty library a short setup runs o
 
 - [`docs/api.md`](docs/api.md): the core, the CLI, config, modules and sources
 - [`docs/frontends.md`](docs/frontends.md): how the UI is built, and how to write another frontend
-- [`docs/extensions.md`](docs/extensions.md): modules and sources that do not ship with Universe, and how to install them
+- [`docs/extensions.md`](docs/extensions.md): modules, sources and themes that do not ship with Universe, and how to install them
 - [`CHANGELOG.md`](CHANGELOG.md): what each release changed, also under Settings › About in both apps
 
 ## License

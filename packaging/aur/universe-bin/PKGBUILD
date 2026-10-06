@@ -1,7 +1,7 @@
 # Maintainer: Ilyas Turki <turki.ilyass@gmail.com>
 pkgbase=universe-bin
 pkgname=(universe-bin universe-desktop-bin)
-pkgver=0.0.10
+pkgver=0.0.11
 pkgrel=1
 pkgdesc='Gamepad-first game launcher: a Rust core, a PySide6 UI, games inside gamescope (prebuilt release)'
 arch=('x86_64')

@@ -1,7 +1,7 @@
 api = 2
 id = "controls"
 name = "Emulator controls"
-version = "0.0.10"
+version = "0.0.11"
 description = "Maps the pads you hold to the emulator's players at every launch. HOME, capture and the back paddles stay Universe's."
 
 [applies]
