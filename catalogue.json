@@ -57,6 +57,20 @@
       {
        "arch": "x86_64",
        "format": "zip",
+       "sha256": "2335971394ef6596f95ded0833e85ee28755e13761716ef4c91d6b11f69162f5",
+       "size": 10734695,
+       "url": "https://broth.itch.zone/butler/linux-amd64/15.32.0/archive/default"
+      }
+     ],
+     "channel": "stable",
+     "date": "",
+     "version": "15.32.0"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "zip",
        "sha256": "4f2a3f22b12f870923504d4b6935535cad377b45859f5fe9419e3adc0611a48c",
        "size": 10229769,
        "url": "https://broth.itch.zone/butler/linux-amd64/15.31.0/archive/default"
@@ -1039,6 +1053,20 @@
       {
        "arch": "x86_64",
        "format": "appimage",
+       "sha256": "d5ea7dc5d08943432420bb0a32baf252f518d6a5cab449427eb8749471b6cae1",
+       "size": 94069095,
+       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-532b6520b4d04e12632c249f34a6fc41f23b1fa6/rpcs3-v0.0.43-20234-532b6520_linux64.AppImage"
+      }
+     ],
+     "channel": "rolling",
+     "date": "2026-10-06T10:35:37Z",
+     "version": "0.0.43-20234-532b6520"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "appimage",
        "sha256": "0a892bb02791e3b93e6c05829de0018e89e1e1421d1e58eea302901cc60d6edd",
        "size": 94056736,
        "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-ba4a4b561edb562d9fd58268edaf927fa436f408/rpcs3-v0.0.43-20217-ba4a4b56_linux64.AppImage"
@@ -1103,20 +1131,6 @@
      "channel": "rolling",
      "date": "2026-10-01T10:50:51Z",
      "version": "0.0.43-20144-83b1e072"
-    },
-    {
-     "assets": [
-      {
-       "arch": "x86_64",
-       "format": "appimage",
-       "sha256": "5114c10bfcca3570cf01f3feebf13e90e54fb7838a5a4723b3e6c342e5754058",
-       "size": 94057910,
-       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-fb4a09215a10d7e04b3b6edcc4141b46d45d86d6/rpcs3-v0.0.42-20113-fb4a0921_linux64.AppImage"
-      }
-     ],
-     "channel": "rolling",
-     "date": "2026-09-30T09:17:25Z",
-     "version": "0.0.42-20113-fb4a0921"
     }
    ],
    "homepage": "https://github.com/RPCS3/rpcs3-binaries-linux",
@@ -1349,20 +1363,20 @@
       {
        "arch": "x86_64",
        "format": "appimage",
-       "sha256": "ccb98572d781292f212593af86b2e919b79d77a7835606c0c0f3780e1fdf1d50",
-       "size": 70232568,
+       "sha256": "339d42c84faca5432a0074ec7002f752636a2c6810b15b3668b3b2a06ebd28df",
+       "size": 70248952,
        "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-x86_64.AppImage"
       },
       {
        "arch": "aarch64",
        "format": "appimage",
-       "sha256": "0d0b5abf2d81863b70de0c8f3a0698b908809924472704a60f56d8e26441dcfa",
-       "size": 70629896,
+       "sha256": "4a32e96fe9eaff711d8d03eafb1afbd7ad905aa8379794e6862fad6e89e79ede",
+       "size": 70642184,
        "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-aarch64.AppImage"
       }
      ],
      "channel": "rolling",
-     "date": "2026-10-05T11:35:42Z",
+     "date": "2026-10-05T19:14:27Z",
      "version": "2026.10.05"
     }
    ],
@@ -1504,6 +1518,6 @@
    "name": "xemu"
   }
  },
- "generated_at": "2026-10-05T12:24:36Z",
+ "generated_at": "2026-10-06T12:06:55Z",
  "schema": 1
 }
