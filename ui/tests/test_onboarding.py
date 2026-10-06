@@ -140,10 +140,12 @@ def test_add_everything_runs_every_launcher_once(empty_api, empty):
 
     until(lambda: len(states()) == 5 and set(states().values()) <= {"imported", "waiting"}, "each runs to its end")
     assert states()["heroic-epic"] == "waiting", "Epic, off and signed out, waits for its sign-in"
-    until(lambda: empty_api.allGames.count == 3, "Lutris's two and the emulator folders' one, the importers one after the other")
+    until(lambda: empty_api.allGames.count == 4, "Lutris's two, GOG's install on disk and the emulator folders' one, one after the other")
 
 
 def test_found_rows_run_the_importers(empty_api, empty):
+    gog = empty.core._data["source_library"]["gog"]
+    gog[:] = [entry for entry in gog if entry.get("game_id") or not entry.get("installed")]
     form = loaded(empty_api.screens.onboarding)
     lutris = index_of(form, "lutris")
     assert form.runImport(lutris) is True
@@ -203,7 +205,10 @@ def test_an_import_still_running_leaves_the_rest_of_the_setup_usable(empty_api, 
     states = {r["key"]: r["state"] for r in form.rows}
     assert form.stepId == "done" and (states["lutris"], states["roms"]) == ("importing", "queued"), "the summary says so"
     gate.set()
-    until(lambda: {r["key"]: r["state"] for r in form.rows} == {"lutris": "imported", "roms": "imported"}, "and follows them to their end")
+    until(
+        lambda: {r["key"]: r["state"] for r in form.rows} == {"lutris": "imported", "roms": "imported", "heroic-gog": "imported"},
+        "and follows them to their end",
+    )
     until(lambda: any(job["kind"] == "media" for job in empty.jobs()), "the emulator games' art comes after, as a job")
 
 

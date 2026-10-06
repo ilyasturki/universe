@@ -685,6 +685,17 @@
         "image": "https://images.gog-statics.com/2010311939.jpg"
       },
       {
+        "id": "1482504285",
+        "disk_size": 9000000000,
+        "title": "Batman: Arkham Asylum Game of the Year Edition",
+        "owned": true,
+        "installed": true,
+        "dir": "/mnt/games/PC/Batman Arkham Asylum GOTY",
+        "build": "3",
+        "remote_build": "3",
+        "image": "https://images.gog-statics.com/1482504285.jpg"
+      },
+      {
         "id": "1207658930",
         "title": "The Witcher 3: Wild Hunt",
         "owned": true,

@@ -43,6 +43,10 @@ Modal {
     readonly property int shownRows: Math.min(7, Math.max(1, choices.length))
 
     function show(spec, done) {
+        if (!spec.choices || spec.choices.length === 0) {
+            Sound.play("edge");
+            return;
+        }
         anchor = spec.anchor || null;
         title = anchored ? "" : spec.title || "";
         choices = spec.choices || [];

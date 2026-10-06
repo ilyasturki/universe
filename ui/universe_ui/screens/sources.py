@@ -22,7 +22,7 @@ def _source_row(game, updates, art, job):
     if busy:
         status = job["label"].split(" ")[0] + "…"  # the live line is `job.message`; rows stay put while it runs
     elif installed:
-        status = "Update available" if pending else "Installed"
+        status = "Update available" if pending else "Installed" if game.get("game_id") else "Not in the library"
     elif partial:
         status = "Paused · " + (f"{_size(partial_bytes)} of {_size(disk)} kept" if disk else f"{_size(partial_bytes)} kept")
     elif game.get("owned"):
@@ -30,6 +30,7 @@ def _source_row(game, updates, art, job):
     else:
         status = "Not owned"
     size = disk if installed or partial else download
+    played = "Play from library" if game.get("game_id") else "Add to library"
     return {
         "id": str(game.get("id") or ""),
         "title": str(game.get("title") or ""),
@@ -46,7 +47,7 @@ def _source_row(game, updates, art, job):
         "size": size,
         "sizeText": _size(size) if size else "",
         "sizeKind": "disk" if installed or partial else ("download" if download else ""),
-        "action": "Cancel" if busy else "Update" if pending else "Play from library" if installed else "Resume" if partial else "Install",
+        "action": "Cancel" if busy else "Update" if pending else played if installed else "Resume" if partial else "Install",
     }
 
 
@@ -105,6 +106,7 @@ class SourcesBrowser(AsyncScreen):
         self._updates = []
         self._query = ""
         self._job = None
+        self._adding = None
         self._arriving = None
         self._landed = False
         self._loaded_at = 0.0
@@ -141,7 +143,7 @@ class SourcesBrowser(AsyncScreen):
         """Y: the store's listing, so games bought since show up."""
         self._reload(True)
 
-    def _reload(self, store, relist=True):
+    def _reload(self, store, relist=True, then=None):
         if self._busy:
             return
         asked, listed = self._source, self._all_updates
@@ -181,6 +183,8 @@ class SourcesBrowser(AsyncScreen):
             self._loaded_at = time.monotonic()
             if not self._query:
                 self._rebuild()
+            if then:
+                then()
 
         self._run(work, done)
 
@@ -260,6 +264,32 @@ class SourcesBrowser(AsyncScreen):
         if job_id:
             self._set_arriving(ArrivingGame(row["id"], row["title"], row["image"], self))
         return job_id
+
+    @Slot(int, result=str)
+    def adopt(self, index):
+        """An installed game the library lacks: the store's scan takes in every one on disk and links the ones already there."""
+        if self._adding or not (0 <= index < len(self._rows)):
+            return ""
+        row = self._rows[index]
+        if not row["installed"] or row["game_id"]:
+            return ""
+        job_id = self._client.scan(self._source)
+        if job_id:
+            self._adding = {"id": job_id, "game": row["id"], "title": row["title"]}
+            self.message.emit(f"Adding {row['title']} to the library…")
+        return job_id
+
+    def _adopted(self, adding, ok, text):
+        game, title = adding["game"], adding["title"]
+        if not ok:
+            self.message.emit(text or f"Could not add {title} to the library")
+            return
+
+        def said():
+            linked = any(r["id"] == game and r["game_id"] for r in self._rows)
+            self.message.emit(f"Added {title} to the library" if linked else f"Could not add {title} to the library")
+
+        self._reload(False, then=said)
 
     @Slot(int, result=str)
     def update(self, index):
@@ -352,6 +382,11 @@ class SourcesBrowser(AsyncScreen):
         self.jobChanged.emit()
 
     def _on_job_finished(self, job_id, ok, text):
+        adding = self._adding
+        if adding and adding["id"] == job_id:
+            self._adding = None
+            self._adopted(adding, ok, text)
+            return
         if not self._job or self._job["id"] != job_id:
             return
         if self._job["cancelled"] and not ok:

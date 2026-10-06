@@ -58,6 +58,10 @@ FocusScope {
 
     // `after(action, all)`: `all` when Y picked it, `alternative` naming what Y does.
     function show(list, anchor, rect, heading, after, start, alternative) {
+        if (list.length === 0) {
+            Sound.edge();
+            return;
+        }
         items = list;
         title = heading || "";
         note = "";

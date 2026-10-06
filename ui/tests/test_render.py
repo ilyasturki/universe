@@ -1,7 +1,7 @@
 import os
 
 import pytest
-from looks import LOOKS, MENU, Look, call, current_row, invoke, lit_fraction, read, render, settle
+from looks import LOOKS, MENU, Look, call, content_rows, current_row, invoke, lit_fraction, read, render, settle
 from PySide6.QtCore import QObject, Qt
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QTest
@@ -311,6 +311,30 @@ def test_a_second_store_switches_the_install_page_to_its_games(look, api, fake):
     assert "Hades" not in install_titles(look, page)
     sources.pick("epic")
     until(lambda: [r["id"] for r in sources.rows] == ["Min"] and install_titles(look, page) == ["Hades"], "the second store's own")
+
+
+def test_an_installed_game_the_library_lacks_offers_to_add_it_and_an_empty_menu_never_opens(look, api):
+    asylum = "Batman: Arkham Asylum Game of the Year Edition"
+    sources = api.screens.sources
+    page = install_page(look)
+    until(lambda: any(r["title"] == asylum for r in sources.rows))
+    at = next(i for i, r in enumerate(sources.rows) if r["title"] == asylum)
+    menu = look.menu()
+    if look.name == "reprise":
+        row = next(r for r in content_rows(page) if r.get("key") == "game" and r["row"] == at)
+        assert [i["action"] for i in call(page, "gameActions", row)] == ["adopt"]
+        call(menu, "show", [], None, None, "", None, 0, "")
+    elif look.name == "ps5":
+        assert [i["act"] for i in call(page, "actionsFor", sources.rows[at])] == ["adopt"]
+        call(menu, "show", {"items": []}, None)
+    else:
+        invoke(page, "activate", sources.rows[at], at)
+        until(lambda: menu.property("open") is True and read(menu, "choices") == ["Add to Library"])
+        look.press(Qt.Key.Key_Escape)
+        until(lambda: menu.property("open") is False)
+        call(menu, "show", {"choices": []}, None)
+    settle(look.window)
+    assert menu.property("open") is False, "nothing to pick: no menu"
 
 
 def test_the_component_bar_hides_and_the_job_goes_on(look, api, fake):

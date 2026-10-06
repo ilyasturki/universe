@@ -328,7 +328,7 @@ FocusScope {
         if (g.busy || g.partial)
             return g.status;
         if (g.installed)
-            return (g.pending ? "Update available" : "Installed") + (g.sizeText ? " · " + g.sizeText : "");
+            return g.status + (g.sizeText ? " · " + g.sizeText : "");
         if (g.status === "Not owned")
             return "Not owned on " + sourceName;
         return "Owned on " + sourceName + (g.download_size > 0 ? " · " + Format.bytes(g.download_size) : "");
@@ -381,6 +381,12 @@ FocusScope {
                 act: "play",
                 label: "Play",
                 glyph: "play"
+            };
+        if (g.installed && g.game_id === "")
+            return {
+                act: "adopt",
+                label: "Add to Library",
+                glyph: "list-add"
             };
         return null;
     }
@@ -454,6 +460,8 @@ FocusScope {
             askInstall(g, index);
         } else if (id === "resume-download" || id === "update") {
             Sound.play(sources.install(index) !== "" ? "ok" : "edge");
+        } else if (id === "adopt") {
+            Sound.play(sources.adopt(index) !== "" ? "ok" : "edge");
         } else if (id === "cancel") {
             cancel();
         } else if (id === "more") {
@@ -1490,7 +1498,7 @@ FocusScope {
                                 return Format.plural(page.sources.updates.length, "update", "updates") + " from " + page.sourceName;
                             if (l.update !== undefined)
                                 return [l.item.version ? "Version " + l.item.version : "", l.item.date || ""].filter(Boolean).join(" · ");
-                            return l.game ? (page.isLive(l.game) ? page.statusOf(l.game) : l.game.partial ? l.game.status : l.game.pending ? "Update available" : l.game.busy ? l.game.status : "Installed") : "";
+                            return l.game ? (page.isLive(l.game) ? page.statusOf(l.game) : l.game.partial ? l.game.status : l.game.pending ? "Update available" : l.game.status) : "";
                         }
                         loud: lineItem.l.game ? lineItem.l.game.busy || lineItem.l.game.pending : lineItem.l.update !== undefined || lineItem.l.all === true
                         size: lineItem.l.game ? lineItem.l.game.sizeText : ""

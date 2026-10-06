@@ -1393,6 +1393,12 @@ FocusScope {
                 label: "Update",
                 action: "update"
             });
+        if (!row.gameId)
+            out.push({
+                icon: "plus",
+                label: "Add to library",
+                action: "adopt"
+            });
         if (row.gameId && api.allGames.byId(row.gameId))
             out.push({
                 icon: "play",
@@ -1446,6 +1452,8 @@ FocusScope {
             return;
         } else if (action === "resume" || action === "update") {
             sources.install(row.row) !== "" ? Sound.enter() : Sound.edge();
+        } else if (action === "adopt") {
+            sources.adopt(row.row) !== "" ? Sound.enter() : Sound.edge();
         } else if (action === "cancel") {
             sources.cancel() ? Sound.cancel() : Sound.edge();
         } else if (action === "play") {

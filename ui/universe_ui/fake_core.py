@@ -1734,8 +1734,8 @@ class FakeCore:
             game["game_id"] = self._land(source, game)
         return f"Installing {game_id}: done"
 
-    # The core's apply_source_game: the install creates the library game, or brings an archived one back.
-    def _land(self, source, entry):
+    # The core's apply_source_game: the install creates the library game, or brings an archived one back; a scan stamps nothing.
+    def _land(self, source, entry, stamp=True):
         ident = str(entry.get("game_id") or _slug(entry["title"]))
         game = next((g for g in self._data["games"] if g["id"] == ident), None)
         if game is None:
@@ -1751,7 +1751,7 @@ class FakeCore:
                 "media": {"screenshots": []},
             }
             self._data["games"].append(game)
-        if not game.get("added_at") or game.get("removed"):
+        if stamp and (not game.get("added_at") or game.get("removed")):
             game.update({"added_at": _now(), "removed": False, "hidden": False})
         self._write_game(game)
         return ident
@@ -1767,7 +1767,12 @@ class FakeCore:
 
     def scan(self, source, progress=None):
         self._tick(progress, "Scanning", 4)
-        return []
+        found = []
+        for entry in self._data.get("source_library", {}).get(source, []):
+            if entry.get("installed") and entry.get("owned") and not entry.get("game_id"):
+                entry["game_id"] = self._land(source, entry, stamp=False)
+                found.append(entry["game_id"])
+        return found
 
     def media_refresh(self, ident, force, progress=None):
         games = [self._game(ident)] if ident else [g for g in self._data["games"] if not g.get("removed")]

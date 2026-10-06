@@ -671,6 +671,25 @@ def test_sources_browser_uninstall_and_remove(api, fake):
     assert len(said) == 4
 
 
+def test_an_installed_game_the_library_lacks_is_added_by_the_stores_scan(api, fake):
+    asylum = "Batman: Arkham Asylum Game of the Year Edition"
+    browser = api.screens.sources
+    browser.load()
+    settle(browser)
+    said = record(browser.message)
+    at = next(i for i, r in enumerate(browser.rows) if r["title"] == asylum)
+    row = browser.rows[at]
+    assert (row["installed"], row["game_id"], row["status"], row["action"]) == (True, "", "Not in the library", "Add to library")
+    linked = next(i for i, r in enumerate(browser.rows) if r["game_id"] == "dead-cells")
+    assert browser.adopt(linked) == "", "a game the library holds has nothing to add"
+    assert browser.adopt(at) != ""
+    assert browser.adopt(at) == "", "one scan at a time"
+    until(lambda: said[-1:] == [(f"Added {asylum} to the library",)])
+    row = next(r for r in browser.rows if r["title"] == asylum)
+    assert row["game_id"] and api.allGames.byId(row["game_id"]) is not None
+    assert not fake.game(row["game_id"]).get("added_at"), "a scan finds what was there: nothing stamped"
+
+
 def test_path_browser(api, tmp_path):
     (tmp_path / "games" / "Mini Metro").mkdir(parents=True)
     (tmp_path / "games" / "Zeta").mkdir()

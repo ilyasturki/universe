@@ -746,7 +746,11 @@ is missing), for the confirm and a disk strip.
 Sizes: an install's is measured (`sizeKind` `disk`); a game not installed shows its download size
 once known (`download`), and `peek(index)` — call it as the cursor lands on a row — fetches one
 `info` at a time, off the busy flag, and the core remembers it. `install(index)` installs, resumes
-a stopped download (the same call: the source continues over its folder) or updates; while it runs
+a stopped download (the same call: the source continues over its folder) or updates. An installed
+row the library lacks (`game_id` empty, `status` "Not in the library", `action` "Add to library")
+takes `adopt(index)`: the store's `scan` job, which brings in every game of that store installed on
+disk and links the library's own imports of them, then a toast once the reload shows the row linked.
+While an install or update runs
 `job` is `{id, game, title, label, message, done, total, ok, cancelled}`, `done`/`total` in bytes and
 `message` the live line ("Installing X · 42% · 3.4 GB of 8.2 GB"); the rows are rebuilt at its start
 and end only, the busy row's `status` "Installing…" and its `action` `Cancel`. `cancel()` stops it: the job ends
@@ -759,7 +763,7 @@ store's name; A opens the menu of them), an Installing card (running and paused,
 progress under a paused row), an Updates card when some are pending (one row, Update everything,
 `updateAll()`; a game's own Update is in its row's menu), then Installed and Owned, every game with its size in figures of one
 width, the library's age or the store's failure in the card meta; A opens the row's menu (Cancel
-install · Resume · Update · Game settings · Uninstall… · Remove…), Install first asks in a
+install · Resume · Update · Add to library · Game settings · Uninstall… · Remove…), Install first asks in a
 `ConfirmDialog` with the download, the disk and the free space; X refreshes; the cursor on a game
 without a size peeks it. The Switch 2 look's `pages/InstallPage.qml` is two tabs on the bumpers:
 Store, the tiles of what is owned and not installed (a download or a pause painted on the tile's

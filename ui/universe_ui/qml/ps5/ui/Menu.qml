@@ -44,6 +44,10 @@ Modal {
     scrimOpacity: 0.55
 
     function show(spec, done) {
+        if (!spec.items || spec.items.length === 0) {
+            Sound.play("edge");
+            return;
+        }
         title = spec.title || "";
         detailHeights = {};
         items = spec.items || [];

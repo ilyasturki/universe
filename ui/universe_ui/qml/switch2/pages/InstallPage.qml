@@ -238,6 +238,8 @@ FocusScope {
             items.push({ label: "Resume", act: "resume" });
         else if (g.pending)
             items.push({ label: "Update", act: "update" });
+        if (g.installed && !g.game_id)
+            items.push({ label: "Add to Library", act: "adopt" });
         if (inLibrary)
             items.push({ label: "Start", act: "start" }, { label: "Software Information", act: "info" }, { label: "Game Settings", act: "settings" });
         if (g.installed && g.game_id)
@@ -250,6 +252,8 @@ FocusScope {
         shell.menu(title, items, function(a) {
             if (a === "resume" || a === "update") {
                 Sound.play(sources.install(row) !== "" ? "ok" : "edge");
+            } else if (a === "adopt") {
+                Sound.play(sources.adopt(row) !== "" ? "ok" : "edge");
             } else if (a === "start") {
                 shell.launch(api.allGames.byId(gameId));
             } else if (a === "info") {
@@ -726,7 +730,7 @@ FocusScope {
                     readonly property real fraction: !g ? 0 : live ? (page.sources.job.total > 0 ? page.sources.job.done / page.sources.job.total : 0)
                                                      : g.partial && g.disk_size > 0 ? g.partial_bytes / g.disk_size : 0
                     readonly property string meta: !g ? "" : live ? page.sources.job.message.replace(page.sources.job.label + " · ", "")
-                                                   : g.partial ? g.status : g.pending ? "Update available" : g.busy ? g.status : "Installed"
+                                                   : g.partial ? g.status : g.pending ? "Update available" : g.status
 
                     x: page.room
                     y: page.room + page.lineY(index)
