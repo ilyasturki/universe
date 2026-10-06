@@ -43,6 +43,9 @@ def test_runners_list_each_runner_with_its_builds_and_the_tools_last(api, fake):
     assert rows["proton"]["component"] == "ge-proton", "the Proton build in use"
     assert rows["xemu"]["component"] == "xemu" and rows["xemu"]["accent"] is True and rows["xemu"]["size"], "an update waits"
     assert rows["rpcs3"]["accent"] is True and rows["rpcs3"]["size"]
+    assert (rows["wine"]["tag"], rows["wine"]["detail"]) == ("Install 11.18", "11.8 · Nix · Universe can install 11.18 beside it"), (
+        "the build in use, then the newer one Universe offers beside it"
+    )
     assert rows["linux"]["component"] == "" and rows["linux"]["accent"] is False, "nothing to install"
     assert rows["gamescope"]["key"] == "component" and "runner" not in rows["gamescope"], "a tool has no page"
     assert form.indexOf("dolphin") == 2 and form.indexOf("gamescope") == tools["rows"][1] and form.indexOf("nope") == -1

@@ -30,6 +30,10 @@ def build_text(build):
     return f"{build.get('version') or 'unknown version'} · {_origin(build)}"
 
 
+def beside_text(component):
+    return f"Universe can install {_latest(component).get('version')} beside it" if component.get("proposal") == "newer" else ""
+
+
 def _icon(component):
     if component["kind"] in ("emulator", "wine"):
         return runner_logo(component["id"]) or "play"
@@ -60,7 +64,7 @@ def _tag(component, busy):
     if component.get("update"):
         return f"Update {component['update']}"
     if component.get("proposal") == "newer":
-        return f"{_latest(component).get('version')} available"
+        return f"Install {_latest(component).get('version')}"
     if component.get("proposal") == "install":
         return "Needed"
     if component.get("recent"):
@@ -86,7 +90,7 @@ def _detail(component):
     elif in_use:
         parts.append(f"From {_origin(in_use)}.")
         if component.get("proposal") == "newer":
-            parts.append(f"Universe can install {latest.get('version')} beside it and use that one.")
+            parts.append(f"{beside_text(component)} and use that one.")
     elif latest:
         parts.append(f"Not installed: Universe can install {latest.get('version')}.")
     else:

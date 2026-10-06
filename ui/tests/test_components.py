@@ -30,6 +30,7 @@ def test_a_component_row_says_what_to_do_about_it(api, fake):
     xemu, wine, rpcs3, dolphin = (row_of(form, ident) for ident in ("xemu", "wine", "rpcs3", "dolphin"))
     assert (xemu["key"], xemu["component"], xemu["accent"]) == ("component", "xemu", True), "an update waits"
     assert wine["accent"] is True and wine["size"], "a newer build than the system's, with its download's size"
+    assert wine["tag"] == "Install 11.18" and "install 11.18 beside it" in wine["detail"], "a build of its own, not the system's update"
     assert rpcs3["accent"] is True and rpcs3["size"], "a game waits on it"
     assert dolphin["accent"] is False and dolphin["size"] == "", "no build to offer: nothing to do"
     assert form.pending == 4, "the update and the three proposals: Runners' badge"

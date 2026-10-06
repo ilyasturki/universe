@@ -6,7 +6,7 @@ from PySide6.QtCore import Signal, Slot
 
 from ..models import file_url
 from ..qt import QVARIANT, Property
-from .components import NO_BUILD, NO_BUILD_META, build_text, catalogue_warning
+from .components import NO_BUILD, NO_BUILD_META, beside_text, build_text, catalogue_warning
 from .settings import HOMES, RowsForm, _group, _plural, _row, _to_bus, field_row, launch_cards, runner_logo
 
 FOUND = {"path": "Found on PATH"}
@@ -64,12 +64,13 @@ def _state(components, row_of):
     if lead is None:
         return {}
     in_use = next((c["in_use"] for c in ordered if c.get("in_use")), None)
+    beside = next((text for c in ordered if (text := beside_text(c))), "")
     return {
         "tag": lead["tag"],
         "accent": any(c.get("update") or c.get("proposal") for c in ordered),
         "size": lead["size"],
         "progress": max(r["progress"] for r in rows),
-        "detail": build_text(in_use) if in_use else "",
+        "detail": " · ".join(filter(None, [build_text(in_use) if in_use else "", beside])),
         "component": lead["component"],
     }
 

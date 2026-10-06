@@ -1043,7 +1043,8 @@ exists), its name and how many library games run through it (`effective.runner`)
 sorted by that count, then by those games' hours, then by name. The row carries the state of the
 components its page installs — the runner's own (`runner` in the listing: Wine and every emulator),
 or for Proton its builds and umu-run — read from `api.screens.components`: the build in use as
-`detail`, a `tag` for what to do (an update, a newer build than the system's, Needed when a game
+`detail` (and, for a newer build than the system's, that Universe can install it beside it), a `tag`
+for what to do (Update X, Install X for that newer build, Needed when a game
 waits on it, Installing…, Updated) with `accent`, the download's `size`, `progress` while its job
 runs, and `component`, the one the tag is about. The cards: the runners found; "Not installed",
 those Universe can download, a runner a game waits on first; a dimmed "No download" for the others

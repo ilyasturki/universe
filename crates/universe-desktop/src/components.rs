@@ -75,7 +75,7 @@ pub fn tag(c: &Value) -> String {
     let update = text(c, "update");
     match text(c, "proposal").as_str() {
         _ if !update.is_empty() => gettext("Update {}").replace("{}", &update),
-        "newer" => gettext("{} available").replace("{}", &latest(c)),
+        "newer" => gettext("Install {}").replace("{}", &latest(c)),
         "install" => gettext("Needed"),
         _ if !c["recent"].is_null() => gettext("Updated"),
         _ => String::new(),
