@@ -379,7 +379,7 @@ def test_an_install_runs_one_at_a_time_and_x_cancels_it_keeping_its_files(look, 
 
 
 @reprise
-def test_the_reprise_library_leads_with_hearts_and_y_hearts_the_game_under_the_cursor(look, api):
+def test_the_reprise_library_runs_in_homes_order_and_y_hearts_the_game_under_the_cursor(look, api):
     def title():
         game = page.property("currentGame")
         return game.property("title") if game is not None else None
@@ -387,15 +387,17 @@ def test_the_reprise_library_leads_with_hearts_and_y_hearts_the_game_under_the_c
     root = look.root
     root.goToTab(root.property("libraryTab"))
     page = look.page("libraryPage")
-    until(lambda: title() == "Dead Cells", "the hearted games first, by title")
+    until(lambda: title() == "The Technomancer", "the last played first, as on Home")
     look.press(Qt.Key.Key_Right, 2)
-    until(lambda: title() == "Batman: Arkham Origins", "then the rest, by title")
+    until(lambda: title() == "Mini Metro", "a game just added sits among the played by its arrival")
     assert [h["glyph"] for h in read(page, "hints")] == ["A", "Start", "B"]
     look.press(Qt.Key.Key_F)
-    until(lambda: api.allGames.byId("batman-arkham-origins").favorite is True)
-    until(lambda: title() == "Batman: Arkham Origins", "the cursor follows the game to its place among the hearts")
+    until(lambda: api.allGames.byId("mini-metro").favorite is True)
     look.press(Qt.Key.Key_Right)
-    until(lambda: title() == "Dead Cells")
+    until(lambda: title() == "Dead Cells", "a heart leaves the order as it was")
+    look.press(Qt.Key.Key_End)
+    look.press(Qt.Key.Key_Left)
+    until(lambda: title() == "Mirror's Edge", "the never played last")
 
 
 def library(look):

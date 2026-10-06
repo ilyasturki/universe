@@ -532,13 +532,13 @@ These cost real time to discover; they are properties of Qt 6.11 / PySide6 6.11,
 
 - **`QtQml.Models.SortFilterProxyModel` cannot carry the theme's filters.** It has no `get()`, no
   `ExpressionFilter`, and its `FunctionFilter` segfaults. Every proxy the theme needs is instead a
-  `QSortFilterProxyModel` subclass. `SortedGames`, `RecentGames`, `LimitedGames`,
-  `FavouritesFirstGames` (Reprise's Library: hearted first, then by title), `SearchGames` and
-  `LibraryGames` are exported to QML as `import Universe`;
+  `QSortFilterProxyModel` subclass. `SortedGames`, `RecentGames`, `RecentFirstGames` (Reprise's
+  Library: every game in `RecentGames`' order, the never played last), `LimitedGames`, `SearchGames`
+  and `LibraryGames` are exported to QML as `import Universe`;
   `CollectionGames` is instantiated Python-side, one per collection. `get(i)` returns the `Game`;
   `sourceRow(i)` stands in for `mapToSource(i)`, whose C++ name is virtual and breaks sorting if
   shadowed. `RecentGames` admits a game played or added (`added_at`) and orders by the later of the
-  two (`recentAt`). `HeadedGames` (a list model, not a proxy) puts `head` — `api.screens.sources.
+  two (`recentAt`). Every proxy breaks a tie by `sortTitle`, A to Z whichever way it sorts. `HeadedGames` (a list model, not a proxy) puts `head` — `api.screens.sources.
   arriving`, the `ArrivingGame` of a store install under way, `installing` true and `progress` 0–1 —
   before `source`'s rows; the arrival stays through the job's end until the library reload brings
   the real game, so the first tile turns into it in place.
@@ -1128,6 +1128,7 @@ words, as the Library's own add tile) adds one instead of opening the Library; t
 HOME row's disc does the same and All Software says so under its tile. Reprise's Library is no tab
 of its own: `theme.qml` keeps it past the three the bar shows (`libraryTab`), Home's rail tile opens it
 (`libraryRequested`), the bar lights Home while it is up, LB / RB step over it and B returns to Home.
+Its grid runs in Home's order (`RecentFirstGames`).
 
 Both open `api.screens.add` — Reprise as `pages/AddGamePage.qml` over the tab (`openSub` with
 `{ add: true }`), the Switch 2 look as `switch2/pages/AddGamePage.qml` on its stack. `load()`

@@ -396,7 +396,12 @@ class GameProxy(QSortFilterProxyModel):
         b = self.sourceModel().data(right, MODEL_DATA_ROLE)
         if a is None or b is None:
             return False
-        return self.sortKey(a) < self.sortKey(b)
+        key_a, key_b = self.sortKey(a), self.sortKey(b)
+        if key_a != key_b:
+            return key_a < key_b
+        # Ties read A to Z whichever way the key runs: a descending sort puts the greater first.
+        title_a, title_b = a.sortTitle.casefold(), b.sortTitle.casefold()
+        return title_a > title_b if self._descending else title_a < title_b
 
     def acceptsGame(self, game, source_row):
         return True
@@ -428,8 +433,7 @@ class SortedGames(GameProxy):
     pass
 
 
-@QmlElement
-class RecentGames(GameProxy):
+class RecentOrderGames(GameProxy):
     playingIdChanged = Signal()
 
     def __init__(self, parent=None):
@@ -446,13 +450,21 @@ class RecentGames(GameProxy):
         self.playingIdChanged.emit()
         self.invalidate()
 
-    def acceptsGame(self, game, source_row):
-        return game.playCount > 0 or game.addedAt is not None or game.id == self._playing
-
     def sortKey(self, game):
         return (2 if game.id == self._playing else 0, *super().sortKey(game))
 
     playingId = Property(str, lambda self: self._playing, _set_playing, notify=playingIdChanged)
+
+
+@QmlElement
+class RecentGames(RecentOrderGames):
+    def acceptsGame(self, game, source_row):
+        return game.playCount > 0 or game.addedAt is not None or game.id == self._playing
+
+
+@QmlElement
+class RecentFirstGames(RecentOrderGames):
+    pass
 
 
 @QmlElement
@@ -474,16 +486,6 @@ class LimitedGames(GameProxy):
         return source_row < self._limit
 
     limit = Property(int, lambda self: self._limit, _set_limit, notify=limitChanged)
-
-
-@QmlElement
-class FavouritesFirstGames(GameProxy):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._sort_name = "sortTitle"
-
-    def sortKey(self, game):
-        return (0 if game.favorite else 1, *super().sortKey(game))
 
 
 @QmlElement

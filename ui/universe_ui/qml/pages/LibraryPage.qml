@@ -67,9 +67,10 @@ FocusScope {
         Sound.favourite(currentGame.favorite);
     }
 
-    FavouritesFirstGames {
+    RecentFirstGames {
         id: shelf
         sourceModel: api.allGames
+        playingId: page.playingId
     }
 
     GameAnchor {

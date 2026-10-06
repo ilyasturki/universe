@@ -2,11 +2,11 @@ from PySide6.QtCore import QDateTime, QUrl
 from uitest import until
 
 from universe_ui.models import (
-    FavouritesFirstGames,
     Game,
     GameAnchor,
     LibraryGames,
     LimitedGames,
+    RecentFirstGames,
     RecentGames,
     SearchGames,
     SortedGames,
@@ -142,7 +142,7 @@ def test_sorted_and_limited(api):
     by_release.sortRoleName = "releaseYear"
     by_release.descending = True
     assert by_release.get(0).title == "Control"
-    assert set(titles(by_release)[-2:]) == {"Mirror's Edge", "LEGO Batman: The Videogame"}
+    assert titles(by_release)[-2:] == ["LEGO Batman: The Videogame", "Mirror's Edge"], "a tie reads A to Z"
 
     newest = LimitedGames()
     newest.setSourceModel(by_release)
@@ -152,15 +152,19 @@ def test_sorted_and_limited(api):
     assert newest.count == 1
 
 
-def test_favourites_first_then_titles_and_a_heart_writes_through(api, fake):
-    shelf = FavouritesFirstGames()
+def test_the_library_holds_every_game_in_homes_order_the_never_played_last_by_title(api, fake):
+    recent = RecentGames()
+    recent.setSourceModel(api.allGames)
+    shelf = RecentFirstGames()
     shelf.setSourceModel(api.allGames)
-    assert titles(shelf)[:2] == ["Dead Cells", "The Technomancer"]
-    rest = titles(shelf)[2:]
-    assert rest == sorted(rest, key=lambda t: sort_title(t).casefold()) and "Control" in rest
+    assert shelf.count == api.allGames.count
+    assert titles(shelf)[: recent.count] == titles(recent)
+    assert titles(shelf)[recent.count :] == ["Mirror's Edge"]
+    shelf.playingId = "mirrors-edge"
+    assert titles(shelf)[0] == "Mirror's Edge"
     api.allGames.byId("control").favorite = True
     assert fake.game("control")["favorite"] is True
-    assert titles(shelf)[:3] == ["Control", "Dead Cells", "The Technomancer"], "a heart moves the game up at once"
+    assert titles(shelf)[: recent.count + 1] == ["Mirror's Edge", *titles(recent)], "a heart leaves the order as it was"
 
 
 def test_search(api):
