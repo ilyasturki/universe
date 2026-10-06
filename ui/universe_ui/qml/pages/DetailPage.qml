@@ -281,6 +281,12 @@ FocusScope {
                 y: page.heroHeight + Theme.dp(44)
                 spacing: Theme.dp(48)
 
+                StatRow {
+                    objectName: "stats"
+                    spacing: Theme.dp(74)
+                    game: page.game
+                }
+
                 Text {
                     id: about
 

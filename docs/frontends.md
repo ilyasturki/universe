@@ -771,7 +771,8 @@ row and the Options menu, with the same menu.
 
 ## Detail, recordings and journal
 
-The detail page is the game's logo over its background, Play and the heart, then the
+The detail page is the game's logo over its background, Play and the heart, then the play time,
+when it was last played and the sessions (`ui/StatRow.qml`, each left out while zero), the
 description and the store's screenshots (`assets.screenshotList`), nothing else. Start is the game's
 menu: its recordings, journal and screenshots are under Media ›, the rest under Manage ›.
 

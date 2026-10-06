@@ -400,6 +400,23 @@ def test_the_reprise_library_runs_in_homes_order_and_y_hearts_the_game_under_the
     until(lambda: title() == "Mirror's Edge", "the never played last")
 
 
+@reprise
+def test_the_reprise_detail_page_shows_the_play_time_once_a_game_is_played(look, api):
+    def stats():
+        page = until(lambda: root.findChild(QObject, "detailPage"))
+        row = until(lambda: descendant(page, "stats"))
+        cells = [text.property("text") for column in row.childItems() for text in column.childItems()]
+        return dict(zip(cells[::2], cells[1::2], strict=True)) if row.isVisible() else {}
+
+    root = look.root
+    invoke(root, "openDetail", api.allGames.byId("the-technomancer"))
+    shown = until(lambda: len(stats()) == 3 and stats())
+    assert (shown["PLAY TIME"], shown["SESSIONS"]) == ("41.5 h", "23") and shown["LAST PLAYED"] != "Never played"
+    invoke(root, "closeDetail")
+    invoke(root, "openDetail", api.allGames.byId("mirrors-edge"))
+    until(lambda: stats() == {}, "never played: no row")
+
+
 def library(look):
     if look.stacked:
         return look.open({"switch2": "pages/AllSoftwarePage.qml", "ps5": "pages/LibraryPage.qml"}[look.name])
