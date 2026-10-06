@@ -52,6 +52,7 @@ Item {
 
         Text {
             id: percent
+            objectName: "osdPercent"
 
             anchors.right: parent.right
             anchors.rightMargin: 28 * root.unit

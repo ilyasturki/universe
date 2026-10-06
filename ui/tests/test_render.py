@@ -289,16 +289,25 @@ def test_each_look_draws_its_volume_level_over_the_game_and_keeps_it_under_the_m
     until(lambda: lit_fraction(overlay.grabWindow().copy(band), "#000000") > 0.8, "the level's card drawn where it rests")
     if where := os.environ.get("UNIVERSE_SHOT_DIR"):
         overlay.grabWindow().save(os.path.join(where, f"overlay-osd-{look.name}.png"))
-    fill, glyph = descendant(card, "osdFill"), descendant(card, "osdGlyph")
+    fill, glyph, percent = descendant(card, "osdFill"), descendant(card, "osdGlyph"), descendant(card, "osdPercent")
 
     def at_level():
         return abs(fill.property("width") - fill.parentItem().width() * 0.6) < 1
 
+    def shade():
+        return percent.property("color"), percent.property("opacity")
+
     until(at_level, "the bar fills to the level")
     assert glyph.property("kind") != "mute"
+    full = shade()
     api.screens.controller._on_event({"event": "volume", "percent": 60, "muted": True, "output": "Speakers"})
     until(lambda: glyph.property("kind") == "mute" and fill.property("opacity") < 1, "the mute glyph, the level dimmed")
+    until(lambda: shade() != full, "the number dimmed with the bar")
     assert at_level(), "the level stays under the mute"
+    assert "60" in percent.property("text"), "the number is the level's, not a word for the mute"
+    api.screens.controller._on_event({"event": "volume", "percent": 0, "muted": False, "output": "Speakers"})
+    until(lambda: fill.property("width") < 1 and fill.property("opacity") == 1 and shade() == full, "nothing left, at full brightness")
+    assert glyph.property("kind") == "mute", "an empty level shows the mute glyph without being a mute"
     assert api.home.osd
     overlay.close()
 
