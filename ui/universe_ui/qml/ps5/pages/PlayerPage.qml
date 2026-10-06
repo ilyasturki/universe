@@ -225,7 +225,7 @@ FocusScope {
         if (arrow) {
             if (!event.isAutoRepeat)
                 Sound.play("tick");
-            scrub.seekBy(event.key === Qt.Key_Left ? -scrub.step : scrub.step);
+            scrub.stepBy(event.key === Qt.Key_Left ? -1 : 1, event.isAutoRepeat);
         } else if (api.keys.isAccept(event)) {
             togglePlay();
         } else if (api.keys.isCancel(event)) {

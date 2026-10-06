@@ -15,6 +15,11 @@ QtObject {
     // ms per second at full tilt: a dozen seconds across the recording, never under a minute a second.
     readonly property real speed: Math.max(60000, duration / 12)
     readonly property real step: 10000
+    // Held, a scrub doubles its pace each second, the stick by its tilt squared, up to `maxBoost` times.
+    readonly property real maxBoost: 8
+    property real doublings: 0
+    property real stickSign: 0
+    property real stepSince: 0
 
     signal woke
 
@@ -32,6 +37,17 @@ QtObject {
         begin();
         scrubPos = Math.max(0, Math.min(duration, scrubPos + ms));
         woke();
+    }
+
+    function boost(doublings) {
+        return Math.min(maxBoost, Math.pow(2, doublings));
+    }
+
+    function stepBy(direction, held) {
+        var now = Date.now();
+        if (!held)
+            stepSince = now;
+        seekBy(direction * step * boost((now - stepSince) / 1000));
     }
 
     // A click on the bar: straight to that point.
@@ -72,6 +88,8 @@ QtObject {
         running: scrub.active && scrub.stickX !== 0 && scrub.duration > 0
         onRunningChanged: {
             if (running) {
+                scrub.doublings = 0;
+                scrub.stickSign = 0;
                 scrub.commitTimer.stop();
                 scrub.begin();
                 scrub.woke();
@@ -81,7 +99,12 @@ QtObject {
         }
         onTriggered: {
             var x = scrub.stickX;
-            var v = (0.12 + 0.88 * x * x) * scrub.speed;
+            var sign = x < 0 ? -1 : 1;
+            if (sign !== scrub.stickSign)
+                scrub.doublings = 0;
+            scrub.stickSign = sign;
+            scrub.doublings += x * x * interval / 1000;
+            var v = (0.12 + 0.88 * x * x) * scrub.speed * scrub.boost(scrub.doublings);
             scrub.scrubPos = Math.max(0, Math.min(scrub.duration, scrub.scrubPos + (x < 0 ? -1 : 1) * v * interval / 1000));
         }
     }

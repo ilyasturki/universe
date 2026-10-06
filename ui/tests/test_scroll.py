@@ -1,4 +1,5 @@
 import pytest
+from looks import invoke
 from PySide6.QtCore import Property, QCoreApplication, QEvent, QObject, QUrl, Signal
 from PySide6.QtQuick import QQuickView
 from uitest import pump, until
@@ -31,6 +32,30 @@ Item {
     }
 }
 """
+
+SCRUB = """
+import QtQuick
+import "UI_DIR"
+
+Item {
+    property alias pos: scrub.scrubPos
+
+    QtObject {
+        id: player
+        property real position: 0
+        property int playbackState: 0
+    }
+
+    Scrubber {
+        id: scrub
+        objectName: "scrub"
+        player: player
+        duration: 3600000
+        active: true
+    }
+}
+"""
+
 
 class Pad(QObject):
     changed = Signal()
@@ -114,3 +139,25 @@ def test_a_cursor_moved_with_the_model_lands_at_once(load):
     pump(20)
     assert 0 <= shown(root, 50) <= 500, "placed in the same frame, no slide across fifty rows"
 
+
+def test_a_held_d_pad_scrubs_further_the_longer_it_is_held(load):
+    root, _ = load(SCRUB)
+    scrub = root.findChild(QObject, "scrub")
+    invoke(scrub, "stepBy", 1, False)
+    assert root.property("pos") == 10000
+    pump(500)
+    invoke(scrub, "stepBy", 1, True)
+    assert root.property("pos") - 10000 > 13000, "half a second in, the step has grown by about 2^0.5"
+    invoke(scrub, "stepBy", -1, False)
+    assert root.property("pos") - 10000 > 13000 - 10000 - 1, "a fresh press starts again at one step"
+
+
+def test_the_stick_held_at_full_tilt_scrubs_faster_and_faster(load):
+    root, api = load(SCRUB)
+    api.pad.set_right_x(1.0)
+    pump(300)
+    first = root.property("pos")
+    pump(300)
+    second = root.property("pos") - first
+    api.pad.set_right_x(0.0)
+    assert second > first * 1.1, f"{first:.0f} ms in the first 300 ms, {second:.0f} in the next: no faster"

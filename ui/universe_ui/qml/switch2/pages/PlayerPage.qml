@@ -193,7 +193,7 @@ FocusScope {
             event.accepted = true;
             if (!event.isAutoRepeat)
                 Sound.play("tick");
-            scrub.seekBy(event.key === Qt.Key_Left ? -scrub.step : scrub.step);
+            scrub.stepBy(event.key === Qt.Key_Left ? -1 : 1, event.isAutoRepeat);
         } else if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
             event.accepted = true;
             wake();

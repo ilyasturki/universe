@@ -602,7 +602,7 @@ These cost real time to discover; they are properties of Qt 6.11 / PySide6 6.11,
 | Guide | — | HOME, through the watcher (`api.home`), not the mapper |
 | d-pad, left stick | arrows | navigation |
 | right stick up / down | `[` / `]` | a screenful up or down, same column, repeating like the arrows: the library and software grids, the settings rows and cards, the media grids and lists |
-| right stick left / right | `api.pad.rightX` | analog, past a 0.18 deadzone: scrubs the recording player |
+| right stick left / right | `api.pad.rightX` | analog, past a 0.18 deadzone: scrubs the recording player, faster the further it tilts and, held, faster still — the pace doubles each second (by the tilt squared) up to eight times (`ui/Scrubber.qml`); a held ◀ ▶ grows its 10 s step the same way |
 
 `api.pad.muted` (set by `Api` while the controller section's live view is on) drops the presses;
 releases still land, so nothing stays held across it. The hint bar names buttons the Xbox way

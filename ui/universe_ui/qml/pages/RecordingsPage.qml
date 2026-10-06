@@ -379,7 +379,7 @@ FocusScope {
             if (page.videoFocused) {
                 if (!event.isAutoRepeat)
                     Sound.tick();
-                scrub.seekBy(event.key === Qt.Key_Left ? -scrub.step : scrub.step);
+                scrub.stepBy(event.key === Qt.Key_Left ? -1 : 1, event.isAutoRepeat);
             } else if (event.key === Qt.Key_Right) {
                 focusVideo(false);
             } else {
