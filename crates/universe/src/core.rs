@@ -117,16 +117,12 @@ fn load_source_caches(sources: &[Source]) -> BTreeMap<String, Vec<serde_json::Ma
     caches
 }
 
-fn runtime_of(c: &Current, r: &Resolved, launch: &crate::config::LaunchDefaults) -> Runtime {
-    crate::session::read_marker()
-        .filter(|m| m.current.session_id == c.session_id)
-        .and_then(|m| m.runtime)
-        .unwrap_or_else(|| Runtime::at_launch(&r.effective, c.gamescope_pid != 0, launch))
+fn runtime_of(c: &Current, seed: Runtime) -> Runtime {
+    crate::session::read_marker().filter(|m| m.current.session_id == c.session_id).and_then(|m| m.runtime).unwrap_or(seed)
 }
 
-fn change_runtime(c: &Current, r: &Resolved, launch: &crate::config::LaunchDefaults, f: impl FnOnce(&mut Runtime)) -> Result<Runtime> {
-    crate::session::change_runtime(&c.session_id, || Runtime::at_launch(&r.effective, c.gamescope_pid != 0, launch), f)?
-        .ok_or_else(|| Error::NotFound("no session running".into()))
+fn change_runtime(c: &Current, seed: Runtime, f: impl FnOnce(&mut Runtime)) -> Result<Runtime> {
+    crate::session::change_runtime(&c.session_id, || seed, f)?.ok_or_else(|| Error::NotFound("no session running".into()))
 }
 
 pub struct Core {
@@ -753,10 +749,16 @@ impl Core {
         )?)
     }
 
+    // Steam's gamescope never held `[launch]`'s filter.
+    async fn launch_runtime(&self, c: &Current, r: &Resolved) -> Runtime {
+        Runtime::at_launch(&r.effective, c.gamescope_pid != 0 && !self.under_steam(), &self.config.read().await.launch)
+    }
+
     /// The running game's HUD, frame rate limit and filter as HOME left them, its settings untouched.
     pub async fn runtime(&self) -> Result<Runtime> {
         let Some(c) = self.current().await else { return Err(Error::NotFound("no session running".into())) };
-        Ok(runtime_of(&c, &self.get(&c.id).await?, &self.config.read().await.launch))
+        let r = self.get(&c.id).await?;
+        Ok(runtime_of(&c, self.launch_runtime(&c, &r).await))
     }
 
     /// MangoHud rereads its conf on inotify's `IN_MODIFY`, and a frozen game's on the thaw: the write is the reload.
@@ -770,8 +772,7 @@ impl Core {
         let _changing = self.runtime_changes.lock().await;
         let Some(c) = self.current().await else { return Err(Error::NotFound("no session running".into())) };
         let r = self.get(&c.id).await?;
-        let launch = self.config.read().await.launch.clone();
-        let rt = change_runtime(&c, &r, &launch, |rt| rt.fps_limit = value.to_owned())?;
+        let rt = change_runtime(&c, self.launch_runtime(&c, &r).await, |rt| rt.fps_limit = value.to_owned())?;
         self.write_layer_conf(&c, &r, &rt).await
     }
 
@@ -799,8 +800,7 @@ impl Core {
             return Err(Error::Unavailable("MangoHud is not installed: nothing draws the HUD".into()));
         }
         let mut was = false;
-        let launch = self.config.read().await.launch.clone();
-        let rt = change_runtime(&c, &r, &launch, |rt| {
+        let rt = change_runtime(&c, self.launch_runtime(&c, &r).await, |rt| {
             was = rt.mangohud;
             rt.mangohud = on.unwrap_or(!was);
         })?;
@@ -823,8 +823,8 @@ impl Core {
         self.nest_or()?.set_filter(filter, sharpness)?;
         if let Some(c) = self.current().await {
             let r = self.get(&c.id).await?;
-            let launch = self.config.read().await.launch.clone();
-            crate::session::change_filter(&c.session_id, || Runtime::at_launch(&r.effective, c.gamescope_pid != 0, &launch), filter, sharpness)?;
+            let seed = self.launch_runtime(&c, &r).await;
+            crate::session::change_filter(&c.session_id, || seed, filter, sharpness)?;
         }
         Ok(())
     }

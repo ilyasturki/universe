@@ -65,7 +65,7 @@ impl Runtime {
         }
     }
 
-    /// A gamescope already running holds `[launch]`'s filter: a game's own reaches only one started for it.
+    /// The launcher's gamescope holds `[launch]`'s filter: a game's own reaches only one started for it.
     pub fn at_launch(e: &crate::library::Effective, nested: bool, launch: &crate::config::LaunchDefaults) -> Runtime {
         match nested {
             true => Runtime { gamescope_filter: launch.gamescope_filter.clone(), gamescope_sharpness: launch.gamescope_sharpness, ..Runtime::of(e) },
@@ -819,11 +819,9 @@ pub(crate) mod tests {
         assert_eq!(core.runtime().await.unwrap().gamescope_filter, "", "the next launch starts from the settings");
     }
 
-    #[tokio::test]
-    async fn the_launchers_gamescope_reads_as_the_settings_filter_whatever_the_games_own() {
-        let _sb = sandbox();
-        let (core, _) = open().await;
-        let mut e = core.get("sample").await.unwrap().effective;
+    #[test]
+    fn the_launchers_gamescope_reads_as_the_settings_filter_whatever_the_games_own() {
+        let mut e = crate::library::Effective::default();
         e.gamescope_fields.filter = "fsr".into();
         e.gamescope_fields.sharpness = Some(3);
         let launch = crate::config::LaunchDefaults { gamescope_filter: "nis".into(), gamescope_sharpness: Some(7), ..Default::default() };
