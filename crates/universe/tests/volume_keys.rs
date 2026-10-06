@@ -1,5 +1,4 @@
-//! The controller watcher's volume macros against a private PipeWire: two null sinks and no WirePlumber, whose part
-//! here (which sink is the default) the test plays by writing the `default` metadata wpctl reads.
+//! The controller watcher's volume macros on a private PipeWire with two null sinks; the test plays WirePlumber's part.
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::process::{Child, ChildStdin, Command, Stdio};
