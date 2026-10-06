@@ -483,11 +483,15 @@
           ++ [
             corePy
             ps.pytest-qt
+            ps.python-dbusmock
           ];
         runtime = qtRuntime ++ [
           pkgs.systemd
           pkgs.ffmpeg
+          pkgs.dbus
         ];
+        # The first run's network test runs the real `universe network watch` against a mocked NetworkManager.
+        env.UNIVERSE_BIN = lib.getExe core;
       };
       pytestModules = pytestOf {
         name = "universe-pytest-modules";
@@ -601,6 +605,7 @@
                 ps.setuptools
                 ps.pytest-qt
                 ps.pytest-xdist
+                ps.python-dbusmock
               ]
             ))
             SDL2
