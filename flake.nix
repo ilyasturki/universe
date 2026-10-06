@@ -447,13 +447,17 @@
           tests ? dirs,
           py ? (ps: [ ]),
           runtime ? [ ],
+          env ? { },
         }:
         pkgs.stdenvNoCC.mkDerivation {
           inherit name;
           src = pySrc dirs;
-          env = checkEnv // {
-            UNIVERSE_TEST_BUDGET_S = "0";
-          };
+          env =
+            checkEnv
+            // {
+              UNIVERSE_TEST_BUDGET_S = "0";
+            }
+            // env;
           dontWrapQtApps = true;
           nativeBuildInputs = [ (pyEnv py) ] ++ runtime;
           postPatch = "patchShebangs .";
@@ -497,6 +501,8 @@
           "extension"
         ];
         runtime = moduleRuntime;
+        # The controls hook's launch test reads the game and its settings off the real core.
+        env.UNIVERSE_BIN = lib.getExe core;
       };
       pytestSources = pytestOf {
         name = "universe-pytest-sources";
