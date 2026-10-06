@@ -1,4 +1,5 @@
 import QtQuick
+import Qt5Compat.GraphicalEffects
 import "../core"
 import "../sound"
 
@@ -18,6 +19,10 @@ GridView {
     readonly property int cursor: addSelected ? count : currentIndex
     // Room inside the clip for the focused cover's ring and its 5% growth.
     readonly property real inset: Theme.dp(12)
+    // The rows past an edge fade out over this much instead of ending on the clip's straight cut.
+    readonly property real edgeFade: Theme.dp(80)
+    readonly property real hiddenAbove: Math.max(0, contentY - originY + topMargin)
+    readonly property real hiddenBelow: Math.max(0, originY + contentHeight + bottomMargin - contentY - height)
 
     cellHeight: coverWidth * 1.5 + gap
     topMargin: inset
@@ -30,6 +35,8 @@ GridView {
     highlightFollowsCurrentItem: false
     clip: true
     cacheBuffer: cellHeight * 2
+    layer.enabled: !Theme.software && contentHeight + topMargin + bottomMargin > height
+    layer.effect: Theme.software ? null : fadeEffect
 
     readonly property int lastRow: cells > 0 ? Math.floor((cells - 1) / columns) : 0
     readonly property int visibleRows: cellHeight > 0 ? Math.max(1, Math.floor(height / cellHeight)) : 1
@@ -38,12 +45,16 @@ GridView {
         // A Flickable whose content fits rests at -topMargin, not 0.
         if (contentHeight + topMargin + bottomMargin <= height)
             return -topMargin;
-        var rowTop = Math.floor(index / columns) * cellHeight;
+        var row = Math.floor(index / columns);
+        var rowTop = row * cellHeight;
+        // A row with more past it keeps its cover out of the fade.
+        var above = row > 0 ? edgeFade : inset;
+        var below = row < lastRow ? edgeFade : inset;
         var target = contentY;
-        if (rowTop - inset < contentY)
-            target = rowTop - inset;
-        else if (rowTop + cellHeight + inset > contentY + height)
-            target = rowTop + cellHeight + inset - height;
+        if (rowTop - above < contentY)
+            target = rowTop - above;
+        else if (rowTop + cellHeight + below > contentY + height)
+            target = rowTop + cellHeight + below - height;
         var maxY = contentHeight - height + bottomMargin;
         return Math.max(-topMargin, Math.min(target, maxY));
     }
@@ -147,6 +158,41 @@ GridView {
 
     Wheel {
         id: wheel
+    }
+
+    readonly property Component fadeEffect: Component {
+        OpacityMask {
+            maskSource: fadeMask
+        }
+    }
+
+    // A GridView's own child stays on the view: the mask holds still while the rows scroll.
+    Rectangle {
+        id: fadeMask
+
+        readonly property real stop: grid.height > 0 ? Math.min(0.5, grid.edgeFade / grid.height) : 0
+
+        width: grid.width
+        height: grid.height
+        visible: false
+        gradient: Gradient {
+            GradientStop {
+                position: 0.0
+                color: Qt.rgba(1, 1, 1, 1 - Math.min(1, grid.hiddenAbove / grid.edgeFade))
+            }
+            GradientStop {
+                position: fadeMask.stop
+                color: "white"
+            }
+            GradientStop {
+                position: 1 - fadeMask.stop
+                color: "white"
+            }
+            GradientStop {
+                position: 1.0
+                color: Qt.rgba(1, 1, 1, 1 - Math.min(1, grid.hiddenBelow / grid.edgeFade))
+            }
+        }
     }
 
     // Room for the add tile, drawn outside the delegates, when it starts a row.

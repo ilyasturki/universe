@@ -1128,7 +1128,8 @@ words, as the Library's own add tile) adds one instead of opening the Library; t
 HOME row's disc does the same and All Software says so under its tile. Reprise's Library is no tab
 of its own: `theme.qml` keeps it past the three the bar shows (`libraryTab`), Home's rail tile opens it
 (`libraryRequested`), the bar lights Home while it is up, LB / RB step over it and B returns to Home.
-Its grid runs in Home's order (`RecentFirstGames`).
+Its grid runs in Home's order (`RecentFirstGames`) and fades the rows past either edge over 80 px
+rather than cutting them at the hints; the focused row scrolls clear of the fade.
 
 Both open `api.screens.add` — Reprise as `pages/AddGamePage.qml` over the tab (`openSub` with
 `{ add: true }`), the Switch 2 look as `switch2/pages/AddGamePage.qml` on its stack. `load()`
