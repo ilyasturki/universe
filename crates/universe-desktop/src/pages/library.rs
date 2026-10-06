@@ -199,6 +199,8 @@ impl LibraryPage {
             page.refilter();
             page.resort();
         });
+        imp.loaded.set(library.is_loaded());
+        self.update_state();
     }
 
     fn set_compact(&self, compact: bool) {

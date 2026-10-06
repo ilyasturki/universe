@@ -362,6 +362,7 @@ impl Window {
             win.upgrade().inspect(|win| win.session_changed());
             None
         });
+        self.session_changed();
         let win = self.downgrade();
         app.connect_changed(move |event| {
             if let (Some(win), universe::changes::Event::Library(ids)) = (win.upgrade(), event) {

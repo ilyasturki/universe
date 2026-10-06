@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeSet, HashMap};
 use std::path::PathBuf;
 
@@ -14,11 +14,12 @@ pub struct Library {
     pub store: gio::ListStore,
     index: RefCell<HashMap<String, GameObject>>,
     listeners: RefCell<Vec<Box<dyn Fn()>>>,
+    loaded: Cell<bool>,
 }
 
 impl Default for Library {
     fn default() -> Library {
-        Library { store: gio::ListStore::new::<GameObject>(), index: RefCell::default(), listeners: RefCell::default() }
+        Library { store: gio::ListStore::new::<GameObject>(), index: RefCell::default(), listeners: RefCell::default(), loaded: Cell::new(false) }
     }
 }
 
@@ -39,6 +40,10 @@ impl Library {
 
     pub fn is_empty(&self) -> bool {
         self.index.borrow().is_empty()
+    }
+
+    pub fn is_loaded(&self) -> bool {
+        self.loaded.get()
     }
 
     /// Called after every batch: a filter or a sorter reads the games' rows, not their properties.
@@ -95,6 +100,7 @@ impl Library {
         if !added.is_empty() {
             self.store.splice(self.store.n_items(), 0, &added);
         }
+        self.loaded.set(true);
         for f in self.listeners.borrow().iter() {
             f();
         }
