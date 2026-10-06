@@ -64,6 +64,14 @@ impl Runtime {
             gamescope_sharpness: e.gamescope_fields.sharpness,
         }
     }
+
+    /// A gamescope already running holds `[launch]`'s filter: a game's own reaches only one started for it.
+    pub fn at_launch(e: &crate::library::Effective, nested: bool, launch: &crate::config::LaunchDefaults) -> Runtime {
+        match nested {
+            true => Runtime { gamescope_filter: launch.gamescope_filter.clone(), gamescope_sharpness: launch.gamescope_sharpness, ..Runtime::of(e) },
+            false => Runtime::of(e),
+        }
+    }
 }
 
 /// What `launch` began, in begin order; undone in reverse.
@@ -286,7 +294,10 @@ impl Core {
             steam.effective.fps_limit = "none".into();
             (launcher::plan(&steam, &cfg, &extra_env, mode, splash.as_deref(), true, true)?, Runtime::of(&steam.effective))
         } else {
-            (launcher::plan(&r, &cfg, &extra_env, mode, splash.as_deref(), gamescope_pid != 0, launcher::mangoapp_installed())?, Runtime::of(&r.effective))
+            (
+                launcher::plan(&r, &cfg, &extra_env, mode, splash.as_deref(), gamescope_pid != 0, launcher::mangoapp_installed())?,
+                Runtime::at_launch(&r.effective, gamescope_pid != 0, &cfg.launch),
+            )
         };
         for (path, text) in plan.mangohud_conf.iter().chain(&plan.mangoapp_conf) {
             std::fs::write(path, text)?;
@@ -806,6 +817,19 @@ pub(crate) mod tests {
         assert!(read_marker().is_none());
         core.launch("sample", "", "").await.unwrap();
         assert_eq!(core.runtime().await.unwrap().gamescope_filter, "", "the next launch starts from the settings");
+    }
+
+    #[tokio::test]
+    async fn the_launchers_gamescope_reads_as_the_settings_filter_whatever_the_games_own() {
+        let _sb = sandbox();
+        let (core, _) = open().await;
+        let mut e = core.get("sample").await.unwrap().effective;
+        e.gamescope_fields.filter = "fsr".into();
+        e.gamescope_fields.sharpness = Some(3);
+        let launch = crate::config::LaunchDefaults { gamescope_filter: "nis".into(), gamescope_sharpness: Some(7), ..Default::default() };
+        let filter = |rt: Runtime| (rt.gamescope_filter, rt.gamescope_sharpness);
+        assert_eq!(filter(Runtime::at_launch(&e, true, &launch)), ("nis".into(), Some(7)), "what the running gamescope holds");
+        assert_eq!(filter(Runtime::at_launch(&e, false, &launch)), ("fsr".into(), Some(3)), "a gamescope of the game's own starts on its own");
     }
 
     #[test]

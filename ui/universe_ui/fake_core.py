@@ -1250,11 +1250,12 @@ class FakeCore:
             self._session_started = time.monotonic()
             self._stopped = False
             effective = self._resolved(game)["effective"]
-            sharpness = effective.get("gamescope_sharpness")
+            filtered = self._config["launch"] if self.nested() else effective
+            sharpness = filtered.get("gamescope_sharpness")
             self._runtime = {
                 "mangohud": bool(effective.get("mangohud")),
                 "fps_limit": str(effective.get("fps_limit") or ""),
-                "gamescope_filter": str(effective.get("gamescope_filter") or ""),
+                "gamescope_filter": str(filtered.get("gamescope_filter") or ""),
                 "gamescope_sharpness": None if sharpness in (None, "") else int(sharpness),
             }
             own = {k: v for k, v in (game.get("system") or {}).items() if v}
