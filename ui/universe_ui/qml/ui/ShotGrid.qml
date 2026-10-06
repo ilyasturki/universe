@@ -55,16 +55,22 @@ Item {
         index = Sound.stepped(index, d, ordered.length);
     }
 
-    // False at the edge: the caller decides what lies past it.
-    function stepLine(d) {
+    // False at the edge: the caller decides what lies past it. `count` lines at most, stopping at the last one.
+    function stepLine(d, count) {
         var l = lineOf(index);
         if (l < 0)
             return false;
         var col = index - lines[l].first;
-        var n = l + d;
-        while (n >= 0 && n < lines.length && lines[n].items.length === 0)
-            n += d;
-        if (n < 0 || n >= lines.length)
+        var n = l;
+        for (var k = 0; k < (count || 1); k++) {
+            var next = n + d;
+            while (next >= 0 && next < lines.length && lines[next].items.length === 0)
+                next += d;
+            if (next < 0 || next >= lines.length)
+                break;
+            n = next;
+        }
+        if (n === l)
             return false;
         Sound.tick();
         index = Math.min(lines[n].first + col, lines[n].first + lines[n].items.length - 1);

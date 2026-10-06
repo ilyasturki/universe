@@ -88,7 +88,8 @@ FocusScope {
     }
 
     function stepScreen(d) {
-        index = Sound.paged(index, d, columns, Math.floor(grid.height / cellHeight), rows.length);
+        if (!grid.stepLine(d, Math.max(1, Math.floor(grid.height / grid.cellHeight))))
+            Sound.edge();
     }
 
     function stepRow(d) {

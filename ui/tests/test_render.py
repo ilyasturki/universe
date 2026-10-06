@@ -171,6 +171,22 @@ def test_the_screenshots_page_puts_the_running_sessions_shots_first(look, api, f
     until(lambda: page.property("since") == "", "the session over, one run again")
 
 
+@reprise
+def test_the_right_stick_pages_the_screenshots_by_whole_lines(look, api):
+    warnings = record(look.engine.warnings)
+    page = look.open("pages/ScreenshotsPage.qml", {"game": api.allGames.byId("the-technomancer")})
+    rows = until(lambda: read(page, "rows"))
+    grid = next(c for c in page.findChildren(QObject) if c.property("cellHeight") is not None)
+    columns = grid.property("columns")
+    assert len(rows) > columns, "the fixture's shots run past one line"
+    look.press(Qt.Key.Key_BracketRight)
+    until(lambda: page.property("index") >= columns, "a screenful down")
+    assert page.property("index") % columns == 0, "in the same column"
+    look.press(Qt.Key.Key_BracketLeft)
+    until(lambda: page.property("index") == 0, "and back up")
+    assert warnings == []
+
+
 def held(window, key):
     QCoreApplication.sendEvent(window, QKeyEvent(QEvent.Type.KeyPress, key, Qt.KeyboardModifier.NoModifier, "", True))
 
