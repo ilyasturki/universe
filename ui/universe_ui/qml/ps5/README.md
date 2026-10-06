@@ -44,6 +44,7 @@ strip comes up at the bottom right; everywhere else every action is also in the 
 | A card grown | 250 ms from the card to the full panel |
 | Back from a game | black, the row at 300 ms, the world at 450 ms, the bar at 700 ms, the hero at 1.2 s, the side tile at 1.7 s |
 | Tabs, pages | Games/Media slide and cross-fade 240 ms; a page fades in from 102 % in 240 ms |
+| A list, a grid, a menu, a text | scrolls just far enough to show the cursor's row, 170 ms (OutCubic; `Theme.reveal` under a `Behavior` on contentY); a strip of tiles 150 ms |
 
 ## A page
 

@@ -231,15 +231,17 @@ Modal {
         currentIndex: sheet.index
         interactive: false
         clip: true
-        highlightFollowsCurrentItem: true
-        preferredHighlightBegin: sheet.room
-        preferredHighlightEnd: height - sheet.room
-        highlightRangeMode: ListView.ApplyRange
+        highlightFollowsCurrentItem: false
+        onCurrentIndexChanged: Theme.reveal(list, currentIndex * sheet.rowHeight - sheet.room, (currentIndex + 1) * sheet.rowHeight + sheet.room, height)
         header: Item {
             height: sheet.room
         }
         footer: Item {
             height: sheet.room
+        }
+
+        Behavior on contentY {
+            Ease {}
         }
 
         delegate: Item {

@@ -1282,10 +1282,15 @@ FocusScope {
                     currentIndex: cc.shot
                     clip: true
                     interactive: false
-                    highlightRangeMode: ListView.ApplyRange
-                    preferredHighlightBegin: 0
-                    preferredHighlightEnd: height
-                    highlightMoveDuration: Theme.durScroll
+                    highlightFollowsCurrentItem: false
+                    onCurrentIndexChanged: Theme.reveal(trophyList, currentIndex * Theme.dp(96), (currentIndex + 1) * Theme.dp(96), height)
+
+                    Behavior on contentY {
+                        NumberAnimation {
+                            duration: Theme.durScroll
+                            easing.type: Easing.OutCubic
+                        }
+                    }
 
                     delegate: Item {
                         id: trophy
@@ -1382,10 +1387,15 @@ FocusScope {
                     currentIndex: cc.shot
                     clip: true
                     interactive: false
-                    highlightRangeMode: GridView.ApplyRange
-                    preferredHighlightBegin: 0
-                    preferredHighlightEnd: height
-                    highlightMoveDuration: Theme.durScroll
+                    highlightFollowsCurrentItem: false
+                    onCurrentIndexChanged: Theme.reveal(shotGrid, Math.floor(currentIndex / columns) * cellHeight, Math.floor(currentIndex / columns + 1) * cellHeight, height)
+
+                    Behavior on contentY {
+                        NumberAnimation {
+                            duration: Theme.durScroll
+                            easing.type: Easing.OutCubic
+                        }
+                    }
 
                     delegate: Item {
                         width: shotGrid.cellWidth

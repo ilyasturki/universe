@@ -11,7 +11,9 @@ Touch and the mouse go through `ui/Touch.qml` (a tap picks, a tap on what holds 
 `direct` item presses `action`, a long press on one with `menu` picks and presses +),
 `ui/Swipe.qml` (a drag scrolls the view it sits over, with a fling) and `ui/Block.qml` (a scrim or
 a card that keeps a tap or a drag from what is beneath). Each surface's `point(i)` moves the cursor
-as its keys would and raises `pointed`, on which the page sets its zone.
+as its keys would and raises `pointed`, on which the page sets its zone. A list, a grid, a picker or
+a text scrolls just far enough to show the cursor's row, in 200 ms OutCubic (`Theme.reveal` under
+`ui/Ease.qml`); the HOME row slides its tiles in 120 ms.
 
 The sounds are synthesized by `assets/sounds/generate.py` (run it to rewrite the WAVs), each recipe
 modelled on the console's own sound for that action: `tick` for lists, `tick-tile` on the HOME row,

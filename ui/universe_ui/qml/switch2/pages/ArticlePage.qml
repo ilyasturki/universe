@@ -82,10 +82,10 @@ FocusScope {
         return Math.max(0, flick.contentHeight - flick.height);
     }
 
-    function scroll(d) {
+    function scroll(d, held) {
         var next = Math.max(0, Math.min(maxScroll(), flick.contentY + d * Theme.dp(260)));
         if (next === flick.contentY) {
-            d > 0 ? openShots() : Sound.play("edge");
+            d > 0 && !held ? openShots() : Sound.play("edge");
             return;
         }
         Sound.play("tick");
@@ -108,7 +108,8 @@ FocusScope {
 
     Keys.onPressed: function (event) {
         var arrow = event.key === Qt.Key_Left || event.key === Qt.Key_Right;
-        if (event.isAutoRepeat && !arrow)
+        var vertical = event.key === Qt.Key_Up || event.key === Qt.Key_Down;
+        if (event.isAutoRepeat && !arrow && !(vertical && !lightbox && mode === "text"))
             return;
 
         if (lightbox) {
@@ -163,11 +164,11 @@ FocusScope {
                 Sound.play("tick");
                 mode = "text";
             } else {
-                scroll(-1);
+                scroll(-1, event.isAutoRepeat);
             }
         } else if (event.key === Qt.Key_Down) {
             event.accepted = true;
-            mode === "shots" ? Sound.play("edge") : scroll(1);
+            mode === "shots" ? Sound.play("edge") : scroll(1, event.isAutoRepeat);
         } else if (arrow) {
             event.accepted = true;
             mode === "shots" ? stepShot(event.key === Qt.Key_Left ? -1 : 1) : Sound.play("edge");

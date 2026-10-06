@@ -93,10 +93,10 @@ FocusScope {
         return Math.max(0, flick.contentHeight - flick.height);
     }
 
-    function scroll(d) {
+    function scroll(d, held) {
         var next = Math.max(0, Math.min(maxScroll(), flick.contentY + d * Theme.dp(260)));
         if (next === flick.contentY) {
-            if (d > 0)
+            if (d > 0 && !held)
                 below();
             else
                 Sound.play("edge");
@@ -228,10 +228,10 @@ FocusScope {
         }
         if (event.key === Qt.Key_Down) {
             event.accepted = true;
-            zone === "text" ? scroll(1) : below();
+            zone === "text" ? scroll(1, event.isAutoRepeat) : event.isAutoRepeat ? Sound.play("edge") : below();
         } else if (event.key === Qt.Key_Up) {
             event.accepted = true;
-            zone === "text" ? scroll(-1) : above();
+            zone === "text" ? scroll(-1, event.isAutoRepeat) : event.isAutoRepeat ? Sound.play("edge") : above();
         } else if (arrow) {
             event.accepted = true;
             if (zone === "images")

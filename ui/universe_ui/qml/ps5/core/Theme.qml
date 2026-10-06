@@ -16,7 +16,8 @@ QtObject {
 
     function reveal(flick, top, bottom, height) {
         var target = top < flick.contentY ? top : bottom > flick.contentY + height ? bottom - height : flick.contentY;
-        flick.contentY = Math.max(0, Math.min(target, Math.max(0, flick.contentHeight - height)));
+        var low = flick.originY - flick.topMargin;
+        flick.contentY = Math.max(low, Math.min(target, flick.originY + flick.contentHeight - height + flick.bottomMargin));
     }
 
     function alpha(c, a) {

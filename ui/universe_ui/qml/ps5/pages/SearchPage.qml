@@ -402,10 +402,15 @@ FocusScope {
             currentIndex: page.index
             interactive: false
             clip: true
-            highlightRangeMode: GridView.ApplyRange
-            preferredHighlightBegin: 0
-            preferredHighlightEnd: height
-            highlightMoveDuration: Theme.durScroll
+            highlightFollowsCurrentItem: false
+            onCurrentIndexChanged: Theme.reveal(gameGrid, Math.floor(currentIndex / columns) * cellHeight, Math.floor(currentIndex / columns + 1) * cellHeight, height)
+
+            Behavior on contentY {
+                NumberAnimation {
+                    duration: Theme.durScroll
+                    easing.type: Easing.OutCubic
+                }
+            }
 
             delegate: Item {
                 id: cell

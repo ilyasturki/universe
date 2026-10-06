@@ -257,16 +257,21 @@ FocusScope {
         interactive: false
         clip: true
         spacing: Theme.dp(12)
-        highlightFollowsCurrentItem: true
-        highlightMoveDuration: Theme.durScroll
-        preferredHighlightBegin: room
-        preferredHighlightEnd: height - room
-        highlightRangeMode: ListView.ApplyRange
+        highlightFollowsCurrentItem: false
+        onCurrentIndexChanged: Theme.reveal(list, currentIndex * (cardHeight + spacing) - room, currentIndex * (cardHeight + spacing) + cardHeight + room, height)
         header: Item {
             height: list.room
         }
         footer: Item {
             height: list.room
+        }
+
+        Behavior on contentY {
+            id: scrollEase
+            NumberAnimation {
+                duration: Theme.durScroll
+                easing.type: Easing.OutCubic
+            }
         }
 
         delegate: Item {
@@ -290,6 +295,7 @@ FocusScope {
 
     Swipe {
         flickable: list
+        ease: scrollEase
     }
 
     Scrollbar {

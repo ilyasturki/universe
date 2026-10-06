@@ -38,7 +38,8 @@ Modal {
 
     Keys.onPressed: function (event) {
         event.accepted = true;
-        if (event.isAutoRepeat)
+        var arrow = event.key === Qt.Key_Left || event.key === Qt.Key_Right || event.key === Qt.Key_Up || event.key === Qt.Key_Down;
+        if (event.isAutoRepeat && !arrow)
             return;
         if (api.keys.isAccept(event)) {
             Sound.play("ok");
@@ -73,7 +74,10 @@ Modal {
 
         Behavior on contentY {
             id: scrollEase
-            Ease {}
+            NumberAnimation {
+                duration: Theme.durScroll
+                easing.type: Easing.OutCubic
+            }
         }
 
         Column {

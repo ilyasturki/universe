@@ -48,6 +48,7 @@ Modal {
             Sound.play("edge");
             return;
         }
+        scrollEase.enabled = false;
         title = spec.title || "";
         detailHeights = {};
         items = spec.items || [];
@@ -57,6 +58,7 @@ Modal {
         index = Math.max(0, Math.min(items.length - 1, spec.index !== undefined ? spec.index : 0));
         present(done);
         list.positionViewAtIndex(index, ListView.Contain);
+        scrollEase.enabled = true;
     }
 
     function heightOf(i) {
@@ -159,11 +161,25 @@ Modal {
             interactive: false
             clip: true
             highlightFollowsCurrentItem: false
-            highlightRangeMode: ListView.ApplyRange
-            preferredHighlightBegin: 0
-            preferredHighlightEnd: height
 
-            onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
+            // show() places the list itself, once its rows are in.
+            onCurrentIndexChanged: {
+                if (!scrollEase.enabled)
+                    return;
+                var row = itemAtIndex(currentIndex);
+                if (row)
+                    Theme.reveal(list, row.y, row.y + row.height, height);
+                else
+                    positionViewAtIndex(currentIndex, ListView.Contain);
+            }
+
+            Behavior on contentY {
+                id: scrollEase
+                NumberAnimation {
+                    duration: Theme.durScroll
+                    easing.type: Easing.OutCubic
+                }
+            }
 
             delegate: Item {
                 id: row

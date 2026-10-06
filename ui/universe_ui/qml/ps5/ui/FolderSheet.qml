@@ -222,12 +222,17 @@ Modal {
         currentIndex: sheet.index
         interactive: false
         clip: true
-        highlightFollowsCurrentItem: true
-        preferredHighlightBegin: Theme.dp(8)
-        preferredHighlightEnd: height - Theme.dp(8)
-        highlightRangeMode: ListView.ApplyRange
+        highlightFollowsCurrentItem: false
+        onCurrentIndexChanged: Theme.reveal(list, currentIndex * sheet.rowHeight - Theme.dp(8), (currentIndex + 1) * sheet.rowHeight + Theme.dp(8), height)
         header: Item {
             height: Theme.dp(8)
+        }
+
+        Behavior on contentY {
+            NumberAnimation {
+                duration: Theme.durScroll
+                easing.type: Easing.OutCubic
+            }
         }
 
         delegate: Item {

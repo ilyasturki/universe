@@ -47,6 +47,7 @@ Modal {
             Sound.play("edge");
             return;
         }
+        scrollEase.enabled = false;
         anchor = spec.anchor || null;
         title = anchored ? "" : spec.title || "";
         choices = spec.choices || [];
@@ -56,6 +57,7 @@ Modal {
         index = Math.max(0, current);
         present(done);
         list.contentY = list.originY + Math.max(0, index - shownRows + 1) * rowHeight;
+        scrollEase.enabled = true;
     }
 
     scrimColor: anchored ? "transparent" : Theme.scrim
@@ -69,7 +71,8 @@ Modal {
 
     Keys.onPressed: function (event) {
         event.accepted = true;
-        if (event.isAutoRepeat)
+        var vertical = event.key === Qt.Key_Up || event.key === Qt.Key_Down;
+        if (event.isAutoRepeat && !vertical)
             return;
         if (api.keys.isAccept(event)) {
             Sound.play("select");
@@ -80,7 +83,7 @@ Modal {
         } else if (api.keys.isCancel(event)) {
             Sound.play("back");
             finish(-1);
-        } else if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
+        } else if (vertical) {
             index = Sound.stepped(index, event.key === Qt.Key_Up ? -1 : 1, choices.length);
         } else if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
             Sound.play("edge");
@@ -126,15 +129,20 @@ Modal {
         currentIndex: picker.index
         interactive: false
         clip: true
-        highlightFollowsCurrentItem: true
-        preferredHighlightBegin: picker.room
-        preferredHighlightEnd: height - picker.room
-        highlightRangeMode: ListView.ApplyRange
+        highlightFollowsCurrentItem: false
+        // show() places the list itself, once its rows are in.
+        onCurrentIndexChanged: if (scrollEase.enabled)
+            Theme.reveal(list, currentIndex * picker.rowHeight - picker.room, (currentIndex + 1) * picker.rowHeight + picker.room, height)
         header: Item {
             height: picker.room
         }
         footer: Item {
             height: picker.room
+        }
+
+        Behavior on contentY {
+            id: scrollEase
+            Ease {}
         }
 
         delegate: Item {
@@ -213,5 +221,6 @@ Modal {
 
     Swipe {
         flickable: list
+        ease: scrollEase
     }
 }
