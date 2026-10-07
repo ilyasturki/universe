@@ -1053,6 +1053,20 @@
       {
        "arch": "x86_64",
        "format": "appimage",
+       "sha256": "b1e21af266a00d91b52ab0264a612b6a388c7bfef98966ab03270fa1ca6586e8",
+       "size": 94050517,
+       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-479ca74cad11e6450abcae130f5b49b69ffbad65/rpcs3-v0.0.43-20239-479ca74c_linux64.AppImage"
+      }
+     ],
+     "channel": "rolling",
+     "date": "2026-10-07T06:28:42Z",
+     "version": "0.0.43-20239-479ca74c"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "appimage",
        "sha256": "d5ea7dc5d08943432420bb0a32baf252f518d6a5cab449427eb8749471b6cae1",
        "size": 94069095,
        "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-532b6520b4d04e12632c249f34a6fc41f23b1fa6/rpcs3-v0.0.43-20234-532b6520_linux64.AppImage"
@@ -1117,20 +1131,6 @@
      "channel": "rolling",
      "date": "2026-10-02T10:42:35Z",
      "version": "0.0.43-20176-18f18b30"
-    },
-    {
-     "assets": [
-      {
-       "arch": "x86_64",
-       "format": "appimage",
-       "sha256": "f28d9502d63b1064ded1c80d61ea7072f776749f4841d9b9bd85439345395ccd",
-       "size": 94067157,
-       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-83b1e072990e839903c67401d1a6d7d1910a5824/rpcs3-v0.0.43-20144-83b1e072_linux64.AppImage"
-      }
-     ],
-     "channel": "rolling",
-     "date": "2026-10-01T10:50:51Z",
-     "version": "0.0.43-20144-83b1e072"
     }
    ],
    "homepage": "https://github.com/RPCS3/rpcs3-binaries-linux",
@@ -1363,21 +1363,21 @@
       {
        "arch": "x86_64",
        "format": "appimage",
-       "sha256": "339d42c84faca5432a0074ec7002f752636a2c6810b15b3668b3b2a06ebd28df",
-       "size": 70248952,
+       "sha256": "626d855e616a239f949f3bc52796c72e847e4aedad25d6c42736ec5c384be9db",
+       "size": 70396408,
        "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-x86_64.AppImage"
       },
       {
        "arch": "aarch64",
        "format": "appimage",
-       "sha256": "4a32e96fe9eaff711d8d03eafb1afbd7ad905aa8379794e6862fad6e89e79ede",
-       "size": 70642184,
+       "sha256": "fe2194828a30430d89a9d225a9adb904a9aa417067fcf4f176d9ac53e0c04c48",
+       "size": 70785544,
        "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-aarch64.AppImage"
       }
      ],
      "channel": "rolling",
-     "date": "2026-10-05T19:14:27Z",
-     "version": "2026.10.05"
+     "date": "2026-10-07T11:51:32Z",
+     "version": "2026.10.07"
     }
    ],
    "homepage": "https://github.com/Vita3K/Vita3K",
@@ -1445,7 +1445,7 @@
    ],
    "homepage": "https://github.com/Kron4ek/Wine-Builds",
    "kind": "wine",
-   "name": "Wine (staging)"
+   "name": "Wine"
   },
   "xemu": {
    "builds": [
@@ -1518,6 +1518,6 @@
    "name": "xemu"
   }
  },
- "generated_at": "2026-10-06T12:06:55Z",
+ "generated_at": "2026-10-07T11:52:20Z",
  "schema": 1
 }
