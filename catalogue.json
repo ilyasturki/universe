@@ -7,6 +7,20 @@
       {
        "arch": "x86_64",
        "format": "appimage",
+       "sha256": "af037f8b775198f636b14bcfe63fb401b02246ebfefe1025bb905ce042556960",
+       "size": 103684600,
+       "url": "https://github.com/azahar-emu/azahar/releases/download/2126.2/azahar.AppImage"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-10-08T23:12:19Z",
+     "version": "2126.2"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "appimage",
        "sha256": "1ea15020334ee2e8fd16fbb3911fa7eafa8111e311c54dd4387b61b2ea742df6",
        "size": 103664120,
        "url": "https://github.com/azahar-emu/azahar/releases/download/2126.1.2/azahar.AppImage"
@@ -1053,6 +1067,20 @@
       {
        "arch": "x86_64",
        "format": "appimage",
+       "sha256": "99b4989803221459f64ce1d20462ad9f69873df8da760e9dbc30bd38e4f0f510",
+       "size": 94082209,
+       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-0be6d121404b245b2bf9a915e91f0086a0f0f588/rpcs3-v0.0.43-20261-0be6d121_linux64.AppImage"
+      }
+     ],
+     "channel": "rolling",
+     "date": "2026-10-09T10:06:25Z",
+     "version": "0.0.43-20261-0be6d121"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "appimage",
        "sha256": "b08232473f08e1e1d9f66472f349a48ff68474f63da0ed2eb932c3929e1be369",
        "size": 94087657,
        "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-222754bfd3d2a482ea60b27d5661a12960491fd9/rpcs3-v0.0.43-20247-222754bf_linux64.AppImage"
@@ -1117,20 +1145,6 @@
      "channel": "rolling",
      "date": "2026-10-04T07:04:39Z",
      "version": "0.0.43-20206-46aee28f"
-    },
-    {
-     "assets": [
-      {
-       "arch": "x86_64",
-       "format": "appimage",
-       "sha256": "7b5a1a53c946e59758c8c84944c40fd88dba178817ca3047a52b4582c7a6f2e5",
-       "size": 94034651,
-       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-e8b4646145c76da683d39cd019ae7dd57e77cfac/rpcs3-v0.0.43-20185-e8b46461_linux64.AppImage"
-      }
-     ],
-     "channel": "rolling",
-     "date": "2026-10-03T08:41:36Z",
-     "version": "0.0.43-20185-e8b46461"
     }
    ],
    "homepage": "https://github.com/RPCS3/rpcs3-binaries-linux",
@@ -1363,21 +1377,21 @@
       {
        "arch": "x86_64",
        "format": "appimage",
-       "sha256": "fa502a7379aa0ed535a138762c7b92b377178b185a9d6994e6ca59199de5e00b",
-       "size": 70396408,
+       "sha256": "1e7d4b514a96e94224b6ba719d97f373e589e6bae591807e086771bd060585fc",
+       "size": 70429176,
        "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-x86_64.AppImage"
       },
       {
        "arch": "aarch64",
        "format": "appimage",
-       "sha256": "cf31543a9e2d69645b2a78c49706e5cca5956c7c30c1d796d925d6fa90cab0af",
-       "size": 70777352,
+       "sha256": "471950568a10e59ba92a774b8f529244ec65a22c80a85f8352106aff8736fa19",
+       "size": 70765064,
        "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-aarch64.AppImage"
       }
      ],
      "channel": "rolling",
-     "date": "2026-10-08T11:31:41Z",
-     "version": "2026.10.08"
+     "date": "2026-10-09T11:47:04Z",
+     "version": "2026.10.09"
     }
    ],
    "homepage": "https://github.com/Vita3K/Vita3K",
@@ -1518,6 +1532,6 @@
    "name": "xemu"
   }
  },
- "generated_at": "2026-10-08T12:07:37Z",
+ "generated_at": "2026-10-09T11:59:16Z",
  "schema": 1
 }
