@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+"""usage: tools/reap COMMAND [ARG...]
+
+Runs COMMAND as the subreaper of all it starts: an orphan comes back here
+instead of to init, and is reaped as it ends. Once COMMAND has exited, a
+process it left running is listed, killed and fails the run (exit 1);
+otherwise the exit status is COMMAND's own."""
+
+import contextlib
+import ctypes
+import os
+import signal
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+PR_SET_CHILD_SUBREAPER = 36
+
+
+def reap() -> None:
+    with contextlib.suppress(ChildProcessError):
+        while os.waitpid(-1, os.WNOHANG)[0]:
+            pass
+
+
+def running() -> dict[int, str]:
+    found = {}
+    for stat in Path("/proc").glob("[0-9]*/stat"):
+        try:
+            state, ppid = stat.read_text().rpartition(") ")[2].split()[:2]
+            if int(ppid) == os.getpid() and state != "Z":
+                found[int(stat.parent.name)] = (stat.parent / "cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace").strip()
+        except (OSError, ValueError):
+            continue
+    return found
+
+
+def main(argv: list[str]) -> int:
+    if not argv or argv[0] in ("-h", "--help"):
+        print(__doc__, file=sys.stdout if argv else sys.stderr)
+        return 0 if argv else 2
+    libc = ctypes.CDLL(None, use_errno=True)
+    if libc.prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) != 0:
+        sys.exit(f"reap: prctl: {os.strerror(ctypes.get_errno())}")
+    command = subprocess.Popen(argv)
+    # Ctrl-C already reaches COMMAND through the terminal's process group; a TERM sent here is passed on.
+    signal.signal(signal.SIGINT, lambda *_: None)
+    signal.signal(signal.SIGTERM, lambda *_: command.send_signal(signal.SIGTERM))
+    while True:
+        pid, status = os.wait()
+        if pid == command.pid:
+            code = os.waitstatus_to_exitcode(status)
+            code = code if code >= 0 else 128 - code
+            break
+    deadline = time.monotonic() + 2
+    while (left := running()) and time.monotonic() < deadline:
+        time.sleep(0.05)
+        reap()
+    if not left:
+        return code
+    print(f"reap: {argv[0]} left these running:", file=sys.stderr)
+    for pid, cmdline in left.items():
+        print(f"  {pid} {cmdline}", file=sys.stderr)
+    deadline = time.monotonic() + 2
+    while (rest := running()) and time.monotonic() < deadline:
+        for pid in rest:
+            with contextlib.suppress(ProcessLookupError):
+                os.kill(pid, signal.SIGKILL)
+        time.sleep(0.05)
+        reap()
+    return code or 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

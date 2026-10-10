@@ -131,9 +131,9 @@ test *suites: build develop env
     for suite in $suites; do
         case "$suite" in
             rust) cargo test ;;
-            python) "{{ python }}" -m pytest -q -n "$workers" ;;
-            bindings) "{{ python }}" -m pytest -q crates/universe-py/tests ;;
-            ui|modules|extension|sources) "{{ python }}" -m pytest -q -n "$workers" "$suite" ;;
+            python) tools/reap "{{ python }}" -m pytest -q -n "$workers" ;;
+            bindings) tools/reap "{{ python }}" -m pytest -q crates/universe-py/tests ;;
+            ui|modules|extension|sources) tools/reap "{{ python }}" -m pytest -q -n "$workers" "$suite" ;;
             desktop) tools/desktop-test ;;
             *) echo "test: unknown suite '$suite' (rust, python, ui, modules, extension, sources, bindings, desktop)" >&2; exit 2 ;;
         esac
