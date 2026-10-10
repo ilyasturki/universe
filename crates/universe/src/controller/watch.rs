@@ -1264,6 +1264,34 @@ mod tests {
         assert_eq!(json("dualsense-edge")["address"], "aa:bb:cc:00:00:01", "a Bluetooth pad names the address BlueZ reconnects it by");
     }
 
+    // Each recorded pad as the watcher reads its node: its family, every control on the slot it sits at, its sticks and triggers.
+    #[test]
+    fn every_recorded_pad_reads_as_it_is() {
+        let cfg = ControllerConfig::default();
+        let mut misprinted = vec![];
+        for pad in super::super::corpus::pads() {
+            let e = &pad.entry;
+            let (vendor, product, keys) = (pad.id_field("vendor"), pad.id_field("product"), pad.keys());
+            let family = detect_family_on(false, vendor, product, pad.name(), &keys);
+            let caps = Caps { name: pad.name().into(), family, vendor, product, keys, axes: pad.axes(), ranges: pad.ranges(), uniq: String::new() };
+            let (cmd, _rx) = mpsc::channel(1);
+            let seen = pad_of("pad".into(), PathBuf::new(), e["bus"].as_str().unwrap().into(), caps, &cfg, cmd).json();
+            assert_eq!(seen["family"], e["family"], "{}", pad.id);
+            for (slot, code) in e["buttons"].as_object().unwrap() {
+                assert_eq!(seen["slots"][slot]["code"], *code, "{}: {slot}", pad.id);
+            }
+            let unbound: Vec<&str> = super::super::STANDARD.iter().map(|s| s.id).filter(|s| seen["slots"][*s]["bound"] != true).collect();
+            assert!(unbound.is_empty(), "{}: {unbound:?} unbound", pad.id);
+            let faces: BTreeSet<&str> = ["south", "east", "west", "north"].iter().map(|s| seen["slots"][*s]["code"].as_str().unwrap()).collect();
+            assert_eq!(faces.len(), 4, "{}: two face buttons on one code", pad.id);
+            assert_eq!(seen["axes"], e["axes"], "{}: sticks and triggers", pad.id);
+            if family.slots().take(4).any(|s| e["print"][s.id] != s.label) {
+                misprinted.push(pad.id.clone());
+            }
+        }
+        assert_eq!(misprinted, ["8bitdo-pro-3-xinput-usb"], "only an 8BitDo in X-input mode, an Xbox 360 pad to xpad, reads as another print");
+    }
+
     // The walk moves to the next step while the stick is still where the last one asked: only leaving rest answers.
     #[test]
     fn an_axis_learn_answers_once_per_throw() {

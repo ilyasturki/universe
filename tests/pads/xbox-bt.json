@@ -1,0 +1,46 @@
+{
+  "pad": "Xbox Series X|S",
+  "family": "xbox",
+  "bus": "bluetooth",
+  "driver": "microsoft",
+  "source": {"evdev": "public: hid-input's mapping of the descriptor in xpadneo's docs/descriptors/xbxs.md, Linux 7.2"},
+  "print": {"south": "A", "east": "B", "west": "X", "north": "Y"},
+  "evdev": {
+    "name": "Xbox Wireless Controller",
+    "vendor": "045e",
+    "product": "0b13",
+    "keys": ["BTN_SOUTH", "BTN_EAST", "BTN_C", "BTN_NORTH", "BTN_WEST", "BTN_Z", "BTN_TL", "BTN_TR", "BTN_TL2", "BTN_TR2", "BTN_SELECT", "BTN_START", "BTN_MODE", "BTN_THUMBL", "BTN_THUMBR", "KEY_RECORD"],
+    "abs": {
+      "ABS_X": [0, 65535, 255, 4095],
+      "ABS_Y": [0, 65535, 255, 4095],
+      "ABS_Z": [0, 65535, 255, 4095],
+      "ABS_RZ": [0, 65535, 255, 4095],
+      "ABS_GAS": [0, 1023, 3, 63],
+      "ABS_BRAKE": [0, 1023, 3, 63],
+      "ABS_HAT0X": [-1, 1, 0, 0],
+      "ABS_HAT0Y": [-1, 1, 0, 0]
+    },
+    "ff": true
+  },
+  "buttons": {
+    "south": "BTN_SOUTH",
+    "east": "BTN_EAST",
+    "north": "BTN_WEST",
+    "west": "BTN_NORTH",
+    "lb": "BTN_TL",
+    "rb": "BTN_TR",
+    "select": "BTN_SELECT",
+    "start": "BTN_START",
+    "guide": "BTN_MODE",
+    "ls": "BTN_THUMBL",
+    "rs": "BTN_THUMBR",
+    "lt": "ABS_BRAKE+",
+    "rt": "ABS_GAS+",
+    "dpad_up": "ABS_HAT0Y-",
+    "dpad_down": "ABS_HAT0Y+",
+    "dpad_left": "ABS_HAT0X-",
+    "dpad_right": "ABS_HAT0X+",
+    "share": "KEY_RECORD"
+  },
+  "axes": {"lx": "ABS_X", "ly": "ABS_Y", "rx": "ABS_Z", "ry": "ABS_RZ", "lt": "ABS_BRAKE", "rt": "ABS_GAS"}
+}

@@ -38,6 +38,9 @@
           && !(lib.any (d: under d rel) pyOnly)
           && (
             lib.hasPrefix "crates" rel
+            # the controller tests read the recorded pads
+            || rel == "tests"
+            || under "tests/pads" rel
             # the components tests read the tools each shipped source pins
             || (
               under "sources" rel
@@ -483,6 +486,7 @@
           "tools/sample"
           "tools/docs-media"
           "site/media"
+          "tests/pads"
         ];
         tests = [ "ui" ];
         py =
@@ -508,6 +512,7 @@
           "modules"
           "extension"
           "crates/universe/src/desktop/gnome.rs"
+          "tests/pads"
         ];
         tests = [
           "modules"

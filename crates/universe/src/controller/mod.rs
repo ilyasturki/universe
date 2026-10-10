@@ -624,27 +624,79 @@ pub fn learn_code(config: &ControllerConfig, family: &Family, slot: &str, code: 
     Ok(previous)
 }
 
+/// The pads recorded under tests/pads, one file per pad, bus and driver, as the tests read their evdev side.
+#[cfg(test)]
+pub(crate) mod corpus {
+    use std::collections::BTreeMap;
+    use std::path::PathBuf;
+    use std::str::FromStr;
+
+    pub struct Pad {
+        pub id: String,
+        pub entry: serde_json::Value,
+    }
+
+    pub fn pads() -> Vec<Pad> {
+        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/pads");
+        let mut out: Vec<Pad> = std::fs::read_dir(&dir)
+            .unwrap_or_else(|e| panic!("{}: {e}", dir.display()))
+            .flatten()
+            .map(|f| f.path())
+            .filter(|p| p.extension().is_some_and(|x| x == "json"))
+            .map(|p| Pad {
+                id: p.file_stem().unwrap().to_string_lossy().into_owned(),
+                entry: serde_json::from_str(&std::fs::read_to_string(&p).unwrap()).unwrap_or_else(|e| panic!("{}: {e}", p.display())),
+            })
+            .collect();
+        out.sort_by(|a, b| a.id.cmp(&b.id));
+        out
+    }
+
+    pub fn pad(id: &str) -> Pad {
+        pads().into_iter().find(|p| p.id == id).unwrap_or_else(|| panic!("no tests/pads/{id}.json"))
+    }
+
+    impl Pad {
+        pub fn id_field(&self, name: &str) -> u16 {
+            u16::from_str_radix(self.entry["evdev"][name].as_str().unwrap(), 16).unwrap()
+        }
+
+        pub fn name(&self) -> &str {
+            self.entry["evdev"]["name"].as_str().unwrap()
+        }
+
+        pub fn keys(&self) -> Vec<u16> {
+            let names = self.entry["evdev"]["keys"].as_array().unwrap();
+            names.iter().map(|k| super::keys::parse_key(k.as_str().unwrap()).unwrap_or_else(|| panic!("{}: key {k}", self.id))).collect()
+        }
+
+        pub fn ranges(&self) -> BTreeMap<u16, (i32, i32)> {
+            let abs = self.entry["evdev"]["abs"].as_object().unwrap();
+            abs.iter()
+                .map(|(name, r)| {
+                    let code = evdev::AbsoluteAxisCode::from_str(name).unwrap_or_else(|_| panic!("{}: axis {name}", self.id)).0;
+                    (code, (r[0].as_i64().unwrap() as i32, r[1].as_i64().unwrap() as i32))
+                })
+                .collect()
+        }
+
+        pub fn axes(&self) -> Vec<u16> {
+            self.ranges().into_keys().collect()
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    // The recorded pads are found by their ids (watch.rs); left over: names alone, an older xpadneo's paddle codes, a pad nobody knows.
     #[test]
     fn families_by_id_name_and_capabilities() {
-        assert_eq!(detect_family(0x054c, 0x0df2, "DualSense Edge Wireless Controller", &[]).id, "dualsense-edge");
-        assert_eq!(detect_family(0x054c, 0x0ce6, "Sony Interactive Entertainment DualSense Wireless Controller", &[]).id, "dualsense");
         assert_eq!(detect_family(0x045e, 0x0b22, "Xbox Wireless Controller", &[]).id, "xbox-elite");
-        assert_eq!(detect_family(0x045e, 0x0b12, "Xbox Wireless Controller", &[0x130]).id, "xbox");
-        assert_eq!(
-            detect_family(0x045e, 0x028e, "Xbox Wireless Controller", &[0x130, 548, 549, 550, 551]).id,
-            "xbox-elite",
-            "xpadneo's identity for an Elite: the grips give it away"
-        );
-        assert_eq!(detect_family(0x045e, 0x028e, "Xbox Wireless Controller", &[0x130, 708]).id, "xbox-elite", "xpad over USB");
-        assert_eq!(detect_family(0x2dc8, 0x6009, "8BitDo Pro 3", &[]).id, "8bitdo-pro-3");
-        assert_eq!(detect_family(0x057e, 0x2069, "Nintendo Switch Pro Controller 2", &[]).id, "switch2-pro");
-        assert_eq!(detect_family(0x057e, 0x2009, "Pro Controller", &[]).id, "switch-pro");
+        assert_eq!(detect_family(0x045e, 0x028e, "Xbox Wireless Controller", &[0x130, 708]).id, "xbox-elite", "xpadneo before 0.10: TRIGGER_HAPPY5-8");
+        assert_eq!(detect_family(0x054c, 0x0e5f, "DualSense Edge Wireless Controller", &[]).id, "dualsense-edge", "an unknown product, by its name");
         assert_eq!(detect_family(0x1234, 0x0001, "Some Pad", &[]).id, "generic");
-        assert_eq!(detect_family(0x054c, 0x0df2, "DualSense Edge Wireless Controller", &[]).slots().filter(|s| s.extra).count(), 4);
     }
 
     #[test]
@@ -671,51 +723,28 @@ mod tests {
         assert!(!roles.contains_key(&16), "a trackpad is no stick");
     }
 
-    // The Pro 3 over Bluetooth in D-input mode, as captured: keys 0x130..0x13f and eight TRIGGER_HAPPY, axes X Y Z RZ GAS BRAKE and a hat.
-    fn pro3_caps() -> (Vec<u16>, Vec<u16>) {
-        ((0x130..=0x13f).chain(0x2c0..=0x2c7).collect(), vec![0, 1, 2, 5, 9, 10, 16, 17])
+    fn pro3() -> (Vec<u16>, Vec<u16>) {
+        let pad = corpus::pad("8bitdo-pro-3-dinput-bt");
+        (pad.keys(), pad.axes())
     }
 
     #[test]
-    fn a_d_input_8bitdo_reports_its_letters_and_its_paddles() {
-        let cfg = ControllerConfig::default();
+    fn a_learned_axis_replaces_the_guess() {
+        let (_, axes) = pro3();
         let pro3 = family_by_id("8bitdo-pro-3").unwrap();
-        let (keys, axes) = pro3_caps();
-        let s = resolve_slots(&cfg, pro3, &keys, &axes);
-        assert_eq!(s["east"].unwrap().to_string(), "BTN_SOUTH", "the A on the right reports as BTN_SOUTH");
-        assert_eq!(s["south"].unwrap().to_string(), "BTN_EAST");
-        assert_eq!(s["north"].unwrap().to_string(), "BTN_NORTH");
-        assert_eq!(s["lt"].unwrap().to_string(), "BTN_TL2");
-        assert_eq!(s["paddle_l4"].unwrap().to_string(), "BTN_TRIGGER_HAPPY1");
-        assert_eq!(s["paddle_pr"].unwrap().to_string(), "BTN_C");
-        assert!(s["star"].is_none());
-        let roles = axis_roles(&cfg, pro3, &axes);
-        assert_eq!(roles[&2], ("rx", false), "Z is the right stick without RX/RY");
-        assert_eq!(roles[&5], ("ry", false));
-        assert_eq!(roles[&10], ("lt", false));
-        assert_eq!(roles[&9], ("rt", false));
-        assert!(!roles.contains_key(&16), "hats are buttons");
-
-        let xpad = axis_roles(&cfg, family_by_id("xbox").unwrap(), &[0, 1, 2, 3, 4, 5, 16, 17]);
-        assert_eq!((xpad[&2], xpad[&3], xpad[&5]), (("lt", false), ("rx", false), ("rt", false)));
-        let xpadneo = axis_roles(&cfg, family_by_id("xbox").unwrap(), &[0, 1, 3, 4, 9, 10, 16, 17]);
-        assert_eq!((xpadneo[&10], xpadneo[&9]), (("lt", false), ("rt", false)));
-        let nintendo = axis_roles(&cfg, family_by_id("switch-pro").unwrap(), &[0, 1, 3, 4, 16, 17]);
-        assert_eq!(nintendo.len(), 4, "digital triggers have no axis");
-
         let mut cfg = ControllerConfig::default();
         cfg.axes.insert(
             "8bitdo-pro-3".into(),
             [("rx".to_string(), "ABS_RZ-".to_string()), ("ry".to_string(), "ABS_Z".to_string()), ("lt".to_string(), "ABS_RX".to_string())].into(),
         );
         let learned = axis_roles(&cfg, pro3, &axes);
-        assert_eq!((learned[&5], learned[&2]), (("rx", true), ("ry", false)), "a learned axis replaces the guess, backwards when thrown the other way");
+        assert_eq!((learned[&5], learned[&2]), (("rx", true), ("ry", false)), "backwards when thrown the other way");
         assert_eq!(learned[&10], ("lt", false), "an axis the pad lacks leaves the guess");
     }
 
     #[test]
     fn sdl_numbers_the_pad_as_its_linux_joystick_does() {
-        let (keys, axes) = pro3_caps();
+        let (keys, axes) = pro3();
         let el = |src: &str| sdl_element(&keys::parse_source(src).unwrap(), &keys, &axes);
         assert_eq!(el("BTN_SOUTH"), "b0");
         assert_eq!(el("BTN_THUMBR"), "b14");
@@ -732,43 +761,13 @@ mod tests {
         assert_eq!(sdl_element(&keys::Source::Key(0x100), &misc, &[]), "b2", "BTN_MISC comes after the joystick range");
     }
 
+    // hid-steam reports a Deck's X and Y by letter, as xpad does an Xbox pad's (watch.rs reads the recorded ones).
     #[test]
-    fn resolve_edge_on_7_2_and_elite_on_both_drivers() {
-        let cfg = ControllerConfig::default();
-        let edge = family_by_id("dualsense-edge").unwrap();
-        let keys: Vec<u16> = [0x130, 0x131, 0x133, 0x134, 0x136, 0x137, 0x138, 0x139, 0x13a, 0x13b, 0x13c, 0x13d, 0x13e, 704, 705, 706, 707].to_vec();
-        let axes = vec![0, 1, 2, 3, 4, 5, 16, 17];
-        let slots = resolve_slots(&cfg, edge, &keys, &axes);
-        assert_eq!(slots["paddle_left"].unwrap().to_string(), "BTN_TRIGGER_HAPPY3");
-        assert_eq!(slots["lt"].unwrap().to_string(), "BTN_TL2");
-        assert_eq!(slots["dpad_left"].unwrap().to_string(), "ABS_HAT0X-");
-        let older: Vec<u16> = keys.iter().copied().filter(|k| *k < 700).collect();
-        assert!(resolve_slots(&cfg, edge, &older, &axes)["paddle_left"].is_none(), "no paddles before kernel 7.2");
-
-        let elite = family_by_id("xbox-elite").unwrap();
-        let bt: Vec<u16> = [0x130, 0x131, 0x133, 0x134, 0x136, 0x137, 0x13a, 0x13b, 0x13c, 0x13d, 0x13e, 548, 549, 550, 551].to_vec();
-        let s = resolve_slots(&cfg, elite, &bt, &[0, 1, 3, 4, 16, 17, 9, 10]);
-        assert_eq!(s["paddle_p1"].unwrap().to_string(), "BTN_GRIPR");
-        assert_eq!(s["paddle_p3"].unwrap().to_string(), "BTN_GRIPL");
-        assert_eq!(s["lt"].unwrap().to_string(), "ABS_BRAKE+");
-        let usb: Vec<u16> = [0x130, 0x131, 0x133, 0x134, 0x136, 0x137, 0x13a, 0x13b, 0x13c, 0x13d, 0x13e, 708, 709, 710, 711].to_vec();
-        let s = resolve_slots(&cfg, elite, &usb, &[0, 1, 2, 3, 4, 5, 16, 17]);
-        assert_eq!(s["paddle_p1"].unwrap().to_string(), "BTN_TRIGGER_HAPPY5");
-        assert_eq!(s["paddle_p4"].unwrap().to_string(), "BTN_TRIGGER_HAPPY8");
-        assert_eq!(s["lt"].unwrap().to_string(), "ABS_Z+");
-    }
-
-    // xpad's Xbox 360 pad over USB: BTN_A..BTN_THUMBR, sticks on X/Y and RX/RY, triggers on Z/RZ, the D-pad on a hat.
-    #[test]
-    fn an_xbox_pads_x_and_y_land_where_they_sit() {
-        let cfg = ControllerConfig::default();
-        let keys: Vec<u16> = (0x130..=0x13e).collect();
-        let axes = vec![0, 1, 2, 3, 4, 5, 16, 17];
-        for id in ["xbox", "xbox-elite", "steam-deck"] {
-            let s = resolve_slots(&cfg, family_by_id(id).unwrap(), &keys, &axes);
-            assert_eq!((s["west"].unwrap().to_string(), s["north"].unwrap().to_string()), ("BTN_NORTH".into(), "BTN_WEST".into()), "{id}");
-            assert_eq!(s["south"].unwrap().to_string(), "BTN_SOUTH", "{id}");
-        }
+    fn a_decks_x_and_y_land_where_they_sit_and_a_walk_stays() {
+        let pad = corpus::pad("xbox-usb");
+        let (keys, axes) = (pad.keys(), pad.axes());
+        let s = resolve_slots(&ControllerConfig::default(), family_by_id("steam-deck").unwrap(), &keys, &axes);
+        assert_eq!((s["west"].unwrap().to_string(), s["north"].unwrap().to_string()), ("BTN_NORTH".into(), "BTN_WEST".into()));
         let mut walked = ControllerConfig::default();
         walked.buttons.entry("xbox".into()).or_default().insert("north".into(), vec!["BTN_NORTH".into()]);
         let north = resolve_slots(&walked, family_by_id("xbox").unwrap(), &keys, &axes)["north"].unwrap().to_string();
