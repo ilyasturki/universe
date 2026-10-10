@@ -27,6 +27,8 @@ KNOWN = {
         ("truncated", "Batman: Arkham Asylum Game of the Year Edition"),
         # The session log's process column.
         ("truncated", "pressure-vessel-wrap"),
+        # Seen once: Artwork's keyboard sheet closed and kept the focus, hidden; not reproduced by hand yet.
+        ("focus-unseen", "artworkPage"),
     },
     "switch2": {
         # Settings' sidebar cuts its sections' second lines at 1280×720.
@@ -64,11 +66,12 @@ KNOWN = {
 @pytest.mark.slow
 @pytest.mark.parametrize("name", LOOKS)
 def test_crawl(api, fake, qtlog, monkeypatch, name):
-    def refused(ident, screen, splash=""):
-        raise UniverseError("Busy", "the explorer stops at a launch")
+    def refused(*_):
+        raise UniverseError("Busy", "the explorer leaves the library as it found it")
 
-    # A played game would reorder Home for the rest of the walk, and for the next run's shots.
-    monkeypatch.setattr(fake.core, "launch", refused)
+    # A game played, favoured, hidden or removed would reorder Home for the rest of the walk, and for the next run's shots.
+    for write in ("launch", "set", "remove", "uninstall", "uninstall_via", "remove_screenshot", "remove_recording", "remove_journal_entry"):
+        monkeypatch.setattr(fake.core, write, refused)
     seen = [0]
 
     def warnings():

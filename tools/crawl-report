@@ -50,7 +50,8 @@ def states(run: Path, look: str) -> dict:
     graph = run / look / "graph.json"
     if not graph.exists():
         return {}
-    return {s["key"]: s for s in json.loads(graph.read_text())["states"] if s.get("shot")}
+    # A screen and the keys that reach it: a menu over Home and the same menu over the Library are two screens.
+    return {(s["key"], tuple(s["path"])): s for s in json.loads(graph.read_text())["states"] if s.get("shot")}
 
 
 def findings(run: Path, look: str) -> list:
