@@ -299,6 +299,7 @@ impl StorePage {
         add("install", true, |page, id| page.confirm_install(id));
         add("resume", true, |page, id| page.start_on(Kind::Install, id));
         add("update", true, |page, id| page.start_on(Kind::Update, id));
+        add("adopt", true, |page, id| page.start_on(Kind::Adopt, id));
         add("uninstall", true, |page, id| page.confirm_uninstall(id));
         add("cancel", false, |page, _| {
             if let Some(job) = page.app().and_then(|app| app.job()) {
@@ -320,6 +321,7 @@ impl StorePage {
             ("install", idle),
             ("resume", idle),
             ("update", idle),
+            ("adopt", idle),
             ("cancel", job.is_some_and(|j| j.cancellable() && !j.cancelled())),
         ] {
             if let Some(action) = group.lookup_action(name).and_downcast::<gio::SimpleAction>() {
@@ -519,10 +521,14 @@ impl StorePage {
             }
             menu.append_section(None, &game);
         }
-        let item = gio::MenuItem::new(Some(&gettext("_Uninstall…")), None);
-        item.set_action_and_target_value(Some("store.uninstall"), Some(&entry.id.to_variant()));
         let end = gio::Menu::new();
-        end.append_item(&item);
+        let items =
+            if entry.game_id.is_empty() { vec![(gettext("Add to _Library"), "store.adopt")] } else { vec![(gettext("_Uninstall…"), "store.uninstall")] };
+        for (label, action) in items {
+            let item = gio::MenuItem::new(Some(&label), None);
+            item.set_action_and_target_value(Some(action), Some(&entry.id.to_variant()));
+            end.append_item(&item);
+        }
         menu.append_section(None, &end);
         menu
     }
@@ -554,7 +560,7 @@ impl StorePage {
         imp.job_group.set_title(&match job.as_ref().map(|j| j.kind()) {
             Some(Kind::Install) => gettext("Installing"),
             Some(Kind::Update) => gettext("Updating"),
-            Some(Kind::Scan | Kind::Artwork | Kind::Component) => gettext("In Progress"),
+            Some(Kind::Scan | Kind::Adopt | Kind::Artwork | Kind::Component) => gettext("In Progress"),
             None => gettext("Paused"),
         });
 
@@ -735,6 +741,7 @@ impl StorePage {
         } else {
             line.push(match job.kind() {
                 Kind::Install => gettext("Installing"),
+                Kind::Adopt => gettext("Adding to the library"),
                 Kind::Update if job.steps() > 1 => {
                     gettext("Updating, {} of {}").replacen("{}", &job.step().to_string(), 1).replacen("{}", &job.steps().to_string(), 1)
                 }

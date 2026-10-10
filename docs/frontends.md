@@ -760,8 +760,9 @@ once known (`download`), and `peek(index)` — call it as the cursor lands on a 
 `info` at a time, off the busy flag, and the core remembers it. `install(index)` installs, resumes
 a stopped download (the same call: the source continues over its folder) or updates. An installed
 row the library lacks (`game_id` empty, `status` "Not in the library", `action` "Add to library")
-takes `adopt(index)`: the store's `scan` job, which brings in every game of that store installed on
-disk and links the library's own imports of them, then a toast once the reload shows the row linked.
+takes `adopt(index)`: an `adopt` job (`source_adopt`), which brings that one game in and no other,
+then a toast once the reload shows the row linked. The first run's adoption and Universe Desktop's
+Find Installed Games stay the store's whole `scan`.
 While an install or update runs
 `job` is `{id, game, title, label, message, done, total, ok, cancelled}`, `done`/`total` in bytes and
 `message` the live line ("Installing X · 42% · 3.4 GB of 8.2 GB"); the rows are rebuilt at its start
@@ -1446,7 +1447,8 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
   a job that can stop asks first; then the game is stopped and its `session-end` waited for, an
   install or update pauses (the Store resumes it) and the window goes. SIGINT and SIGTERM take the
   same way out.
-- **One job at a time** (`jobs.rs`): an install, an update, a scan, an art refresh or a component's
+- **One job at a time** (`jobs.rs`): an install, an update, a scan, an add (one install into the
+  library, `source_adopt`; like a scan it runs to its end), an art refresh or a component's
   install or update (`Application::start_component`, a `ComponentJob`; Stop cancels it through
   `component_cancel`). A store's "update all" steps through its games, so each can be cancelled.
   The Store page shows the job; its end is a toast — on the preferences when they are open — and a
@@ -1487,7 +1489,8 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
 - **Stores**: the Store page's switcher lists the signed-in stores, each with its label and icon in
   the library; it hides with one, and the search names the store it asks ("Search GOG"). Each row
   shows its verb — Play for a game installed and in the library, Resume, Install, Update — with a
-  menu beside it, and Refresh is the header's button. The first run adopts what `discover()` finds through the store a launcher's `via`
+  menu beside it (an installed game the library lacks: Add to Library, an add job; one it holds:
+  Uninstall…), and Refresh is the header's button. The first run adopts what `discover()` finds through the store a launcher's `via`
   names, turning it on when it is off; one that found nothing while signed out is listed on the
   stores step, and adopted again once its sign-in succeeds.
 - **Search provider**: `org.gnome.Shell.SearchProvider2` at

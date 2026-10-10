@@ -603,6 +603,10 @@ class CoreClient(QObject):
         return self._job("install", game_id, lambda progress: self._core.install(source, game_id, progress), source=source)
 
     @Slot(str, str, result=str)
+    def adopt(self, source, game_id):
+        return self._job("adopt", game_id, lambda progress: self._core.adopt(source, game_id, progress), source=source)
+
+    @Slot(str, str, result=str)
     def update(self, source, game_id):
         return self._job("update", game_id, lambda progress: f"{self._core.update(source, game_id, progress)} updated", source=source)
 
@@ -970,6 +974,8 @@ class CoreClient(QObject):
         kind, arrived = self._jobs[job]["kind"], []
         if ok and kind == "scan":
             arrived = [str(i) for i in result or []]
+        elif ok and kind == "adopt" and result:
+            arrived = [str(result)]
         elif ok and kind == "install" and result:
             arrived = [str(result)] if any(str(g.get("id")) == str(result) for g in self._guarded([], self._core.list)) else []
         if arrived:

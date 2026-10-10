@@ -263,6 +263,9 @@ pub enum Cmd {
     Scan {
         /// Source id; every source when omitted
         source: Option<String>,
+        /// Add only this install to the library, by the store's id; the source is the one enabled when omitted
+        #[arg(long)]
+        only: Option<String>,
     },
     /// Import the Lutris library (report only without --apply)
     Migrate {
@@ -1777,7 +1780,16 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             }
             println!("{t}");
         }
-        Cmd::Scan { source } => {
+        Cmd::Scan { source, only: Some(id) } => {
+            let source = enabled_source(&core, source).await?;
+            let mut p = progress_printer(json);
+            let added = core.source_adopt(&source, &id, Some(&mut p)).await;
+            if let Ok(game) = &added {
+                fetch_art(&core, json, std::slice::from_ref(game)).await;
+            }
+            finish(json, added);
+        }
+        Cmd::Scan { source, only: None } => {
             let mut p = progress_printer(json);
             let found = core.source_scan(source.as_deref().unwrap_or(""), Some(&mut p)).await?;
             fetch_art(&core, json, &found).await;

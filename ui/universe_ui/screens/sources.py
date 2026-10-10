@@ -267,29 +267,24 @@ class SourcesBrowser(AsyncScreen):
 
     @Slot(int, result=str)
     def adopt(self, index):
-        """An installed game the library lacks: the store's scan takes in every one on disk and links the ones already there."""
+        """An installed game the library lacks: the store's scan brings that one in, and no other."""
         if self._adding or not (0 <= index < len(self._rows)):
             return ""
         row = self._rows[index]
         if not row["installed"] or row["game_id"]:
             return ""
-        job_id = self._client.scan(self._source)
+        job_id = self._client.adopt(self._source, row["id"])
         if job_id:
             self._adding = {"id": job_id, "game": row["id"], "title": row["title"]}
             self.message.emit(f"Adding {row['title']} to the library…")
         return job_id
 
     def _adopted(self, adding, ok, text):
-        game, title = adding["game"], adding["title"]
+        title = adding["title"]
         if not ok:
             self.message.emit(text or f"Could not add {title} to the library")
             return
-
-        def said():
-            linked = any(r["id"] == game and r["game_id"] for r in self._rows)
-            self.message.emit(f"Added {title} to the library" if linked else f"Could not add {title} to the library")
-
-        self._reload(False, then=said)
+        self._reload(False, then=lambda: self.message.emit(f"Added {title} to the library"))
 
     @Slot(int, result=str)
     def update(self, index):

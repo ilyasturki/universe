@@ -1787,6 +1787,15 @@ class FakeCore:
                 found.append(entry["game_id"])
         return found
 
+    def adopt(self, source, game_id, progress=None):
+        self._tick(progress, "Scanning", 4)
+        entry = self._source_game(source, game_id)
+        if entry is None or not entry.get("installed"):
+            raise UniverseError("NotFound", f"{source} finds no install of {game_id}")
+        if not entry.get("game_id"):
+            entry["game_id"] = self._land(source, entry)
+        return entry["game_id"]
+
     def media_refresh(self, ident, force, progress=None):
         games = [self._game(ident)] if ident else [g for g in self._data["games"] if not g.get("removed")]
         return self._refresh_media(games, progress, stoppable=not ident)

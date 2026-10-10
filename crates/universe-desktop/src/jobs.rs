@@ -14,6 +14,8 @@ pub enum Kind {
     Install,
     Update,
     Scan,
+    /// One install the store found on disk, into the library.
+    Adopt,
     Artwork,
     Component,
 }
@@ -112,6 +114,7 @@ impl Job {
             Kind::Update if n == 1 => gettext("Updating {}").replace("{}", &first),
             Kind::Update => ngettext("Updating {} game", "Updating {} games", n).replace("{}", &n.to_string()),
             Kind::Scan => gettext("Looking for installed games"),
+            Kind::Adopt => gettext("Adding {} to the library").replace("{}", &first),
             Kind::Artwork if n == 1 => gettext("Fetching art for {}").replace("{}", &first),
             Kind::Artwork => gettext("Fetching artwork"),
             Kind::Component => gettext("Installing {}").replace("{}", &first),
@@ -181,7 +184,7 @@ impl Job {
 
     /// A scan runs to its end; the others can be stopped.
     pub fn cancellable(&self) -> bool {
-        self.kind() != Kind::Scan
+        !matches!(self.kind(), Kind::Scan | Kind::Adopt)
     }
 
     /// Stopping pauses an install or an update, which resumes where it was.
@@ -246,6 +249,10 @@ pub fn start(kind: Kind, source: &str, targets: Vec<(String, String)>, force: bo
                 }
                 Ok((targets.len(), String::new()))
             }
+            Kind::Adopt => core.source_adopt(&source, &first, Some(&mut progress)).await.map(|id| {
+                arrived.push((id.clone(), title.clone()));
+                (1, id)
+            }),
             Kind::Scan => match core.source_scan(&source, Some(&mut progress)).await {
                 Ok(ids) => {
                     arrived = titled(&core, ids).await;
@@ -262,6 +269,7 @@ pub fn start(kind: Kind, source: &str, targets: Vec<(String, String)>, force: bo
         }?;
         let text = match (kind, count as u32, count.to_string()) {
             (Kind::Install | Kind::Component, ..) => gettext("{} is installed").replace("{}", &title),
+            (Kind::Adopt, ..) => gettext("{} is in your library").replace("{}", &title),
             (Kind::Update, 1, _) => gettext("{} is updated").replace("{}", &title),
             (Kind::Update, n, text) => ngettext("{} game updated", "{} games updated", n).replace("{}", &text),
             (Kind::Scan, 0, _) => gettext("No new installed games"),

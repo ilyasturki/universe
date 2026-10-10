@@ -433,6 +433,13 @@ impl Core {
             c.source_install(&source, &game_id, p.as_deref_mut()).await
         })
     }
+    #[pyo3(signature = (source, game_id, progress=None))]
+    fn adopt(&self, py: Python<'_>, source: String, game_id: String, progress: Option<Py<PyAny>>) -> PyResult<String> {
+        self.run(py, |c| async move {
+            let mut p = progress_of(&progress);
+            c.source_adopt(&source, &game_id, p.as_deref_mut()).await
+        })
+    }
     fn cancel(&self, source: String, game_id: String) -> bool {
         self.core.source_cancel(&source, &game_id)
     }

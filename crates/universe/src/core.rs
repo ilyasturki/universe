@@ -90,6 +90,15 @@ fn store_twin<'a>(games: &'a [Resolved], source: &str, sid: &str, dir: Option<&P
     })
 }
 
+/// How a store's report comes in, for `added_at`: a scan finds what was there all along; an install lands the game as new, an
+/// add from the store's page unless the library held it already; either brings an archived one back.
+#[derive(Clone, Copy)]
+enum Arrival {
+    Found,
+    Installed,
+    Added,
+}
+
 fn free_id(slug: &str, source: &str, sid: &str, taken: &[String]) -> String {
     let free = |id: &str| !taken.iter().any(|t| t == id) && !paths::game_dir(id).join("game.toml").exists();
     let slug = if slug.is_empty() { crate::slug::slug(&format!("{source} {sid}")) } else { slug.to_string() };
@@ -1993,7 +2002,7 @@ impl Core {
     }
 
     /// Creates the game when owned and installed, updates its source fields otherwise.
-    async fn apply_source_game(&self, source: &str, g: &serde_json::Map<String, serde_json::Value>, create: bool, stamp: bool) -> Result<Option<String>> {
+    async fn apply_source_game(&self, source: &str, g: &serde_json::Map<String, serde_json::Value>, create: bool, arrival: Arrival) -> Result<Option<String>> {
         let field = |k: &str| g.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
         let (sid, title, dir, exe, build) = (field("id"), field("title"), field("dir"), field("exe"), field("build"));
         let owned = g.get("owned").and_then(|v| v.as_bool());
@@ -2016,6 +2025,7 @@ impl Core {
             let taken = if existing.is_none() && arriving { games.iter().map(|x| x.game.id.clone()).collect() } else { Vec::new() };
             (existing, taken)
         };
+        let was_in = existing.as_ref().is_some_and(|g| g.removed_at.is_empty());
         let mut game = match existing {
             Some(g) if g.source.kind == source || claim => g,
             Some(_) => return Ok(None),
@@ -2033,8 +2043,12 @@ impl Core {
                 ng
             }
         };
-        // A scan finds what was there all along; only an install lands a game as new (or back from the archive).
-        if stamp && arriving && (game.added_at.is_empty() || !game.removed_at.is_empty()) {
+        let lands = match arrival {
+            Arrival::Found => false,
+            Arrival::Installed => game.added_at.is_empty() || !game.removed_at.is_empty(),
+            Arrival::Added => !was_in,
+        };
+        if arriving && lands {
             game.mark_added();
         }
         if !dir.is_empty() {
@@ -2108,7 +2122,7 @@ impl Core {
             let had: std::collections::HashSet<String> =
                 self.games.read().await.iter().filter(|g| g.game.source.kind == sid).map(|g| g.game.id.clone()).collect();
             for g in Self::game_events(&events) {
-                if let Ok(Some(id)) = self.apply_source_game(&sid, &g, true, false).await {
+                if let Ok(Some(id)) = self.apply_source_game(&sid, &g, true, Arrival::Found).await {
                     if !had.contains(&id) && !found.contains(&id) {
                         found.push(id);
                     }
@@ -2125,11 +2139,30 @@ impl Core {
         for mut g in Self::game_events(&events) {
             g.entry("owned".to_string()).or_insert(serde_json::Value::Bool(true));
             g.entry("installed".to_string()).or_insert(serde_json::Value::Bool(true));
-            if let Ok(Some(i)) = self.apply_source_game(source, &g, true, true).await {
+            if let Ok(Some(i)) = self.apply_source_game(source, &g, true, Arrival::Installed).await {
                 id = i;
             }
         }
         Ok(id)
+    }
+
+    /// Brings in the one install of `game_id` the source's `scan` finds, and nothing else: its library id, whose art the caller fetches.
+    pub async fn source_adopt(&self, source: &str, game_id: &str, progress: Option<Progress<'_, '_>>) -> Result<String> {
+        let m = self.source(source).await?;
+        let events = self.run_verb(&m, "scan", &[], progress).await?;
+        let mut g = Self::game_events(&events)
+            .into_iter()
+            .find(|g| g.get("id").and_then(|v| v.as_str()) == Some(game_id) && g.get("installed").and_then(|v| v.as_bool()) == Some(true))
+            .ok_or_else(|| Error::NotFound(format!("{source} finds no install of {game_id}")))?;
+        // Offline, a scan cannot tell what the account owns; the listing the page showed can.
+        if !g.get("owned").is_some_and(|v| v.is_boolean()) {
+            let listed = self.source_libraries.lock().await.get(source).is_some_and(|list| {
+                list.iter().any(|l| l.get("id").and_then(|v| v.as_str()) == Some(game_id) && l.get("owned").and_then(|v| v.as_bool()) == Some(true))
+            });
+            g.insert("owned".into(), serde_json::Value::Bool(listed));
+        }
+        let title = g.get("title").and_then(|v| v.as_str()).unwrap_or(game_id).to_string();
+        self.apply_source_game(source, &g, true, Arrival::Added).await?.ok_or_else(|| Error::Invalid(format!("{} does not list {title} as yours", m.name())))
     }
 
     pub async fn source_updates(&self) -> Result<Vec<serde_json::Value>> {
@@ -2167,7 +2200,7 @@ impl Core {
         for t in targets {
             let events = self.run_verb(&m, "update", std::slice::from_ref(&t), progress.as_deref_mut()).await.map_err(|e| Error::Io(format!("{t}: {e}")))?;
             for g in Self::game_events(&events) {
-                let _ = self.apply_source_game(source, &g, false, false).await;
+                let _ = self.apply_source_game(source, &g, false, Arrival::Found).await;
             }
             n += 1;
         }
@@ -2820,6 +2853,25 @@ install) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":t
         );
         assert_eq!(core.get("dead-cells").await.unwrap().game.source.kind, "gog");
         assert!(core.list().await.iter().all(|g| g["id"] != "dishonored-definitive-edition"), "no second game");
+    }
+
+    #[tokio::test]
+    async fn adding_one_install_to_the_library_leaves_the_others_out() {
+        let _dir = fake_source(
+            r#"library) for i in 1 2 3; do echo "{\"event\":\"game\",\"id\":\"$i\",\"title\":\"Game $i\",\"owned\":true,\"installed\":true,\"dir\":\"/g/$i\"}"; done ;;
+scan) for i in 1 2 3; do echo "{\"event\":\"game\",\"id\":\"$i\",\"title\":\"Game $i\",\"owned\":null,\"installed\":true,\"dir\":\"/g/$i\",\"exe\":\"g.exe\"}"; done ;;"#,
+        );
+        let core = open().await;
+        core.source_library("fake", true).await.unwrap();
+        let id = core.source_adopt("fake", "2", None).await.unwrap();
+        assert_eq!(core.list().await.iter().map(|g| g["id"].as_str().unwrap()).collect::<Vec<_>>(), [id.as_str()], "that one alone");
+        let game = core.get(&id).await.unwrap().game;
+        assert_eq!((game.source.kind.as_str(), game.source.id.as_str(), game.source.dir.as_str()), ("fake", "2", "/g/2"), "owned, as the listing said");
+        assert!(!game.added_at.is_empty(), "new to the library");
+        let list = core.source_library("fake", false).await.unwrap();
+        assert_eq!(list.iter().map(|g| g["game_id"].as_str().unwrap_or("")).collect::<Vec<_>>(), ["", id.as_str(), ""]);
+        assert_eq!(core.source_adopt("fake", "2", None).await.unwrap(), id, "added again, the same game");
+        assert!(matches!(core.source_adopt("fake", "4", None).await, Err(Error::NotFound(_))));
     }
 
     #[tokio::test]
