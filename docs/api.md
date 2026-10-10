@@ -1799,7 +1799,7 @@ Access menu has them).
 Defaults as the core ships them:
 
 ```toml
-schema = 1
+schema = 2                           # a file without it, or older, is migrated once when the core opens it (see Emulator controls)
 
 [paths]                              # defaults follow XDG and xdg-user-dirs
 games_root = "~/Games"               # $XDG_GAMES_DIR: where sources install

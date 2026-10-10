@@ -75,6 +75,31 @@ fn discover_on_a_bare_home_finds_nothing() {
 }
 
 #[test]
+fn an_older_config_gives_up_its_all_games_xbox_layout_and_a_game_keeps_its_own() {
+    let dir = tempfile::tempdir().unwrap();
+    let controls = dir.path().join("modules/controls");
+    std::fs::create_dir_all(&controls).unwrap();
+    std::fs::copy(concat!(env!("CARGO_MANIFEST_DIR"), "/../../modules/controls/module.toml"), controls.join("module.toml")).unwrap();
+    std::fs::create_dir_all(dir.path().join("config")).unwrap();
+    let config = dir.path().join("config/config.toml");
+    std::fs::write(&config, "schema = 1\n[modules]\nenabled = [\"controls\"]\n[modules.controls]\nlayout = \"xbox\"\n").unwrap();
+    let game = dir.path().join("data/games/strikers");
+    std::fs::create_dir_all(&game).unwrap();
+    std::fs::write(
+        game.join("game.toml"),
+        "schema = 1\nid = \"strikers\"\ntitle = \"Super Mario Strikers\"\nplatform = \"Nintendo GameCube\"\n[launch]\nrunner = \"dolphin\"\nexe = \"/roms/strikers.rvz\"\n[modules.controls]\nlayout = \"xbox\"\n",
+    )
+    .unwrap();
+    let layout = |args: &[&str]| -> serde_json::Value {
+        let out = universe(&dir, &[&["--json", "module", "settings", "controls"], args].concat(), &[]);
+        serde_json::from_slice::<serde_json::Value>(&out.stdout).unwrap_or_else(|e| panic!("{e}: {}", text(&out.stderr)))["layout"].clone()
+    };
+    assert_eq!(layout(&[]), "pad", "each controller's own for every game");
+    assert_eq!(layout(&["strikers"]), "xbox", "the game's own choice stays");
+    assert!(std::fs::read_to_string(&config).unwrap().starts_with("schema = 2\n"));
+}
+
+#[test]
 fn a_write_out_of_range_or_to_a_read_only_config_is_refused() {
     let dir = tempfile::tempdir().unwrap();
     let config = dir.path().join("config/config.toml");

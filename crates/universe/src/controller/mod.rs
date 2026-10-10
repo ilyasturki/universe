@@ -562,7 +562,7 @@ fn controller_table(doc: &mut toml_edit::DocumentMut) -> &mut toml_edit::Table {
 pub fn write_macros(list: &[Macro]) -> crate::Result<()> {
     let path = paths::config_file();
     let text = std::fs::read_to_string(&path).unwrap_or_default();
-    let mut doc: toml_edit::DocumentMut = text.parse().map_err(|e: toml_edit::TomlError| crate::Error::Invalid(e.to_string()))?;
+    let mut doc = crate::config::document(&text)?;
     controller_table(&mut doc)["macros"] = toml_edit::Item::ArrayOfTables(macros_to_toml(list));
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;

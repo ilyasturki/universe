@@ -244,7 +244,7 @@ pub struct Keys {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            schema: 1,
+            schema: SCHEMA as u32,
             paths: Paths::default(),
             launch: LaunchDefaults::default(),
             desktop: DesktopConfig::default(),
@@ -489,7 +489,7 @@ impl Config {
 
     pub fn set_key(path: &Path, key: &str, value: &str) -> crate::Result<()> {
         let text = std::fs::read_to_string(path).unwrap_or_default();
-        let mut doc: toml_edit::DocumentMut = text.parse().map_err(|e: toml_edit::TomlError| crate::Error::Invalid(e.to_string()))?;
+        let mut doc = document(&text)?;
         crate::game::set_dotted(&mut doc, key, value)?;
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
@@ -518,6 +518,54 @@ impl Config {
 
 pub const HOME_MANAGER: &str = "home-manager";
 
+/// The config.toml layout this Universe writes; a file without `schema` is 1.
+pub const SCHEMA: i64 = 2;
+
+/// Brings an older config.toml up to `SCHEMA` in place, once. 2: the all-games `[modules.controls] layout = "xbox"` goes, each
+/// pad's own layout taking its place. A missing file stays missing; one the core may not write (home-manager's) stays as it is.
+pub fn migrate(path: &Path) -> crate::Result<bool> {
+    let Ok(text) = std::fs::read_to_string(path) else { return Ok(false) };
+    let mut doc: toml_edit::DocumentMut = text.parse().map_err(|e: toml_edit::TomlError| crate::Error::Invalid(e.to_string()))?;
+    if doc.get("schema").and_then(|v| v.as_integer()).unwrap_or(1) >= SCHEMA {
+        return Ok(false);
+    }
+    if !Config::writable(path) || Config::owner(path) == HOME_MANAGER {
+        tracing::info!("{} is read-only: left at its schema, its [modules.controls] layout kept", path.display());
+        return Ok(false);
+    }
+    if let Some(controls) = doc.get_mut("modules").and_then(|m| m.get_mut("controls")).and_then(|c| c.as_table_like_mut()) {
+        if controls.get("layout").and_then(|v| v.as_str()) == Some("xbox") {
+            controls.remove("layout");
+        }
+    }
+    doc["schema"] = toml_edit::value(SCHEMA);
+    replace(path, &doc.to_string())?;
+    Ok(true)
+}
+
+/// Through a symlink to its target, so a config kept in a dotfiles repository stays linked; by a rename, so a process opening
+/// the file at the same moment reads the old one or the new one whole.
+fn replace(path: &Path, text: &str) -> std::io::Result<()> {
+    let target = std::fs::canonicalize(path)?;
+    let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let tmp = target.with_file_name(format!(".{name}.{}.tmp", std::process::id()));
+    std::fs::write(&tmp, text)?;
+    let kept = std::fs::metadata(&target).and_then(|m| std::fs::set_permissions(&tmp, m.permissions())).and_then(|()| std::fs::rename(&tmp, &target));
+    if kept.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    kept
+}
+
+/// A config.toml the core starts is current: a later start reads it as `SCHEMA`, not as one to migrate.
+pub fn document(text: &str) -> crate::Result<toml_edit::DocumentMut> {
+    let mut doc: toml_edit::DocumentMut = text.parse().map_err(|e: toml_edit::TomlError| crate::Error::Invalid(e.to_string()))?;
+    if text.trim().is_empty() {
+        doc["schema"] = toml_edit::value(SCHEMA);
+    }
+    Ok(doc)
+}
+
 fn owner_under(path: &Path, store: &Path) -> &'static str {
     let linked = std::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink());
     if linked && std::fs::canonicalize(path).is_ok_and(|p| p.starts_with(store)) {
@@ -530,6 +578,59 @@ fn owner_under(path: &Path, store: &Path) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // The user's own file, comments and order as they wrote them.
+    const SCHEMA_1: &str = "schema = 1\n\n[launch]\nproton = \"proton-ge\" # GE for everything\n\n[modules.controls]\n# set long ago\nshoulders = \"standard\"\nlayout = \"xbox\"\n\n[controller.buttons.xbox-elite]\nnorth = [\"BTN_WEST\"]\n";
+
+    #[test]
+    fn schema_1_drops_the_all_games_xbox_layout_once_and_keeps_the_rest_as_written() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, SCHEMA_1).unwrap();
+        assert!(migrate(&path).unwrap());
+        let after = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(after, SCHEMA_1.replace("schema = 1", "schema = 2").replace("layout = \"xbox\"\n", ""));
+        assert!(!migrate(&path).unwrap(), "once");
+        Config::set_key(&path, "modules.controls.layout", "xbox").unwrap();
+        assert!(!migrate(&path).unwrap());
+        assert_eq!(Config::load_from(&path).unwrap().modules.settings["controls"]["layout"].as_str(), Some("xbox"), "chosen again under schema 2, it stays");
+
+        std::fs::write(&path, "[modules.controls]\nlayout = \"positional\"\n").unwrap();
+        assert!(migrate(&path).unwrap(), "no schema is 1");
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "schema = 2\n[modules.controls]\nlayout = \"positional\"\n",
+            "A on the right everywhere still means that"
+        );
+
+        let fresh = dir.path().join("fresh.toml");
+        assert!(!migrate(&fresh).unwrap() && !fresh.exists(), "a missing file stays missing");
+        Config::set_key(&fresh, "modules.controls.layout", "xbox").unwrap();
+        assert!(!migrate(&fresh).unwrap(), "a file the core started is current");
+    }
+
+    #[test]
+    fn a_read_only_or_linked_config_is_migrated_only_where_the_core_may_write() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        // `just fresh` with FRESH=hm: home-manager's read-only file.
+        let hm = dir.path().join("hm.toml");
+        let text = "schema = 1\n[modules.controls]\nlayout = \"xbox\"\n";
+        std::fs::write(&hm, text).unwrap();
+        std::fs::set_permissions(&hm, std::fs::Permissions::from_mode(0o444)).unwrap();
+        assert!(!migrate(&hm).unwrap());
+        assert_eq!(std::fs::read_to_string(&hm).unwrap(), text);
+
+        let dotfiles = dir.path().join("dotfiles");
+        std::fs::create_dir_all(&dotfiles).unwrap();
+        std::fs::write(dotfiles.join("config.toml"), SCHEMA_1).unwrap();
+        let linked = dir.path().join("linked.toml");
+        std::os::unix::fs::symlink(dotfiles.join("config.toml"), &linked).unwrap();
+        assert!(migrate(&linked).unwrap());
+        assert!(std::fs::symlink_metadata(&linked).unwrap().file_type().is_symlink(), "the link stays a link");
+        assert!(std::fs::read_to_string(dotfiles.join("config.toml")).unwrap().starts_with("schema = 2\n"));
+        assert_eq!(std::fs::read_dir(&dotfiles).unwrap().count(), 1, "no temporary file left");
+    }
 
     #[test]
     fn a_config_linked_into_the_store_is_home_managers() {

@@ -60,7 +60,7 @@ in
     ]
     ++ lib.optional (cfg.desktop != null) cfg.desktop;
     xdg.configFile."universe/config.toml" = lib.mkIf (cfg.settings != null) {
-      source = tomlFormat.generate "universe-config.toml" ({ schema = 1; } // cfg.settings);
+      source = tomlFormat.generate "universe-config.toml" ({ schema = 2; } // cfg.settings);
     };
   };
 }

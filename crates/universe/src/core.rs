@@ -246,6 +246,9 @@ impl Core {
     }
 
     pub async fn open() -> Result<Core> {
+        if let Err(e) = crate::config::migrate(&paths::config_file()) {
+            tracing::warn!("{}: {e}", paths::config_file().display());
+        }
         let config = Config::load()?;
         let host = Host::live(&config);
         Core::open_with(config, host).await
