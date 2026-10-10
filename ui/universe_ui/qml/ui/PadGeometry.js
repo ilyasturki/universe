@@ -174,8 +174,13 @@ function xboxButtons(kind) {
         b.push({ slot: "paddle_p1", kind: "paddle", x: 872, y: 520, w: 52, h: 96, ghost: true });
         b.push({ slot: "paddle_p2", kind: "paddle", x: 804, y: 548, w: 46, h: 70, ghost: true });
     }
-    if (kind === "switch-pro")
+    if (kind === "switch-pro" || kind === "switch2-pro")
         b.push({ slot: "capture", kind: "small", x: 430, y: 318, w: 28, h: 28 });
+    if (kind === "switch2-pro") {
+        b.push({ slot: "c", kind: "small", x: 500, y: 300, w: 26, h: 26, round: true });
+        b.push({ slot: "gl", kind: "paddle", x: 150, y: 500, w: 54, h: 96, ghost: true });
+        b.push({ slot: "gr", kind: "paddle", x: 850, y: 500, w: 54, h: 96, ghost: true });
+    }
     if (kind === "8bitdo-pro-3") {
         b = b.concat(PRO3_BUMPERS);
         b.push({ slot: "star", kind: "small", x: 500, y: 300, w: 26, h: 26, round: true });
@@ -186,7 +191,7 @@ function xboxButtons(kind) {
 }
 
 var SONY_KINDS = { "dualsense-edge": true, "dualsense": true, "dualshock4": true };
-var DRAWN_KINDS = { "xbox-elite": true, "xbox": true, "switch-pro": true, "8bitdo-pro-3": true };
+var DRAWN_KINDS = { "xbox-elite": true, "xbox": true, "switch-pro": true, "switch2-pro": true, "8bitdo-pro-3": true };
 
 // A family without a body of its own is drawn on the generic one.
 function of(family) {

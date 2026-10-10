@@ -141,6 +141,7 @@ pub fn seeded_macros() -> Vec<Macro> {
         Macro::seeded("8bitdo-pro-3", "paddle_pl", "volume_down"),
         Macro::seeded("xbox", "share", "screenshot"),
         Macro::seeded("switch-pro", "capture", "screenshot"),
+        Macro::seeded("switch2-pro", "capture", "screenshot"),
     ]
 }
 
@@ -224,6 +225,10 @@ const SWITCH: [Slot; 17] = standard!("B", "A", "X", "Y", "L", "R", "ZL", "ZR", "
 const EIGHTBITDO: [Slot; 17] =
     standard!("B", "A", "X", "Y", "L1", "R1", "L2", "R2", "Select", "Start", "Home", "L3", "R3"; &["BTN_EAST"], &["BTN_SOUTH"], &["BTN_NORTH"], &["BTN_WEST"]);
 
+// The hid-nintendo Switch 2 driver (v13, not yet merged) reports A, B, X and Y by letter: the A on the right is BTN_SOUTH.
+const SWITCH2: [Slot; 17] =
+    standard!("B", "A", "X", "Y", "L", "R", "ZL", "ZR", "Minus", "Plus", "Home", "LS", "RS"; &["BTN_EAST"], &["BTN_SOUTH"], &["BTN_NORTH"], &["BTN_WEST"]);
+
 pub struct Family {
     pub id: &'static str,
     pub name: &'static str,
@@ -240,7 +245,7 @@ impl Family {
     }
 }
 
-const FAMILIES: [Family; 9] = [
+const FAMILIES: [Family; 10] = [
     // hid-steam's own device. Steam Input's virtual pad counts only on Deck hardware: `detect_family_on`.
     Family {
         id: "steam-deck",
@@ -300,6 +305,19 @@ const FAMILIES: [Family; 9] = [
         extras: &[extra("share", "Share", &["BTN_TRIGGER_HAPPY1", "KEY_RECORD"])],
         ids: &[(0x045e, 0)],
         name_hints: &["xbox", "microsoft", "x-box"],
+    },
+    Family {
+        id: "switch2-pro",
+        name: "Switch 2 Pro",
+        standard: &SWITCH2,
+        extras: &[
+            extra("gl", "GL", &["BTN_GRIPL"]),
+            extra("gr", "GR", &["BTN_GRIPR"]),
+            extra("c", "C", &["BTN_C"]),
+            extra("capture", "Capture", &["KEY_RECORD"]),
+        ],
+        ids: &[(0x057e, 0x2069)],
+        name_hints: &["pro controller 2", "switch 2 pro"],
     },
     Family {
         id: "switch-pro",
@@ -583,6 +601,8 @@ mod tests {
         );
         assert_eq!(detect_family(0x045e, 0x028e, "Xbox Wireless Controller", &[0x130, 708]).id, "xbox-elite", "xpad over USB");
         assert_eq!(detect_family(0x2dc8, 0x6009, "8BitDo Pro 3", &[]).id, "8bitdo-pro-3");
+        assert_eq!(detect_family(0x057e, 0x2069, "Nintendo Switch Pro Controller 2", &[]).id, "switch2-pro");
+        assert_eq!(detect_family(0x057e, 0x2009, "Pro Controller", &[]).id, "switch-pro");
         assert_eq!(detect_family(0x1234, 0x0001, "Some Pad", &[]).id, "generic");
         assert_eq!(detect_family(0x054c, 0x0df2, "DualSense Edge Wireless Controller", &[]).slots().filter(|s| s.extra).count(), 4);
     }
@@ -732,7 +752,7 @@ mod tests {
     #[test]
     fn macros_default_to_the_seeds_until_written() {
         let cfg: ControllerConfig = toml::from_str("").unwrap();
-        assert_eq!(cfg.macros().len(), 13);
+        assert_eq!(cfg.macros().len(), 14);
         let cfg: ControllerConfig = toml::from_str("macros = []").unwrap();
         assert!(cfg.macros().is_empty());
         let cfg: ControllerConfig = toml::from_str("[[macros]]\nfamily = \"*\"\nbutton = \"start\"\ntrigger = \"hold\"\naction = \"stop\"\n[[macros]]\nfamily = \"*\"\nbutton = \"guide\"\ntrigger = \"hold\"\naction = \"stop\"\n").unwrap();
@@ -807,7 +827,7 @@ mod tests {
     #[test]
     fn state_lists_families_macros_and_presets() {
         let v = state_json(&ControllerConfig::default());
-        assert_eq!(v["families"].as_array().unwrap().len(), 9);
+        assert_eq!(v["families"].as_array().unwrap().len(), 10);
         assert_eq!(v["presets"].as_array().unwrap().len(), 8);
         let edge = v["families"].as_array().unwrap().iter().find(|f| f["id"] == "dualsense-edge").unwrap();
         let slots = edge["slots"].as_array().unwrap();

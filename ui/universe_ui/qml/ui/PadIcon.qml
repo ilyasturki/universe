@@ -17,7 +17,7 @@ Canvas {
             return "circle";
         if (family === "8bitdo-pro-3")
             return "star";
-        if (family === "switch-pro")
+        if (family === "switch-pro" || family === "switch2-pro")
             return "square";
         if (family === "steam-deck")
             return "screen";

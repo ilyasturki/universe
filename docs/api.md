@@ -1658,7 +1658,10 @@ outcome as a `hud` event, which the launcher toasts: "MangoHud shown · <title>"
 Families: `steam-deck` (grip_l4, grip_l5, grip_r4, grip_r5, quick, pad_left, pad_right: hid-steam's
 `BTN_GRIPL`, `BTN_GRIPL2`, `BTN_GRIPR`, `BTN_GRIPR2`, `BTN_BASE`, `BTN_THUMB`, `BTN_THUMB2`; its
 analog triggers on `ABS_HAT2Y` and `ABS_HAT2X`), `dualsense-edge` (fn_left, fn_right, paddle_left, paddle_right), `dualsense`,
-`dualshock4`, `xbox-elite` (paddle_p1…p4), `xbox` (share), `switch-pro` (capture), `8bitdo-pro-3`
+`dualshock4`, `xbox-elite` (paddle_p1…p4), `xbox` (share), `switch2-pro` (gl, gr, c, capture: the
+Switch 2 Pro Controller, `057e:2069`, as the hid-nintendo Switch 2 driver under review maps it; no
+merged kernel drives it yet, so it reaches no evdev node and `doctor`'s `switch2-pro` line says
+so while it is plugged in), `switch-pro` (capture), `8bitdo-pro-3`
 (paddle_l4, paddle_r4, paddle_pl, paddle_pr, star), `generic`; every family has the standard slots
 `south east north west lb rb lt rt select start guide ls rs dpad_up dpad_down dpad_left dpad_right`.
 The Xbox families and the Deck seed `north` with `BTN_WEST` and `west` with `BTN_NORTH`: xpad,

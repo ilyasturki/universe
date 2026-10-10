@@ -101,7 +101,7 @@ pub fn geometry(family: &str) -> Geometry {
         }
         return Geometry { body: sheet::DUALSENSE_BODY, details: sheet::DUALSENSE_DETAILS, buttons };
     }
-    let kind = if matches!(family, "xbox-elite" | "xbox" | "switch-pro" | "8bitdo-pro-3") { family } else { "generic" };
+    let kind = if matches!(family, "xbox-elite" | "xbox" | "switch-pro" | "switch2-pro" | "8bitdo-pro-3") { family } else { "generic" };
     let xbox = matches!(kind, "xbox" | "xbox-elite");
     let (body, details, shoulders, layout) = if xbox {
         (sheet::XBOX_BODY, sheet::XBOX_DETAILS, sheet::XBOX_SHOULDERS, sheet::XBOX_LAYOUT)
@@ -118,6 +118,12 @@ pub fn geometry(family: &str) -> Geometry {
             buttons.push(extra("paddle_p2", Shape::Paddle { x: 804.0, y: 548.0, w: 46.0, h: 70.0 }, true));
         }
         "switch-pro" => buttons.push(extra("capture", Shape::Small { x: 430.0, y: 318.0, w: 28.0, h: 28.0, angle: 0.0, round: false }, false)),
+        "switch2-pro" => {
+            buttons.push(extra("capture", Shape::Small { x: 430.0, y: 318.0, w: 28.0, h: 28.0, angle: 0.0, round: false }, false));
+            buttons.push(extra("c", Shape::Small { x: 500.0, y: 300.0, w: 26.0, h: 26.0, angle: 0.0, round: true }, false));
+            buttons.push(extra("gl", Shape::Paddle { x: 150.0, y: 500.0, w: 54.0, h: 96.0 }, true));
+            buttons.push(extra("gr", Shape::Paddle { x: 850.0, y: 500.0, w: 54.0, h: 96.0 }, true));
+        }
         "8bitdo-pro-3" => {
             buttons.extend(sheet::PRO3_BUMPERS);
             buttons.push(extra("star", Shape::Small { x: 500.0, y: 300.0, w: 26.0, h: 26.0, angle: 0.0, round: true }, false));
@@ -133,7 +139,7 @@ pub fn geometry(family: &str) -> Geometry {
 fn glyph(family: &str, slot: &str) -> (&'static str, &'static str) {
     let style = match family {
         "dualsense-edge" | "dualsense" | "dualshock4" => "sony",
-        "switch-pro" => "nintendo",
+        "switch-pro" | "switch2-pro" => "nintendo",
         "8bitdo-pro-3" => "eightbitdo",
         "steam-deck" => "deck",
         _ => "xbox",
@@ -210,6 +216,9 @@ fn glyph(family: &str, slot: &str) -> (&'static str, &'static str) {
         "capture" => ("", "capture"),
         "mute" => ("", "mic"),
         "star" => ("", "star"),
+        "gl" => ("GL", ""),
+        "gr" => ("GR", ""),
+        "c" => ("C", ""),
         "grip_l4" => ("L4", ""),
         "grip_l5" => ("L5", ""),
         "grip_r4" => ("R4", ""),
@@ -779,7 +788,8 @@ mod tests {
                 }
             }
         }
-        for family in ["steam-deck", "dualsense-edge", "dualsense", "dualshock4", "xbox", "xbox-elite", "switch-pro", "8bitdo-pro-3", "generic"] {
+        for family in ["steam-deck", "dualsense-edge", "dualsense", "dualshock4", "xbox", "xbox-elite", "switch2-pro", "switch-pro", "8bitdo-pro-3", "generic"]
+        {
             for spec in geometry(family).buttons {
                 if let Shape::Trigger { path, .. } | Shape::Bumper { path, .. } = spec.shape {
                     texts.push(path);
@@ -806,6 +816,8 @@ mod tests {
         assert_eq!(glyph("switch-pro", "east"), ("A", ""));
         assert_eq!(glyph("dualsense", "south"), ("", "cross"));
         assert_eq!((glyph("dualshock4", "select"), glyph("dualsense", "select")), (("", "share"), ("", "create")));
+        assert!(["gl", "gr", "c", "capture"].iter().all(|s| slots("switch2-pro").contains(s)));
+        assert_eq!(glyph("switch2-pro", "east"), ("A", ""));
         let deck = slots("steam-deck");
         assert!(["grip_l5", "grip_r4", "quick", "pad_left", "pad_right"].iter().all(|s| deck.contains(s)), "{deck:?}");
         assert_eq!((glyph("steam-deck", "guide"), glyph("steam-deck", "lb"), glyph("steam-deck", "quick")), (("", "steam"), ("L1", ""), ("", "more")));

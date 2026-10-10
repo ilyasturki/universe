@@ -3,7 +3,7 @@
 var STYLE = {
     "dualsense-edge": "sony", "dualsense": "sony", "dualshock4": "sony-ds4",
     "xbox": "xbox", "xbox-elite": "xbox", "generic": "xbox",
-    "switch-pro": "nintendo", "8bitdo-pro-3": "eightbitdo", "steam-deck": "deck"
+    "switch-pro": "nintendo", "switch2-pro": "nintendo", "8bitdo-pro-3": "eightbitdo", "steam-deck": "deck"
 };
 
 // slot → [text, symbol]
@@ -32,7 +32,7 @@ var EXTRA = {
     fn_left: ["Fn"], fn_right: ["Fn"], paddle_left: ["LB"], paddle_right: ["RB"],
     paddle_p1: ["P1"], paddle_p2: ["P2"], paddle_p3: ["P3"], paddle_p4: ["P4"],
     paddle_l4: ["L4"], paddle_r4: ["R4"], paddle_pl: ["PL"], paddle_pr: ["PR"],
-    share: ["", "share"], capture: ["", "capture"], mute: ["", "mic"], star: ["", "star"],
+    share: ["", "share"], capture: ["", "capture"], mute: ["", "mic"], star: ["", "star"], gl: ["GL"], gr: ["GR"], c: ["C"],
     grip_l4: ["L4"], grip_l5: ["L5"], grip_r4: ["R4"], grip_r5: ["R5"], quick: ["", "more"],
     pad_left: ["", "pad"], pad_right: ["", "pad"]
 };
@@ -48,8 +48,10 @@ function shape(slot) {
         return "trigger";
     if (slot === "ls" || slot === "rs")
         return "stick";
-    if (slot === "select" || slot === "start" || slot === "share" || slot === "capture" || slot === "mute" || slot === "star" || slot === "quick")
+    if (slot === "select" || slot === "start" || slot === "share" || slot === "capture" || slot === "mute" || slot === "star" || slot === "quick" || slot === "c")
         return "small";
+    if (slot === "gl" || slot === "gr")
+        return "paddle";
     if (slot.indexOf("pad_") === 0)
         return "circle";
     if (slot.indexOf("fn_") === 0)

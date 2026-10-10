@@ -949,6 +949,33 @@
         ]
       },
       {
+        "id": "switch2-pro",
+        "name": "Switch 2 Pro",
+        "slots": [
+          {"id": "south", "label": "B", "codes": ["BTN_EAST"], "extra": false},
+          {"id": "east", "label": "A", "codes": ["BTN_SOUTH"], "extra": false},
+          {"id": "north", "label": "X", "codes": ["BTN_NORTH"], "extra": false},
+          {"id": "west", "label": "Y", "codes": ["BTN_WEST"], "extra": false},
+          {"id": "lb", "label": "L", "codes": ["BTN_TL"], "extra": false},
+          {"id": "rb", "label": "R", "codes": ["BTN_TR"], "extra": false},
+          {"id": "lt", "label": "ZL", "codes": ["BTN_TL2"], "extra": false},
+          {"id": "rt", "label": "ZR", "codes": ["BTN_TR2"], "extra": false},
+          {"id": "select", "label": "Minus", "codes": ["BTN_SELECT"], "extra": false},
+          {"id": "start", "label": "Plus", "codes": ["BTN_START"], "extra": false},
+          {"id": "guide", "label": "Home", "codes": ["BTN_MODE"], "extra": false},
+          {"id": "ls", "label": "LS", "codes": ["BTN_THUMBL"], "extra": false},
+          {"id": "rs", "label": "RS", "codes": ["BTN_THUMBR"], "extra": false},
+          {"id": "dpad_up", "label": "D-pad up", "codes": ["BTN_DPAD_UP"], "extra": false},
+          {"id": "dpad_down", "label": "D-pad down", "codes": ["BTN_DPAD_DOWN"], "extra": false},
+          {"id": "dpad_left", "label": "D-pad left", "codes": ["BTN_DPAD_LEFT"], "extra": false},
+          {"id": "dpad_right", "label": "D-pad right", "codes": ["BTN_DPAD_RIGHT"], "extra": false},
+          {"id": "gl", "label": "GL", "codes": ["BTN_GRIPL"], "extra": true},
+          {"id": "gr", "label": "GR", "codes": ["BTN_GRIPR"], "extra": true},
+          {"id": "c", "label": "C", "codes": ["BTN_C"], "extra": true},
+          {"id": "capture", "label": "Capture", "codes": ["KEY_RECORD"], "extra": true}
+        ]
+      },
+      {
         "id": "switch-pro",
         "name": "Switch Pro Controller",
         "slots": [
