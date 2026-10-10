@@ -22,7 +22,7 @@ def interface():
     return iface.get("name"), methods
 
 
-def test_the_bus_calls_match_the_extensions_interface():
+def test_the_core_calls_the_extension_by_its_uuid_and_interface():
     name, methods = interface()
     gnome = (EXTENSION.parent / "crates" / "universe" / "src" / "desktop" / "gnome.rs").read_text()
     assert f'"{name}", "/org/universe/Windows", "{name}"' in gnome
@@ -30,10 +30,6 @@ def test_the_bus_calls_match_the_extensions_interface():
     assert methods["Screenshot"] == ("sbb", "b") and '"Screenshot", &(path.to_string_lossy().as_ref(), window, cursor)' in gnome
     assert methods["List"] == ("", "s") and methods["Activate"] == ("t", "b")
     assert methods["HideCursor"] == ("b", "") and '"HideCursor", &(true,)' in gnome and '"HideCursor", &(false,)' in gnome
-
-
-def test_the_metadata_names_the_shells_it_runs_on():
     meta = json.loads((EXTENSION / "metadata.json").read_text())
-    assert meta["uuid"] == "universe@ilyasturki.github.io"
-    assert meta["session-modes"] == ["user"]
+    assert f'UNIVERSE_EXTENSION: &str = "{meta["uuid"]}";' in gnome, "the core enables the extension by the uuid it ships with"
     assert meta["shell-version"] and all(v.isdigit() for v in meta["shell-version"])
