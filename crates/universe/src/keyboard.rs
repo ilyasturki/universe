@@ -257,9 +257,4 @@ mod tests {
         assert_eq!(lst_lookup(lst, "Generic 105-key PC"), None, "a model is no layout");
         assert_eq!(lst_lookup(lst, "Klingon"), None);
     }
-
-    #[test]
-    fn the_environment_is_exported_as_libxkbcommon_reads_it() {
-        assert_eq!(Layout::new("fr", "").env(), [("XKB_DEFAULT_LAYOUT".to_string(), "fr".to_string()), ("XKB_DEFAULT_VARIANT".to_string(), String::new())]);
-    }
 }

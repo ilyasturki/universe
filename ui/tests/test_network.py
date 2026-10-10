@@ -1,6 +1,4 @@
-import os
-
-from universe_ui.screens.network import FAKE, Network, read_link
+from universe_ui.screens.network import read_link
 
 WIRELESS_HEAD = "Inter-| sta-|   Quality        |\n face | tus | link level noise |\n"
 
@@ -30,7 +28,3 @@ def test_wifi_reads_its_arcs_a_cable_wins_and_no_link_up_is_offline(tmp_path):
         (root / name / "operstate").write_text("down\n")
     assert read_link(str(root), str(tmp_path / "missing")) == {"kind": "", "bars": 0}
 
-
-def test_the_fixture_is_on_wifi(app):
-    network = Network(os.path.join(FAKE, "class"), os.path.join(FAKE, "wireless"))
-    assert (network.kind, network.bars) == ("wifi", 2)

@@ -75,11 +75,17 @@ fn discover_on_a_bare_home_finds_nothing() {
 }
 
 #[test]
-fn a_read_only_config_is_named_when_a_write_is_refused() {
+fn a_write_out_of_range_or_to_a_read_only_config_is_refused() {
     let dir = tempfile::tempdir().unwrap();
     let config = dir.path().join("config/config.toml");
     std::fs::create_dir_all(config.parent().unwrap()).unwrap();
     std::fs::write(&config, "schema = 1\n").unwrap();
+    for (step, taken) in [("0", false), ("101", false), ("precise", false), ("10", true)] {
+        let out = universe(&dir, &["config", "set", "controller.volume_step", step], &[]);
+        assert_eq!(out.status.success(), taken, "volume step {step}: {}", text(&out.stderr));
+    }
+    let settings: serde_json::Value = serde_json::from_slice(&universe(&dir, &["config", "get", "--json"], &[]).stdout).unwrap();
+    assert_eq!(settings["controller"]["volume_step"], 10, "a percent from 1 to 100");
     std::fs::set_permissions(&config, std::os::unix::fs::PermissionsExt::from_mode(0o444)).unwrap();
     let out = universe(&dir, &["config", "set", "launch.hdr", "true"], &[]);
     let err = String::from_utf8_lossy(&out.stderr).into_owned();

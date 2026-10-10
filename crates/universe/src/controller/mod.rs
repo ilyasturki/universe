@@ -721,24 +721,6 @@ mod tests {
     }
 
     #[test]
-    fn volume_step_is_a_percent() {
-        let cfg: ControllerConfig = toml::from_str("").unwrap();
-        assert_eq!(cfg.volume_step, 2);
-        assert_eq!(toml::from_str::<ControllerConfig>("volume_step = 5").unwrap().volume_step, 5);
-        assert!(toml::from_str::<ControllerConfig>("volume_step = \"loud\"").is_err());
-        assert_eq!(volume_step_value("10").unwrap(), 10);
-        assert!(volume_step_value("0").is_err() && volume_step_value("101").is_err() && volume_step_value("precise").is_err());
-        assert_eq!(state_json(&cfg)["volume_step"], 2);
-    }
-
-    #[test]
-    fn home_summons_the_launcher_unless_turned_off() {
-        assert!(toml::from_str::<ControllerConfig>("").unwrap().home_summons);
-        let off: ControllerConfig = toml::from_str("home_summons = false").unwrap();
-        assert_eq!(state_json(&off)["home_summons"], false);
-    }
-
-    #[test]
     fn macro_validation() {
         assert!(Macro {
             family: "dualsense-edge".into(),

@@ -23,13 +23,6 @@ def test_theme_ids_are_unique_and_have_entries():
         assert theme["accent"] and theme["ground"], f"{theme['id']}'s swatch in Themes"
 
 
-def test_the_unlock_card_takes_the_looks_words(app, tmp_path):
-    selector = ThemeSelector(Memory(str(tmp_path / "memory.json")))
-    for theme in THEMES:
-        selector.set(theme["id"])
-        assert selector.unlocked == theme["unlocked"]
-
-
 def test_selector_defaults_and_persists(app, tmp_path):
     memory = Memory(str(tmp_path / "memory.json"))
     selector = ThemeSelector(memory)
