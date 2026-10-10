@@ -10,8 +10,6 @@ use crate::{paths, sessions};
 
 pub const MEDIA_SLOTS: [&str; 5] = ["box_front", "square", "banner", "background", "logo"];
 pub const IMAGE_EXTS: [&str; 4] = ["png", "jpg", "jpeg", "webp"];
-/// GE-Proton's PlayStation pad switches: one set by hand in `[launch.env]` takes over from `launch.sony_pad`.
-pub const SONY_ENV: &str = "PROTON_SONY_";
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Resolved {
@@ -184,6 +182,19 @@ pub(crate) fn gamescope_fields_of(game: &Game, config: &Config) -> crate::gamesc
     }
 }
 
+/// A GE-Proton PlayStation pad switch already in the environment: set by hand, it takes over from `launch.sony_pad`.
+pub fn sony_by_hand<'a>(keys: impl IntoIterator<Item = &'a String>) -> Option<&'a String> {
+    keys.into_iter().find(|k| k.starts_with("PROTON_SONY_"))
+}
+
+pub fn sony_pad_auto(playstation: &str) -> &'static str {
+    match playstation {
+        "dualsense" => "native",
+        "dualshock" => "dualshock4",
+        _ => "xinput",
+    }
+}
+
 pub fn resolve(game: Game, config: &Config, modules: &[crate::modules::Module]) -> Resolved {
     resolve_with(game, config, modules, &mut HashMap::new())
 }
@@ -248,15 +259,12 @@ pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Modu
         xess_upgrade: upgrade("xess_upgrade", game.launch.xess_upgrade, config.launch.xess_upgrade),
         optiscaler: game.launch.optiscaler.unwrap_or(config.launch.optiscaler),
         debug_log: game.launch.debug_log.unwrap_or(config.launch.debug_log),
-        sony_pad: if env.keys().any(|k| k.starts_with(SONY_ENV)) {
+        sony_pad: if sony_by_hand(env.keys()).is_some() {
             String::new()
         } else {
-            let set = [&game.launch.sony_pad, &config.launch.sony_pad].into_iter().find(|s| !s.is_empty()).map_or("auto", String::as_str);
-            match (set, game.metadata.playstation.as_str()) {
-                ("auto", "dualsense") => "native".into(),
-                ("auto", "dualshock") => "dualshock4".into(),
-                ("auto", _) => "xinput".into(),
-                (set, _) => set.into(),
+            match [&game.launch.sony_pad, &config.launch.sony_pad].into_iter().find(|s| !s.is_empty()).map_or("auto", String::as_str) {
+                "auto" => sony_pad_auto(&game.metadata.playstation).into(),
+                set => set.into(),
             }
         },
         mangohud: game.launch.mangohud.unwrap_or(config.launch.mangohud),

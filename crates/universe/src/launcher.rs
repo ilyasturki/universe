@@ -320,7 +320,7 @@ pub fn plan(
     let (program, mut args) = match spec.kind {
         Kind::Proton => {
             proton_env(g, r, config, &mut env)?;
-            if !env.keys().any(|k| k.starts_with(crate::library::SONY_ENV)) {
+            if crate::library::sony_by_hand(env.keys()).is_none() {
                 env.extend(sony_pad_env(&r.effective.sony_pad));
             }
             (if g.launch.runner_exe.is_empty() { config.launch.umu_run.clone() } else { r.effective.runner_path.clone() }, vec![file])
