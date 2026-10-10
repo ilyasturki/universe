@@ -34,6 +34,7 @@ def test_selector_defaults_and_persists(app, tmp_path):
     assert selector.set("no-such-theme") is False and selector.current == "switch2"
     assert ThemeSelector(memory).current == "switch2"
     assert ThemeSelector(memory, "reprise").current == "reprise"
+    assert ThemeSelector(memory, "universe").current == "reprise", "the default look answers to its name too"
     memory.set("theme", "gone")
     assert ThemeSelector(memory).current == "reprise"
     assert selector.fontPath == ""
@@ -138,8 +139,8 @@ OLD = {**DUSK, "id": "old", "name": "Old", "incompatible": "written for extensio
 def test_an_installed_theme_lists_beside_the_looks_and_one_for_another_universe_cannot_be_picked(app, tmp_path):
     memory = Memory(str(tmp_path / "memory.json"))
     memory.set("theme", "old")
-    selector = ThemeSelector(memory, installed=lambda: [DUSK, OLD, {**DUSK, "id": "ps5"}])
-    assert [t["id"] for t in selector.themes] == ["reprise", "switch2", "ps5", "dusk", "old"], "a built-in look keeps its id"
+    selector = ThemeSelector(memory, installed=lambda: [DUSK, OLD, {**DUSK, "id": "ps5"}, {**DUSK, "id": "universe"}])
+    assert [t["id"] for t in selector.themes] == ["reprise", "switch2", "ps5", "dusk", "old"], "a built-in look keeps its id and its alias"
     assert next(t for t in selector.themes if t["id"] == "old")["unavailable"]
     assert selector.current == "reprise" and selector.takeNotice(), "remembered but unusable: the default look, with a notice"
     assert selector.takeNotice() == "", "said once"

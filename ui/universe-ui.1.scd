@@ -10,7 +10,7 @@ universe-ui - gamepad-first game library on the Universe core
 
 # DESCRIPTION
 
-Renders the launcher (Qt 6, PySide6) in the Reprise or Switch 2 look over the
+Renders the launcher (Qt 6, PySide6) in the Universe, Switch 2 or PS5 look over the
 Universe core linked in-process. Fullscreen by default. Games launch as
 transient systemd units bound to the UI's own scope: quitting the UI (SIGINT
 and SIGTERM included) stops the running game first, and *universe session-end*
@@ -35,8 +35,9 @@ whatever has the focus.
 	Window size (default 1920x1080).
 
 *--theme* _ID_
-	The look for this run: *reprise* or *switch2*. Without it
-	the host starts in the look last picked in Settings › Themes, Reprise at first.
+	The look for this run: *reprise* (the Universe look, also *universe*),
+	*switch2* or *ps5*. Without it the host starts in the look last picked in
+	Settings › Themes, the Universe look at first.
 
 *--no-gamepad*
 	Do not open the SDL2 gamepad; keyboard only.

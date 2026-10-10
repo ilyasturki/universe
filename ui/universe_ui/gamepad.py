@@ -410,7 +410,7 @@ def post_wheel(window, x, y, steps, sideways=False, pixels=False):
 EXPECT_FAILED = 3
 
 
-# The id of the game Reprise's Return would launch, "" for none, as in HOME's dock; None, which no Expect matches, on another look, window or dialog.
+# The id of the game the Universe look's Return would launch, "" for none, as in HOME's dock; None, which no Expect matches, on another look, window or dialog.
 def launch_target(window):
     focus = QGuiApplication.focusWindow()
     if focus not in (None, window):

@@ -80,7 +80,7 @@ FocusScope {
         limit: 12
     }
 
-    // A library that predates `added_at` has nothing recent to show; the newest releases stand in, as in Reprise.
+    // A library that predates `added_at` has nothing recent to show; the newest releases stand in, as in the Universe look.
     readonly property bool standingIn: recent.count < 5
 
     SortedGames {

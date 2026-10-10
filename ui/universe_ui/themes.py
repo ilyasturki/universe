@@ -8,7 +8,7 @@ from .qt import Property
 THEMES = [
     {
         "id": "reprise",
-        "name": "Reprise",
+        "name": "Universe",
         "entry": "theme.qml",
         "overlay": "ui/Dock.qml",
         "osd": "ui/VolumeOsd.qml",
@@ -46,6 +46,8 @@ THEMES = [
 AFFILIATION = "Not affiliated with Nintendo or Sony"
 TRADEMARKS = "Nintendo Switch is a trademark of Nintendo; PlayStation and PS5 are trademarks of Sony Interactive Entertainment."
 DEFAULT = "reprise"
+# --theme takes either id; no installed theme takes one.
+ALIASES = {"universe": "reprise"}
 MEMORY_KEY = "theme"
 BOOT_KEY = "bootIntro"
 # What an installed theme cannot name: it draws in the main window alone, and the host's own pill shows the volume over a game.
@@ -105,10 +107,11 @@ class ThemeSelector(QObject):
         self._current = current or self._by_id(DEFAULT) or self._themes[0]
 
     def _read(self):
-        builtin = {t["id"] for t in BUILT_IN}
+        builtin = {t["id"] for t in BUILT_IN} | set(ALIASES)
         return BUILT_IN + [installed_look(t) for t in self._installed() if t["id"] not in builtin]
 
     def _by_id(self, ident):
+        ident = ALIASES.get(ident, ident)
         return next((t for t in self._themes if t["id"] == ident), None)
 
     def _switch(self, theme, landing):

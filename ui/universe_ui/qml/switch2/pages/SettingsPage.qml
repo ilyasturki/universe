@@ -930,7 +930,7 @@ FocusScope {
         } else if (row.action === "theme") {
             Sound.play("select");
             var id = row.theme;
-            // Reprise replaces this tree: let the press finish first.
+            // The new look replaces this tree: let the press finish first.
             Qt.callLater(function () {
                 api.theme.set(id);
             });

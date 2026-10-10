@@ -26,7 +26,7 @@ COMPONENTS = Path(__file__).parent / "fixtures" / "components.json"
 EXTENSIONS = Path(__file__).parent / "fixtures" / "extensions.json"
 EXTENSION_INDEX = "https://raw.githubusercontent.com/ilyasturki/universe-extensions/index/index.json"
 EXTENSION_API = 2
-BUILTIN_THEMES = ("reprise", "switch2", "ps5")
+BUILTIN_THEMES = ("reprise", "universe", "switch2", "ps5")
 THEME_ENTRY = "theme.qml"
 # What an index theme installs here, where no archive exists to unpack.
 STUB_THEME = 'import QtQuick\nRectangle {\n    objectName: "stubTheme"\n    color: "#202024"\n}\n'

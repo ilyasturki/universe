@@ -166,7 +166,7 @@ Window {
         }
     }
 
-    // The look's own volume level, at the window's scale: Theme.dp follows only Reprise's root.
+    // The look's own volume level, at the window's scale: Theme.dp follows only the Universe look's root.
     Loader {
         id: osd
         objectName: "volumeOsd"

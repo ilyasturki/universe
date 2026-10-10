@@ -3,7 +3,7 @@ import "../core"
 import "../sound"
 import "../../core" as Base
 import "../../core/Format.js" as Format
-import "../../ui" as Reprise
+import "../../ui" as Shared
 import "../../ui/Controls.js" as Controls
 import "../pages/Home.js" as Home
 import "Trophy.js" as Trophy
@@ -817,7 +817,7 @@ FocusScope {
                 }
             }
 
-            Reprise.PowerBadge {
+            Shared.PowerBadge {
                 anchors.verticalCenter: parent.verticalCenter
                 tint: Qt.rgba(1, 1, 1, 0.85)
                 size: Theme.dp(26)
@@ -1313,7 +1313,7 @@ FocusScope {
                             border.color: Theme.ringSoft
                         }
 
-                        Reprise.AchievementBadge {
+                        Shared.AchievementBadge {
                             id: badge
                             x: Theme.dp(14)
                             anchors.verticalCenter: parent.verticalCenter

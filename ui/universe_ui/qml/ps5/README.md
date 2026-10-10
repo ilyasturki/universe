@@ -24,7 +24,7 @@ its Light, Regular and Semibold; Settings › Themes › Font takes a `.ttf` you
 - **Control Center** (`ui/ControlCenter.qml`, the overlay window over the game): the game's cards
   (the game, its hub, trophies, captures, the journal's next step), the icon bar (Home, the game,
   Screenshot, Trophies, Performance, Sound, System, Power) with a panel over each icon; the
-  Trophies and Captures cards grow into their lists. It carries every row of Reprise's dock.
+  Trophies and Captures cards grow into their lists. It carries every row of the Universe look's dock.
 - **Game Library**, **Media Gallery** and **Journal**, **Store**, **Search**, **Settings** (a list
   of sections, each on two columns: its parts left, their rows right), and the per-game pages the
   hub and the "…" menu open (Information, Trophies, Game Settings, Artwork, Play Log).

@@ -14,8 +14,8 @@ pub const MIN_API: u32 = 2;
 pub const SCHEMA: u32 = 1;
 pub const DEFAULT_INDEX: &str = "https://raw.githubusercontent.com/ilyasturki/universe-extensions/index/index.json";
 pub const KINDS: [&str; 3] = ["module", "source", "theme"];
-/// universe-ui's own looks (`themes.py` THEMES): no installed theme takes their ids.
-pub const BUILTIN_THEMES: [&str; 3] = ["reprise", "switch2", "ps5"];
+/// universe-ui's own looks (`themes.py` THEMES and ALIASES): no installed theme takes their ids.
+pub const BUILTIN_THEMES: [&str; 4] = ["reprise", "universe", "switch2", "ps5"];
 /// The root QML file universe-ui loads from a theme's folder, beside its `theme.toml`.
 pub const THEME_ENTRY: &str = "theme.qml";
 
@@ -929,8 +929,10 @@ mod tests {
         let bare = theme_tree(&work, "bare", API, "");
         std::fs::remove_file(bare.join(THEME_ENTRY)).unwrap();
         assert!(refused(core.extension_install(&bare.to_string_lossy(), true, None).await).contains(THEME_ENTRY));
-        let ps5 = theme_tree(&work, "ps5", API, "");
-        assert!(refused(core.extension_install(&ps5.to_string_lossy(), true, None).await).contains("ships with Universe"));
+        for look in ["ps5", "reprise", "universe"] {
+            let folder = theme_tree(&work, look, API, "");
+            assert!(refused(core.extension_install(&folder.to_string_lossy(), true, None).await).contains("ships with Universe"), "{look}");
+        }
         assert!(refused(core.extension_remove("reprise").await).contains("ships with Universe"), "a built-in look cannot be removed");
         core.extension_install(&tree(&work, "module", "hello", "1.0.0", API).to_string_lossy(), true, None).await.unwrap();
         let hello = theme_tree(&work, "hello", API, "");

@@ -48,7 +48,7 @@ The shell is theme.qml's functions; B answers `dialogAsk` with 0, `pick` with âˆ
 
 `hints` glyphs are the Xbox names (`A B X Y LB RB LT RT Start Select dpad`); `dim: true` keeps a
 hint in place at low opacity when the page has nothing for it, and the d-pad is not written for
-plain navigation. `ui/HintGlyph.qml` draws them the HOME way from the same prompts as Reprise's
+plain navigation. `ui/HintGlyph.qml` draws them the HOME way from the same prompts as the Universe look's
 `PadGlyph` (the outline in ink under the filled disc, the mark showing through).
 
 ## Running

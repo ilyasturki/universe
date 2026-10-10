@@ -49,7 +49,7 @@ def parse_args(argv):
     parser.add_argument("--key-gap", type=int, default=120, metavar="MS")
     parser.add_argument("--key-delay", type=int, default=1200, metavar="MS", help="delay before the first key")
     parser.add_argument("--size", metavar="WxH", help="window size, implies --windowed (default 1920x1080)")
-    parser.add_argument("--theme", default="", metavar="ID", help="the look for this run: reprise or switch2")
+    parser.add_argument("--theme", default="", metavar="ID", help="the look for this run: reprise (or universe), switch2 or ps5")
     parser.add_argument(
         "--boot", action=argparse.BooleanOptionalAction, default=None, help="open on the startup animation, or not (default: fullscreen starts only)"
     )
