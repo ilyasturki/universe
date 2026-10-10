@@ -793,7 +793,7 @@ class FakeCore:
         effective["modules"] = {m["id"]: self.module_settings(m["id"], game["id"]) for m in self._data.get("modules", []) if m.get("enabled")}
         effective["proton_path"] = ""
         appid = int((out.get("metadata") or {}).get("steam_appid") or 0)
-        effective["umu_id"] = launch.get("umu_id") or (f"umu-{appid}" if appid else "umu-default")
+        effective["umu_id"] = launch.get("umu_id") or (f"umu-{appid}" if appid and spec.get("kind") == "proton" else "umu-default")
         env = {**(self._config["launch"].get("env") or {}), **(launch.get("env") or {})}
         steam_pads = {"dualsense": "native", "dualshock": "dualshock4"}.get((out.get("metadata") or {}).get("playstation") or "", "xinput")
         pad = effective["sony_pad"] or "auto"

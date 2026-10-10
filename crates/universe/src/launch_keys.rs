@@ -143,7 +143,7 @@ pub static LAUNCH_KEYS: &[LaunchKey] = &[
     key!("sony_pad", Kind::Enum(&SONY_PADS), "auto", "PlayStation controller", "Proton", Both, PROTON, "How GE-Proton hands a PlayStation controller to a Windows game. Native keeps its buttons and haptics, but a game made for Xbox pads sees nothing; an Xbox pad works in any game that takes one. Auto goes by the game's Steam page."),
     advanced!("prefix", Kind::Path, "", "Wine prefix", "Proton", Game, WINE, "The Wine prefix the game runs in; empty: <prefixes_root>/<id>."),
     advanced!("arch", Kind::Enum(&["win64", "win32"]), "win64", "Architecture", "Proton", Game, &["wine"], "WINEARCH for a plain Wine prefix."),
-    advanced!("umu_id", Kind::Str, "", "umu id", "Proton", Game, PROTON, "GAMEID for umu-run's protonfixes; empty: umu-default."),
+    advanced!("umu_id", Kind::Str, "", "umu id", "Proton", Game, PROTON, "GAMEID for umu-run's protonfixes; empty: umu-<Steam app id> when the game has one, else umu-default."),
     advanced!("store", Kind::Str, "", "Store", "Proton", Game, PROTON, "STORE for umu-run's protonfixes."),
     advanced!("dll_overrides", Kind::Map, "", "DLL overrides", "Proton", Game, WINE, "WINEDLLOVERRIDES, one key per DLL without .dll: d3d11 = \"n,b\"."),
     advanced!("esync", Kind::Bool, "true", "Esync", "Sync", Both, WINE, "Faster thread synchronisation through eventfd; on for most games, off if one hangs or stutters."),

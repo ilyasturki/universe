@@ -609,7 +609,7 @@ unless the limit is `none`.
 
 `proton` runs `umu-run <exe>` with `WINEPREFIX` (`launch.prefix`, else `<prefixes_root>/<id>`),
 `PROTONPATH`, `GAMEID` (`effective.umu_id`: `launch.umu_id`, else `umu-<metadata.steam_appid>` when
-the game has one — a GOG game or an import then gets the protonfixes and GE-Proton's per-game
+the game has one and is a `proton` game, not an emulator run through it — a GOG game or an import then gets the protonfixes and GE-Proton's per-game
 switches of its Steam twin — else `umu-default`), `STORE`, then the switches as the env
 Proton reads: `esync`/`fsync`/`ntsync` off are `PROTON_NO_ESYNC`/`_FSYNC`/`_NTSYNC=1`; `wayland`,
 `hdr`, `dlss_upgrade`, `fsr4_upgrade`, `xess_upgrade` and `optiscaler` on are

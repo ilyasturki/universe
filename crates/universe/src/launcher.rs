@@ -606,6 +606,10 @@ mod tests {
         assert_eq!(gameid(g.clone()), "umu-578330", "a GOG game or an import gets its Steam twin's fixes");
         g.launch.umu_id = "umu-lego".into();
         assert_eq!(gameid(g), "umu-lego", "the game's own umu id wins");
+        let mut xenia = game(dir.path(), "a.iso", "xenia");
+        xenia.launch.runner_exe = "/x/xenia_canary.exe".into();
+        xenia.metadata.steam_appid = 578330;
+        assert_eq!(gameid(xenia), "umu-default", "an emulator run through Proton is not its PC twin");
     }
 
     #[test]

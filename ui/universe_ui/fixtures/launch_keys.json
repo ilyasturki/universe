@@ -375,7 +375,7 @@
     "runners": [
       "proton"
     ],
-    "description": "GAMEID for umu-run's protonfixes; empty: umu-default.",
+    "description": "GAMEID for umu-run's protonfixes; empty: umu-<Steam app id> when the game has one, else umu-default.",
     "advanced": true
   },
   {
