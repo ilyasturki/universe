@@ -10,6 +10,8 @@ use crate::{paths, sessions};
 
 pub const MEDIA_SLOTS: [&str; 5] = ["box_front", "square", "banner", "background", "logo"];
 pub const IMAGE_EXTS: [&str; 4] = ["png", "jpg", "jpeg", "webp"];
+/// GE-Proton's PlayStation pad switches: one set by hand in `[launch.env]` takes over from `launch.sony_pad`.
+pub const SONY_ENV: &str = "PROTON_SONY_";
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Resolved {
@@ -46,6 +48,8 @@ pub struct Effective {
     pub xess_upgrade: bool,
     pub optiscaler: bool,
     pub debug_log: bool,
+    /// What a PlayStation pad is to a Proton game (`native`, `dualshock4`, `xinput`), `auto` resolved; empty when a `PROTON_SONY_*` of `env` decides.
+    pub sony_pad: String,
     pub mangohud: bool,
     pub pause_on_home: bool,
     pub gamescope: bool,
@@ -244,6 +248,17 @@ pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Modu
         xess_upgrade: upgrade("xess_upgrade", game.launch.xess_upgrade, config.launch.xess_upgrade),
         optiscaler: game.launch.optiscaler.unwrap_or(config.launch.optiscaler),
         debug_log: game.launch.debug_log.unwrap_or(config.launch.debug_log),
+        sony_pad: if env.keys().any(|k| k.starts_with(SONY_ENV)) {
+            String::new()
+        } else {
+            let set = [&game.launch.sony_pad, &config.launch.sony_pad].into_iter().find(|s| !s.is_empty()).map_or("auto", String::as_str);
+            match (set, game.metadata.playstation.as_str()) {
+                ("auto", "dualsense") => "native".into(),
+                ("auto", "dualshock") => "dualshock4".into(),
+                ("auto", _) => "xinput".into(),
+                (set, _) => set.into(),
+            }
+        },
         mangohud: game.launch.mangohud.unwrap_or(config.launch.mangohud),
         pause_on_home: game.launch.pause_on_home.unwrap_or(config.launch.pause_on_home),
         gamescope,

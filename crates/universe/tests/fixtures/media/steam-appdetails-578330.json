@@ -1,0 +1,74 @@
+{
+ "578330": {
+  "success": true,
+  "data": {
+   "type": "game",
+   "name": "LEGO® City Undercover",
+   "steam_appid": 578330,
+   "short_description": "Join the Chase! In LEGO® CITY Undercover, play as Chase McCain, a police officer who's been tasked with going undercover to hunt down the notorious – and recently escaped – criminal Rex Fury and putting an end to his city-wide crime wave.",
+   "developers": [
+    "Traveller's Tales"
+   ],
+   "publishers": [
+    "TT Games"
+   ],
+   "genres": [
+    {
+     "id": "1",
+     "description": "Action"
+    }
+   ],
+   "categories": [
+    {
+     "id": 2,
+     "description": "Single-player"
+    },
+    {
+     "id": 1,
+     "description": "Multi-player"
+    },
+    {
+     "id": 24,
+     "description": "Shared/Split Screen"
+    },
+    {
+     "id": 22,
+     "description": "Steam Achievements"
+    },
+    {
+     "id": 28,
+     "description": "Full controller support"
+    },
+    {
+     "id": 23,
+     "description": "Steam Cloud"
+    },
+    {
+     "id": 41,
+     "description": "Remote Play on Phone"
+    },
+    {
+     "id": 42,
+     "description": "Remote Play on Tablet"
+    },
+    {
+     "id": 43,
+     "description": "Remote Play on TV"
+    },
+    {
+     "id": 44,
+     "description": "Remote Play Together"
+    },
+    {
+     "id": 62,
+     "description": "Family Sharing"
+    }
+   ],
+   "controller_support": "full",
+   "release_date": {
+    "coming_soon": false,
+    "date": "4 Apr, 2017"
+   }
+  }
+ }
+}

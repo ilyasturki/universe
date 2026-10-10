@@ -421,6 +421,24 @@ fn twin(key: &str) -> Option<Twin<'_>> {
     }
 }
 
+/// Why `effective.sony_pad` is what it is for `game`, `value` the key's setting: the description's first sentence.
+fn sony_pad_why(game: &Value, value: &str) -> String {
+    let env = game["effective"]["env"].as_object();
+    if let Some(key) = env.and_then(|env| env.keys().find(|k| k.starts_with(crate::library::SONY_ENV))) {
+        return format!("The {key} environment variable decides for this game instead.");
+    }
+    if value != "auto" {
+        return String::new();
+    }
+    match render(dig(game, "metadata.playstation")).as_str() {
+        "dualsense" => "On auto this game gets the pad as it is, since Steam lists DualSense support for it.",
+        "dualshock" => "On auto this game gets a DualShock 4, since Steam lists DualShock support but not DualSense.",
+        "none" => "On auto this game gets an Xbox pad, since Steam lists no PlayStation support for it.",
+        _ => "On auto this game gets an Xbox pad, since Universe knows no Steam page for it.",
+    }
+    .into()
+}
+
 fn table_value(table: Option<&toml::Table>, key: &str) -> String {
     table.and_then(|t| t.get(key)).map(|v| render(&crate::modules::toml_to_json(v))).unwrap_or_default()
 }
@@ -554,7 +572,7 @@ impl Build<'_> {
             }
             names.iter().map(|n| Choice::same(n)).collect()
         } else {
-            row.choices.iter().map(|c| Choice::same(c)).collect()
+            row.choices.iter().map(|c| Choice { value: c.clone(), label: launch_keys::choice_label(row.key, c).into() }).collect()
         };
         f.free = matches!(row.kind, "resolution" | "refresh" | "fps" | "int" | "proton");
         f
@@ -690,6 +708,12 @@ impl Build<'_> {
                 f.resolved = machine.resolve(row.key, row.kind, &f.value, gamescope, &refresh);
                 f.inherited_resolved = machine.resolve(row.key, row.kind, &f.inherited, gamescope, &refresh);
                 f.fits = machine.gpu_says("fits", row.key);
+                if row.key == "sony_pad" {
+                    let pad = render(&effective["sony_pad"]);
+                    f.resolved = if f.value == "auto" { pad.clone() } else { String::new() };
+                    f.inherited_resolved = if f.inherited == "auto" { pad } else { String::new() };
+                    f.description = format!("{} {}", sony_pad_why(game, &f.value), f.description).trim_start().into();
+                }
             } else if COMPUTED.contains(&row.key) {
                 f = f.inherits(own, Origin::Game, render(&effective[row.key]), Origin::Default);
             } else {
@@ -898,6 +922,24 @@ mod tests {
         assert_eq!((pause.own.as_str(), pause.value.as_str(), pause.origin), ("", "true", Some(Origin::Default)));
         core.set_field(&form, &entry_key("launch.env", "NEW VAR!").unwrap(), "x").await.unwrap();
         assert_eq!(core.get("sample").await.unwrap().game.launch.env.get("NEWVAR").map(String::as_str), Some("x"), "the name is cleaned to one key");
+    }
+
+    #[tokio::test]
+    async fn a_proton_games_playstation_row_says_what_auto_came_to() {
+        let _sb = sandbox();
+        let mut g = Game::load(&Game::new("Sample").toml_path()).unwrap();
+        g.launch.runner = "proton".into();
+        g.launch.runner_exe.clear();
+        g.metadata.playstation = "dualshock".into();
+        g.save().unwrap();
+        let (core, _) = open().await;
+        let form = Form::Game("sample".into());
+        let pad = core.form(&form, None).await.unwrap().into_iter().find(|f| f.key == "launch.sony_pad").unwrap();
+        assert_eq!((pad.value.as_str(), pad.resolved.as_str(), pad.origin), ("auto", "dualshock4", Some(Origin::Default)));
+        assert_eq!(pad.choices.iter().map(|c| c.value.as_str()).collect::<Vec<_>>(), launch_keys::SONY_PADS);
+        core.set_field(&form, "launch.env.PROTON_SONY_HIDRAW_XINPUT", "1").await.unwrap();
+        let pad = core.form(&form, None).await.unwrap().into_iter().find(|f| f.key == "launch.sony_pad").unwrap();
+        assert_eq!((pad.value.as_str(), pad.resolved.as_str()), ("auto", ""), "the variable set by hand decides");
     }
 
     #[tokio::test]

@@ -177,7 +177,7 @@ def _shown(field, page):
     if kind == "secret":
         return "Set" if value else "—"
     if value == "auto" and resolved:
-        return "auto · " + _reads(field, resolved)
+        return "auto · " + _reads(field, _label_of(field, resolved))
     if value == "" and resolved:
         return resolved if page in SCOPED else "default · " + resolved
     if kind == "list":

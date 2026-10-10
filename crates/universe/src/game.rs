@@ -74,6 +74,7 @@ pub struct Launch {
     pub xess_upgrade: Option<crate::config::Toggle>,
     pub optiscaler: Option<bool>,
     pub debug_log: Option<bool>,
+    pub sony_pad: String,
     pub dll_overrides: BTreeMap<String, String>,
     pub env: BTreeMap<String, String>,
     /// Runs the program: `gamemoderun`, `taskset -c 0-7`…, innermost, after gamescope.
@@ -115,6 +116,8 @@ pub struct Metadata {
     pub description: String,
     pub metacritic: u32,
     pub players: u32,
+    /// The PlayStation pads Steam's store page lists (`dualsense`, `dualshock`, `none`); empty: no Steam page read yet.
+    pub playstation: String,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -186,6 +189,7 @@ impl Default for Launch {
             xess_upgrade: None,
             optiscaler: None,
             debug_log: None,
+            sony_pad: String::new(),
             dll_overrides: BTreeMap::new(),
             env: BTreeMap::new(),
             wrapper: String::new(),

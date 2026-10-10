@@ -52,7 +52,7 @@ GAME = {
     "source": {"kind": "", "id": "", "dir": "", "build_id": "", "dlcs": [], "lutris_slug": ""},
     "desktop": {"hide_cursor": None},
     "metadata": dict.fromkeys(("sgdb_id", "gamesdb_id", "steam_appid", "metacritic", "players"), 0)
-    | {"developers": [], "publishers": [], "genres": [], "summary": "", "description": ""},
+    | {"developers": [], "publishers": [], "genres": [], "summary": "", "description": "", "playstation": ""},
     "modules": {},
     "launch": {
         **dict.fromkeys(
@@ -70,6 +70,7 @@ GAME = {
                 "post_command",
                 "umu_id",
                 "store",
+                "sony_pad",
             ],
             "",
         ),
@@ -793,6 +794,10 @@ class FakeCore:
         effective["proton_path"] = ""
         appid = int((out.get("metadata") or {}).get("steam_appid") or 0)
         effective["umu_id"] = launch.get("umu_id") or (f"umu-{appid}" if appid else "umu-default")
+        env = {**(self._config["launch"].get("env") or {}), **(launch.get("env") or {})}
+        steam_pads = {"dualsense": "native", "dualshock": "dualshock4"}.get((out.get("metadata") or {}).get("playstation") or "", "xinput")
+        pad = effective["sony_pad"] or "auto"
+        effective["sony_pad"] = "" if any(k.startswith("PROTON_SONY_") for k in env) else steam_pads if pad == "auto" else pad
         items = self._data.get("achievements", {}).get(game["id"], {}).get("items") or []
         out["achievements"] = {"total": len(items), "unlocked": sum(1 for a in items if a.get("unlocked_at"))}
         meta = out.setdefault("metadata", {})

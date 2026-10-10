@@ -314,6 +314,25 @@
     "advanced": false
   },
   {
+    "key": "sony_pad",
+    "type": "enum",
+    "default": "auto",
+    "choices": [
+      "auto",
+      "native",
+      "dualshock4",
+      "xinput"
+    ],
+    "label": "PlayStation controller",
+    "section": "Proton",
+    "scope": "both",
+    "runners": [
+      "proton"
+    ],
+    "description": "How GE-Proton hands a PlayStation controller to a Windows game. Native keeps its buttons and haptics, but a game made for Xbox pads sees nothing; an Xbox pad works in any game that takes one. Auto goes by the game's Steam page.",
+    "advanced": false
+  },
+  {
     "key": "prefix",
     "type": "path",
     "default": "",

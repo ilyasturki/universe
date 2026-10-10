@@ -152,6 +152,16 @@ pub fn proton_toggles(e: &crate::library::Effective, rdna3: bool) -> BTreeMap<St
     env
 }
 
+/// GE-Proton (11-4 on) hands a PlayStation pad to the game as raw PlayStation HID, which a game that reads only XInput does not see.
+fn sony_pad_env(mode: &str) -> Option<(String, String)> {
+    let key = match mode {
+        "xinput" => "PROTON_SONY_HIDRAW_XINPUT",
+        "dualshock4" => "PROTON_SONY_DUALSENSE_AS_DUALSHOCK4",
+        _ => return None,
+    };
+    Some((key.into(), "1".into()))
+}
+
 /// Every Proton launch: winedbg writes `<time>_appid-<n>_crash.log` into `dir` when the game dies of an unhandled exception, which a game
 /// exiting 0 through umu-run would not show otherwise.
 pub fn crash_env(kind: crate::runners::Kind, dir: &Path) -> BTreeMap<String, String> {
@@ -310,6 +320,9 @@ pub fn plan(
     let (program, mut args) = match spec.kind {
         Kind::Proton => {
             proton_env(g, r, config, &mut env)?;
+            if !env.keys().any(|k| k.starts_with(crate::library::SONY_ENV)) {
+                env.extend(sony_pad_env(&r.effective.sony_pad));
+            }
             (if g.launch.runner_exe.is_empty() { config.launch.umu_run.clone() } else { r.effective.runner_path.clone() }, vec![file])
         }
         Kind::Wine => {
@@ -626,6 +639,48 @@ mod tests {
         assert_eq!(p.env["PROTON_ENABLE_HDR"], "1");
         assert_eq!(p.env["PROTON_DLSS_UPGRADE"], "1");
         assert!(!p.env.contains_key("PROTON_FSR4_UPGRADE"));
+    }
+
+    #[test]
+    fn a_playstation_pad_reaches_a_proton_game_as_its_steam_page_says_it_takes_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut cfg = Config::default();
+        cfg.launch.gamescope = false;
+        let sony_with = |g: Game, cfg: &Config, hook: &BTreeMap<String, String>| -> Vec<(String, String)> {
+            let p = plan(&crate::library::resolve(g, cfg, &[]), cfg, hook, None, None, false, true).unwrap();
+            p.env.into_iter().filter(|(k, _)| k.starts_with("PROTON_SONY_")).collect()
+        };
+        let sony = |g: Game, cfg: &Config| sony_with(g, cfg, &BTreeMap::new());
+        let steam_says = |file: &str, runner: &str, playstation: &str| {
+            let mut g = game(dir.path(), file, runner);
+            g.metadata.playstation = playstation.into();
+            g
+        };
+        let one = |key: &str| vec![(key.to_string(), "1".to_string())];
+        let (xinput, ds4) = (one("PROTON_SONY_HIDRAW_XINPUT"), one("PROTON_SONY_DUALSENSE_AS_DUALSHOCK4"));
+        assert_eq!(sony(steam_says("Game.exe", "", "none"), &cfg), xinput, "no PlayStation support listed: an Xbox pad");
+        assert_eq!(sony(steam_says("Game.exe", "", ""), &cfg), xinput, "no Steam page: an Xbox pad, which any game reads");
+        assert_eq!(sony(steam_says("Game.exe", "", "dualshock"), &cfg), ds4);
+        assert!(sony(steam_says("Game.exe", "", "dualsense"), &cfg).is_empty(), "native");
+
+        let mut own = steam_says("Game.exe", "", "none");
+        own.launch.sony_pad = "native".into();
+        assert!(sony(own, &cfg).is_empty(), "the game's own setting beats auto");
+        let mut global = cfg.clone();
+        global.launch.sony_pad = "dualshock4".into();
+        assert_eq!(sony(steam_says("Game.exe", "", "dualsense"), &global), ds4, "the global setting too");
+        let mut by_hand = steam_says("Game.exe", "", "none");
+        by_hand.launch.env.insert("PROTON_SONY_DUALSENSE_AS_DUALSHOCK4".into(), "1".into());
+        assert_eq!(sony(by_hand, &cfg), ds4, "a variable set by hand decides alone");
+        let hook = BTreeMap::from([("PROTON_SONY_DUALSHOCK4_V2_AS_V1".to_string(), "1".to_string())]);
+        assert_eq!(sony_with(steam_says("Game.exe", "", "none"), &cfg, &hook), one("PROTON_SONY_DUALSHOCK4_V2_AS_V1"), "so does a hook's");
+
+        let mut xenia = steam_says("a.iso", "xenia", "none");
+        xenia.launch.runner_exe = "/x/xenia_canary.exe".into();
+        for g in [steam_says("Game.exe", "wine", "none"), steam_says("game.sh", "linux", "none"), xenia] {
+            let runner = g.launch.runner.clone();
+            assert!(sony(g, &cfg).is_empty(), "{runner}: Proton games alone");
+        }
     }
 
     #[test]

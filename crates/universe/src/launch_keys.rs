@@ -79,6 +79,8 @@ pub struct LaunchKey {
 
 const WINE: &[&str] = &["proton", "wine"];
 const PROTON: &[&str] = &["proton"];
+/// `auto` reads `metadata.playstation`; the other three are what `effective.sony_pad` comes to.
+pub const SONY_PADS: [&str; 4] = ["auto", "native", "dualshock4", "xinput"];
 
 macro_rules! key {
     ($key:literal, $kind:expr, $default:literal, $label:literal, $section:literal, $scope:ident, $runners:expr, $description:literal) => {
@@ -138,6 +140,7 @@ pub static LAUNCH_KEYS: &[LaunchKey] = &[
     key!("proton", Kind::Proton, "proton-ge", "Proton build", "Proton", Both, PROTON, "The Proton build umu-run starts the game with."),
     key!("wayland", Kind::Bool, "true", "Wayland", "Proton", Both, PROTON, "Proton's own Wayland driver instead of Xwayland: lower latency, proper scaling; dropped inside gamescope unless it exposes Wayland."),
     key!("hdr", Kind::Bool, "false", "HDR", "Proton", Both, PROTON, "HDR output on an HDR screen: Proton's PROTON_ENABLE_HDR, and --hdr-enabled on gamescope."),
+    key!("sony_pad", Kind::Enum(&SONY_PADS), "auto", "PlayStation controller", "Proton", Both, PROTON, "How GE-Proton hands a PlayStation controller to a Windows game. Native keeps its buttons and haptics, but a game made for Xbox pads sees nothing; an Xbox pad works in any game that takes one. Auto goes by the game's Steam page."),
     advanced!("prefix", Kind::Path, "", "Wine prefix", "Proton", Game, WINE, "The Wine prefix the game runs in; empty: <prefixes_root>/<id>."),
     advanced!("arch", Kind::Enum(&["win64", "win32"]), "win64", "Architecture", "Proton", Game, &["wine"], "WINEARCH for a plain Wine prefix."),
     advanced!("umu_id", Kind::Str, "", "umu id", "Proton", Game, PROTON, "GAMEID for umu-run's protonfixes; empty: umu-default."),
@@ -158,6 +161,15 @@ pub static LAUNCH_KEYS: &[LaunchKey] = &[
 
 /// Under Steam the HUD and the frame limit are its Quick Access menu's, and no HOME reaches a game to pause it.
 pub const STEAM_OWNS: [&str; 3] = ["mangohud", "fps_limit", "pause_on_home"];
+
+/// How a choice reads where its value alone would not.
+pub fn choice_label<'a>(key: &str, value: &'a str) -> &'a str {
+    match (key, value) {
+        ("sony_pad", "dualshock4") => "as a DualShock 4",
+        ("sony_pad", "xinput") => "as an Xbox pad",
+        _ => value,
+    }
+}
 
 pub fn find(key: &str) -> Option<&'static LaunchKey> {
     LAUNCH_KEYS.iter().find(|k| k.key == key)

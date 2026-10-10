@@ -971,6 +971,18 @@ fn summary_of(text: &str) -> String {
     text.split("\n\n").next().unwrap_or("").chars().take(400).collect()
 }
 
+/// Steam's store categories 57 and 58 are DualSense support, 55 DualShock's.
+fn playstation_of(d: &Value) -> &'static str {
+    let ids: Vec<u64> = d["categories"].as_array().into_iter().flatten().filter_map(|c| c["id"].as_u64()).collect();
+    if ids.iter().any(|id| matches!(id, 57 | 58)) {
+        "dualsense"
+    } else if ids.contains(&55) {
+        "dualshock"
+    } else {
+        "none"
+    }
+}
+
 /// Steam's store page: what it has replaces the fields on `over`, else fills the empty ones; `true` when the description is its.
 fn fill_from_steam(g: &mut Game, d: &Value, over: bool) -> (bool, bool) {
     let names = |k: &str| -> Vec<String> { d[k].as_array().into_iter().flatten().filter_map(|x| x.as_str().map(str::to_string)).collect() };
@@ -983,6 +995,7 @@ fn fill_from_steam(g: &mut Game, d: &Value, over: bool) -> (bool, bool) {
     changed |= take_list(&mut m.publishers, names("publishers"), over);
     let genres = d["genres"].as_array().into_iter().flatten().filter_map(|x| x["description"].as_str().map(str::to_string)).collect();
     changed |= take_list(&mut m.genres, genres, over);
+    changed |= take_text(&mut m.playstation, playstation_of(d).into(), over);
     if let Some(score) = d["metacritic"]["score"].as_u64().filter(|s| *s > 0 && (over || m.metacritic == 0) && *s as u32 != m.metacritic) {
         m.metacritic = score as u32;
         changed = true;
@@ -1060,7 +1073,8 @@ async fn refresh_with(net: &Net, config: &Config, game: &Game, force: bool) -> c
         }
     }
 
-    if force || wants_details(&g) {
+    // A game filled before `playstation` existed reads its Steam page once more, when its app id is known.
+    if force || wants_details(&g) || (g.metadata.playstation.is_empty() && look.known_appid() > 0) {
         let appid = look.steam_appid().await;
         let mut described_by = None;
         if appid > 0 {
@@ -1482,6 +1496,31 @@ mod tests {
         let g = Game::load(&game.toml_path()).unwrap();
         assert_eq!(g.metadata.steam_appid, 367520, "kept in game.toml, where GAMEID reads it");
         assert_eq!(crate::library::resolve(g, &keyless(), &[]).effective.umu_id, "umu-367520");
+    }
+
+    #[tokio::test]
+    async fn steams_controller_categories_name_the_playstation_pads_a_filled_game_takes() {
+        for (appid, pads) in [(578330, "none"), (1091500, "dualsense")] {
+            let (_env, mut game) = setup("filled");
+            game.metadata = crate::game::Metadata {
+                steam_appid: appid,
+                description: "d".into(),
+                genres: vec!["Action".into()],
+                developers: vec!["Dev".into()],
+                ..Default::default()
+            };
+            game.save().unwrap();
+            touch(&game.media_dir().join("screenshots/steam-01.jpg"));
+            let net = saved(vec![(steam_details_url(appid), fixture(&format!("steam-appdetails-{appid}.json")))]);
+            refresh_with(&net, &keyless(), &game, false).await.unwrap();
+            let g = Game::load(&game.toml_path()).unwrap();
+            assert_eq!(g.metadata.playstation, pads, "{appid}");
+            assert_eq!(g.metadata.developers, ["Dev"], "a filled game keeps its fields");
+            let again = saved(vec![]);
+            refresh_with(&again, &keyless(), &g, false).await.unwrap();
+            assert!(!asked(&again).contains(&steam_details_url(appid)), "read once");
+        }
+        assert_eq!(playstation_of(&serde_json::json!({"categories": [{"id": 28}, {"id": 55}]})), "dualshock");
     }
 
     #[tokio::test]

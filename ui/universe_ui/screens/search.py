@@ -38,6 +38,7 @@ SYNONYMS = {
     "proton": ["compatibility", "wine", "ge", "cachyos", "em"],
     "wayland": ["xwayland", "x11", "display server", "latency"],
     "hdr": ["high dynamic range", "10 bit"],
+    "sony_pad": ["dualsense", "dualshock", "ps5", "ps4", "gamepad", "xinput", "xbox", "buttons", "not detected"],
     "prefix": ["wineprefix", "pfx", "bottle", "drive c"],
     "arch": ["64 bit", "32 bit", "win32", "win64"],
     "umu_id": ["gameid", "protonfixes", "umu"],

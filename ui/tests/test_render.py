@@ -921,7 +921,10 @@ def test_the_game_settings_page_shows_an_advanced_change_with_advanced_off(look,
     page = game_settings(look, "launch.proton")
     form = api.screens.gameSettings
     proton = page.findChild(QObject, "cardSections").property("section")
-    look.press(Qt.Key.Key_Down, 3)
+    for _ in range(8):
+        if current_row(page)["key"] == "launch.prefix":
+            break
+        look.press(Qt.Key.Key_Down)
     until(lambda: current_row(page)["key"] == "launch.prefix", "the game's own prefix sits under the Proton card's rows")
     assert form.showAdvanced is False
     look.press(Qt.Key.Key_I)
