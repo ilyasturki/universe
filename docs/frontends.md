@@ -650,7 +650,9 @@ secondary text at the right, `more` a chevron that Right opens; `push(list, head
 one showing, `cancel()` pops before it closes. A list swapped in (`push`, `pop`, a `show()` while open) takes its
 cursor before its rows, so no other row lights on the way, slides in from the right (deeper) or the left (back) as
 it fades in, over `Theme.durQuick`, and the panel eases to its new size meanwhile; a list that comes back stands
-where it was scrolled. The PS5 `Menu` and the Switch 2 `Picker` set their cursor before their rows too.
+where it was scrolled. `refresh(list)` reads the showing list again in place (Settings' add-on list as the
+index lands), the cursor kept on its index or the new last row. The PS5 `Menu` and the Switch 2 `Picker`
+set their cursor before their rows too.
 
 ## The hint bar
 

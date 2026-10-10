@@ -1621,7 +1621,7 @@ FocusScope {
         }
         function onListingChanged() {
             if (page.addonsShown !== "" && menu.open)
-                menu.items = page.addons.items(page.addonsShown);
+                menu.refresh(page.addons.items(page.addonsShown));
         }
     }
 

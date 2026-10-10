@@ -125,6 +125,17 @@ FocusScope {
         setList(top.items, top.title, top.done, top.index, -1, top.scroll);
     }
 
+    // The list showing, read again (an add-on listing that changed): in place, the cursor kept on its index.
+    function refresh(list) {
+        var kept = {
+            alt: alt,
+            note: note
+        };
+        setList(list, title, done, index, 0, rowsScroll.heading());
+        alt = kept.alt;
+        note = kept.note;
+    }
+
     // The index goes first: the rows are built lit where the cursor is, none lighting up on the way. `from` is the side the
     // rows come in from (1 deeper, -1 back, 0 at once), `scroll` where the list stood.
     function setList(list, heading, after, start, from, scroll) {

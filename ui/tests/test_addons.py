@@ -1,5 +1,5 @@
 import pytest
-from looks import call, invoke, read, theme_rows
+from looks import call, invoke, lit_rows, read, theme_rows
 from PySide6.QtCore import QObject, Qt
 from uitest import until
 
@@ -93,6 +93,15 @@ def test_an_open_add_ons_list_takes_the_index_in_place_when_it_lands(look, api, 
     until(lambda: [i["state"] for i in addons.items("module")] == states, "the index lands")
     until(lambda: labels(menu) == [i["label"] for i in addons.items("module")], "the open list takes it")
     assert menu.property("open") is True, "in place, without reopening"
+    if lands == "listing":
+        look.press(Qt.Key.Key_Down)
+        monkeypatch.setattr(fake.core, "extensions", lambda: {"index": {"url": "", "error": "offline"}, "extensions": []})
+        addons._listing = None
+        addons.load()
+        until(lambda: [i["state"] for i in addons.items("module")] == ["error"], "the index goes")
+        until(lambda: labels(menu) == [i["label"] for i in addons.items("module")], "a shorter list in place too")
+        if not look.stacked:
+            assert menu.property("index") == 0 and lit_rows(menu) == [0], "the cursor past its end comes back onto the list"
 
 
 @pytest.mark.slow
