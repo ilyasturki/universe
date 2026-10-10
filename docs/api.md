@@ -1749,10 +1749,10 @@ dummy_hcd for xpad's — and adds the driver bound, SDL3's view, the pads module
 | Switch Pro (057e:2009) | USB, Bluetooth | hid-nintendo | yes; Capture bindable | SDL's Switch driver | through Steam Input | public | — |
 | Switch 2 Pro (057e:2069) | USB | none: the hid-nintendo Switch 2 series is not merged | no evdev node, so none; `doctor` says why | over SDL's libusb, one program at a time | no | public | Bluetooth works nowhere on Linux |
 | Xbox Series X\|S (045e:0b12) | USB | xpad | yes; Share bindable | the evdev pad | XInput | public | — |
-| Xbox Series X\|S (045e:0b13) | Bluetooth | hid-microsoft, or xpadneo | yes; Share bindable | SDL's Xbox driver | XInput | public | — |
+| Xbox Series X\|S (045e:0b13) | Bluetooth | hid-microsoft, or xpadneo | yes; Share bindable | SDL's Xbox driver where a rule opens its hidraw node (steam-devices), else the evdev pad | XInput | public | game-devices-udev opens no hidraw node for it |
 | Xbox Elite Series 2 (045e:0b00) | USB | xpad | yes; P1 to P4 bindable | the evdev pad | XInput | public | — |
 | Xbox Elite Series 2 (045e:0b05, 0b22) | Bluetooth | xpadneo (as 045e:028e), or hid-microsoft | yes; the paddles with xpadneo only | the evdev pad | XInput | SDL view captured | hid-microsoft maps no paddle |
-| 8BitDo Pro 3 (2dc8:6009), D-input | Bluetooth | hid-generic | yes; L4, R4, PL and PR bindable | SDL's 8BitDo driver: gyro | through Steam Input | captured | Star never reaches evdev |
+| 8BitDo Pro 3 (2dc8:6009), D-input | Bluetooth | hid-generic | yes; L4, R4, PL and PR bindable | SDL's 8BitDo driver (gyro, rumble) where a rule opens its hidraw node, else the evdev pad | through Steam Input | captured | Star never reaches evdev; game-devices-udev opens no hidraw node for it |
 | 8BitDo Pro 3, X-input (045e:028e) | USB | xpad, as an Xbox 360 pad | as an Xbox pad: A at the bottom whatever the print | the evdev pad | XInput | SDL view captured | nothing tells it from a 360 pad: keep it in D-input or Switch mode |
 
 A pad you own is recorded with `universe controller dump --walk --json <id> > tests/pads/<family>-<bus>.json` (the id from
