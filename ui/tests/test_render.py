@@ -277,7 +277,7 @@ def test_each_look_draws_its_volume_level_over_the_game_and_keeps_it_under_the_m
     from PySide6.QtCore import QRectF, QSize
 
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
-    monkeypatch.setattr(fake, "overlay", lambda window, input, opacity: None)
+    monkeypatch.setattr(fake.core, "nest_overlay", lambda window, input, opacity: None)
     overlay = host.create_overlay(look.engine, QSize(1280, 720))
     assert api.home.attachOverlay(overlay)
     settle(overlay)

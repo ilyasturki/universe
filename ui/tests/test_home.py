@@ -76,18 +76,21 @@ def test_a_volume_macro_shows_its_level_on_the_overlay_for_a_moment(api, fake, m
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
     home = home_module.Home(fake, api.screens.controller)
     states = []
-    monkeypatch.setattr(fake, "overlay", lambda window, input, opacity: states.append((input, opacity)))
+    monkeypatch.setattr(fake.core, "nest_overlay", lambda window, input, opacity: states.append((input, opacity)))
     home.attachOverlay(Overlay())
     states.clear()
     api.screens.controller._on_event({"event": "volume", "percent": 40, "muted": False, "output": "Speakers"})
     assert home.osd and (home.volumePercent, home.muted, home.volumeOutput) == (40, False, "Speakers")
     assert states == [(False, home_module.OPAQUE)], "painted over whatever is shown, the pad left where it was"
     until(lambda: not home.osd and states[-1] == (False, 0), "gone again")
-    home._open = True
+    fake.launch("mirrors-edge", "")
+    until(lambda: fake.currentSession)
+    home.openDock()
+    assert home.open
     states.clear()
     api.screens.controller._on_event({"event": "volume", "percent": 45, "muted": False, "output": "Speakers"})
     assert not home.osd and states == [] and home.volumePercent == 45, "the open dock prints the level itself"
-    home._open = False
+    home.closeDock()
     monkeypatch.delenv("GAMESCOPE_WAYLAND_DISPLAY")
     api.screens.controller._on_event({"event": "volume", "percent": 50, "muted": True, "output": "Speakers"})
     assert not home.osd and states == [], "on the desktop the shell shows it"
@@ -99,7 +102,7 @@ def test_a_key_scripts_volume_phase_plays_a_pad_macro(api, fake, monkeypatch):
 
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
     home = home_module.Home(fake, api.screens.controller)
-    monkeypatch.setattr(fake, "overlay", lambda window, input, opacity: None)
+    monkeypatch.setattr(fake.core, "nest_overlay", lambda window, input, opacity: None)
     home.attachOverlay(Overlay())
     before = fake.core.level
     gamepad.KeyScript("Volume:up", 1, None, home=home)._step()

@@ -14,7 +14,7 @@ def unfocused(fake, tmp_path, monkeypatch):
     from universe_ui.screens.power import FAKE
 
     monkeypatch.setattr(focus_module, "POLL_MS", 20)
-    monkeypatch.setattr(focus_module, "mode_of", lambda client: "host")
+    monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
     api = Api(fake, memory_path=str(tmp_path / "memory.json"), power_root=FAKE, net_root=FAKE_NET)
     yield api
     api.shutdown()
