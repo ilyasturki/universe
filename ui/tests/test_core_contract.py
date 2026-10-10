@@ -192,6 +192,13 @@ def test_the_fake_answers_in_the_cores_shape(cores, name):
     assert [k for k in known if not any(fnmatch(d, k) for d in found)] == [], "the fake answers as the core does now: drop it from KNOWN"
 
 
+@needs_manifests
+def test_a_gamecube_game_s_page_offers_the_layout_and_the_trigger_swap(cores):
+    core, _ = cores
+    keys = {f["key"] for f in core.form("game", "super-mario-strikers", SCREEN)}
+    assert {"modules.controls.layout", "modules.controls.shoulders"} <= keys
+
+
 ERRORS = [
     ("NotFound", "get", "nope"),
     ("NotFound", "module_settings", "nope", ""),

@@ -47,9 +47,10 @@ platforms = ["Nintendo Wii"]
 key = "shoulders"
 type = "enum"
 default = "standard"
-label = "Bumpers and triggers"
+label = "Triggers and bumpers"
 description = "Swapped exchanges the two. GameCube L and R then sit on the bumpers, Z on the triggers."
 choice_labels = { standard = "As on the console", swapped = "Swapped" }
+keywords = ["swap", "shoulders", "zl", "zr", "l2", "r2"]
 scope = "game"
 choices = ["standard", "swapped"]
 runners = ["eden", "ryujinx", "dolphin", "cemu", "azahar", "mupen64plus", "rpcs3", "pcsx2", "duckstation"]
