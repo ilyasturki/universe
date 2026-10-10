@@ -1,6 +1,7 @@
 """What a user does, end to end: the UI driven by keys on the real in-process core, over a sealed profile. The stores are their
 shims, the user's systemd a private bus's, the game tools/sample's."""
 
+import base64
 import contextlib
 import json
 import os
@@ -19,6 +20,7 @@ from uitest import until
 
 universe_core = pytest.importorskip("universe_core")
 
+PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
 ROOT = Path(__file__).resolve().parents[2]
 TESTS = Path(__file__).parent
 needs_tree = pytest.mark.skipif(not (ROOT / "tools" / "sample").is_file(), reason="the flake's check copies no tools/: no sample game")
@@ -176,7 +178,8 @@ def pick(look, menu, *actions):
     for action in actions:
         until(lambda action=action: menu.property("open") is True and action in menu_ids(menu), f"no {action} in {menu.objectName()}")
         target = menu_ids(menu).index(action)
-        look.press(Qt.Key.Key_Down, target - menu.property("index"))
+        step = target - menu.property("index")
+        look.press(Qt.Key.Key_Down if step > 0 else Qt.Key.Key_Up, abs(step))
         until(lambda target=target: menu.property("index") == target)
         look.press(Qt.Key.Key_Return)
 
@@ -313,7 +316,7 @@ LIBRARY = [{"id": MINI_METRO, "title": "Mini Metro", "owned": True, "installed":
 
 
 def gog_info(folder, game_id, name, exe):
-    folder.mkdir(parents=True, exist_ok=True)
+    (folder / exe).parent.mkdir(parents=True, exist_ok=True)
     (folder / exe).write_bytes(b"MZ")
     info = {"gameId": game_id, "rootGameId": game_id, "name": name, "buildId": "B1", "playTasks": [{"isPrimary": True, "type": "FileTask", "path": exe}]}
     (folder / f"goggame-{game_id}.info").write_text(json.dumps(info))
@@ -349,7 +352,6 @@ def test_a_store_game_installed_from_settings_joins_the_library_installed(journe
     until(lambda: journey.api.allGames.byId("mini-metro") is not None, "Home lists it")
 
 
-@pytest.mark.slow
 def test_uninstall_from_settings_trashes_the_folder_and_keeps_the_game(journey):
     store(journey)
     folder = journey.root / "games" / "Mini Metro"
@@ -374,7 +376,6 @@ def test_uninstall_from_settings_trashes_the_folder_and_keeps_the_game(journey):
 
 
 @needs_tree
-@pytest.mark.slow
 def test_remove_from_the_games_menu_takes_it_off_home_and_keeps_its_files(journey):
     game = journey.sample()
     look = journey.start()
@@ -385,3 +386,148 @@ def test_remove_from_the_games_menu_takes_it_off_home_and_keeps_its_files(journe
     toml = journey.game(game)
     assert toml["removed_at"] and toml["hidden"] is True, "archived in game.toml"
     assert (journey.root / "sample" / "sample-game").is_file(), "its files stay"
+
+
+DISHONORED = "1701063787"
+
+
+def gog_games(journey):
+    """Two GOG installs in the source's scan folder: Dishonored, its exe two folders under its manifest, and Mini Metro."""
+    scan = journey.root / "GOG Games"
+    gog_info(scan / "Dishonored", DISHONORED, "Dishonored", "Binaries/Win32/Dishonored.exe")
+    gog_info(scan / "Mini Metro", MINI_METRO, "Mini Metro", "Mini Metro.exe")
+    journey.write("data/sources/gog/umu.json", json.dumps({MINI_METRO: "umu-287980", DISHONORED: "umu-205100"}))
+    return scan
+
+
+def test_installs_a_scan_finds_read_as_in_the_library_by_folder_and_one_is_added_alone(journey):
+    scan = gog_games(journey)
+    exe = scan / "Dishonored" / "Binaries" / "Win32" / "Dishonored.exe"
+    # Imported from Lutris before the manifest was looked for above the exe: the exe's folder, no store id.
+    imported = journey.write(
+        "data/games/dishonored/game.toml",
+        f'schema = 1\nid = "dishonored"\ntitle = "Dishonored"\n[source]\nkind = "lutris"\ndir = "{exe.parent}"\n[launch]\nrunner = "proton"\nexe = "{exe}"\n',
+    )
+    before = imported.read_bytes()
+    journey.write("data/sources/gog/library.json", json.dumps([*LIBRARY, {"id": DISHONORED, "title": "Dishonored: Definitive Edition", "owned": True}]))
+    look = journey.start()
+    page, row = settings(look, "install")
+    until(lambda: store_row(journey, DISHONORED).get("installed") and store_row(journey, MINI_METRO).get("installed"), "the scan finds both installs")
+    assert store_row(journey, DISHONORED)["game_id"] == "dishonored", "the Lutris import is the install in its folder: in the library"
+    assert (store_row(journey, MINI_METRO)["game_id"], store_row(journey, MINI_METRO)["dir"]) == ("", str(scan / "Mini Metro")), "nobody's: found where"
+    assert imported.read_bytes() == before, "listing writes no game.toml"
+    down_to(look, row, storeId=MINI_METRO)
+    look.press(Qt.Key.Key_Return)
+    menu = page.findChild(QObject, "settingsMenu")
+    until(lambda: {"adopt", "trash"} <= set(menu_ids(menu)), "an install nobody's offers Add to library and Delete files")
+    pick(look, menu, "adopt")
+    until(lambda: store_row(journey, MINI_METRO).get("game_id") == "mini-metro", "added", 10000)
+    game = journey.game("mini-metro")
+    assert (game["source"]["kind"], game["source"]["id"], game["source"]["dir"]) == ("gog", MINI_METRO, str(scan / "Mini Metro"))
+    until(lambda: journey.api.allGames.byId("mini-metro") is not None, "Home lists it")
+    assert imported.read_bytes() == before, "Add to library brings in that game alone"
+    assert sorted(p.name for p in (journey.data / "games").iterdir()) == ["dishonored", "mini-metro"], "no second Dishonored"
+
+
+def lutris(journey, scan):
+    """Lutris's own record of Dishonored, the GOG install it ran from the exe below its manifest."""
+    import sqlite3
+
+    exe = scan / "Dishonored" / "Binaries" / "Win32" / "Dishonored.exe"
+    journey.write("home/.config/lutris/games/dishonored-1.yml", f"game:\n  exe: {exe}\n")
+    db = journey.home / ".local" / "share" / "lutris" / "pga.db"
+    db.parent.mkdir(parents=True)
+    with contextlib.closing(sqlite3.connect(db)) as conn:
+        conn.execute(
+            "CREATE TABLE games (id INTEGER PRIMARY KEY, name TEXT, slug TEXT, runner TEXT, platform TEXT, hidden INTEGER, playtime REAL,"
+            " lastplayed INTEGER, service TEXT, service_id TEXT, configpath TEXT, directory TEXT, year INTEGER, installed INTEGER)"
+        )
+        conn.execute(
+            "INSERT INTO games VALUES (1, 'Dishonored', 'dishonored', 'wine', 'Windows', 0, 12.5, 0, 'gog', ?, 'dishonored-1', ?, 2012, 1)",
+            (DISHONORED, str(scan / "Dishonored")),
+        )
+        conn.commit()
+
+
+def test_the_first_run_adds_what_lutris_installed_and_lands_on_home(journey):
+    scan = gog_games(journey)
+    lutris(journey, scan)
+    look = journey.start(onboarded=False)
+    form = journey.api.screens.onboarding
+    page = look.find("onboardingPage")
+    until(lambda: not form.loading and form.stepId == "found", "the setup opens on what this machine holds")
+    rows = until(lambda: page.findChild(QObject, "setupRows"))
+    until(lambda: rows.property("activeFocus"))
+    down_to(look, lambda: read(rows, "currentRow") or {}, key="lutris")
+    look.press(Qt.Key.Key_Return)
+    until(lambda: journey.api.allGames.byId("dishonored") is not None, "A on Lutris imports its games")
+    game = journey.game("dishonored")
+    assert (game["source"]["kind"], game["source"]["id"], game["source"]["dir"]) == ("gog", DISHONORED, str(scan / "Dishonored")), (
+        "a GOG game by the manifest two folders above its exe"
+    )
+    for step in range(form.step + 1, len(form.steps)):
+        look.press(Qt.Key.Key_I)
+        until(lambda step=step: form.step == step, "X moves on")
+    assert form.stepId == "done"
+    look.press(Qt.Key.Key_I)
+    until(journey.client.core.onboarded, "Finish marks the machine set up")
+    until(lambda: look.root.property("returnLaunches") == "dishonored", "Home, on the game")
+
+
+def kid(item, qml_type):
+    """The first child of `item` of a QML type the page gives no name."""
+    return next(c for c in item.findChildren(QObject) if c.metaObject().className().startswith(f"{qml_type}_QMLTYPE"))
+
+
+@needs_tree
+def test_a_file_picked_on_the_artwork_page_becomes_the_games_cover(journey):
+    game = journey.sample()
+    cover = journey.write("home/Pictures/cover.png", PNG)
+    look = journey.start()
+    until(lambda: look.root.property("returnLaunches") == game)
+    look.press(Qt.Key.Key_F1)
+    pick(look, look.menu(), "manage", "artwork")
+    page = look.page("artworkPage")
+    until(lambda: page.property("currentSlot"))
+    for _ in range(len(read(page, "slots"))):
+        if page.property("currentSlot") == "box_front":
+            break
+        look.press(Qt.Key.Key_Right)
+    assert page.property("currentSlot") == "box_front"
+    look.press(Qt.Key.Key_F1)
+    pick(look, kid(page, "ActionMenu"), "file")
+    sheet = kid(page, "KeyboardSheet")
+    until(lambda: sheet.property("open") is True, "under a keyboard the file's path is typed")
+    type_text(look, str(cover))
+    look.press(Qt.Key.Key_Return)
+    picked = journey.data / "games" / game / "media" / "picked" / "box_front.png"
+    until(picked.is_file, "the file is copied in as the game's own pick")
+    assert picked.read_bytes() == PNG
+    until(lambda: journey.api.allGames.byId(game).assets.boxFront.toLocalFile() == str(picked), "the library's cover is the pick")
+
+
+def test_a_macro_bound_on_a_pad_button_lands_in_the_config_the_watcher_rereads(journey):
+    from universe_ui.screens.controller import FakeWatcher
+
+    look = journey.start()
+    # The pad is the watcher's stand-in: real input devices are the machine's own.
+    watcher = FakeWatcher("dualsense-edge")
+    journey.api.screens.controller.start(watcher)
+    pick(look, look.dialog(), "no")
+    until(lambda: look.dialog().property("open") is False, "a new pad's button walk is offered once: Not now")
+    page, row = settings(look, "controller")
+    slot = down_to(look, row, key="fn_left")
+    assert ((slot["press"] or {}).get("action"), slot["hold"]) == ("screenshot", None), "the Edge's seeded press, no hold"
+    look.press(Qt.Key.Key_Return)
+    pick(look, page.findChild(QObject, "settingsMenu"), "hold", "preset:mangohud")
+
+    def macros(state):
+        return {(m["family"], m["button"], m["trigger"], m["action"]) for m in state.get("macros") or []}
+
+    written = until(lambda: macros(tomllib.loads((journey.config / "config.toml").read_text()).get("controller", {})))
+    assert ("dualsense-edge", "fn_left", "hold", "mangohud") in written, written
+    assert {("dualsense-edge", "fn_left", "hold", "mangohud"), ("dualsense-edge", "fn_left", "press", "screenshot")} <= macros(
+        journey.client.core.controller_state()
+    )
+    assert watcher.commands[-1] == {"cmd": "reload"}, "the running watcher rereads it"
+    until(lambda: (row().get("hold") or {}).get("action") == "mangohud", "the row shows the hold's macro")
