@@ -3,7 +3,7 @@ from PySide6.QtGui import QColor
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuick import QQuickWindow  # noqa: F401  (rootObjects() down-cast, for grabWindow)
 from PySide6.QtTest import QTest
-from uitest import until
+from uitest import descendants, until
 
 from universe_ui import host
 
@@ -97,6 +97,12 @@ def theme_rows(page):
     """The Themes section's rows as the look builds them: Reprise's `content` carries its cards beside them."""
     content = read(page, "content") or []
     return content.get("rows", []) if isinstance(content, dict) else content
+
+
+def lit_rows(menu):
+    """The rows of a Reprise list drawn lit right now, mid-fade included: the cursor's alone once a list is swapped in."""
+    rows = descendants(menu, "menuRow")
+    return [i for i, row in enumerate(rows) if QColor(row.property("color")).alpha() > 0]
 
 
 def page_name(source):

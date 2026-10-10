@@ -1,7 +1,7 @@
 import os
 
 import pytest
-from looks import LOOKS, MENU, Look, call, content_rows, current_row, invoke, lit_fraction, read, render, settle
+from looks import LOOKS, MENU, Look, call, content_rows, current_row, invoke, lit_fraction, lit_rows, read, render, settle
 from PySide6.QtCore import QCoreApplication, QEvent, QObject, Qt
 from PySide6.QtGui import QKeyEvent
 from PySide6.QtQuick import QQuickItem
@@ -829,12 +829,13 @@ def test_the_reprise_game_menu_groups_its_rows_and_hides_the_media_a_game_has_no
     assert items[3]["more"] is True and items[4]["more"] is True
     look.press(Qt.Key.Key_Down, 3)
     look.press(Qt.Key.Key_Return)
+    assert depth() == 1 and lit_rows(menu) == [0], "the list pushed is built lit on its cursor alone"
     until(lambda: menu.property("open") is True and depth() == 1)
     counts = {kind: len(getattr(fake, kind)("the-technomancer")) for kind in ("screenshots", "recordings", "journal")}
     assert all(counts.values()), "the fixture game has every kind"
     assert actions() == list(counts), "the kinds the game has, no counts"
     look.press(Qt.Key.Key_Escape)
-    until(lambda: depth() == 0, "B comes back to the row that opened it")
+    assert depth() == 0 and lit_rows(menu) == [3], "the list B comes back to lights the row that opened it, none on the way"
     assert menu.property("open") is True and menu.property("index") == 3 and actions()[3] == "media", "B comes back to the row that opened it"
     look.press(Qt.Key.Key_Escape)
     until(lambda: menu.property("open") is False)
@@ -847,7 +848,7 @@ def test_the_reprise_game_menu_groups_its_rows_and_hides_the_media_a_game_has_no
     assert read(menu, "items")[4]["danger"] is True
     look.press(Qt.Key.Key_Down, 4)
     look.press(Qt.Key.Key_Return)
-    until(lambda: depth() == 2, "the removal asks first")
+    assert depth() == 2 and lit_rows(menu) == [0], "the removal asks first, Keep it under the cursor"
     look.press(Qt.Key.Key_Down)
     look.press(Qt.Key.Key_Return)
     until(lambda: menu.property("open") is False)

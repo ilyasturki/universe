@@ -45,6 +45,16 @@ def descendant(item, name):
     return None
 
 
+def descendants(item, name):
+    """Every item named `name` under `item`, in the order they stack."""
+    out = []
+    for child in item.childItems():
+        if child.objectName() == name:
+            out.append(child)
+        out.extend(descendants(child, name))
+    return out
+
+
 def settle(screen, timeout_ms=5000):
     until(lambda: not screen.busy, "still busy", timeout_ms)
 

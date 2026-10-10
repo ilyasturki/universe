@@ -50,11 +50,12 @@ Modal {
         scrollEase.enabled = false;
         anchor = spec.anchor || null;
         title = anchored ? "" : spec.title || "";
-        choices = spec.choices || [];
-        icons = spec.icons || [];
+        // The index before the rows: they are built lit where the cursor is.
         current = spec.index !== undefined ? spec.index : -1;
+        index = Math.max(0, Math.min(spec.choices.length - 1, current));
+        choices = spec.choices;
+        icons = spec.icons || [];
         alt = spec.alt || "";
-        index = Math.max(0, current);
         present(done);
         list.contentY = list.originY + Math.max(0, index - shownRows + 1) * rowHeight;
         scrollEase.enabled = true;

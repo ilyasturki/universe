@@ -62,12 +62,6 @@ FocusScope {
             Sound.edge();
             return;
         }
-        items = list;
-        title = heading || "";
-        note = "";
-        done = after || null;
-        index = start || 0;
-        alt = alternative || "";
         centered = !anchor;
         if (anchor) {
             var p = anchor.mapToItem(menu, rect.x, rect.y);
@@ -75,7 +69,9 @@ FocusScope {
             copy.sourceRect = Qt.rect(rect.x - copyMargin, rect.y - copyMargin, rect.width + copyMargin * 2, rect.height + copyMargin * 2);
         }
         copy.sourceItem = anchor || null;
-        shown++;
+        // A follow-up shown in place comes in as a list pushed would.
+        setList(list, heading, after, start, open ? 1 : 0, 0);
+        alt = alternative || "";
         asking = false;
         open = true;
         forceActiveFocus();
@@ -112,25 +108,52 @@ FocusScope {
                 items: items,
                 title: title,
                 done: done,
-                index: index
+                index: index,
+                scroll: rowsScroll.heading()
             }
         ]);
-        items = list;
-        title = heading || "";
-        note = "";
-        done = after || null;
-        index = 0;
-        alt = "";
-        shown++;
+        setList(list, heading, after, 0, 1, 0);
     }
 
     function pop() {
         var top = stack[stack.length - 1];
         stack = stack.slice(0, -1);
-        items = top.items;
-        title = top.title;
-        done = top.done;
-        index = top.index;
+        setList(top.items, top.title, top.done, top.index, -1, top.scroll);
+    }
+
+    // The index goes first: the rows are built lit where the cursor is, none lighting up on the way. `from` is the side the
+    // rows come in from (1 deeper, -1 back, 0 at once), `scroll` where the list stood.
+    function setList(list, heading, after, start, from, scroll) {
+        enter(from);
+        index = Math.max(0, Math.min(list.length - 1, start || 0));
+        items = list;
+        title = heading || "";
+        note = "";
+        done = after || null;
+        alt = "";
+        shown++;
+        rows.forceLayout();
+        rowsScroll.place(scroll);
+        reveal(true);
+    }
+
+    // The rows' way in from one side; the panel eases to its new size meanwhile.
+    property real shift: 0
+
+    function enter(from) {
+        entrance.stop();
+        shift = from;
+        if (from !== 0)
+            entrance.start();
+    }
+
+    NumberAnimation {
+        id: entrance
+        target: menu
+        property: "shift"
+        to: 0
+        duration: Theme.durQuick
+        easing.type: Easing.OutCubic
     }
 
     function hide() {
@@ -175,10 +198,10 @@ FocusScope {
     // A list taller than the screen scrolls under the cursor.
     onIndexChanged: Qt.callLater(reveal)
 
-    function reveal() {
+    function reveal(now) {
         var slot = slots.itemAt(index);
         if (slot)
-            rowsScroll.reveal(slot.y, slot.y + slot.height);
+            rowsScroll.reveal(slot.y, slot.y + slot.height, now === true);
     }
 
     Rectangle {
@@ -217,9 +240,12 @@ FocusScope {
         id: panel
 
         readonly property real room: menu.height - Theme.dp(80)
+        readonly property real fit: Math.min(room, (head.visible ? head.y + head.height : 0) + scroller.anchors.topMargin + scroller.contentHeight + scroller.bottomMargin)
 
         width: Theme.dp(menu.centered ? 640 : 460)
-        height: Math.min(room, (head.visible ? head.y + head.height : 0) + scroller.anchors.topMargin + scroller.contentHeight + scroller.anchors.bottomMargin)
+        height: fit
+        // The rows take their new size at once, under the panel's edge while it grows.
+        clip: entrance.running
         radius: Theme.dp(24)
         color: "#1b1d24"
         border.width: 1
@@ -233,6 +259,13 @@ FocusScope {
         opacity: 1.0 - menu.slide
         scale: 1.0 - menu.slide * 0.04
         transformOrigin: menu.centered ? Item.Center : menu.onRight ? Item.Left : Item.Right
+
+        Behavior on height {
+            enabled: entrance.running
+            Ease {
+                duration: Theme.durQuick
+            }
+        }
 
         // The panel's own padding is neither a row nor the scrim.
         HoverHandler {}
@@ -249,6 +282,10 @@ FocusScope {
             anchors.rightMargin: Theme.dp(34)
             spacing: Theme.dp(10)
             visible: menu.title !== ""
+            opacity: 1 - Math.abs(menu.shift)
+            transform: Translate {
+                x: menu.shift * Theme.dp(24)
+            }
 
             Text {
                 id: heading
@@ -297,14 +334,15 @@ FocusScope {
             id: scroller
             objectName: "scroll"
 
+            readonly property real bottomMargin: Theme.dp(12)
+
             anchors.top: head.visible ? head.bottom : parent.top
             anchors.topMargin: head.visible ? Theme.dp(8) : Theme.dp(12)
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: Theme.dp(12)
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.leftMargin: Theme.dp(12)
             anchors.rightMargin: Theme.dp(12)
+            height: Math.max(0, Math.min(contentHeight, panel.room - y - bottomMargin))
             contentHeight: rows.height
             interactive: false
             clip: contentHeight > height
@@ -322,6 +360,10 @@ FocusScope {
 
                 width: parent.width
                 spacing: Theme.dp(4)
+                opacity: 1 - Math.abs(menu.shift)
+                transform: Translate {
+                    x: menu.shift * Theme.dp(24)
+                }
 
                 Repeater {
                     id: slots
@@ -350,6 +392,7 @@ FocusScope {
 
                         MenuRow {
                             id: line
+                            objectName: "menuRow"
 
                             anchors.bottom: parent.bottom
                             width: parent.width

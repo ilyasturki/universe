@@ -51,11 +51,12 @@ Modal {
         scrollEase.enabled = false;
         title = spec.title || "";
         detailHeights = {};
-        items = spec.items || [];
+        // The index before the rows: they are built lit where the cursor is.
+        index = Math.max(0, Math.min(spec.items.length - 1, spec.index !== undefined ? spec.index : 0));
+        items = spec.items;
         at = spec.at || null;
         panelWidth = spec.width || Theme.dp(560);
         alt = spec.alt || "";
-        index = Math.max(0, Math.min(items.length - 1, spec.index !== undefined ? spec.index : 0));
         present(done);
         list.positionViewAtIndex(index, ListView.Contain);
         scrollEase.enabled = true;
