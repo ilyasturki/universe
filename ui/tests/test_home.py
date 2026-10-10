@@ -350,11 +350,17 @@ def test_a_hold_that_flips_leaves_nothing_to_thaw_on_the_release(api, fake, monk
 
 
 def test_quitting_from_the_game_brings_the_launcher_up_first(api, fake, monkeypatch):
+    from universe_ui import home as home_module
+
+    monkeypatch.setattr(home_module, "FRESH_S", 0.0)
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
     home = api.home
     home.changed.connect(home.covered)
     fake.launch("mirrors-edge", "")
     until(lambda: home.shown == "game")
+    home.guide(True)
+    home.guide(False)
+    until(lambda: not home._capturing)
     titles, ended, stops = [], [], []
     home.stopping.connect(titles.append)
     api.universe.sessionEnded.connect(lambda *a: ended.append(a))
@@ -366,6 +372,7 @@ def test_quitting_from_the_game_brings_the_launcher_up_first(api, fake, monkeypa
     until(lambda: ended)
     assert stops == [(False, False)], "the launcher is up, and the game never frozen, when it is asked to quit: the SIGTERM has to land"
     assert len(ended) == 1 and home.shown == "launcher" and not home.paused
+    assert fake.core.frames == 1, "the flip took the press's stale frame: a quit waits on no new one"
 
 
 def test_the_hud_and_the_limit_reach_the_game_without_a_key(api, fake):

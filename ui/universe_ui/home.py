@@ -375,7 +375,8 @@ class Home(QObject):
             self._flip("")
             return
         self._flipping = True
-        if self._fresh():
+        # A quit takes the press's frame however old: the game is on its way out, and a new one costs gamescope ~0.6 s at 4K.
+        if self._fresh() or (self._stopping and self._captured is not None):
             self._flip(self._captured)
         else:
             self._capture()

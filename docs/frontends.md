@@ -454,7 +454,8 @@ Quit asks, then `api.home.stop()`.
 
 The swap between the game and the launcher is gamescope's, one cut, so the last frame it painted
 bridges it: the Guide press from the game asks for it (`nest_frame`) and the flip — the hold, the
-dock's Home or Quit — reuses what the press took, or waits for it to land. A look registered with
+dock's Home or Quit — reuses what the press took, or waits for it to land. Home asks for a new one
+when the game ran on under the dock past `FRESH_S`; Quit takes the press's however old. A look registered with
 `frame: False` (the Switch 2 and PS5 ones) paints nothing and waits for none; the PS5 look blanks
 its home while the game is shown and builds it back up in beats when it returns. `toLauncher` then sets
 `frame` (`""` when none came) and `shown`; with a frame it waits for the theme's `covered()` —
