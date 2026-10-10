@@ -167,6 +167,30 @@ smoke *profiles:
 distro-check distro:
     tools/container {{ distro }} tools/distro-check
 
+# The release tarball installed and started in Arch, Ubuntu 22.04 and 24.04 and Fedora containers, as release.yml does before upload: just release-smoke [TARBALL] (default: built as release.yml builds it, Universe Desktop on Arch then tools/dist on Ubuntu 22.04); DISTROS="arch fedora" for fewer
+release-smoke tarball="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{ justfile_directory() }}"
+    version="$(sed -n '/^\[workspace.package\]/,/^\[/{s/^version = "\(.*\)"$/\1/p}' Cargo.toml)"
+    tarball="{{ tarball }}"
+    if [ -z "$tarball" ]; then
+        rev="$(git rev-parse --short HEAD)"
+        tools/container arch env UNIVERSE_GIT_REV="$rev" bash -c \
+            'cargo build --release --locked -p universe-desktop && install -Dm755 "$CARGO_TARGET_DIR/release/universe-desktop" /out/universe-desktop'
+        tools/container -v "$PWD/target/container/arch/universe-desktop:/desktop/universe-desktop:ro" ubuntu-22.04 \
+            env UNIVERSE_GIT_REV="$rev" UNIVERSE_DESKTOP_BIN=/desktop/universe-desktop bash -c '
+                set -euo pipefail
+                python3.11 -m venv /tmp/py && /tmp/py/bin/pip install --quiet --upgrade pip
+                PYTHON=/tmp/py/bin/python tools/dist "/tmp/dist/universe-$1" > /dev/null
+                tar -C /tmp/dist -czf /out/universe-x86_64-linux.tar.gz "universe-$1"' release "$version"
+        tarball=target/container/ubuntu-22.04/universe-x86_64-linux.tar.gz
+    fi
+    for distro in ${DISTROS:-arch ubuntu-22.04 ubuntu fedora}; do
+        echo "━━ $distro"
+        tools/container -v "$(realpath "$tarball"):/release.tar.gz:ro" "$distro-user" tools/release-smoke /release.tar.gz "$version"
+    done
+
 # The RPM spec built from the checkout, installed and run in a Fedora container
 rpm-check:
     tools/container fedora tools/rpm-check

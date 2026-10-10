@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+    cat <<'USAGE'
+usage: tools/release-smoke TARBALL VERSION
+
+What a user of the release tarball goes through: TARBALL extracted, its
+install.sh run into a fresh HOME (and through sudo, its udev rule, uhid load,
+login session and install helper under /etc and /usr), `universe --version`
+naming VERSION, the CLI finding the shipped modules and sources, doctor,
+Universe Desktop where the tarball has it and the distro's GTK runs it, the UI
+offscreen on the fake library and on the real core, each shot not blank (in
+DISTRO_OUT, default ./release-smoke), then install.sh --uninstall leaving
+nothing behind.
+
+As a user other than root with a passwordless sudo, where `tools/ci-deps user`
+set things up (`just release-smoke`, release.yml's smoke job). Needs the
+network: install.sh's pip fetches PySide6.
+USAGE
+}
+
+case "${1:-}" in
+    "" | -h | --help) usage; exit 0 ;;
+esac
+[ $# -eq 2 ] || { usage >&2; exit 2; }
+tarball="$(realpath "$1")"
+version=$2
+out="$(realpath -m "${DISTRO_OUT:-release-smoke}")"
+mkdir -p "$out"
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+
+echo "── install"
+mkdir "$work/release"
+tar -C "$work/release" -xzf "$tarball"
+dist="$(echo "$work"/release/*/)"
+dist="${dist%/}"
+[ -x "$dist/install.sh" ] || { echo "release-smoke: no install.sh at the top of $1" >&2; exit 1; }
+export HOME="$work/home" XDG_CONFIG_HOME="$work/home/.config" XDG_DATA_HOME="$work/home/.local/share" \
+    XDG_STATE_HOME="$work/home/.local/state" XDG_CACHE_HOME="$work/home/.cache"
+mkdir -p "$HOME"
+"$dist/install.sh"
+export PATH="$HOME/.local/bin:$PATH"
+lib="$HOME/.local/lib/universe"
+cmp "$dist/lib/udev/rules.d/70-universe.rules" /etc/udev/rules.d/70-universe.rules
+cmp "$dist/lib/modules-load.d/universe.conf" /etc/modules-load.d/universe.conf
+grep -qxF "Exec=$HOME/.local/bin/universe-ui --session" /usr/share/wayland-sessions/universe.desktop
+cmp "$dist/lib/universe/universe-system-install" /usr/local/lib/universe/universe-system-install
+grep -qF ">$(realpath /usr/local/lib/universe/universe-system-install)<" /usr/share/polkit-1/actions/io.github.ilyasturki.universe.policy
+[ ! -e "$HOME/.local/share/polkit-1" ] || { echo "release-smoke: the polkit policy landed where polkit does not read it" >&2; exit 1; }
+[ ! -e "$HOME/.local/share/wayland-sessions" ] || { echo "release-smoke: the session landed where no display manager reads it" >&2; exit 1; }
+
+echo "── cli"
+said="$(universe --version)"
+echo "$said"
+read -r _ built _ <<< "$said"
+[ "$built" = "$version" ] || { echo "release-smoke: the release says it is $built, not $version" >&2; exit 1; }
+universe module ls --json > "$work/modules.json"
+universe source ls --json > "$work/sources.json"
+universe doctor --json > "$work/doctor.json" || true
+"$lib/venv/bin/python" - "$work" "$lib" <<'PY'
+import json, sys
+work, lib = sys.argv[1:]
+for kind, want in (("modules", {"capture", "journal", "screenshot"}), ("sources", {"gog"})):
+    found = {m["id"]: m["dir"] for m in json.load(open(f"{work}/{kind}.json"))}
+    assert want <= set(found), f"{kind}: {sorted(found)}"
+    assert all(d.startswith(lib) for d in found.values()), f"{kind} outside the install: {found}"
+checks = json.load(open(f"{work}/doctor.json"))
+assert checks and all({"check", "ok", "fix"} <= set(c) for c in checks), checks
+for c in checks:
+    print("ok  " if c["ok"] else "--  ", c["label"], "" if c["ok"] else f"({c['detail']})")
+PY
+
+echo "── desktop"
+if [ -x "$HOME/.local/bin/universe-desktop" ]; then
+    universe-desktop --help > /dev/null
+    echo "universe-desktop: installed"
+elif [ -x "$dist/bin/universe-desktop" ]; then
+    echo "universe-desktop: left out, no GTK 4.22 and libadwaita 1.9 here"
+else
+    echo "universe-desktop: not in this tarball"
+fi
+
+echo "── ui"
+ui() {
+    local name=$1; shift
+    rm -f "$out/$name.png"
+    QT_QPA_PLATFORM=offscreen PIPEWIRE_REMOTE=/nonexistent timeout 120 universe-ui --no-gamepad --size 1280x720 --key-gap 300 \
+        --keys "Wait:4 Shot:$out/$name.png" --quit-after 15000 "$@"
+    [ -s "$out/$name.png" ] || { echo "release-smoke: the UI saved no $name.png" >&2; exit 1; }
+    "$lib/venv/bin/python" - "$out/$name.png" <<'PY'
+import collections, sys
+from PySide6.QtGui import QImage
+image = QImage(sys.argv[1]).scaled(192, 108)
+pixels = collections.Counter(image.pixel(x, y) for y in range(image.height()) for x in range(image.width()))
+ground = pixels.most_common(1)[0][1] / (image.width() * image.height())
+if ground > 0.98:
+    sys.exit(f"release-smoke: {sys.argv[1]} is blank, {ground:.1%} of it one colour")
+PY
+    echo "$out/$name.png"
+}
+ui ui-fake --fake
+ui ui-core
+
+echo "── uninstall"
+"$dist/install.sh" --uninstall
+left="$(find "$HOME/.local/bin" "$HOME/.local/lib" "$HOME/.local/share/applications" "$HOME/.local/share/dbus-1/services" \
+    "$HOME/.local/share/gnome-shell/search-providers" "$HOME/.local/share/metainfo" -mindepth 1 2> /dev/null || true)"
+left="$left$(find /etc/udev/rules.d/70-universe.rules /etc/modules-load.d/universe.conf /usr/share/wayland-sessions/universe.desktop \
+    /usr/local/lib/universe /usr/share/polkit-1/actions/io.github.ilyasturki.universe.policy 2> /dev/null || true)"
+[ -z "$left" ] || { echo "release-smoke: left behind:"$'\n'"$left" >&2; exit 1; }
+echo "release-smoke: $version ok"

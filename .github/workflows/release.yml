@@ -61,9 +61,39 @@ jobs:
         with:
           name: dist
           path: universe-x86_64-linux.tar.gz
+  # The tarball just built, installed and started as a user would before anything publishes it
+  smoke:
+    needs: dist
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { distro: arch, image: "archlinux:latest" }
+          - { distro: ubuntu-22.04, image: "ubuntu:22.04" }
+          - { distro: ubuntu-24.04, image: "ubuntu:24.04" }
+          - { distro: fedora, image: "fedora:latest" }
+    container: ${{ matrix.image }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+      - run: tools/ci-deps user
+      - run: chown -R ci .
+      - run: runuser -u ci -- env HOME=/home/ci DISTRO_OUT=shots tools/release-smoke universe-x86_64-linux.tar.gz "${GITHUB_REF_NAME#v}"
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: smoke-${{ matrix.distro }}
+          path: shots
+          if-no-files-found: ignore
   # gh is not in the 22.04 container
   upload:
-    needs: dist
+    needs: [dist, smoke]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -74,7 +104,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
   aur:
-    needs: notes
+    needs: [notes, smoke]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -91,7 +121,7 @@ jobs:
           force_push: true
   # The COPR project builds with the network on (cargo fetches the crates), for Fedora 44 and newer: older ones ship a PySide6 under 6.11
   copr:
-    needs: notes
+    needs: [notes, smoke]
     runs-on: ubuntu-latest
     container: fedora:latest
     steps:

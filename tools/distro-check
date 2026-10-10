@@ -6,12 +6,10 @@ usage() {
 usage: tools/distro-check
 
 What a user of a distro other than NixOS goes through, on this one: the core's
-tests, tools/dist, install.sh into a fresh HOME (and through sudo, its udev
-rule and uhid load under /etc), the CLI finding the shipped
-modules and sources, doctor, Universe Desktop where the distro's GTK is new
-enough for it, the UI offscreen on the fake library and on the
-real core (shots in DISTRO_OUT, default target/distro-check), then
-install.sh --uninstall leaving nothing behind.
+tests, then tools/dist's tree, built here and packed as a release tarball,
+through tools/release-smoke: install.sh, the CLI, doctor, Universe Desktop
+where the distro's GTK is new enough for it, the UI offscreen (shots in
+DISTRO_OUT, default target/distro-check) and the uninstall.
 
 As a user other than root, where tools/ci-deps set things up (tools/container,
 CI). Needs the network: pip fetches PySide6, maturin and setuptools.
@@ -22,8 +20,7 @@ case "${1:-}" in
     -h | --help) usage; exit 0 ;;
 esac
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-out="${DISTRO_OUT:-${CARGO_TARGET_DIR:-$repo/target}/distro-check}"
-mkdir -p "$out"
+export DISTRO_OUT="${DISTRO_OUT:-${CARGO_TARGET_DIR:-$repo/target}/distro-check}"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
@@ -42,65 +39,8 @@ done
 [ -n "$python" ] || { echo "distro-check: no Python 3.11 to 3.14 here" >&2; exit 1; }
 "$python" -m venv "$work/build"
 "$work/build/bin/pip" install --quiet --upgrade pip
-PYTHON="$work/build/bin/python" "$repo/tools/dist" "$work/dist" > /dev/null
+version="$(sed -n '/^\[workspace.package\]/,/^\[/{s/^version = "\(.*\)"$/\1/p}' "$repo/Cargo.toml")"
+PYTHON="$work/build/bin/python" "$repo/tools/dist" "$work/dist/universe-$version" > /dev/null
+tar -C "$work/dist" -czf "$work/universe.tar.gz" "universe-$version"
 
-echo "── install"
-export HOME="$work/home" XDG_CONFIG_HOME="$work/home/.config" XDG_DATA_HOME="$work/home/.local/share" \
-    XDG_STATE_HOME="$work/home/.local/state" XDG_CACHE_HOME="$work/home/.cache"
-mkdir -p "$HOME"
-"$work/dist/install.sh"
-export PATH="$HOME/.local/bin:$PATH"
-cmp "$repo/packaging/system/70-universe.rules" /etc/udev/rules.d/70-universe.rules
-cmp "$repo/packaging/system/universe.conf" /etc/modules-load.d/universe.conf
-grep -qxF "Exec=$HOME/.local/bin/universe-ui --session" /usr/share/wayland-sessions/universe.desktop
-cmp "$work/dist/lib/universe/universe-system-install" /usr/local/lib/universe/universe-system-install
-grep -qF ">$(realpath /usr/local/lib/universe/universe-system-install)<" /usr/share/polkit-1/actions/io.github.ilyasturki.universe.policy
-[ ! -e "$HOME/.local/share/polkit-1" ] || { echo "distro-check: the polkit policy landed where polkit does not read it" >&2; exit 1; }
-[ ! -e "$HOME/.local/share/wayland-sessions" ] || { echo "distro-check: the session landed where no display manager reads it" >&2; exit 1; }
-
-echo "── cli"
-universe --version
-universe module ls --json > "$work/modules.json"
-universe source ls --json > "$work/sources.json"
-universe doctor --json > "$work/doctor.json" || true
-python3 - "$work" "$HOME/.local/lib/universe" <<'PY'
-import json, sys
-work, lib = sys.argv[1:]
-for kind, want in (("modules", {"capture", "journal", "screenshot"}), ("sources", {"gog"})):
-    found = {m["id"]: m["dir"] for m in json.load(open(f"{work}/{kind}.json"))}
-    assert want <= set(found), f"{kind}: {sorted(found)}"
-    assert all(d.startswith(lib) for d in found.values()), f"{kind} outside the install: {found}"
-checks = json.load(open(f"{work}/doctor.json"))
-assert checks and all({"check", "ok", "fix"} <= set(c) for c in checks), checks
-for c in checks:
-    print("ok  " if c["ok"] else "--  ", c["label"], "" if c["ok"] else f"({c['detail']})")
-PY
-
-echo "── desktop"
-if [ -x "$HOME/.local/bin/universe-desktop" ]; then
-    universe-desktop --help > /dev/null
-    echo "universe-desktop: installed"
-else
-    echo "universe-desktop: left out, no GTK 4.22 and libadwaita 1.9 here"
-fi
-
-echo "── ui"
-ui() {
-    local name=$1; shift
-    QT_QPA_PLATFORM=offscreen PIPEWIRE_REMOTE=/nonexistent timeout 120 universe-ui --no-gamepad --size 1280x720 --key-gap 300 \
-        --keys "Wait:4 Shot:$out/$name.png" --quit-after 15000 "$@"
-    [ -s "$out/$name.png" ] || { echo "distro-check: the UI saved no $name.png" >&2; exit 1; }
-    echo "$out/$name.png"
-}
-rm -f "$out"/ui-*.png
-ui ui-fake --fake
-ui ui-core
-
-echo "── uninstall"
-"$work/dist/install.sh" --uninstall
-left="$(find "$HOME/.local/bin" "$HOME/.local/lib" "$HOME/.local/share/applications" "$HOME/.local/share/dbus-1/services" \
-    "$HOME/.local/share/gnome-shell/search-providers" "$HOME/.local/share/metainfo" -mindepth 1 2> /dev/null || true)"
-left="$left$(find /etc/udev/rules.d/70-universe.rules /etc/modules-load.d/universe.conf /usr/share/wayland-sessions/universe.desktop \
-    /usr/local/lib/universe /usr/share/polkit-1/actions/io.github.ilyasturki.universe.policy 2> /dev/null || true)"
-[ -z "$left" ] || { echo "distro-check: left behind:"$'\n'"$left" >&2; exit 1; }
-echo "distro-check: ok"
+"$repo/tools/release-smoke" "$work/universe.tar.gz" "$version"

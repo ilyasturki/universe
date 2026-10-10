@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
     cat <<'USAGE'
-usage: tools/ci-deps [desktops]
+usage: tools/ci-deps [desktops | user]
 
 As root in a fresh Arch, Ubuntu or Fedora container: the packages that
 tools/distro-check needs (a Rust toolchain, Python, scdoc, the libraries
@@ -13,48 +13,67 @@ on Arch and Fedora, rpm-build for tools/rpm-check on Fedora), and a user
 make; ci has a passwordless sudo, which install.sh takes to put the udev rule
 and the uhid load under /etc, and tools/rpm-check to install the RPMs and their
 build dependencies. `desktops` adds what
-tools/desktop-smoke starts (Arch only: Ubuntu has no niri).
+tools/desktop-smoke starts (Arch only: Ubuntu has no niri). `user` is only
+what a release needs to install and run (tools/release-smoke): Python, the
+libraries Qt loads, fonts and sudo, no compiler.
 USAGE
 }
 
 case "${1:-}" in
     -h | --help) usage; exit 0 ;;
-    "" | desktops) ;;
+    "" | desktops | user) ;;
     *) usage >&2; exit 2 ;;
 esac
+mode="${1:-}"
 . /etc/os-release
 
 case "$ID" in
     arch)
+        run=(sudo diffutils python tzdata libxkbcommon libxkbcommon-x11 sdl2 fontconfig libglvnd nss libpulse xcb-util-cursor ttf-dejavu dbus)
+        build=(base-devel rust git scdoc glib2-devel gtk4 libadwaita blueprint-compiler)
+        [ "$mode" != user ] || build=()
         pacman -Sy --noconfirm archlinux-keyring > /dev/null
-        pacman -Su --noconfirm --needed base-devel sudo rust python git scdoc tzdata \
-            libxkbcommon libxkbcommon-x11 sdl2 fontconfig libglvnd nss libpulse xcb-util-cursor ttf-dejavu dbus \
-            glib2-devel gtk4 libadwaita blueprint-compiler > /dev/null
-        [ "${1:-}" != desktops ] || pacman -S --noconfirm --needed mesa sway foot grim mako xorg-server-xvfb openbox xterm dunst \
+        pacman -Su --noconfirm --needed "${run[@]}" "${build[@]}" > /dev/null
+        [ "$mode" != desktops ] || pacman -S --noconfirm --needed mesa sway foot grim mako xorg-server-xvfb openbox xterm dunst \
             kwin kconfig niri > /dev/null
         # cap_sys_nice on the file, which exec refuses where the container's bounding set lacks it
-        if [ "${1:-}" = desktops ]; then
+        if [ "$mode" = desktops ]; then
             for bin in /usr/bin/sway /usr/bin/kwin_wayland; do setcap -r "$bin"; done
         fi
         ;;
     ubuntu | debian)
         export DEBIAN_FRONTEND=noninteractive
+        python=(python3 python3-venv python3-dev)
+        rust=(rustup)
+        # 22.04's python3 is 3.10, under what PySide6 and install.sh take; it has no rustup, and its cargo is older than the tree
+        if [ "$VERSION_ID" = 22.04 ]; then
+            python=(python3.11 python3.11-venv python3.11-dev)
+            rust=(curl)
+        fi
+        run=(sudo "${python[@]:0:2}" tzdata ca-certificates libgl1 libegl1 libxkbcommon-x11-0 libfontconfig1 libdbus-1-3 libpulse0
+            libglib2.0-0 libgssapi-krb5-2 libxcb-cursor0 fonts-dejavu-core dbus)
+        build=(build-essential pkg-config "${rust[@]}" "${python[2]}" git scdoc libxkbcommon-dev)
+        [ "$mode" != user ] || build=()
         apt-get update -qq
-        apt-get install -y -qq build-essential sudo pkg-config rustup python3 python3-venv python3-dev git scdoc tzdata ca-certificates \
-            libxkbcommon-dev libgl1 libegl1 libxkbcommon-x11-0 libfontconfig1 libdbus-1-3 libpulse0 libglib2.0-0 libgssapi-krb5-2 \
-            libxcb-cursor0 fonts-dejavu-core dbus > /dev/null
+        apt-get install -y -qq "${run[@]}" "${build[@]}" > /dev/null
         ;;
     fedora)
-        dnf install -y -q sudo rpm-build rpmdevtools gcc rust cargo python3 python3.14 python3-devel git scdoc tzdata libxkbcommon-devel libxkbcommon-x11 \
-            mesa-libGL mesa-libEGL fontconfig dbus-libs pulseaudio-libs glib2 krb5-libs xcb-util-cursor dejavu-sans-fonts dbus-daemon \
-            gtk4-devel libadwaita-devel blueprint-compiler util-linux > /dev/null
+        run=(sudo diffutils findutils python3 python3.14 tzdata libxkbcommon-x11 mesa-libGL mesa-libEGL fontconfig dbus-libs pulseaudio-libs glib2 krb5-libs
+            xcb-util-cursor dejavu-sans-fonts dbus-daemon util-linux)
+        build=(rpm-build rpmdevtools gcc rust cargo python3-devel git scdoc libxkbcommon-devel gtk4-devel libadwaita-devel blueprint-compiler)
+        [ "$mode" != user ] || build=()
+        dnf install -y -q "${run[@]}" "${build[@]}" > /dev/null
         ;;
     *) echo "ci-deps: no package list for $ID" >&2; exit 2 ;;
 esac
-[ "${1:-}" != desktops ] || [ "$ID" = arch ] || { echo "ci-deps: the desktops are Arch's" >&2; exit 2; }
+[ "$mode" != desktops ] || [ "$ID" = arch ] || { echo "ci-deps: the desktops are Arch's" >&2; exit 2; }
 
 id ci > /dev/null 2>&1 || useradd -m ci
 echo 'ci ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/ci
+[ "$mode" != user ] || exit 0
 if command -v rustup > /dev/null; then
     runuser -u ci -- rustup default stable > /dev/null
+elif ! command -v cargo > /dev/null; then
+    runuser -u ci -- sh -c 'curl -sSf https://sh.rustup.rs | sh -s -- -q -y --profile minimal --no-modify-path' > /dev/null
+    ln -sf /home/ci/.cargo/bin/* /usr/local/bin/
 fi
