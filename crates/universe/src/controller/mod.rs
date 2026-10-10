@@ -216,6 +216,9 @@ macro_rules! standard {
         standard!($south, $east, $north, $west, $lb, $rb, $lt, $rt, $select, $start, $guide, $ls, $rs; &["BTN_SOUTH"], &["BTN_EAST"], &["BTN_NORTH"], &["BTN_WEST"])
     };
     ($south:literal, $east:literal, $north:literal, $west:literal, $lb:literal, $rb:literal, $lt:literal, $rt:literal, $select:literal, $start:literal, $guide:literal, $ls:literal, $rs:literal; $south_codes:expr, $east_codes:expr, $north_codes:expr, $west_codes:expr) => {
+        standard!($south, $east, $north, $west, $lb, $rb, $lt, $rt, $select, $start, $guide, $ls, $rs; $south_codes, $east_codes, $north_codes, $west_codes; &["BTN_TL2", "ABS_BRAKE+", "ABS_Z+"], &["BTN_TR2", "ABS_GAS+", "ABS_RZ+"])
+    };
+    ($south:literal, $east:literal, $north:literal, $west:literal, $lb:literal, $rb:literal, $lt:literal, $rt:literal, $select:literal, $start:literal, $guide:literal, $ls:literal, $rs:literal; $south_codes:expr, $east_codes:expr, $north_codes:expr, $west_codes:expr; $lt_codes:expr, $rt_codes:expr) => {
         [
             slot("south", $south, $south_codes),
             slot("east", $east, $east_codes),
@@ -223,8 +226,8 @@ macro_rules! standard {
             slot("west", $west, $west_codes),
             slot("lb", $lb, &["BTN_TL"]),
             slot("rb", $rb, &["BTN_TR"]),
-            slot("lt", $lt, &["BTN_TL2", "ABS_BRAKE+", "ABS_Z+"]),
-            slot("rt", $rt, &["BTN_TR2", "ABS_GAS+", "ABS_RZ+"]),
+            slot("lt", $lt, $lt_codes),
+            slot("rt", $rt, $rt_codes),
             slot("select", $select, &["BTN_SELECT"]),
             slot("start", $start, &["BTN_START"]),
             slot("guide", $guide, &["BTN_MODE"]),
@@ -242,8 +245,9 @@ pub const STANDARD: [Slot; 17] = standard!("A", "B", "Y", "X", "LB", "RB", "LT",
 const SONY: [Slot; 17] = standard!("Cross", "Circle", "Triangle", "Square", "L1", "R1", "L2", "R2", "Create", "Options", "PS", "L3", "R3");
 const SONY_DS4: [Slot; 17] = standard!("Cross", "Circle", "Triangle", "Square", "L1", "R1", "L2", "R2", "Share", "Options", "PS", "L3", "R3");
 // xpad, hid-microsoft, hid-steam and Steam Input's pad report X and Y by letter: X on the left is BTN_X (BTN_NORTH), Y on top BTN_Y (BTN_WEST).
-const XBOX: [Slot; 17] =
-    standard!("A", "B", "Y", "X", "LB", "RB", "LT", "RT", "View", "Menu", "Xbox", "LS", "RS"; &["BTN_SOUTH"], &["BTN_EAST"], &["BTN_WEST"], &["BTN_NORTH"]);
+// hid-microsoft lists BTN_TL2/BTN_TR2 from the Bluetooth descriptor's unused buttons 9 and 10: the pull is the trigger.
+const XBOX: [Slot; 17] = standard!("A", "B", "Y", "X", "LB", "RB", "LT", "RT", "View", "Menu", "Xbox", "LS", "RS";
+    &["BTN_SOUTH"], &["BTN_EAST"], &["BTN_WEST"], &["BTN_NORTH"]; &["ABS_BRAKE+", "ABS_Z+", "BTN_TL2"], &["ABS_GAS+", "ABS_RZ+", "BTN_TR2"]);
 const DECK: [Slot; 17] =
     standard!("A", "B", "Y", "X", "L1", "R1", "L2", "R2", "View", "Menu", "Steam", "L3", "R3"; &["BTN_SOUTH"], &["BTN_EAST"], &["BTN_WEST"], &["BTN_NORTH"]);
 const SWITCH: [Slot; 17] = standard!("B", "A", "X", "Y", "L", "R", "ZL", "ZR", "Minus", "Plus", "Home", "LS", "RS");
