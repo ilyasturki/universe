@@ -65,7 +65,7 @@ def path_words(path: list) -> str:
 
 
 def figure(src: str, caption: str) -> str:
-    return f'<figure><a href="{src}"><img src="{src}" loading="lazy" alt=""></a><figcaption>{html.escape(caption)}</figcaption></figure>'
+    return f'<figure><a href="{src}"><img src="{src}" decoding="async" alt=""></a><figcaption>{html.escape(caption)}</figcaption></figure>'
 
 
 def card(state: dict, shots: list[tuple[str, str]], note: str = "") -> str:
@@ -92,7 +92,7 @@ def report(before: Path, after: Path) -> Path:
         for key, s in now.items():
             shot = after / look / "shots" / s["shot"]
             if key not in was:
-                new.append(card(s, [(f"../{look}/shots/{s['shot']}", "after")]))
+                new.append(card(s, [(f"{look}/shots/{s['shot']}", "after")]))
                 continue
             old = before / look / "shots" / was[key]["shot"]
             pixels = changed(small(old), small(shot))
@@ -108,7 +108,7 @@ def report(before: Path, after: Path) -> Path:
                     share,
                     card(
                         s,
-                        [(f"{look}/{kept.name}", "before"), (f"../{look}/shots/{s['shot']}", "after"), (f"{look}/diff-{s['shot']}", "what changed")],
+                        [(f"report/{look}/{kept.name}", "before"), (f"{look}/shots/{s['shot']}", "after"), (f"report/{look}/diff-{s['shot']}", "what changed")],
                         f"<em>{share:.1f}% of the screen</em>",
                     ),
                 )
@@ -117,7 +117,7 @@ def report(before: Path, after: Path) -> Path:
             if key not in now:
                 kept = out / look / f"before-{s['shot']}"
                 shutil.copy(before / look / "shots" / s["shot"], kept)
-                gone.append(card(s, [(f"{look}/{kept.name}", "before")]))
+                gone.append(card(s, [(f"report/{look}/{kept.name}", "before")]))
         moved.sort(key=lambda m: -m[0])
         found = findings(after, look)
         problems = "".join(

@@ -8,13 +8,21 @@ import pytest
 from explorer import Explorer
 from looks import LOOKS
 
+from universe_ui.errors import UniverseError
+
 OUT = Path(os.environ.get("UNIVERSE_CRAWL_OUT", ".crawl/run"))
-BUDGET_S = float(os.environ.get("UNIVERSE_CRAWL_BUDGET_S", "900"))
+PRESSES = int(os.environ.get("UNIVERSE_CRAWL_PRESSES", "3000"))
+BUDGET_S = float(os.environ.get("UNIVERSE_CRAWL_BUDGET_S", "1800"))
 
 
 @pytest.mark.slow
 @pytest.mark.parametrize("name", LOOKS)
-def test_crawl(api, fake, qtlog, name):
+def test_crawl(api, fake, qtlog, monkeypatch, name):
+    def refused(ident, screen, splash=""):
+        raise UniverseError("Busy", "the explorer stops at a launch")
+
+    # A played game would reorder Home for the rest of the walk, and for the next run's shots.
+    monkeypatch.setattr(fake.core, "launch", refused)
     seen = [0]
 
     def warnings():
@@ -23,7 +31,7 @@ def test_crawl(api, fake, qtlog, name):
         seen[0] = len(records)
         return [r.message for r in new]
 
-    explorer = Explorer(api, fake, name, OUT / name, budget_s=BUDGET_S, log=warnings)
+    explorer = Explorer(api, fake, name, OUT / name, presses=PRESSES, budget_s=BUDGET_S, log=warnings)
     findings = explorer.crawl()
     print(f"\n{name}: {len(explorer.states)} states, {explorer.steps} presses, {explorer.resets} resets, complete={explorer.complete}")
     for f in findings:

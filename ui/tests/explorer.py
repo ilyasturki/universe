@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import re
 import sys
 import time
 import traceback
@@ -33,6 +34,8 @@ HINTED = {"X": Qt.Key.Key_I, "Y": Qt.Key.Key_F, "Start": Qt.Key.Key_F1, "LB": Qt
 HOME_WITHIN = 6
 # Cursor states expanded per region before its moves wait for the rest: a grid's every cell is not a new screen.
 PER_REGION = 16
+# Suspects of B never getting home walked again, at most: each costs a new window.
+CONFIRMED = 15
 # Tries of a button in a region that found no page earlier ones had: the button is worked out there.
 SATURATED = 3
 # Longer text is an excerpt, cut on purpose.
@@ -41,7 +44,7 @@ EXCERPT = 60
 NOT_CURSOR = {"shown", "guestId", "lastSession", "launchedSession", "openSound", "title", "alt", "addonsShown", "subSource", "lastShown", "settingsLanding"}
 # Text typed on a keyboard: whether there is some, not what, or every letter is a new state.
 TYPED = {"query", "text", "typed", "search"}
-LOOK_DIRS = {"reprise": "pages", "switch2": "switch2/pages", "ps5": "ps5/pages"}
+LOOK_DIRS = {"reprise": [".", "pages", "ui"], "switch2": ["switch2", "switch2/pages", "switch2/ui"], "ps5": ["ps5", "ps5/pages", "ps5/ui"]}
 
 SMALL = (160, 90)
 TINY = (80, 45)
@@ -54,7 +57,9 @@ TRUNCATED = """(function () {
         opacity *= item.opacity;
         if (!item.visible || opacity < 0.05)
             return;
-        if (item.truncated === true && item.elide !== undefined && String(item.text).length <= %d) {
+        // A path is elided on purpose: its end or middle is what tells it apart.
+        var path = /^[\\/~]/.test(String(item.text));
+        if (item.truncated === true && item.elide !== undefined && !path && String(item.text).length <= %d) {
             var at = item.mapToItem(null, 0, 0);
             if (at.x < width && at.y < height && at.x + item.width > 0 && at.y + item.height > 0)
                 out.push(String(item.text));
@@ -128,21 +133,22 @@ def _cursor_props(item):
 
 
 def page_names(look):
-    """The objectName of every page file a look has."""
-    names = set()
-    for f in (host.QML_DIR / LOOK_DIRS[look]).glob("*.qml"):
-        names.add(f.stem[0].lower() + f.stem[1:])
-    return names
+    """The objectName of every page the look opens: the pages/ files its QML names, not the components that sit beside them."""
+    files = [p for d in LOOK_DIRS[look] for p in (host.QML_DIR / d).glob("*.qml")]
+    pages = {p.stem for p in (host.QML_DIR / LOOK_DIRS[look][1]).glob("*.qml")}
+    named = {m for f in files for m in re.findall(r'"(?:pages/)?([A-Z]\w*Page)(?:\.qml)?"', f.read_text())}
+    return {m[0].lower() + m[1:] for m in named & pages}
 
 
 class Explorer:
-    def __init__(self, api, fake, name, out, width=1280, height=720, budget_s=600, log=None):
+    def __init__(self, api, fake, name, out, width=1280, height=720, presses=3000, budget_s=1800, log=None):
         assert type(fake.core).__name__ == "FakeCore", "the explorer presses A on games: never on the real core"
         self.api = api
         self.fake = fake
         self.name = name
         self.out = Path(out)
         self.size = (width, height)
+        self.presses = presses
         self.budget_s = budget_s
         self.log = log or list
         self.states = {}
@@ -329,11 +335,8 @@ class Explorer:
         self._launches.clear()
         self.press(key)
         if self._launches:
-            # A game started on the fake core: the walk goes on from a new window once it ends.
+            # The walk stops at a launch and goes on from a new window.
             before.edges[key] = "launch:" + self._launches[0]
-            until(lambda: self.fake.currentSession, "the launch never started a session", 10000)
-            self.fake.core.end_session()
-            until(lambda: not self.fake.currentSession, "the session never ended", 10000)
             self.open()
             self.current = self.record([])
         elif self.api.theme.current != self.name:
@@ -361,6 +364,20 @@ class Explorer:
             self.step("B")
         self.open()
         self.current = self.record([])
+
+    def b_home(self, state):
+        """B pressed from `state`, reached again from a new window, until home: the presses it took, None when home never came."""
+        self.open()
+        self.current = self.record([])
+        for k in state.path:
+            self.step(k)
+        if self.current.page != state.page:
+            return 0
+        for presses in range(HOME_WITHIN + 1):
+            if self.current.home:
+                return presses
+            self.step("B")
+        return None
 
     def routes(self, start):
         """The shortest run of keys known to lead from `start` to each state it reaches."""
@@ -427,12 +444,13 @@ class Explorer:
             crowded = not s.expanded and expanded.get(s.region, 0) >= PER_REGION
             for key in untried:
                 if key in MOVES:
-                    rank = 3 if crowded else 1
+                    rank = 9 if crowded else 2
                 elif not any(key in t.edges for t in self.by_region[s.region]):
                     rank = 0
                 else:
-                    rank = 3 if crowded or self.saturated(s, key) else 2
-                order = (rank, far, len(self.depth.get(s.key, s.path)))
+                    rank = 9 if crowded or self.saturated(s, key) else 1
+                # A button on a row a move just found beats the next move, unless it is a long walk away.
+                order = (4 * rank + min(far, 20), len(self.depth.get(s.key, s.path)))
                 if best is None or order < best[0]:
                     best = (order, s, key)
         return best[1:] if best else (None, None)
@@ -452,7 +470,7 @@ class Explorer:
             self.current = self.origin = self.record([])
             self.depth = {}
             failed = {}
-            while time.monotonic() - self.started < self.budget_s:
+            while self.steps < self.presses and time.monotonic() - self.started < self.budget_s:
                 goal, key = self.next_goal(failed)
                 if goal is None:
                     break
@@ -463,13 +481,13 @@ class Explorer:
                 if key in goal.untried():
                     self.step(key)
             self.complete = goal is None if self.states else False
+            self.judge()
         finally:
             sys.excepthook = previous_hook
             if self.look is not None:
                 self.look.close()
             for look in self.retired:
                 look.engine = None
-        self.judge()
         self.write()
         return self.findings
 
@@ -483,21 +501,8 @@ class Explorer:
         for s in states.values():
             for kind, detail in s.findings:
                 self.findings.append({"kind": kind, "state": s.key, "page": s.page, "path": s.path, "detail": detail})
-        # B, pressed again and again, reaches home.
-        for s in states.values():
-            # B on a keyboard deletes what was typed first.
-            if s.home or "B" not in s.edges or "typed" in s.cursor.values():
-                continue
-            at, presses, seen = s, 0, set()
-            while not at.home and presses <= HOME_WITHIN and at.key not in seen:
-                seen.add(at.key)
-                target = at.edges.get("B")
-                if target not in states:
-                    break
-                at, presses = states[target], presses + 1
-            if not at.home and (presses > HOME_WITHIN or at.key in seen or at.edges.get("B") in states):
-                self.findings.append({"kind": "b-never-home", "state": s.key, "page": s.page, "path": s.path, "detail": f"B {presses} times ends on {at.key}"})
-        # Every state explored all its keys and none moved it: a dead end. Any state home cannot be reached from: a trap.
+        # B, pressed again and again, reaches home; any state home cannot be reached from is a trap. The graph only suspects:
+        # a page that remembers its cursor makes cycles of states it merged, so each suspect is walked again from a new window.
         back = {k: set() for k in states}
         for s in states.values():
             for target in s.edges.values():
@@ -510,11 +515,29 @@ class Explorer:
             for prev in back[k] - reach:
                 reach.add(prev)
                 queue.append(prev)
+        suspects = {}
         for s in states.values():
             if s.edges and not s.untried() and all(t == s.key for t in s.edges.values()):
                 self.findings.append({"kind": "dead-end", "state": s.key, "page": s.page, "path": s.path, "detail": "no key leaves it"})
-            elif not s.untried() and s.key not in reach:
-                self.findings.append({"kind": "trap", "state": s.key, "page": s.page, "path": s.path, "detail": "no known way home"})
+                continue
+            # B on a keyboard deletes what was typed first.
+            if s.home or "B" not in s.edges or "typed" in s.cursor.values():
+                continue
+            at, presses, seen = s, 0, set()
+            while not at.home and presses <= HOME_WITHIN and at.key not in seen:
+                seen.add(at.key)
+                target = at.edges.get("B")
+                if target not in states:
+                    break
+                at, presses = states[target], presses + 1
+            cycles = not at.home and (presses > HOME_WITHIN or at.key in seen or at.edges.get("B") in states)
+            if cycles or (not s.untried() and s.key not in reach):
+                suspects.setdefault(s.region, s)
+        for s in list(suspects.values())[:CONFIRMED]:
+            if self.b_home(s) is None:
+                self.findings.append(
+                    {"kind": "b-never-home", "state": s.key, "page": s.page, "path": s.path, "detail": f"B {HOME_WITHIN} times from here never reaches home"}
+                )
         reached = {s.page for s in states.values()}
         for page in sorted(page_names(self.name) - reached):
             self.findings.append({"kind": "unreached", "state": "", "page": page, "path": [], "detail": f"no key path reached {page}"})
