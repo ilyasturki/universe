@@ -44,7 +44,7 @@ Wait:3 Type:de Type:ad Type:_c Type:el Type:ls Wait:3
 Up Wait Up Wait:2 Expect:dead-cells Return
 Wait:136 Mark:overlay
 Wait:3 Guide Wait:3
-Right Right Right Right Right Right Wait:2
+Right Right Right Right Right Right Right Wait:2
 Expect: Return Wait:2 Expect: Return Wait:4
 Guide Wait:4
 Volume:up Wait Volume:up Wait Volume:up Wait:5
