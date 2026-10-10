@@ -32,9 +32,9 @@ One context property, `api`:
 | `api.system` | what logind will do with the machine: `actions`, the ones of `suspend`, `reboot` and `power_off` it would carry out (the core's `power_actions()`, read once at startup), `run(action)` (`power(action)` off the UI thread; `reboot` and `power_off` stop a running session first, so its `session-end` runs before the machine goes down), `failed(action, message)` when logind refuses. `--fake` records the call and does nothing. `steam`: the launcher runs in Steam's Game Mode (the core's `under_steam()`): no power actions (the menu keeps Quit Universe alone, and says Steam's menu has the rest), no Sound section, no dock over a game, no MangoHud, frame limit or Pause on HOME rows. `session`: the launcher runs as the Universe session a display manager started (the core's `nest::session()`): its way out logs out, so every look's power menu says Log out for Quit Universe (action `logout`), and the PS5 Control Center's Power panel adds a Log Out of its own. `deck`: `lcd` or `oled` on a Steam Deck. `controls`: the core's `system_controls()`, read after `apply_system()` at startup, on `reload()` and as a session starts or ends (a game's own `[system]` goes on and off with it); `set(id, value)` (the machine's own), `setFor(game, id, value)` (the game's own, the machine's own for an empty `game`) and `setAll(game, id, value)` (the machine's own, the game letting its own go) show the value at once and write it off the UI thread, a refusal raising `controlFailed(id, message)` and reading the machine back; `control(id)` one of them. The Universe look lists them under Settings › Performance and in the dock's System group (a step writes once the cursor rests, 400 ms), Switch 2 under System Settings › Performance, the PS5 look under Settings › Performance and in the Control Center's System panel; `ui/Controls.js` turns one into rows any look uses. `network` / `bluetooth`: NetworkManager lists a Wi-Fi card / BlueZ an adapter, outside Game Mode: the looks' Network and Bluetooth pages show. `--fake` lists an OLED Deck's under `UNIVERSE_DECK`, and plays Game Mode under `GAMESCOPE_WAYLAND_DISPLAY` with `UNIVERSE_FAKE_STEAM=1`, the Universe session with `UNIVERSE_FAKE_SESSION=1` |
 | `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written, a game's sessions and their logs, a game's data and the storage view, the changelog, Wi-Fi and Bluetooth) |
 | `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed` and `--size` turn it off) |
-| `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `overlay`, `osd`, `frame`, `ground`, `accent`, `detail`, `unlocked`, `screenshot`, `installed`, `unavailable`; the built-in ones, then the installed themes, see "Themes"), `current`, `frame`, `set(id)` (false for one that is `unavailable`), `rescan()`, `failed()`, `escape()`, `takeNotice()`, `landing` / `takeLanding()`, `fontPath` (the current look's own font file, stored under `<id>Font`: `switch2Font`, `ps5Font`), `soundsPath` (a folder of WAVs, stored under `<id>Sounds`) and `soundFiles` (`{name: url}` of the WAVs in it, the name lowercased: each replaces the look's bundled sound of that name, `sound/SoundPool.qml`'s `overrides`; Switch 2 offers it in Settings › Appearance), `bootIntro` (the startup animation's switch, every look's: on until `ui-memory.json`'s `bootIntro` is false) |
+| `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `overlay`, `osd`, `frame`, `ground`, `accent`, `detail`, `unlocked`, `screenshot`, `installed`, `unavailable`; the built-in ones, then the installed themes, see "Themes"), `current`, `frame`, `ground` and `accent` (the current look's colours), `set(id)` (false for one that is `unavailable`), `rescan()`, `failed()`, `escape()`, `takeNotice()`, `landing` / `takeLanding()`, `fontPath` (the current look's own font file, stored under `<id>Font`: `switch2Font`, `ps5Font`), `soundsPath` (a folder of WAVs, stored under `<id>Sounds`) and `soundFiles` (`{name: url}` of the WAVs in it, the name lowercased: each replaces the look's bundled sound of that name, `sound/SoundPool.qml`'s `overrides`; Switch 2 offers it in Settings › Appearance), `bootIntro` (the startup animation's switch, every look's: on until `ui-memory.json`'s `bootIntro` is false) |
 | `api.home` | the HOME button over a running game (see "HOME and the dock"): `shown` (`game` / `launcher`), `underGame` (the game is on screen over the launcher, inside gamescope), `open`, `loading` (a session this client launched has no window up yet), `paused`, `pauseOnHome`, `flipped`, `frame`, `volumePercent`, `muted`, `outputs` (`loadOutputs()` fills it); `pressed()`, `stopping(title)`; `openDock()`, `closeDock()`, `dockClosed()`, `toGame()`, `toLauncher(landing?)` / `takeLanding()`, `covered()`, `stop()`, `setPauseOnHome(on)`, `screenshot()` (→ `screenshotGrabbed()` at the grab, then `screenshotTaken(path)`, and `screenshotLost()` when it fails after the grab), `volume(change, value)`, `setOutput(id)`, `runtime()` / `setRuntime(key, value)` (the running game's HUD, frame limit and filter, for this session alone), `launchChoices(key)`, `setLaunchValueAll(key, value)` (every game's default, the game following it), `screenRefresh()`, `escapeHeld()` (HOME held 5 s) |
-| `api.boot` | the startup animation (see "Startup animation"): `running`, `started()` (its first frame is on screen), `skipped()`, `landed(skipped)` (the mark is done: each look builds its home), `land()`, `finish()` |
+| `api.boot` | the startup animation (see "Startup animation"): `running`, `started()` (its first frame is on screen), `skipped()`, `landed(skipped)` (the ground opens: each look builds its home), `land()`, `finish()` |
 
 A `Game` exposes `id`, `title`, `sortTitle`, `favorite` (writable), `hidden`, `playTime`,
 `playCount`, `lastPlayed`, `releaseYear`, `developerList`, `publisherList`, `genreList`, `players`,
@@ -257,22 +257,35 @@ one does in Settings › Appearance: the sample's Start lists `api.theme.themes`
 ## Startup animation
 
 A fullscreen start opens on the Universe mark: `ui/Boot.qml`, in `main.qml` over the theme's
-`Loader` and outside it, so a theme switch never replays it. It lasts about 1.2 s and covers no
-wait: the app is ready in about 250 ms. On `api.theme.ground`, the controller ring
-sweeps in from edge-on, the planet rises inside it and the wordmark settles
-(`qml/assets/brand/`, the icon split into `ring-back`, `planet` and `ring-front` layers, and the
-wordmark for a light or a dark ground); under the software scenegraph (offscreen) the whole mark
-only fades in. Then `api.boot.land()` emits `landed(false)` and the layer fades out over each look
-building its home: PS5 runs its back-from-a-game `home.rebuild()`, the Universe look brings in the backdrop,
-the page and the bars in turn (`backdropReveal`, `pageReveal`, `chromeReveal` on its root), Switch 2
-slides its row in and settles its bars (`rowReveal`, `chromeReveal`). Each root blanks those parts
-in `Component.onCompleted` while `api.boot.running`, and only then runs `start()`, its Themes
-landing, the first-run setup or what's new (see "What's new"), which otherwise runs there at once.
+`Loader` and outside it, so a theme switch never replays it. It lasts 1.9 s and covers no wait: the
+app is ready in about 250 ms. On `api.theme.ground`, hairlines of one ink stream toward the viewer
+faster and faster (`assets/shaders/hairlines.frag`, one full-screen `ShaderEffect` pass), then brake
+at 900 ms: they shrink back to points and go out, the mark punches in (scale 1.22 to 1, OutBack;
+`qml/assets/brand/`, the icon's `ring-back`, `planet` and `ring-front` layers and the wordmark for a
+light or a dark ground) and sends one thin ring out from its planet. At 1.35 s `api.boot.land()`
+emits `landed(false)` and the ground opens: a hole edged by a thin circle grows from the centre past
+the corners in 520 ms (a `Shape`, odd-even fill), and through it each look builds its home: PS5 runs
+its back-from-a-game `home.rebuild()`, the Universe look brings in the backdrop, the page and the bars in turn
+(`backdropReveal`, `pageReveal`, `chromeReveal` on its root), Switch 2 slides its row in and settles
+its bars (`rowReveal`, `chromeReveal`). Each root blanks those parts in `Component.onCompleted` while
+`api.boot.running`, and only then runs `start()`, its Themes landing, the first-run setup or what's
+new (see "What's new"), which otherwise runs there at once.
+
+Every part is a function of one `t`, the milliseconds since the first frame, so the hand-off and the
+end hold their time through a stalled frame. Its colours come from the ground and the accent alone,
+so any look, an installed theme's included, recolours it: the ink is `#101116` on a light ground
+(HSL lightness over 0.5) and `#f2f3f5` on a dark one, and `accent` (`api.theme.accent`) falls back
+to the ink under 2.2:1 against the ground. Before the first tick every part is drawn once all but
+transparent, so none builds its pipeline or uploads its texture mid-intro. Under the software
+scenegraph (offscreen) the hairlines are left out; the mark, the ring and the opening still play.
+`hairlines.frag.qsb` is rebuilt from `hairlines.frag` with
+`qsb --glsl "100 es,120,150" --hlsl 50 --msl 12 -o hairlines.frag.qsb hairlines.frag`.
 
 The animation starts on the window's first swapped frame (`started`), not when QML loads, so a
 compositor slow to map the window loses none of it. It plays the look's `boot.wav` (each look's
-`assets/sounds/generate.py` synthesizes it, quieter than the look's other cues;
-`api.theme.soundFiles.boot` from the look's sound folder replaces it), unless the output is muted.
+`assets/sounds/generate.py` synthesizes it on the intro's beats: a rise under the warp, the hit on
+the brake, a tail on the opening; quieter than the look's other cues; `api.theme.soundFiles.boot`
+from the look's sound folder replaces it), unless the output is muted.
 
 While `running`, the input is the intro's: `api.keys`' window filter swallows every key, click,
 touch and wheel, and `api.home` the HOME button, so focus moves under the layer as usual but nothing

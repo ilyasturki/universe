@@ -51,7 +51,7 @@ class Boot(QObject):
         self.skipped.emit()
         self.land()
 
-    # The mark is done: the look builds its home under the fading layer, at once after a skip.
+    # The ground opens: the look builds its home through it, at once after a skip.
     @Slot()
     def land(self):
         if self._running and not self._landed:
