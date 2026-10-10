@@ -44,7 +44,7 @@ Top of CHANGELOG.md:
 
 4. **Docs.** The site documents the latest release: it is rebuilt from the tag with the media of the `site-media` branch, so this release's pages and media ship with it. This step follows the changelog entry because `record` stamps the media with the entry's version.
     1. For each entry, find the guide pages under `site/src/content/docs/docs/` that cover it (grep its setting, command or screen name) and fix what it made wrong. A new feature with a screen of its own gets a take at the end of `site/media/takes.toml` and a `<Shot name="…" />` or `<Clip name="…" />` on its page; the head of takes.toml and `site/README.md` have the rules. `just site build` passes, its link validator included.
-    2. `UNIVERSE_DEV=.dev-showcase just showcase`, then `UNIVERSE_DEV=.dev-showcase just docs-media record`. It films every take on the GPU in a headless compositor, no window, and its gamescope clips launch Dead Cells in the showcase profile.
+    2. `just showcase` (rebuilds `.dev-showcase` from `.dev`), then `UNIVERSE_DEV=.dev-showcase just docs-media record`. It films every take on the GPU in a headless compositor, no window, and its gamescope clips launch Dead Cells in the showcase profile.
     3. Read `target/docs-media/contact.png`. A take that failed, or whose tile shows another screen than its page describes or a half-drawn one: fix its keys, record it alone (`UNIVERSE_DEV=.dev-showcase just docs-media record <name>`) and Read the sheet again.
     4. `just docs-media check --strict X.Y.Z`.
     5. `just docs-media publish X.Y.Z`: the media become the single commit of the local `site-media` branch.
