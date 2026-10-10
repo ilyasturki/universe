@@ -226,6 +226,7 @@ Window {
 
         NoticePill {
             id: lostPill
+            maxWidth: overlay.width / 2
         }
 
         Connections {
