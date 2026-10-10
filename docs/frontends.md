@@ -217,8 +217,9 @@ removal, and whenever a look opens its Settings › Appearance. An installed the
 `installed`, `screenshot` (the manifest's picture as a file URL: the Universe look's Theme menu draws it by the
 name, the Switch 2 and PS5 rows in place of the swatch) and `unavailable` (why it cannot be picked:
 an `api` this Universe does not read, or no `theme.qml`); `set(id)` refuses such a one and the looks
-list it dimmed. It draws in the main window alone: its `overlay` is empty, so HOME over a game
-brings the launcher back as under Switch 2, its `osd` is the host's `ui/VolumePill.qml`, its `ground`
+list it dimmed. It draws in the main window alone: its `overlay` is empty, so over a game a HOME
+hold brings the launcher back (the host's own `toLauncher()`) and a press does what the theme makes
+of `api.home`'s `pressed()`, as Switch 2's `theme.qml` does, its `osd` is the host's `ui/VolumePill.qml`, its `ground`
 black. A theme that fails to load (the `Loader`'s `status` turns `Error`; QML logs why) makes
 `main.qml` call `failed()`, which puts the default look back, writes it to `ui-memory.json` and leaves
 a notice that `main.qml` hands to `Notices.fail` once the default look has loaded (`takeNotice()`).
@@ -1480,8 +1481,10 @@ looking at its row fires nothing, and nothing shows either: the SDL mapper is st
 pad into keys, and the rows are for binding. The live view (`setTesting(true)`, from the test
 row) is where presses are looked at: the pad takes the column, the mapper is muted, the watcher
 streams the sticks and triggers (`axes {on}` → `axis {id, axis, value}`, `lx ly rx ry` as -1..1 and
-`lt rt` as 0..1), and the last thing touched is named under the pad — a trigger as soon as it
-moves, with its pull in percent. It ends on a Circle/B held for a second or Start and Select
+`lt rt` as 0..1), `PadArt`'s readouts print each stick's lean and each trigger's pull in percent
+beside it, and the HISTORY column (`ui/PadHistory.js`) logs the last 12 presses newest first, each
+with the milliseconds since the one before (orange under 30 ms: the pad fired twice), a trigger or a
+stick once past half with its pull or its direction. It ends on a Circle/B held for a second or Start and Select
 together (both read from the watcher's `button` events), on Escape, or by itself when the section
 is left, the shown pad goes, another is picked, or the watcher stops or turns passive; `Api` mutes
 `api.pad` for exactly as long as `testing` is true.
