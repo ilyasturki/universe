@@ -25,3 +25,7 @@ A speed budget is a test named `…_within_its_budget` whose limit comes from `s
 A pad change is checked against the recorded pads in tests/pads: `just test-pads` replays each as a uinput pad on this desktop, `just test vm` through the real kernel drivers in a VM; `universe controller dump --walk --json` records a new one.
 
 The full check is `just verify` (lint and every suite; the pre-push hook runs it). To see a UI change, follow the run-ui skill (.claude/skills/run-ui/SKILL.md).
+
+## Docs
+
+A user-facing change updates its guide page (site/src/content/docs) in the same commit, and its take in site/media/takes.toml when the screen changed. site/README.md has how pages are written and what the site's build checks.
