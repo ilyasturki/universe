@@ -1,0 +1,40 @@
+---
+title: System check
+description: "Settings › System check runs Universe's checks on this machine and says how to fix the ones that fail."
+sidebar:
+  order: 14
+---
+
+import Shot from '../../../../components/Shot.astro';
+
+Settings › **System check** runs Universe's checks on this machine and says what fails and how to fix it. It checks the core, the runners, the media tools and the controller, and each feature and store that is on.
+
+<Shot name="settings-system-check" />
+
+## The tally
+
+Above the cards, two counts give the checks that pass, in green, and the ones that need attention, in red.
+
+## Needs attention
+
+This card comes first when a check fails, and its line counts them ("2 of 31 checks fail"). Each row reads its area, then the check ("Core › Gamescope"), with what is wrong and a "To fix:" line under it.
+
+A failing check that an install fixes shows **A** **Install**. It asks "Install …?", then installs the build or tool as Settings › [Emulators & Proton](/docs/settings/emulators-proton/) would.
+
+## The areas
+
+One card per area, **Core** first, then **Runners**, **Media**, **Controller** and the features and stores that are on. Each line counts its checks ("12 of 12 checks pass"), and each card lists only the ones that pass.
+
+## Keys
+
+**X** (**Refresh**) runs the checks again, after you've fixed something.
+
+## From the command line
+
+[`universe doctor`](/docs/reference/cli/doctor/) runs the same checks and prints each fix. It exits with status 1 when a check fails, and `--json` gives the results to a script. On GNOME, [`universe setup`](/docs/reference/cli/setup/) installs the Universe Shell extension first, then runs them.
+
+[Troubleshooting](/docs/running/troubleshooting/) covers what to do when a check fails or a game won't start.
+
+## In the other looks
+
+The Switch 2 look has System Settings › **System check**, and the PS5 look Settings › **System Check**, both refreshed with **Y**. Universe Desktop has it in its main menu, as **System Check**, with **Check Again**.

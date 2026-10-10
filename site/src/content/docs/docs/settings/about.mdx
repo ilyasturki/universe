@@ -1,0 +1,32 @@
+---
+title: About
+description: "Settings › About shows the version and what's new, and opens the first-run setup and the Power menu."
+sidebar:
+  order: 15
+---
+
+import Shot from '../../../../components/Shot.astro';
+
+Settings › **About** says which Universe this is and what changed in each release. It's also where you run the first-run setup again and open the Power menu.
+
+<Shot name="settings-about" />
+
+## Universe
+
+The section's one card holds these rows, in order:
+
+- **Version**: the version number, with its git revision in parentheses when the build has one. **A** (**What's new**) opens the same page as the next row.
+- **What's new**: the newest release's version. **A** (**Open**) opens the **What's new** page, every version's changes, newest first; **B** goes back.
+- **Show what's new after an update**: that page opens by itself, once, on the first start after an update. It's `desktop.whats_new` in config.toml, on by default, and the same switch as Settings › [Game defaults](/docs/settings/game-defaults/) › Updates.
+- **First-run setup** (A: **Run again**): the setup Universe opens on with an empty library, which goes through what other launchers hold, your stores and a few choices. See [First run](/docs/getting-started/first-run/).
+- **Power** (A: **Open**): the **Power** menu, the same one that holding **B** opens. It lists **Quit Universe** (**Log out** in the Universe session), then **Suspend**, **Reboot** and **Power off** where the system allows them, and **Stay**. Under Steam's Game Mode only Quit Universe and Stay are there, since Steam's own menu has the power options.
+
+[Getting around](/docs/using/getting-around/) has the rest of the Power menu. Every release's notes are also in the [changelog](/docs/changelog/).
+
+## From the command line
+
+`universe --version` prints the version. [`universe config set`](/docs/reference/cli/config/) `desktop.whats_new false` keeps the What's new page from opening after an update.
+
+## In the other looks
+
+The Switch 2 look has System Settings › **About**, with **Universe**, **Look** and **Library** rows but no Power row. Its power options are the HOME bar's **Power** icon, or **B** held. The PS5 look's Settings › **About** splits into **System Information** and **Setup and Power**, the latter with **First-run setup** and **Power**. Universe Desktop has **About Universe Desktop** and **What's New** in its main menu, and the setup under Add Games › **First-Run Setup…**.

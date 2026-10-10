@@ -1,0 +1,32 @@
+---
+title: Sound
+description: "Settings › Sound picks the output every sound plays through, such as speakers, headphones or HDMI."
+sidebar:
+  order: 11
+---
+
+import Shot from '../../../../components/Shot.astro';
+
+Settings › **Sound** picks the output that the games, Universe and the desktop all play through. It's hidden under [Steam's Game Mode](/docs/getting-started/steam-deck/#steams-game-mode), where the output is Steam's.
+
+<Shot name="settings-sound" />
+
+## Output
+
+One row per output PipeWire lists. The label is the route, such as speakers, headphones or HDMI, and the value is the sound card it belongs to. The output in use is tagged **In use**.
+
+**A** (**Use**) on another output makes it the system's default, the one the desktop's own sound settings would set, and switches the card's profile when that output needs it. With no output at all, the card reads "No output found".
+
+## Keys
+
+**X** (**Refresh**) lists the outputs again, after you plug in headphones or a TV for instance.
+
+## From the command line
+
+[`universe output`](/docs/reference/cli/output/) lists the outputs, and `universe output <id>` plays through one. Under Game Mode it refuses with "The sound output belongs to Steam in Game Mode".
+
+Over a game, the dock's **Sound** button has the volume and the same output choice, as [Playing](/docs/using/playing/) describes.
+
+## In the other looks
+
+The Switch 2 look has System Settings › **Sound**, and the PS5 look Settings › **Sound**, with the outputs in an **Audio Output** part. Each output reads its card, then its route, and **Y** refreshes the list. Universe Desktop has no Sound page.

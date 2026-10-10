@@ -1,0 +1,51 @@
+---
+title: Storage
+description: "Settings › Storage shows the size of Universe's folders and of each game, and the leftovers no game holds any more."
+sidebar:
+  order: 13
+---
+
+import Shot from '../../../../components/Shot.astro';
+
+Settings › **Storage** shows what Universe takes on disk, folder by folder and game by game, and what no game holds any more. Sizes are measured in the background and can take a few seconds to come in.
+
+<Shot name="settings-storage" />
+
+## Folders
+
+One row per folder Universe writes to. The value is its size and the free space on its drive, and the detail line is its path.
+
+- **Games** (`paths.games_root`), **Windows game folders** (`paths.prefixes_root`), **Save backups** (`paths.saves_root`) and **Recordings** (`paths.recordings_root`), set in Settings › [Game defaults](/docs/settings/game-defaults/) › Folders.
+- **Library data**: the games' own folders under `~/.local/share/universe/games`.
+- **Runners and tools**: the builds Universe installed.
+- **Logs**.
+
+## Games
+
+This card lists the games by size, the biggest first, with their total on its line. The detail splits each game's share into "Install … · Prefix … · Saves … · Recordings …". **A** opens the game's **Data and saves** page.
+
+## Leftovers
+
+The leftovers are what no game holds any more. The card's line gives their total, or **None**.
+
+- **Prefix no game uses**: a Wine prefix in the Windows game folders that no game runs in.
+- **Archived recordings**: the recordings of a game removed from the library.
+- **Removed game**: the folder of a game removed from the library. Trashing it takes the game out of the library for good.
+- **Removed game's logs**.
+
+**A** asks "Move this to the trash?" with the path, and **Move to Trash** sends it to the desktop's trash, which can give it back until it's emptied. Nothing goes to the trash unless you ask.
+
+## Keys
+
+**X** (**Refresh**) measures again.
+
+## From the command line
+
+- [`universe storage`](/docs/reference/cli/storage/) prints the same three lists, and `universe storage trash <path>` trashes a leftover.
+- [`universe data`](/docs/reference/cli/data/) `<game>` gives one game's install, prefix, saves, Universe's files, recordings and logs, each with its size.
+
+[Disk space](/docs/library/disk-space/) covers freeing room, and [Saves and cloud saves](/docs/library/saves/) the Data and saves page.
+
+## In the other looks
+
+The Switch 2 look calls it **Data Management**, a single row in System Settings that opens a page with the same three groups. The PS5 look has no such section; the **Console Storage** widget of its Welcome hub opens the same page. Universe Desktop has it in its main menu, as **Storage**.

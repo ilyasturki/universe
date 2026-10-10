@@ -1,0 +1,43 @@
+---
+title: Artwork
+description: "Settings › Artwork shows every game's five art slots in one grid, and fetches the art that is missing."
+sidebar:
+  order: 7
+---
+
+import Shot from '../../../../components/Shot.astro';
+
+Settings › **Artwork** lays out the art of your whole library in one grid, so you can see what's missing and fetch it. Unlike the other sections, it has no cards.
+
+<Shot name="settings-artwork" />
+
+## The grid
+
+One row per game, A to Z, leaving out hidden and removed games. One column per slot: **Box front**, **Square**, **Banner**, **Background** and **Logo**. An empty cell reads "missing", and art you picked yourself carries a **Pick** badge.
+
+**A** on a cell (the hint reads **Open** and the slot, such as "Open banner") opens that game's artwork browser on that slot.
+
+## Fetch missing art
+
+Up from the first row lands on the button above the titles. It reads **Fetch missing art**, or **Nothing missing**, dimmed, when every game has all five.
+
+**A** asks first ("Fetch the missing art of 12 games?"), then fetches from the stores, GOG GamesDB and libretro, and from SteamGridDB once you've added a key. The art goes into each game's media folder, and your picks stay on top. While the fetch runs the button reads "Stop · 3/12"; **A** stops it after the game in hand, and what was fetched stays.
+
+## Keys
+
+**B** (**Sections**) goes back to the sidebar, and so does Left from the first column. X, Y and **Start** do nothing here.
+
+## SteamGridDB
+
+A SteamGridDB key adds that site's art to the fetch and to each slot's choices. Enter it in Settings › [Game defaults](/docs/settings/game-defaults/) › API keys (behind **Y**), or from the "Add a SteamGridDB key for more art" cell of a game's artwork browser. It's kept as `keys.sgdb` in config.toml.
+
+## From the command line
+
+- [`universe media`](/docs/reference/cli/media/) `all refresh` fetches the missing art of every game; `--force` fetches again even where every slot is filled.
+- `universe media <game> status` lists a game's slots and where each image came from.
+
+[Artwork](/docs/library/artwork/) explains where the art comes from and how to pick your own.
+
+## In the other looks
+
+The Switch 2 look has no Artwork section; there you set art one game at a time, from Software Options › **Artwork**. The PS5 look has Settings › **Artwork**, with a **Library Artwork** part that holds the fetch, then **Missing Art** and **Every Game**. Universe Desktop has it in its main menu, as **Library Artwork…**.

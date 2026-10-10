@@ -1,0 +1,73 @@
+---
+title: Downloads
+description: "Settings › Downloads lists a store's games, what is installing and the updates waiting, and installs or uninstalls a game."
+sidebar:
+  order: 2
+---
+
+import Shot from '../../../../components/Shot.astro';
+
+Settings › **Downloads** is where you install, update and uninstall store games. It shows one store at a time: what your account owns, what is on this PC, what is installing and what has an update. The sidebar entry counts the updates waiting for the store shown.
+
+<Shot name="settings-downloads" />
+
+## Cards
+
+The cards come in this order, the first three only when they have something in them:
+
+1. **Store**, when two stores or more are on: one **Store** row naming the store shown. **A** (**Change**) picks another. A store that is off or unavailable isn't offered.
+2. **Installing**: the install or update running and the paused ones, counted on the card's line ("1 running · 1 paused").
+3. **Updates**, while updates are pending: **Update everything** ("2 updates"). **A** (**Update**) updates the store's pending games one after another.
+4. **On this PC**: the store's games installed here, with their number, their total size and the folders the store looks in.
+5. **Not installed**: the games your account owns that aren't installed, and when that listing was refreshed. When the store can't be reached, the line warns "… could not be reached · listing from …" and the last listing stays.
+
+A game row has its size on the right and its status as its value:
+
+| Value | What it means |
+| --- | --- |
+| In your library | Installed, and a library game uses it |
+| Not in your library | Installed, but no library game uses it; the detail reads "Found in …" |
+| Update available | Installed, with an update waiting |
+| Owned | Yours, not installed |
+| Installing…, Updating… | Running now |
+| Paused · … kept | Stopped part way, with the files downloaded so far kept |
+
+Resting the cursor on a game whose size isn't known yet asks the store for it.
+
+## A on a game
+
+**A** (**Options**) opens the game's menu, which follows the row's state:
+
+- installing or updating: **Cancel install** or **Cancel update**, which keeps the files and leaves the row paused;
+- not installed: **Install**, or **Resume** on a paused game;
+- installed: **Update** first when one is waiting. Then **Add to library** and **Delete files…** when no library game uses it, or **Play**, **Details** and **Game settings** when one does, followed by **Uninstall…** and **Remove from library…**.
+
+The actions that touch the disk ask first:
+
+- **Install** shows the download and disk sizes ("Size not known yet" until the store says) and the free space in the install folder. **Install** goes ahead, **Not now** doesn't.
+- **Uninstall…** offers **Uninstall through …** when the store removes its own games (Steam, Epic Games, itch.io), or **Trash the install folder** for GOG. **Keep it** cancels. The game stays in the library, not installed.
+- **Delete files…** offers **Uninstall through …** or **Move the folder to the trash**, and **Keep them** to cancel.
+- **Remove from library…** offers **Remove from the library**, and **Keep it** to cancel. Its files stay where they are.
+
+One install or update runs at a time, and a bar above the cards follows it. While a game installs it heads the Home row, and pressing it there opens this section.
+
+## Keys
+
+**X** (**Refresh**) asks the store for its listing again, so the games you bought since show up. Opening the section doesn't ask the store. It reads the last listing again and looks at the disk, at most once every 15 minutes.
+
+## From the command line
+
+- [`universe library`](/docs/reference/cli/library/) `[<store>]` lists a store's games; `--refresh` asks the store again.
+- [`universe install`](/docs/reference/cli/install/) `<id> --source <store>` installs a game by the store's id for it.
+- [`universe update`](/docs/reference/cli/update/) lists the pending updates and offers to install them; `universe update <game>` updates one.
+- [`universe scan`](/docs/reference/cli/scan/) `[<store>]` adds all of a store's installs on this PC to the library, where **Add to library** adds one at a time.
+- [`universe uninstall`](/docs/reference/cli/uninstall/) `<game>` uninstalls a library game. Given a store's id and `--source <store>`, it does **Delete files…**.
+- [`universe rm`](/docs/reference/cli/rm/) `<game>` removes a game from the library.
+
+No command cancels an install. Ctrl-C stops one that a terminal started.
+
+The pages for [GOG](/docs/library/gog/), [Steam](/docs/library/steam/), [Epic Games](/docs/library/epic/) and [itch.io](/docs/library/itch/) explain what each store installs and where. See also [Disk space](/docs/library/disk-space/).
+
+## In the other looks
+
+The Switch 2 and PS5 looks have no Downloads section. On Switch 2 the store is the **Install** page of the HOME bar, and the updates are System Settings › **Updates**. On PS5 the store is the **Store** tile of the home row, and the updates are Settings › **Updates**. Universe Desktop has a **Store** page in its sidebar.
