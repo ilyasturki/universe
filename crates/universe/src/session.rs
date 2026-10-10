@@ -920,10 +920,11 @@ pub(crate) mod tests {
         assert_eq!(core.session_log("sample", "", 1).await.unwrap().len(), 2, "the tail keeps the command line");
 
         core.stop("").await.unwrap();
+        memory.finish(&unit, 11);
         core.session_end("sample", &sid, None, None).await.unwrap();
         let row = &core.sessions("sample").await.unwrap()[0];
-        assert!(row.session.stopped == Some(true) && row.session.exit == 143, "{:?}", row.session);
-        assert_eq!(sessions::end_of(&row.session), "stopped");
+        assert!(row.session.stopped == Some(true) && row.session.exit == 11, "{:?}", row.session);
+        assert_eq!(sessions::end_of(&row.session), "stopped", "a game segfaulting in the shutdown a stop asked for is no crash");
         assert_eq!(row.session.command, command);
         let json = serde_json::to_value(row).unwrap();
         assert_eq!((json["end"].as_str(), json["debug_log"].is_null(), json.get("command")), (Some("stopped"), true, None));
