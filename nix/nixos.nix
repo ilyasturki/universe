@@ -11,6 +11,13 @@ let
   rules = pkgs.writeTextDir "lib/udev/rules.d/70-universe.rules" (
     builtins.readFile ../packaging/system/70-universe.rules
   );
+  # game-devices-udev-rules' files carry no number and would sort after 73-seat-late.rules: their uaccess would never apply.
+  gameDevices = pkgs.runCommand "game-devices-udev-rules-uaccess" { } ''
+    mkdir -p $out/lib/udev/rules.d
+    for f in ${pkgs.game-devices-udev-rules}/lib/udev/rules.d/*.rules; do
+      cp "$f" "$out/lib/udev/rules.d/70-$(basename "$f")"
+    done
+  '';
   ui = "${cfg.session.package}/bin/universe-ui";
   # providedSessions names the file less .desktop: NixOS checks it, and defaultSession picks by it.
   session =
@@ -77,7 +84,7 @@ in
       ];
       hardware.uinput.enable = lib.mkIf cfg.controller.enable true;
       services.udev.packages = lib.mkIf cfg.controller.enable [
-        pkgs.game-devices-udev-rules
+        gameDevices
         rules
       ];
       # /dev/uhid is a static node: a user's open does not load the module, and the rule applies once it is loaded.
