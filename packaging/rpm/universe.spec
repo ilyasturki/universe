@@ -137,8 +137,7 @@ install -Dm644 gen/universe-desktop.1 -t %{buildroot}%{_mandir}/man1
 %check
 export CARGO_TARGET_DIR=target
 # the journal tests expect Paris local time, as the flake's check does
-# the stop tests need a cgroup of their own and python3, which a build chroot may not give
-TZ=Europe/Paris cargo test --frozen -p universe -p universe-desktop -- --skip host::cgroup::
+TZ=Europe/Paris cargo test --frozen -p universe -p universe-desktop
 
 %files
 %license LICENSE

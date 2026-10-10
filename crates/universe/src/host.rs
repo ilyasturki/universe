@@ -870,7 +870,7 @@ mod live {
     }
 }
 
-/// A real cgroup behind a fake manager on the test bus: the flake's sandbox has none and skips these.
+/// A real cgroup behind a fake manager on the test bus; where the test process may make none, they skip.
 #[cfg(test)]
 mod cgroup {
     use super::*;
@@ -927,8 +927,8 @@ while True:
 
     #[tokio::test]
     async fn a_game_ignoring_sigterm_is_killed_after_its_grace_with_no_core_to_dump() {
+        let Some(cgroup) = Cgroup::new().map(Arc::new) else { return };
         let bus = Bus::start();
-        let cgroup = Arc::new(Cgroup::new());
         let _manager = Manager::serve(&bus, UNIT, cgroup.clone()).await;
         let (exit, mut lines) = game(&cgroup, IGNORES_TERM).await;
         let units = Units::Systemd(Systemd::on(bus.connect().await));
@@ -945,7 +945,7 @@ while True:
     #[tokio::test]
     async fn a_frozen_game_runs_a_moment_before_its_sigterm() {
         let freeze = Duration::from_millis(600);
-        let hazard = Cgroup::new();
+        let (Some(hazard), Some(cgroup)) = (Cgroup::new(), Cgroup::new().map(Arc::new)) else { return };
         let (exit, _) = game(&hazard, CATCHES_UP).await;
         let pid = rustix::process::Pid::from_raw(hazard.pids()[0] as i32).unwrap();
         hazard.freeze(true).await;
@@ -955,7 +955,6 @@ while True:
         assert_eq!(exit.await.unwrap().code(), Some(70), "a SIGTERM right behind the thaw meets the catch-up");
 
         let bus = Bus::start();
-        let cgroup = Arc::new(Cgroup::new());
         let _manager = Manager::serve(&bus, UNIT, cgroup.clone()).await;
         let (exit, _) = game(&cgroup, CATCHES_UP).await;
         let units = Units::Systemd(Systemd::on(bus.connect().await));

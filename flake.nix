@@ -120,8 +120,6 @@
         env.UNIVERSE_GIT_REV = gitRev;
         # chrono ignores TZDIR, so the zone is given as a file
         preCheck = "export TZ=${pkgs.tzdata}/share/zoneinfo/Europe/Paris";
-        # They make a cgroup under their own, and the sandbox has no /sys/fs/cgroup
-        checkFlags = [ "--skip=host::cgroup::" ];
         # reqwest's platform verifier refuses to build a client on an empty CA store; the NetworkManager and BlueZ tests run their own dbus-daemon, the volume keys' test its own PipeWire, the game session's an Xvfb for gamescope
         nativeCheckInputs = [
           pkgs.cacert

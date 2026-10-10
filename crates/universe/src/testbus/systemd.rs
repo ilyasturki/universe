@@ -28,14 +28,24 @@ pub struct Cgroup {
 }
 
 impl Cgroup {
-    pub fn new() -> Cgroup {
+    /// `None`, the reason printed, where the test process may not make one: a build sandbox, a container, an ssh or TTY login's root-owned session scope.
+    pub fn new() -> Option<Cgroup> {
         static NEXT: AtomicU32 = AtomicU32::new(0);
-        let own = std::fs::read_to_string("/proc/self/cgroup").unwrap();
-        let own = own.lines().find_map(|l| l.strip_prefix("0::")).expect("a cgroup v2 hierarchy");
+        let cgroups = std::fs::read_to_string("/proc/self/cgroup").unwrap_or_default();
+        let Some(own) = cgroups.lines().find_map(|l| l.strip_prefix("0::")) else {
+            eprintln!("skipped: no cgroup v2 hierarchy in /proc/self/cgroup");
+            return None;
+        };
         let path = format!("{}/universe-test-{}-{}", own.trim_end_matches('/'), std::process::id(), NEXT.fetch_add(1, Ordering::SeqCst));
         let dir = PathBuf::from("/sys/fs/cgroup").join(path.trim_start_matches('/'));
-        std::fs::create_dir(&dir).unwrap_or_else(|e| panic!("{}: {e} (a stop test needs a writable cgroup; the flake's sandbox skips it)", dir.display()));
-        Cgroup { path, dir }
+        match std::fs::create_dir(&dir) {
+            Ok(()) => Some(Cgroup { path, dir }),
+            Err(e) if matches!(e.raw_os_error(), Some(libc::EACCES | libc::EPERM | libc::EROFS | libc::ENOENT)) => {
+                eprintln!("skipped: no cgroup of its own to make here ({}: {e})", dir.display());
+                None
+            }
+            Err(e) => panic!("{}: {e}", dir.display()),
+        }
     }
 
     /// Started inside the cgroup, before its first instruction.
