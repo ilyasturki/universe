@@ -51,43 +51,52 @@ fn unclaimed(g: &Game) -> bool {
     matches!(g.source.kind.as_str(), "manual" | "lutris" | "")
 }
 
-/// Through symlinks when the path exists, as written when it does not.
 fn real(p: &Path) -> PathBuf {
     p.canonicalize().unwrap_or_else(|_| p.to_path_buf())
 }
 
-/// `dir` is one of the folders games are installed into, or holds one: never a single game's.
+fn scan_dirs(settings: &serde_json::Map<String, serde_json::Value>) -> Vec<PathBuf> {
+    let listed = settings.get("scan_dirs").and_then(|v| v.as_str()).unwrap_or("");
+    listed.split(',').map(str::trim).filter(|d| !d.is_empty()).map(paths::expand).collect()
+}
+
+/// `dir` is one of the folders games are installed into, or holds one: never a single game's. `roots` are real paths, as
+/// `install_roots` gives them.
 fn is_root(dir: &Path, roots: &[PathBuf]) -> bool {
     let dir = real(dir);
-    dir.parent().is_none() || roots.iter().any(|r| real(r).starts_with(&dir))
+    dir.parent().is_none() || roots.iter().any(|r| r.starts_with(&dir))
 }
 
 /// The library game a store's `sid` stands for: the store's own; else, for an install found in `dir`, a game no store has
-/// claimed with that id or the one a Lutris import parked, then one whose exe or folder lies in `dir`.
+/// claimed with that id or the one a Lutris import parked, then one whose exe or folder lies in `dir`. A live game before
+/// an archived one, whichever way each is found.
 fn store_twin<'a>(games: &'a [Resolved], source: &str, sid: &str, dir: Option<&Path>, roots: &[PathBuf]) -> Option<&'a Resolved> {
     if sid.is_empty() {
         return None;
     }
-    if let Some(own) = games.iter().find(|x| x.game.source.kind == source && x.game.source.id == sid) {
-        return Some(own);
-    }
-    let dir = dir.filter(|d| !d.as_os_str().is_empty())?;
+    let dir = dir.filter(|d| !d.as_os_str().is_empty());
+    let holder = dir.filter(|d| !is_root(d, roots)).map(real);
     let parked = |g: &Game| g.extra.get("lutris").and_then(|l| l.get(format!("{source}_manifest"))).and_then(|v| v.as_str()) == Some(sid);
-    let free = || games.iter().filter(|x| unclaimed(&x.game));
-    if let Some(found) = free().find(|x| x.game.source.id == sid || parked(&x.game)) {
-        return Some(found);
-    }
-    if is_root(dir, roots) {
-        return None;
-    }
-    let dir = real(dir);
-    free().find(|x| {
-        let g = &x.game;
-        [(!g.launch.exe.is_empty()).then(|| g.exe_path()), (!g.source.dir.is_empty()).then(|| paths::expand(&g.source.dir))]
-            .into_iter()
-            .flatten()
-            .any(|p| real(&p).starts_with(&dir))
-    })
+    let twin = |live: bool| {
+        let pool = || games.iter().filter(move |x| !live || x.game.removed_at.is_empty());
+        if let Some(own) = pool().find(|x| x.game.source.kind == source && x.game.source.id == sid) {
+            return Some(own);
+        }
+        dir?;
+        let free = || pool().filter(|x| unclaimed(&x.game));
+        if let Some(found) = free().find(|x| x.game.source.id == sid || parked(&x.game)) {
+            return Some(found);
+        }
+        let holder = holder.as_deref()?;
+        free().find(|x| {
+            let g = &x.game;
+            [(!g.launch.exe.is_empty()).then(|| g.exe_path()), (!g.source.dir.is_empty()).then(|| paths::expand(&g.source.dir))]
+                .into_iter()
+                .flatten()
+                .any(|p| real(&p).starts_with(holder))
+        })
+    };
+    twin(true).or_else(|| twin(false))
 }
 
 /// Why `dir` must not go to the trash: games are installed into it, or another game's exe, folder or prefix is in it, or it is
@@ -1731,8 +1740,7 @@ impl Core {
                 let s = m.merged_settings(&cfg, None);
                 let mut j = m.to_json();
                 j["games_dir"] = s.get("games_dir").cloned().unwrap_or(serde_json::Value::Null);
-                let scanned = s.get("scan_dirs").and_then(|v| v.as_str()).unwrap_or("");
-                j["scan_dirs"] = scanned.split(',').map(str::trim).filter(|d| !d.is_empty()).map(|d| paths::expand(d).to_string_lossy().into_owned()).collect();
+                j["scan_dirs"] = scan_dirs(&s).iter().map(|d| d.to_string_lossy().into_owned()).collect();
                 j["library_cached"] = serde_json::json!(caches.get(m.id()).map(|v| v.len()).unwrap_or(0));
                 j["library_at"] = serde_json::Value::String(Self::library_at(m));
                 j["logged_in"] = serde_json::Value::Bool(logins.contains_key(m.id()));
@@ -1895,18 +1903,17 @@ impl Core {
         Ok(())
     }
 
-    /// Home, Universe's own folders and every folder a source installs into or scans.
+    /// Home, Universe's own folders and every folder a source installs into or scans, through symlinks.
     async fn install_roots(&self) -> Vec<PathBuf> {
         let cfg = self.config.read().await.clone();
         let mut roots =
             vec![paths::home(), paths::data_home(), paths::config_home(), paths::state_home(), cfg.games_root(), cfg.prefixes_root(), cfg.recordings_root()];
         for m in self.sources.read().await.iter() {
             let s = m.merged_settings(&cfg, None);
-            let listed = |k: &str| s.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let scanned = listed("scan_dirs");
-            roots.extend(std::iter::once(listed("games_dir").as_str()).chain(scanned.split(',')).map(str::trim).filter(|d| !d.is_empty()).map(paths::expand));
+            let games_dir = s.get("games_dir").and_then(|v| v.as_str()).filter(|d| !d.trim().is_empty()).map(|d| paths::expand(d.trim()));
+            roots.extend(games_dir.into_iter().chain(scan_dirs(&s)));
         }
-        roots
+        roots.iter().map(|r| real(r)).collect()
     }
 
     pub async fn source_library(&self, source: &str, refresh: bool) -> Result<Vec<serde_json::Value>> {
@@ -2023,12 +2030,12 @@ impl Core {
         let cfg = self.config.read().await.clone();
         let claim = installed && owned == Some(true);
         let arriving = create && claim;
-        let roots = self.install_roots().await;
+        let found = (installed && !dir.is_empty()).then(|| paths::expand(&dir));
+        let roots = if found.is_some() { self.install_roots().await } else { Vec::new() };
         let (existing, taken) = {
             let games = self.games.read().await;
             let slug = crate::slug::slug(&title);
             let ours = |g: &Game| g.source.kind == source || unclaimed(g);
-            let found = (installed && !dir.is_empty()).then(|| paths::expand(&dir));
             let existing = store_twin(&games, source, &sid, found.as_deref(), &roots)
                 .or_else(|| games.iter().find(|x| x.game.id == slug && x.game.source.id.is_empty() && ours(&x.game)))
                 .map(|x| x.game.clone());
@@ -2159,11 +2166,7 @@ impl Core {
     /// Brings in the one install of `game_id` the source's `scan` finds, and nothing else: its library id, whose art the caller fetches.
     pub async fn source_adopt(&self, source: &str, game_id: &str, progress: Option<Progress<'_, '_>>) -> Result<String> {
         let m = self.source(source).await?;
-        let events = self.run_verb(&m, "scan", &[], progress).await?;
-        let mut g = Self::game_events(&events)
-            .into_iter()
-            .find(|g| g.get("id").and_then(|v| v.as_str()) == Some(game_id) && g.get("installed").and_then(|v| v.as_bool()) == Some(true))
-            .ok_or_else(|| Error::NotFound(format!("{source} finds no install of {game_id}")))?;
+        let mut g = self.scanned_install(&m, game_id, progress).await?;
         // Offline, a scan cannot tell what the account owns; the listing the page showed can.
         if !g.get("owned").is_some_and(|v| v.is_boolean()) {
             let listed = self.source_libraries.lock().await.get(source).is_some_and(|list| {
@@ -2175,17 +2178,27 @@ impl Core {
         self.apply_source_game(source, &g, true, Arrival::Added).await?.ok_or_else(|| Error::Invalid(format!("{} does not list {title} as yours", m.name())))
     }
 
+    async fn scanned_install(&self, m: &Source, game_id: &str, progress: Option<Progress<'_, '_>>) -> Result<serde_json::Map<String, serde_json::Value>> {
+        let events = self.run_verb(m, "scan", &[], progress).await?;
+        Self::game_events(&events)
+            .into_iter()
+            .find(|g| g.get("id").and_then(|v| v.as_str()) == Some(game_id) && g.get("installed").and_then(|v| v.as_bool()) == Some(true))
+            .ok_or_else(|| Error::NotFound(format!("{} finds no install of {game_id}", m.id())))
+    }
+
     /// Trashes the install of `game_id` the source's `scan` finds when no library game stands for it: the folder trashed. One the
     /// library holds goes through `uninstall`.
     pub async fn source_trash(&self, source: &str, game_id: &str) -> Result<String> {
         let m = self.source(source).await?;
-        let events = self.run_verb(&m, "scan", &[], None).await?;
-        let dir = Self::game_events(&events)
-            .into_iter()
-            .find(|g| g.get("id").and_then(|v| v.as_str()) == Some(game_id) && g.get("installed").and_then(|v| v.as_bool()) == Some(true))
-            .and_then(|g| g.get("dir")?.as_str().filter(|d| !d.is_empty()).map(paths::expand))
+        let dir = self
+            .scanned_install(&m, game_id, None)
+            .await?
+            .get("dir")
+            .and_then(|v| v.as_str())
+            .filter(|d| !d.is_empty())
+            .map(paths::expand)
             .filter(|d| d.is_dir())
-            .ok_or_else(|| Error::NotFound(format!("{source} finds no install of {game_id}")))?;
+            .ok_or_else(|| Error::NotFound(format!("{source} finds no folder of {game_id}")))?;
         let roots = self.install_roots().await;
         {
             let games = self.games.read().await;
@@ -2866,6 +2879,11 @@ install) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":t
         archived.launch.exe = gone.join("gone.exe").to_string_lossy().into();
         archived.removed_at = "2026-01-01T00:00:00+01:00".into();
         archived.save().unwrap();
+        let mut archived_own = Game::new("Dishonored GOG");
+        archived_own.source.kind = "gog".into();
+        archived_own.source.id = "1701063787".into();
+        archived_own.removed_at = "2026-01-01T00:00:00+01:00".into();
+        archived_own.save().unwrap();
         let before: Vec<Vec<u8>> = [&imported, &parked].iter().map(|g| std::fs::read(g.toml_path()).unwrap()).collect();
         let core = open().await;
         assert_eq!(core.sources().await[0]["scan_dirs"], serde_json::json!([pc]), "where the page says it looked");
@@ -2876,7 +2894,7 @@ install) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":t
         assert_eq!(
             linked,
             [("1701063787", "dishonored", true), ("1237807960", "dead-cells", true), ("1482504285", "", true), ("7", "", true), ("9", "", true)],
-            "by the exe in its folder, by the id Lutris parked; nobody's, an archived game's, and a scanned folder itself never"
+            "by the exe in its folder over the store's own archived game, by the id Lutris parked; nobody's, an archived game's, and a scanned folder itself never"
         );
         assert_eq!((list[2]["dir"].as_str(), list[3]["dir"].as_str()), (Some(&*asylum.to_string_lossy()), Some(&*gone.to_string_lossy())));
         let after: Vec<Vec<u8>> = [&imported, &parked].iter().map(|g| std::fs::read(g.toml_path()).unwrap()).collect();
@@ -2890,7 +2908,7 @@ install) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":t
             "found by its folder though its title differs; its exe stays"
         );
         assert_eq!(core.get("dead-cells").await.unwrap().game.source.kind, "gog");
-        assert!(core.list().await.iter().all(|g| g["id"] != "dishonored-definitive-edition"), "no second game");
+        assert!(core.list().await.iter().all(|g| g["id"] != "dishonored-definitive-edition" && g["id"] != "dishonored-gog"), "no second game");
     }
 
     #[tokio::test]
