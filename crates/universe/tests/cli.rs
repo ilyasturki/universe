@@ -2,6 +2,10 @@
 use std::process::Command;
 
 fn universe(dir: &tempfile::TempDir, args: &[&str], env: &[(&str, &str)]) -> std::process::Output {
+    command(dir, args, env).output().unwrap()
+}
+
+fn command(dir: &tempfile::TempDir, args: &[&str], env: &[(&str, &str)]) -> Command {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_universe"));
     for (var, sub) in [
         ("UNIVERSE_DATA_HOME", "data"),
@@ -17,7 +21,8 @@ fn universe(dir: &tempfile::TempDir, args: &[&str], env: &[(&str, &str)]) -> std
     cmd.env_remove("NO_COLOR").env_remove("CLICOLOR_FORCE").env("HOME", dir.path());
     // The emulators' own configs (discover's folder scan) live under these, not the Universe homes.
     cmd.env("XDG_CONFIG_HOME", dir.path().join(".config")).env("XDG_DATA_HOME", dir.path().join(".local/share"));
-    cmd.envs(env.iter().copied()).args(args).output().unwrap()
+    cmd.envs(env.iter().copied()).args(args);
+    cmd
 }
 
 fn no_desktop() -> tempfile::TempDir {
@@ -126,6 +131,49 @@ fn journal_add_files_an_entry_the_journal_lists_and_calls_only_a_refusal_invalid
     }
     let escaped: Vec<_> = files_under(dir.path()).into_iter().filter(|p| p.file_name().is_some_and(|n| n == "x.json")).collect();
     assert!(escaped.is_empty(), "{escaped:?}");
+}
+
+#[test]
+fn a_ludusavi_lookup_dies_with_the_cli_killed_mid_way() {
+    let dir = no_desktop();
+    let bin = dir.path().join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    let pid_file = dir.path().join("ludusavi.pid");
+    let stub = bin.join("ludusavi");
+    std::fs::write(&stub, format!("#!/bin/sh\necho $$ > {0}.part && mv {0}.part {0}\nexec sleep 60\n", pid_file.display())).unwrap();
+    std::fs::set_permissions(&stub, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    let exe = dir.path().join("quest.sh");
+    std::fs::write(&exe, "").unwrap();
+    let added = universe(&dir, &["add", exe.to_str().unwrap(), "--runner", "linux", "--title", "Quest", "--json"], &[]);
+    let game: serde_json::Value = serde_json::from_slice(&added.stdout).unwrap_or_else(|e| panic!("{e}: {}", text(&added.stderr)));
+    let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap_or_default());
+    let mut cli = command(&dir, &["saves", "backup", game["id"].as_str().unwrap()], &[("PATH", &path)])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let started = std::time::Instant::now();
+    let pid = loop {
+        if let Ok(pid) = std::fs::read_to_string(&pid_file) {
+            break pid.trim().parse::<i32>().unwrap();
+        }
+        assert!(started.elapsed().as_secs() < 10 && cli.try_wait().unwrap().is_none(), "the CLI never ran ludusavi");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
+    cli.kill().unwrap();
+    cli.wait().unwrap();
+    // Reaped, or a zombie its new parent has yet to reap: either way it runs no more.
+    let alive = || std::fs::read_to_string(format!("/proc/{pid}/stat")).is_ok_and(|s| s.rsplit_once(") ").is_some_and(|(_, rest)| !rest.starts_with('Z')));
+    let killed = std::time::Instant::now();
+    while alive() && killed.elapsed().as_secs() < 2 {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let outlived = alive();
+    if outlived {
+        // SAFETY: a plain signal to a pid this test started.
+        unsafe { libc::kill(pid, libc::SIGKILL) };
+    }
+    assert!(!outlived, "ludusavi {pid} outlived the CLI");
 }
 
 fn files_under(dir: &std::path::Path) -> Vec<std::path::PathBuf> {

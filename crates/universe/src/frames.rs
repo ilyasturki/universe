@@ -223,7 +223,7 @@ async fn extract(ffmpeg: PathBuf, job: Job, seconds: f64, vaapi: Option<String>)
     if let Some(parent) = out.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    let status = tokio::process::Command::new(ffmpeg)
+    let status = crate::dies_with_parent(&mut tokio::process::Command::new(ffmpeg))
         .args(ffmpeg_args(&job.recording, seconds, &part, vaapi.as_deref()))
         .stdin(Stdio::null())
         .stdout(Stdio::null())

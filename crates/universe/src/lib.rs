@@ -67,6 +67,24 @@ pub fn init_tracing() {
         .try_init();
 }
 
+/// SIGKILL to the child when the thread that spawned it ends, the process's exit included, which `kill_on_drop` never sees.
+pub fn dies_with_parent(cmd: &mut tokio::process::Command) -> &mut tokio::process::Command {
+    let parent = std::process::id() as libc::pid_t;
+    // SAFETY: the closure runs between fork and exec, and calls only async-signal-safe functions and allocates nothing.
+    unsafe {
+        cmd.pre_exec(move || {
+            if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            // The parent may have died before prctl armed the signal.
+            if libc::getppid() != parent {
+                return Err(std::io::Error::from_raw_os_error(libc::ESRCH));
+            }
+            Ok(())
+        })
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("not found: {0}")]

@@ -433,7 +433,8 @@ pub struct HookOutcome {
 pub(crate) fn command(exe: &Path, dir: &Path, data_dir: &Path, prefix: &str) -> crate::Result<tokio::process::Command> {
     std::fs::create_dir_all(data_dir)?;
     let mut cmd = tokio::process::Command::new(exe);
-    cmd.env(format!("{prefix}_DIR"), dir)
+    crate::dies_with_parent(&mut cmd)
+        .env(format!("{prefix}_DIR"), dir)
         .env(format!("{prefix}_DATA_DIR"), data_dir)
         .env("PATH", crate::tools::search_path())
         .current_dir(dir)

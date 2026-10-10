@@ -1492,7 +1492,9 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 let Some(c) = core.current().await.filter(|c| c.id == id && (session.is_empty() || c.session_id == session)) else {
                     anyhow::bail!("{id} is not running; --follow needs the running session");
                 };
-                let mut child = tokio::process::Command::new("journalctl").args(["--user", "-u", &c.unit, "-f", "-n", "0", "-o", "short", "-q"]).spawn()?;
+                let mut child = crate::dies_with_parent(&mut tokio::process::Command::new("journalctl"))
+                    .args(["--user", "-u", &c.unit, "-f", "-n", "0", "-o", "short", "-q"])
+                    .spawn()?;
                 let unit = c.unit.clone();
                 loop {
                     tokio::select! {

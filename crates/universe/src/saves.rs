@@ -256,7 +256,8 @@ async fn run(bin: &Path, ask: Option<&Ask>, dir: &Path, keep: u32, args: Vec<std
     .await?;
     std::fs::write(cfg_dir.join("config.yaml"), serde_json::to_vec_pretty(&config_yaml(ask, dir, keep))?)?;
     let mut cmd = command(bin);
-    cmd.arg("--config")
+    crate::dies_with_parent(&mut cmd)
+        .arg("--config")
         .arg(&cfg_dir)
         .arg("--try-manifest-update")
         .args(&args)
