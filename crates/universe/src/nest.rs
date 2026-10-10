@@ -265,7 +265,7 @@ impl Nest {
             Shot::AllRealLayers => 2,
         };
         // A reply: the server holds the request before the frames are counted.
-        let hz = self.refresh()?.unwrap_or(60);
+        let hz = self.refresh().ok().flatten().unwrap_or(60);
         std::thread::sleep(Duration::from_secs(frames) / hz);
         grabbed();
         let deadline = Instant::now() + timeout;

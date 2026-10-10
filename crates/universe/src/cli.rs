@@ -2599,6 +2599,9 @@ fn nest_shot(path: &std::path::Path, overlays: bool) -> anyhow::Result<()> {
     let Some(saved) = nest.frame(path, shot, WAIT, || println!("{}", crate::screenshots::GRABBED))? else {
         anyhow::bail!("gamescope wrote no screenshot within {} s", WAIT.as_secs())
     };
+    if !std::fs::metadata(&saved).is_ok_and(|m| m.len() > 0) {
+        anyhow::bail!("gamescope wrote an empty screenshot");
+    }
     println!("{}", saved.display());
     Ok(())
 }
