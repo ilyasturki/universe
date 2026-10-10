@@ -1,6 +1,6 @@
 ---
 name: release
-description: Write the changelog entry, then bump, commit and tag the version.
+description: Write the changelog entry, refresh the docs and their media, then bump, commit and tag the version.
 disable-model-invocation: true
 argument-hint: <patch|minor|major|X.Y.Z>
 allowed-tools: Bash Read Write Edit Grep Glob AskUserQuestion
@@ -42,6 +42,15 @@ Top of CHANGELOG.md:
 
 3. **README.** Read the entry back and update `README.md` where it no longer matches (features, install paths, runners, commands). Skip for a fixes-only release.
 
-4. **Bump.** `just bump <level>`. It runs `just release-ready` and `just check` first, then rewrites every copy of the version, writes the entry into the metainfo's `<release>` (`tools/changelog metainfo`), commits it with `CHANGELOG.md` and `README.md` as `chore(release): vX.Y.Z`, and tags. If it fails, stop and report its output.
+4. **Docs.** The site documents the latest release: it is rebuilt from the tag with the media of the `site-media` branch, so this release's pages and media ship with it. This step follows the changelog entry because `record` stamps the media with the entry's version.
+    1. For each entry, find the guide pages under `site/src/content/docs/docs/` that cover it (grep its setting, command or screen name) and fix what it made wrong. A new feature with a screen of its own gets a take at the end of `site/media/takes.toml` and a `<Shot name="…" />` or `<Clip name="…" />` on its page; the head of takes.toml and `site/README.md` have the rules. `just site build` passes, its link validator included.
+    2. `UNIVERSE_DEV=.dev-showcase just showcase`, then `UNIVERSE_DEV=.dev-showcase just docs-media record`. It films every take on the GPU in a headless compositor, no window, and its gamescope clips launch Dead Cells in the showcase profile.
+    3. Read `target/docs-media/contact.png`. A take that failed, or whose tile shows another screen than its page describes or a half-drawn one: fix its keys, record it alone (`UNIVERSE_DEV=.dev-showcase just docs-media record <name>`) and Read the sheet again.
+    4. `just docs-media check --strict X.Y.Z`.
+    5. `just docs-media publish X.Y.Z`: the media become the single commit of the local `site-media` branch.
 
-5. **Hand off.** Show the entry, and give `git push --follow-tags` for the user to run: the tag reruns the whole ci on the release commit (about 35 minutes), and only once it is green publishes the GitHub release "Universe X.Y.Z" (`tools/changelog notes X.Y.Z` is its body); the tarball is uploaded, and the COPR build and the `universe` and `universe-bin` AUR packages published, only once it installs and starts on Arch, Ubuntu 22.04 and 24.04 and Fedora (the smoke job; `just release-smoke` runs it locally).
+    Done when every tile on the contact sheet shows what its page says, the strict check passes, and publish printed `site-media`'s commit.
+
+5. **Bump.** `just bump <level>`. It runs `just release-ready` and `just check` first, then `docs-media check --strict` on the new version, rewrites every copy of the version, writes the entry into the metainfo's `<release>` (`tools/changelog metainfo`), commits it with `CHANGELOG.md`, `README.md`, the pages under `site/src/content/docs` and `site/media/takes.toml` as `chore(release): vX.Y.Z`, and tags. A hotfix the user wants out on the last release's media skips step 4's recording and publishing, and runs `BUMP_SKIP_MEDIA=1 just bump <level>`. If it fails, stop and report its output.
+
+6. **Hand off.** Show the entry, and give `git push --follow-tags origin main && git push --force-with-lease origin site-media` for the user to run (its first push alone after `BUMP_SKIP_MEDIA`): the tag reruns the whole ci on the release commit (about 35 minutes), and only once it is green publishes the GitHub release "Universe X.Y.Z" (`tools/changelog notes X.Y.Z` is its body) and rebuilds the site from the tag with the media `site-media` holds; the tarball is uploaded, and the COPR build and the `universe` and `universe-bin` AUR packages published, only once it installs and starts on Arch, Ubuntu 22.04 and 24.04 and Fedora (the smoke job; `just release-smoke` runs it locally).
