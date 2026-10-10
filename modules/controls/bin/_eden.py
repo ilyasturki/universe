@@ -96,7 +96,7 @@ def _stick(head, pad, x, y):
 
 def player_values(player, pad, port, ctx: Context):
     head = f"engine:sdl,port:{port},guid:{eden_guid(pad.guid)}"
-    values = {f"button_{k}": _param(head, button(pad, b)) for k, b in {**ctx.face, **BUTTONS}.items()}
+    values = {f"button_{k}": _param(head, button(pad, b)) for k, b in {**ctx.face_of(pad), **BUTTONS}.items()}
     held = pad_shoulders(ctx, pad)
     values.update({f"button_{k}": _param(head, held[i]) for k, i in SHOULDERS.items()})
     values["button_home"] = _param(head, button(pad, GUIDE)) if ctx.guide else EMPTY

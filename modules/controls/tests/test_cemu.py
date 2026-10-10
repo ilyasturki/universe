@@ -52,7 +52,7 @@ def test_uuids_count_pads_with_the_same_full_guid():
 
 
 def test_positional_gamepad_is_cemus_own_default_without_home(cemu):
-    files = _cemu.plan(Context([EDGE]))
+    files = _cemu.plan(Context([EDGE], "positional"))
     root, controller, maps = parse(files[cemu / "controllerProfiles" / "controller0.xml"])
     assert root.findtext("type") == "Wii U GamePad" and root.findtext("toggle_display") == "0"
     assert controller.findtext("api") == "SDLController" and controller.findtext("uuid") == f"0_{EDGE.guid.hex()}"
@@ -77,7 +77,7 @@ def test_a_nintendo_labelled_pad_is_swapped_back_for_sdl2(cemu):
 def test_an_existing_file_keeps_its_type_name_and_tuning(cemu):
     path = cemu / "controllerProfiles" / "controller0.xml"
     path.write_text(EXISTING.replace("Wii U GamePad", "Wii U Pro Controller"))
-    root, controller, maps = parse(_cemu.plan(Context([XBOX]))[path])
+    root, controller, maps = parse(_cemu.plan(Context([XBOX], "positional"))[path])
     assert root.findtext("type") == "Wii U Pro Controller" and root.findtext("profile") == "Dualsense BOTW"
     assert controller.findtext("rumble") == "0.25" and controller.find("axis").findtext("deadzone") == "0.1"
     assert controller.findtext("uuid") == f"0_{XBOX.guid.hex()}" and maps[1] == 1

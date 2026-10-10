@@ -1657,6 +1657,9 @@ impl Core {
         if key == "controller.volume_step" {
             crate::controller::volume_step_value(value)?;
         }
+        if key.starts_with("controller.layout.") {
+            crate::controller::layout_value(key, value)?;
+        }
         if key == "saves.keep" && !value.is_empty() {
             crate::config::SavesConfig::validate_keep(value)?;
         }

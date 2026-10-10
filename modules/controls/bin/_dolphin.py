@@ -104,7 +104,7 @@ def devices(pads):
 
 
 def _face(ctx: Context, pad):
-    face = GAMECUBE_FACE if pad.labels == GAMECUBE_LABELS else ctx.face
+    face = GAMECUBE_FACE if pad.labels == GAMECUBE_LABELS else ctx.face_of(pad)
     return {k: FACE_NAME[b] for k, b in face.items()}
 
 

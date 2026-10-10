@@ -90,7 +90,7 @@ def _either(first, second):
 
 def values_for(ctx: Context):
     pad = first_pad(ctx)
-    values = {k.upper(): encode(button(pad, b)) for k, b in ctx.face.items()}
+    values = {k.upper(): encode(button(pad, b)) for k, b in ctx.face_of(pad).items()}
     values.update({k: encode(button(pad, b)) for k, b in BUTTONS.items()})
     lb, rb, lt, rt = held_shoulders(pad)
     values.update({"L": _either(lb, lt), "R": _either(rb, rt)})

@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 from pathlib import Path
@@ -5,6 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "bin"))
 import _gamepads
+import _mapping
 import controls_fixtures
 from _gamepads import Pad
 
@@ -20,3 +22,5 @@ def held(_hints):
 
 
 _gamepads.pads = held
+# CONTROLS_DEVICES: what `universe --json controller ls` lists, the machine's own pads left out.
+_mapping.devices = lambda: json.loads(os.environ.get("CONTROLS_DEVICES") or "[]")

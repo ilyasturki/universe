@@ -160,6 +160,8 @@ struct Pad {
     slots: BTreeMap<String, Option<Source>>,
     by_source: BTreeMap<Source, String>,
     bindings: BTreeMap<String, Binding>,
+    /// `[controller.layout]` for its family, empty when its print decides
+    layout: String,
     axis_down: BTreeSet<(u16, bool)>,
     thrown: BTreeSet<u16>,
     axis_last: BTreeMap<&'static str, i32>,
@@ -273,6 +275,7 @@ impl Pad {
         self.roles = axis_roles(cfg, self.family, &self.axes);
         self.by_source = self.slots.iter().filter_map(|(s, src)| src.map(|src| (src, s.clone()))).collect();
         self.bindings = self.slots.keys().map(|s| (s.clone(), Binding::of(&cfg.macros_for(self.family.id, s)))).collect();
+        self.layout = cfg.layout.get(self.family.id).filter(|l| super::LAYOUTS.contains(&l.as_str())).cloned().unwrap_or_default();
     }
 
     /// The axis as the page reads it: -1..1 for a stick, 0..1 for a trigger, a backwards axis turned round.
@@ -349,6 +352,7 @@ impl Pad {
         serde_json::json!({
             "event": "device", "id": self.id, "name": self.name, "family": self.family.id, "family_name": self.family.name, "bus": self.bus,
             "vendor": self.vendor, "product": self.product, "slots": slots_json(&self.slots), "axes": axes, "sdl": sdl, "sdl_axes": sdl_axes,
+            "layout": self.layout, "printed_layout": self.family.printed_layout(),
             "battery": self.battery.map(|(percent, charging)| serde_json::json!({"percent": percent, "charging": charging})),
         })
     }
@@ -428,6 +432,7 @@ fn pad_of(id: String, path: PathBuf, bus: String, c: Caps, cfg: &ControllerConfi
         slots: BTreeMap::new(),
         by_source: BTreeMap::new(),
         bindings: BTreeMap::new(),
+        layout: String::new(),
         axis_down: BTreeSet::new(),
         thrown: BTreeSet::new(),
         axis_last: BTreeMap::new(),
@@ -1190,6 +1195,35 @@ mod tests {
             ranges: [(0, (-32768, 32767)), (1, (-32768, 32767)), (2, (0, 1023)), (3, (-32768, 32767)), (4, (-32768, 32767)), (5, (0, 1023))].into(),
         };
         pad_of("pad".into(), PathBuf::new(), "usb".into(), caps, &ControllerConfig::default(), cmd)
+    }
+
+    #[test]
+    fn a_pads_nintendo_layout_is_its_models_choice_else_its_prints() {
+        let cfg: ControllerConfig = toml::from_str("[layout]\n8bitdo-pro-3 = \"xbox\"\nxbox = \"sideways\"\n").unwrap();
+        let json = |family: &str| {
+            let (cmd, _rx) = mpsc::channel(1);
+            let caps = Caps {
+                name: family.into(),
+                family: super::super::family_by_id(family).unwrap(),
+                vendor: 0,
+                product: 0,
+                keys: vec![],
+                axes: vec![],
+                ranges: BTreeMap::new(),
+            };
+            pad_of("pad".into(), PathBuf::new(), "usb".into(), caps, &cfg, cmd).json()
+        };
+        let seen = |family: &str| {
+            let j = json(family);
+            (j["layout"].as_str().unwrap().to_string(), j["printed_layout"].as_str().unwrap().to_string())
+        };
+        assert_eq!(seen("8bitdo-pro-3"), ("xbox".into(), "positional".into()), "A printed on the right, set to the bottom");
+        assert_eq!(seen("dualsense-edge"), (String::new(), "xbox".into()), "Cross counts as A");
+        assert_eq!(seen("switch-pro").1, "positional");
+        assert_eq!(seen("xbox"), (String::new(), "xbox".into()), "a value no frontend wrote is no choice");
+        assert!(super::super::layout_value("controller.layout.xbox", "positional").is_ok() && super::super::layout_value("controller.layout.xbox", "").is_ok());
+        assert!(super::super::layout_value("controller.layout.xbox", "sideways").is_err());
+        assert!(super::super::layout_value("controller.layout.gamecube", "xbox").is_err(), "no such family");
     }
 
     // The walk moves to the next step while the stick is still where the last one asked: only leaving rest answers.

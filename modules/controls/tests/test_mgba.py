@@ -57,13 +57,13 @@ def mgba(tmp_path):
 
 
 def test_bindings_follow_the_research_example_and_a_digital_trigger_leaves_l_to_the_bumper():
-    assert {k: str(v) for k, v in _mgba.bindings(EDGE, Context([EDGE])).items()} == EDGE_POSITIONAL
-    digital = _mgba.bindings(SWITCH_PRO_DIGITAL, Context([SWITCH_PRO_DIGITAL]))
+    assert {k: str(v) for k, v in _mgba.bindings(EDGE, Context([EDGE], "positional")).items()} == EDGE_POSITIONAL
+    digital = _mgba.bindings(SWITCH_PRO_DIGITAL, Context([SWITCH_PRO_DIGITAL], "positional"))
     assert digital["keyL"] == 9 and "axisLAxis" not in digital
 
 
 def test_player_one_and_every_pads_profiles_are_rewritten(mgba):
-    files = _mgba.plan(Context([EDGE, XBOX, twin(EDGE)]))
+    files = _mgba.plan(Context([EDGE, XBOX, twin(EDGE)], "positional"))
     text = files[mgba / "config.ini"]
     sdlb = ini_section(text, _mgba.SDLB)
     assert {k: v for k, v in sdlb.items() if k.startswith(("key", "axis", "hat"))} == EDGE_POSITIONAL

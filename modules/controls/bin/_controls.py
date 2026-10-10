@@ -1,9 +1,9 @@
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
-from _gamepads import BIND_AXIS, BIND_BUTTON, Pad
+from _gamepads import BIND_AXIS, BIND_BUTTON, LABEL_A, Pad, device_of
 
 SOUTH, EAST, WEST, NORTH = 0, 1, 2, 3
 BACK, GUIDE, START, LEFT_STICK, RIGHT_STICK, LEFT_SHOULDER, RIGHT_SHOULDER = 4, 5, 6, 7, 8, 9, 10
@@ -15,6 +15,8 @@ FACE = {
     "positional": {"a": EAST, "b": SOUTH, "x": NORTH, "y": WEST},
     "xbox": {"a": SOUTH, "b": EAST, "x": WEST, "y": NORTH},
 }
+# A game's `layout`: each pad its own, else one of FACE for every pad.
+LAYOUTS = ("pad", *FACE)
 WIIMOTE = ("nunchuk", "sideways", "classic")
 SHOULDERS = ("standard", "swapped")
 
@@ -28,16 +30,42 @@ class Skip(Exception): ...
 @dataclass
 class Context:
     pads: list[Pad]
-    layout: str = "positional"
+    layout: str = "pad"
     guide: bool = False
     runner_path: str = ""
     platform: str = ""
     wiimote: str = "nunchuk"
     shoulders: str = "standard"
+    # A pad's GUID → its model's `[controller.layout]` choice, for the models that have one.
+    models: dict = field(default_factory=dict)
 
-    @property
-    def face(self):
-        return FACE[self.layout]
+    def face_of(self, pad):
+        """The game's layout for every pad, else the one chosen for the pad's model, else the one its print gives."""
+        if self.layout in FACE:
+            return FACE[self.layout]
+        return FACE[self.models.get(pad.guid) or printed(pad)]
+
+
+def printed(pad):
+    """A Nintendo-style pad has its A on the right; a PlayStation pad's Cross counts as A, at the bottom."""
+    return "positional" if pad.labels[EAST] == LABEL_A else "xbox"
+
+
+def vendor_product(guid):
+    """SDL's GUID carries the USB vendor and product, little-endian, at bytes 4 and 8."""
+    return int.from_bytes(guid[4:6], "little"), int.from_bytes(guid[8:10], "little")
+
+
+def models(pads, devices):
+    """Each held pad's `[controller.layout]` choice, read off the core's device for it: the one on the same sysfs device, else
+    the one of the same vendor and product."""
+    out = {}
+    for pad in pads:
+        same = [d for d in devices if pad.device and device_of(d.get("path") or "") == pad.device]
+        same = same or [d for d in devices if (d.get("vendor"), d.get("product")) == vendor_product(pad.guid)]
+        if same and same[0].get("layout") in FACE:
+            out[pad.guid] = same[0]["layout"]
+    return out
 
 
 def config_home():

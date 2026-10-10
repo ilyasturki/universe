@@ -47,7 +47,7 @@ def uuids(pads):
 
 def mappings(ctx: Context, pad, kind):
     swap = pad.labels[0] == LABEL_B
-    out = {i: (LABEL_SWAP[b] if swap else b) for i, b in zip((1, 2, 3, 4), (ctx.face[k] for k in "abxy"), strict=True)}
+    out = {i: (LABEL_SWAP[b] if swap else b) for i, b in zip((1, 2, 3, 4), (ctx.face_of(pad)[k] for k in "abxy"), strict=True)}
     held: dict[int, int] = dict(zip((LEFT_SHOULDER, RIGHT_SHOULDER, ZL, ZR), shoulders(ctx, LEFT_SHOULDER, RIGHT_SHOULDER, ZL, ZR), strict=True))
     out.update({m: held.get(b, b) for m, b in REST[kind].items()})
     if ctx.guide:

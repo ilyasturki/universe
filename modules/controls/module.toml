@@ -23,12 +23,13 @@ scope = "game"
 [[settings]]
 key = "layout"
 type = "enum"
-default = "positional"
+default = "pad"
 label = "Nintendo button layout"
-description = "Where A sits in Nintendo games, GameCube and Wii included. B, X and Y follow it."
-choice_labels = { positional = "Switch (A on the right)", xbox = "Xbox (A at the bottom)" }
+description = "Where A sits in Nintendo games, GameCube and Wii included. B, X and Y follow it. By default each controller keeps the one printed on it, or the one set for it in the controller settings."
+choice_labels = { pad = "Each controller's own", positional = "A on the right, every controller", xbox = "A at the bottom, every controller" }
 scope = "game"
-choices = ["positional", "xbox"]
+choices = ["pad", "positional", "xbox"]
+keywords = ["abxy", "swap", "face buttons"]
 runners = ["eden", "ryujinx", "dolphin", "cemu", "azahar", "melonds", "mgba", "snes9x"]
 
 [[settings]]

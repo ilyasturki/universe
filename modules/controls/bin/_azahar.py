@@ -76,7 +76,7 @@ def _stick(device, pad, x, y):
 def values_for(ctx: Context):
     pad = first_pad(ctx)
     device = {"engine": "sdl", "guid": pad.guid.hex(), "port": ordinals(ctx.pads, lambda p: p.guid)[0]}
-    values = {f"button_{k}": _param(device, button(pad, b)) for k, b in {**ctx.face, **BUTTONS}.items()}
+    values = {f"button_{k}": _param(device, button(pad, b)) for k, b in {**ctx.face_of(pad), **BUTTONS}.items()}
     held = dict(zip(("button_l", "button_r", "button_zl", "button_zr"), pad_shoulders(ctx, pad), strict=True))
     values.update({k: _param(device, b) for k, b in held.items()})
     values["button_home"] = _param(device, button(pad, GUIDE)) if ctx.guide else EMPTY

@@ -1448,9 +1448,19 @@ player they are:
 A game's page shows the module's rows on emulator games only (`[applies]`): `wiimote` on Wii games,
 `layout` and `shoulders` on the runners whose writer honours them (a value set for all games still
 reaches the others' hooks, and their writers ignore it). `layout` picks where a Nintendo A sits,
-per game over a global default: `positional` (A on the right, as on a Switch and as these
-emulators, Dolphin aside, map by themselves) or `xbox` (A at the bottom), B, X and Y following as
-on a Switch diamond. It holds for the Switch, 3DS, Wii U, DS, GBA and SNES, the GameCube
+per game over a global default, B, X and Y following as on a Switch diamond. `pad`, the default, is
+each pad's own, worked out per player: the one set for its model in `[controller.layout]`
+(`<family> = "positional"` or `"xbox"`, Settings › Controller's Nintendo games row; the core's
+`controller ls` names it as each device's `layout`, the hook matching SDL's pad to the core's device
+by sysfs device, else by vendor and product), else the one its print gives — `positional` when SDL
+labels the right button A (Switch Pro, an 8BitDo in D-input or Switch mode), `xbox` otherwise, a
+PlayStation pad's Cross counting as A. `positional` (A on the right, as on a Switch and as these
+emulators, Dolphin aside, map by themselves) and `xbox` (A at the bottom) hold for every pad. An
+8BitDo in X-input mode passes for an Xbox 360 pad, so its print reads as `xbox`. A config.toml from
+before `schema = 2` loses an all-games `layout = "xbox"` once, the first time the core opens it
+(not a read-only one, home-manager's included); a game's own value stays. The `pads` module's
+virtual pads ignore `layout`: the emulator sees PlayStation-class pads, bound as it maps them.
+It holds for the Switch, 3DS, Wii U, DS, GBA and SNES, the GameCube
 controller and the Wii's Classic Controller; on the Wii remote `layout`'s A is the remote's A and its B the remote's
 B (which also stays on the right trigger), 1 and 2 on the left and top buttons. N64 keeps
 mupen64plus's own (A bottom, B left). A face button is named by its place on the pad, not by the
@@ -1687,7 +1697,7 @@ real pad is connected, so the pad shown is the one with its own family and extra
 game, SDL or Proton reads the same node untouched), rescans every 2 s (hotplug, and pads
 InputPlumber hides by chmod 000 are dropped while hidden), and with `--json` speaks one object per
 line: out — `{"event":"ready"}`, `{"event":"device","id":"event30","name","family","family_name",
-"bus","vendor","product","slots":{"<slot>":{"code","bound"}},"axes":{"<role>":"ABS_Z"},"sdl":{"<slot>":"b3"},"sdl_axes":{"<role>":"a2"},"battery"}`
+"bus","vendor","product","slots":{"<slot>":{"code","bound"}},"axes":{"<role>":"ABS_Z"},"sdl":{"<slot>":"b3"},"sdl_axes":{"<role>":"a2"},"layout","printed_layout","battery"}`
 (`axes` names the evdev axis behind `lx ly rx ry lt rt`, by the pad's shape — Z/RZ are triggers next
 to RX/RY, the right stick without them — or as `[controller.axes.<family>]` learned it, `-` on one
 thrown backwards; `sdl`/`sdl_axes` number the same as SDL's Linux joystick does, `~` on a backwards
@@ -1880,6 +1890,8 @@ home_summons = true                  # HOME pressed in another app brings Univer
 # paddle_p1 = ["BTN_GRIPR", "BTN_TRIGGER_HAPPY5"]
 # [controller.axes.8bitdo-pro-3]     # learned axes: a role's evdev axis, `-` when the pad reads it backwards
 # rx = "ABS_Z"
+# [controller.layout]                # where A sits in Nintendo games, per model: "positional" (right) or "xbox" (bottom); absent: its print
+# 8bitdo-pro-3 = "xbox"
 # [[controller.macros]]              # {family, button, trigger, action} (`universe controller bind`); absent: the seeded workflow, `macros = []` none at all
 ```
 

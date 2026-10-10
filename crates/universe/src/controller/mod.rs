@@ -77,14 +77,40 @@ pub struct ControllerConfig {
     pub buttons: BTreeMap<String, BTreeMap<String, Vec<String>>>,
     /// family → stick or trigger (`lx ly rx ry lt rt`) → the axis learned for it, `ABS_Z-` when it runs backwards
     pub axes: BTreeMap<String, BTreeMap<String, String>>,
+    /// family → where A sits in Nintendo games on that model (`LAYOUTS`); absent, where its print puts it
+    pub layout: BTreeMap<String, String>,
     /// absent: the seeded workflow; `macros = []` is none at all
     pub macros: Option<Vec<Macro>>,
 }
 
 impl Default for ControllerConfig {
     fn default() -> Self {
-        ControllerConfig { enabled: true, hold_ms: 600, volume_step: 2, home_summons: true, buttons: BTreeMap::new(), axes: BTreeMap::new(), macros: None }
+        ControllerConfig {
+            enabled: true,
+            hold_ms: 600,
+            volume_step: 2,
+            home_summons: true,
+            buttons: BTreeMap::new(),
+            axes: BTreeMap::new(),
+            layout: BTreeMap::new(),
+            macros: None,
+        }
     }
+}
+
+/// A model's Nintendo layout: A on the right (`positional`) or at the bottom (`xbox`).
+pub const LAYOUTS: [&str; 2] = ["positional", "xbox"];
+
+/// `controller.layout.<family>`: a known family, and one of `LAYOUTS` or empty to go back to the print.
+pub fn layout_value(key: &str, value: &str) -> crate::Result<()> {
+    let family = key.strip_prefix("controller.layout.").unwrap_or("");
+    if family_by_id(family).is_none() {
+        return Err(crate::Error::Invalid(format!("{key}: unknown family '{family}'")));
+    }
+    if !value.is_empty() && !LAYOUTS.contains(&value) {
+        return Err(crate::Error::Invalid(format!("{key}: positional or xbox, not '{value}'")));
+    }
+    Ok(())
 }
 
 pub fn volume_step_value(value: &str) -> crate::Result<u8> {
@@ -242,6 +268,15 @@ pub struct Family {
 impl Family {
     pub fn slots(&self) -> impl Iterator<Item = &Slot> {
         self.standard.iter().chain(self.extras)
+    }
+
+    /// Where its print puts A: on the right on a Nintendo-style pad, at the bottom otherwise (a PlayStation pad's Cross).
+    pub fn printed_layout(&self) -> &'static str {
+        if self.standard[1].label == "A" {
+            "positional"
+        } else {
+            "xbox"
+        }
     }
 }
 

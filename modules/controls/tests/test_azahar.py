@@ -11,7 +11,7 @@ def params(value):
 
 
 def test_positional_matches_azahars_own_automap_less_home():
-    got = _azahar.values_for(Context([EDGE]))
+    got = _azahar.values_for(Context([EDGE], "positional"))
     assert got["button_a"] == f"button:1,{G}"
     assert got["button_b"] == f"button:0,{G}"
     assert (got["button_x"], got["button_y"]) == (f"button:3,{G}", f"button:2,{G}")
@@ -60,7 +60,7 @@ profiles\\size=2
 
 
 def test_rewrite_fills_the_active_profile_and_grows_the_list_to_hold_it():
-    new = _azahar.rewrite(INI, _azahar.values_for(Context([EDGE])))
+    new = _azahar.rewrite(INI, _azahar.values_for(Context([EDGE], "positional")))
     controls = ini_section(new, "Controls")
     assert controls["profiles\\2\\button_a"] == f"button:1,{G}" and controls["profiles\\2\\button_a\\default"] == "false"
     assert controls["profiles\\2\\button_home"] == "[empty]"

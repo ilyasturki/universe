@@ -7,7 +7,7 @@ TRIGGER = 0x10000 | 2 << 20
 
 
 def test_the_dpad_also_reads_the_left_stick_and_l_r_read_the_bumper_and_the_trigger():
-    assert _melonds.values_for(Context([EDGE])) == {
+    assert _melonds.values_for(Context([EDGE], "positional")) == {
         "A": 1,
         "B": 0,
         "X": 3,
@@ -62,7 +62,7 @@ A = 0
 
 
 def test_rewrite_points_at_the_pads_place_among_all_joysticks_and_leaves_the_keyboard():
-    new = _melonds.rewrite(TOML, Context([XBOX]))
+    new = _melonds.rewrite(TOML, Context([XBOX], "positional"))
     assert ini_section(new, "Instance0")["JoystickID"] == "1"
     joystick = ini_section(new, "Instance0.Joystick")
     assert joystick["A"] == "1" and joystick["Up"] == str(0x100 | 1 | 0x10000 | 1 << 20 | 1 << 24)

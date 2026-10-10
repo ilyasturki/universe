@@ -36,7 +36,7 @@ def _stick(side, old):
 
 
 def entry(pad, pad_id, player, ctx: Context, old):
-    face = ctx.face
+    face = ctx.face_of(pad)
     motion = {"motion_backend": "GamepadDriver", "sensitivity": 100, "gyro_deadzone": 1, **(old.get("motion") or {}), "enable_motion": pad.gyro}
     out = {
         "left_joycon_stick": _stick("Left", old.get("left_joycon_stick") or {}),

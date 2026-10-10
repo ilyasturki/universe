@@ -117,7 +117,7 @@ def test_a_gamecube_pad_presses_the_buttons_printed_on_it_under_either_layout(do
 
 
 def test_swapped_shoulders_trade_the_triggers_and_the_bumpers(dolphin):
-    files = run(Context([EDGE], shoulders="swapped"))
+    files = run(Context([EDGE], "positional", shoulders="swapped"))
     gc = ini_section(files["GCPadNew.ini"], "GCPad1")
     assert (gc["Buttons/Z"], gc["Triggers/L"], gc["Triggers/R-Analog"]) == ("`Trigger R` | `Trigger L`", "`Shoulder L`", "`Shoulder R`")
     wm = ini_section(files["WiimoteNew.ini"], "Wiimote1")

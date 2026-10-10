@@ -11,7 +11,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _gamepads
 import _mapping
-from _controls import FACE, SHOULDERS, WIIMOTE, Context, Skip
+from _controls import LAYOUTS, SHOULDERS, WIIMOTE, Context, Skip, models
 
 WRITERS = (
     "eden",
@@ -112,7 +112,8 @@ def main():
     pads = _gamepads.lead_first(pads, _mapping.active_device())
     ctx = Context(
         pads=pads,
-        layout=settings.get("layout") if settings.get("layout") in FACE else "positional",
+        layout=settings.get("layout") if settings.get("layout") in LAYOUTS else "pad",
+        models=models(pads, _mapping.devices()),
         wiimote=settings.get("wiimote") if settings.get("wiimote") in WIIMOTE else "nunchuk",
         shoulders=settings.get("shoulders") if settings.get("shoulders") in SHOULDERS else "standard",
         guide=bool(settings.get("guide")),

@@ -40,7 +40,8 @@ def _raw(binding):
 
 
 def bindings(pad, ctx: Context):
-    keys = {"A": ctx.face["a"], "B": ctx.face["b"], "Select": BACK, "Start": START}
+    face = ctx.face_of(pad)
+    keys = {"A": face["a"], "B": face["b"], "Select": BACK, "Start": START}
     out = {f"key{k}": _raw(button(pad, b)) for k, b in keys.items()}
     lb, rb, lt, rt = held_shoulders(pad)
     for key, inputs in (("L", (lb, lt)), ("R", (rb, rt))):

@@ -19,8 +19,8 @@ GAMES = {
 }
 # The printed letter of each face button: A on the right, B at the bottom, X at the top, Y on the left.
 PRINTED = {"`Button E`": "A", "`Button S`": "B", "`Button N`": "X", "`Button W`": "Y"}
-# Eden binds SDL's raw buttons 0-3: SDL's 8BitDo driver numbers them by printed letter, xpad by the Xbox pad's positions.
-RAW = {"PRO3_DINPUT": "ABXY", "PRO3_XINPUT": "BAYX"}
+# Eden binds SDL's raw buttons 0-3: SDL's 8BitDo driver numbers them by printed letter, xpad and the PS5 driver by position.
+RAW = {"PRO3_DINPUT": "ABXY", "PRO3_XINPUT": "BAYX", "EDGE": "BAYX"}
 # The layout table: the printed button each console button lands on.
 NINTENDO = {"positional": {"A": "A", "B": "B", "X": "X", "Y": "Y"}, "xbox": {"A": "B", "B": "A", "X": "Y", "Y": "X"}}
 NUNCHUK = {"positional": {"A": "A", "B": "B", "2": "X", "1": "Y"}, "xbox": {"A": "B", "B": "A", "2": "X", "1": "Y"}}
@@ -76,7 +76,7 @@ def launch(universe, tmp_path):
     state = Path(universe.env["UNIVERSE_STATE_HOME"])
     state.mkdir(exist_ok=True)
 
-    def run(game, pads):
+    def run(game, pads, devices=()):
         info = universe.games[game]
         g = json.loads(info)
         env_file = state / f"env-{SESSION}"
@@ -100,6 +100,7 @@ def launch(universe, tmp_path):
             "MODULE_DATA_DIR": str(Path(universe.env["UNIVERSE_DATA_HOME"]) / "modules" / "controls"),
             "PYTHONPATH": str(Path(__file__).resolve().parent / "launch"),
             "CONTROLS_PADS": ",".join(pads),
+            "CONTROLS_DEVICES": json.dumps(list(devices)),
         }
         out = subprocess.run([MODULE / "bin" / "pre"], cwd=MODULE, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=10, check=False)
         assert out.returncode == 0, out.stderr
@@ -179,3 +180,28 @@ def test_the_pad_last_pressed_is_player_one_with_an_edge_connected_first(univers
     launch("mk8", ["EDGE", pad])
     controls = ini_section(launch.ini("eden", "qt-config.ini"), "Controls")
     assert [controls[f"player_{n}_button_a"].split("guid:")[1][8:12] for n in (0, 1)] == [{"PRO3_DINPUT": "c82d", "PRO3_XINPUT": "5e04"}[name], "4c05"]
+
+
+# The Pro 3's device as `controller ls` lists it, with its model's `[controller.layout]` choice.
+def pro3_device(layout):
+    return {"id": "event99", "family": "8bitdo-pro-3", "vendor": 0x2DC8, "product": 0x6009, "path": "/dev/input/event99", "layout": layout}
+
+
+@pytest.mark.parametrize("override", ["", "xbox"])
+@pytest.mark.parametrize("layout", ["pad", "positional", "xbox"])
+def test_each_pad_held_gets_its_own_face_unless_the_game_names_one(universe, launch, layout, override):
+    universe("module", "set", "controls", f"layout={layout}")
+    held = ["EDGE", "PRO3_DINPUT"]
+    if layout == "pad":
+        # Cross counts as A, so the Edge's A sits at the bottom; the Pro 3's A is printed on the right, or where its model is set.
+        expected = {"EDGE": "xbox", "PRO3_DINPUT": override or "positional"}
+    else:
+        expected = dict.fromkeys(held, layout)
+
+    launch("double-dash", held, [pro3_device(override)])
+    gcpads = launch.ini("dolphin-emu", "GCPadNew.ini")
+    assert [faces(ini_section(gcpads, f"GCPad{n}"), "Buttons/", "ABXY") for n in (1, 2)] == [NINTENDO[expected[p]] for p in held]
+
+    launch("mk8", held, [pro3_device(override)])
+    controls = ini_section(launch.ini("eden", "qt-config.ini"), "Controls")
+    assert [eden_faces(controls, RAW[p], n) for n, p in enumerate(held)] == [NINTENDO[expected[p]] for p in held]

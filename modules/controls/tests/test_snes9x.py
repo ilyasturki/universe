@@ -17,7 +17,7 @@ def test_the_x11_build_is_left_alone(conf):
 
 
 def test_a_fresh_file_holds_the_ports_and_both_sets(conf):
-    text = _snes9x.plan(Context([EDGE], runner_path=GTK))[conf]
+    text = _snes9x.plan(Context([EDGE], "positional", runner_path=GTK))[conf]
     assert ini_section(text, "Input") == {"ControllerPort0": "joypad", "ControllerPort1": "joypad"}
     pad = ini_section(text, "Joypad 0")
     assert (pad["A"], pad["B"], pad["X"], pad["Y"]) == ("Joystick 1 Button 1", "Joystick 1 Button 0", "Joystick 1 Button 3", "Joystick 1 Button 2")

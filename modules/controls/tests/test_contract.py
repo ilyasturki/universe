@@ -15,6 +15,8 @@ PADS = [SWITCH_PRO_DIGITAL, EDGE, PRO3_DINPUT, PRO3_XINPUT]
 # Nintendo labels on positional raw buttons, Nintendo labels on raw buttons in label order, and a Nintendo print SDL reads as an Xbox pad.
 HELD = {"switch-pro": SWITCH_PRO_DIGITAL, "pro3-dinput": PRO3_DINPUT, "pro3-xinput": PRO3_XINPUT}
 SETTINGS = {s["key"]: s for s in tomllib.loads((BIN_DIR.parent / "module.toml").read_text())["settings"]}
+# The two choices of a setting that put every pad's bindings in different places.
+OPPOSITES = {"layout": ("positional", "xbox"), "shoulders": ("standard", "swapped")}
 UNIVERSE = taken_buttons(EDGE)
 RAW = "|".join(map(str, sorted(UNIVERSE)))
 NAMED = r"Guide|Misc|Paddle"
@@ -265,10 +267,10 @@ def test_a_setting_moves_only_the_bindings_it_names(seeded, setting, held):
     writer, offered = WRITERS[seeded], SETTINGS[setting]
     moves = getattr(writer, setting)
     assert (moves is not None) == (seeded in offered["runners"])
-    (other,) = set(offered["choices"]) - {offered["default"]}
+    assert offered["default"] in offered["choices"]
     before, after = (
         {(path, *k): v for path, text in plan(seeded, [HELD[held]], **{setting: choice}).items() for k, v in writer.read(text).items()}
-        for choice in (offered["default"], other)
+        for choice in OPPOSITES[setting]
     )
     changed = {k for k in before.keys() | after.keys() if before.get(k) != after.get(k)}
     assert {k[-1] for k in changed} == set(moves or ())

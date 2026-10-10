@@ -1,4 +1,6 @@
+import json
 import os
+import subprocess
 from pathlib import Path
 
 # Universe's buttons: HOME, the share/capture/mic button, the back paddles and an Edge's Fn keys.
@@ -42,6 +44,15 @@ def active_device():
         return (runtime_dir() / "active-pad").read_text().strip()
     except OSError:
         return ""
+
+
+def devices():
+    """The pads the core reads, each with its family and its model's `[controller.layout]` choice; none when the core cannot say."""
+    try:
+        r = subprocess.run([os.environ.get("UNIVERSE_BIN") or "universe", "--json", "controller", "ls"], capture_output=True, text=True, check=False, timeout=5)
+        return (json.loads(r.stdout).get("devices") or []) if r.returncode == 0 else []
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return []
 
 
 def text(pads, guide=False, databases=()):
