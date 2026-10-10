@@ -111,9 +111,13 @@ The Arch and Fedora packages and `install.sh` add a **Universe** session to the 
 
 ## First run
 
-Open **Universe** from your app menu. With an empty library a short setup runs once per machine, in either app: it adds the games other launchers already installed (Lutris, Steam, Heroic, itch.io, your emulators' folders), signs you in to your stores, asks where new games install, sets your controller and HDR, and installs the runners your games need.
+Open **Universe Big Screen** from your app menu, or Universe Desktop. With an empty library a short setup runs once, in either app: it adds the games other launchers already installed (Lutris, Steam, Heroic, itch.io, your emulators' folders), signs you in to your stores, asks where new games install, sets your controller and HDR, and installs the runners your games need.
 
 ## Docs
+
+[universe.ilyasturki.com/docs](https://universe.ilyasturki.com/docs/) has the guide: install, first run, controllers, every settings section, and a reference of the CLI, the launch settings and config.toml generated from the app.
+
+For development:
 
 - [`docs/api.md`](docs/api.md): the core, the CLI, config, modules and sources
 - [`docs/frontends.md`](docs/frontends.md): how the UI is built, and how to write another frontend
