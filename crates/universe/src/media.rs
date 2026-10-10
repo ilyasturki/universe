@@ -103,6 +103,8 @@ struct SyncCache {
     /// Found through GamesDB or SteamGridDB; `source_appid` is the store's word and wins.
     steam_appid: u64,
     source_appid: u64,
+    /// An app id Steam's store page gave nothing for: `playstation` is not asked again for it until a force refresh.
+    steam_page_miss: u64,
     /// slot → URL, from the source's `game` event.
     source_art: BTreeMap<String, String>,
     fetched_at: String,
@@ -1074,14 +1076,18 @@ async fn refresh_with(net: &Net, config: &Config, game: &Game, force: bool) -> c
     }
 
     // A game filled before `playstation` existed reads its Steam page once more, when its app id is known.
-    if force || wants_details(&g) || (g.metadata.playstation.is_empty() && look.known_appid() > 0) {
+    let known = look.known_appid();
+    if force || wants_details(&g) || (g.metadata.playstation.is_empty() && known > 0 && known != look.cache.steam_page_miss) {
         let appid = look.steam_appid().await;
         let mut described_by = None;
         if appid > 0 {
-            if let Some(d) = look.details(appid).await {
-                let (filled, described) = fill_from_steam(&mut g, &d, force);
-                changed |= filled;
-                described_by = described.then_some("steam");
+            match look.details(appid).await {
+                Some(d) => {
+                    let (filled, described) = fill_from_steam(&mut g, &d, force);
+                    changed |= filled;
+                    described_by = described.then_some("steam");
+                }
+                None => look.cache.steam_page_miss = appid,
             }
         }
         if wants_details(&g) {
@@ -1521,6 +1527,17 @@ mod tests {
             assert!(!asked(&again).contains(&steam_details_url(appid)), "read once");
         }
         assert_eq!(playstation_of(&serde_json::json!({"categories": [{"id": 28}, {"id": 55}]})), "dualshock");
+
+        let (_env, mut game) = setup("delisted");
+        game.metadata =
+            crate::game::Metadata { steam_appid: 404, description: "d".into(), genres: vec!["A".into()], developers: vec!["D".into()], ..Default::default() };
+        game.save().unwrap();
+        touch(&game.media_dir().join("screenshots/steam-01.jpg"));
+        for round in 0..2 {
+            let net = saved(vec![]);
+            refresh_with(&net, &keyless(), &Game::load(&game.toml_path()).unwrap(), false).await.unwrap();
+            assert_eq!(asked(&net).contains(&steam_details_url(404)), round == 0, "a page Steam has nothing for is asked once, round {round}");
+        }
     }
 
     #[tokio::test]
