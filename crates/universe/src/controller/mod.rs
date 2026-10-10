@@ -523,6 +523,7 @@ pub fn state_json(config: &ControllerConfig) -> serde_json::Value {
         "hold_ms": config.hold_ms,
         "volume_step": config.volume_step,
         "home_summons": config.home_summons,
+        "layout": config.layout,
         "families": families,
         "macros": config.macros(),
         "presets": PRESETS.iter().map(|p| serde_json::json!({"id": p.id, "label": p.label, "hold_only": p.hold_only})).collect::<Vec<_>>(),

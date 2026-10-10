@@ -21,6 +21,16 @@ const RESTART_MS: u64 = 2000;
 const RESTART_MAX_MS: u64 = 30_000;
 const HOLDS: [u64; 4] = [400, 600, 800, 1000];
 const STEPS: [u64; 4] = [1, 2, 5, 10];
+/// `[controller.layout]` per model: empty follows the print, which the core names per device.
+const LAYOUTS: [&str; 3] = ["", "positional", "xbox"];
+
+fn layout_words(layout: &str) -> String {
+    if layout == "positional" {
+        gettext("A on the right")
+    } else {
+        gettext("A at the bottom")
+    }
+}
 
 fn text(v: &Value, key: &str) -> String {
     match &v[key] {
@@ -75,6 +85,7 @@ pub struct Controller {
     status: gtk::Label,
     device_row: adw::ComboRow,
     family_row: adw::ComboRow,
+    layout: adw::ComboRow,
     test: adw::SwitchRow,
     walk_button: gtk::Button,
     buttons: adw::PreferencesGroup,
@@ -290,6 +301,16 @@ impl Controller {
             self.family_row.set_selected(index as u32);
         }
         let state = self.state.borrow().clone();
+        self.layout.set_visible(device.is_some());
+        if let Some(device) = &device {
+            let family = text(device, "family");
+            let printed = format!("{} ({})", gettext("As printed"), layout_words(&text(device, "printed_layout")));
+            let names = [printed, layout_words("positional"), layout_words("xbox")];
+            self.layout.set_model(Some(&gtk::StringList::new(&names.iter().map(String::as_str).collect::<Vec<_>>())));
+            self.layout.set_subtitle(&gettext("Where A sits in Nintendo games on every {name}").replace("{name}", &text(device, "family_name")));
+            let chosen = state["layout"][family.as_str()].as_str().unwrap_or("");
+            self.layout.set_selected(LAYOUTS.iter().position(|l| *l == chosen).unwrap_or(0) as u32);
+        }
         if let Some(index) = HOLDS.iter().position(|h| state["hold_ms"].as_u64() == Some(*h)) {
             self.hold.set_selected(index as u32);
         }
@@ -1044,11 +1065,13 @@ pub fn page(dialog: &adw::PreferencesDialog) -> Rc<Controller> {
     let walk_button = gtk::Button::builder().label(gettext("Start")).valign(gtk::Align::Center).build();
     let walk_row = adw::ActionRow::builder().title(gettext("Set Up the Buttons")).subtitle(gettext("Press each one in turn")).build();
     walk_row.add_suffix(&walk_button);
+    let layout = adw::ComboRow::builder().title(gettext("Nintendo Games")).visible(false).build();
     let pad = adw::PreferencesGroup::new();
     pad.add(&device_row);
     pad.add(&family_row);
     pad.add(&test);
     pad.add(&walk_row);
+    pad.add(&layout);
     let buttons = adw::PreferencesGroup::new();
     let hold = adw::ComboRow::builder().title(gettext("Hold Length")).subtitle(gettext("A press this long is a hold")).build();
     hold.set_model(Some(&gtk::StringList::new(&HOLDS.iter().map(|h| format!("{h} ms")).collect::<Vec<_>>().iter().map(String::as_str).collect::<Vec<_>>())));
@@ -1077,6 +1100,7 @@ pub fn page(dialog: &adw::PreferencesDialog) -> Rc<Controller> {
         status: status.clone(),
         device_row: device_row.clone(),
         family_row: family_row.clone(),
+        layout: layout.clone(),
         test: test.clone(),
         walk_button: walk_button.clone(),
         buttons: buttons.clone(),
@@ -1137,6 +1161,12 @@ pub fn page(dialog: &adw::PreferencesDialog) -> Rc<Controller> {
             this.remember(&family);
             this.rebuild();
         }
+    });
+    let weak = Rc::downgrade(&this);
+    layout.connect_selected_notify(move |row| {
+        let Some(this) = weak.upgrade().filter(|t| !t.syncing.get()) else { return };
+        let Some(family) = this.device().map(|d| text(&d, "family")) else { return };
+        this.set_config(&format!("controller.layout.{family}"), LAYOUTS[row.selected() as usize % LAYOUTS.len()].to_string());
     });
     let weak = Rc::downgrade(&this);
     hold.connect_selected_notify(move |row| {

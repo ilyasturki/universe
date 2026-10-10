@@ -57,8 +57,16 @@ def test_rows_follow_the_watcher_and_the_macros(api, fake):
     assert rows["paddle_left"]["extra"] is True and rows["paddle_left"]["bound"] is True and rows["paddle_left"]["family"] == "dualsense-edge"
     keys = [r["key"] for r in pad_rows(screen)]
     assert keys[:2] == ["test", "walk"] and "slot" not in rows["test"] and "slot" not in rows["walk"], "the live view, the walk"
-    extras = [rows[k]["extra"] for k in keys[2:]]
+    assert keys[2] == "controller.layout.dualsense-edge", "then where A sits in Nintendo games"
+    extras = [rows[k]["extra"] for k in keys[3:]]
     assert extras == sorted(extras, reverse=True), "then the extras: they are what the page is for"
+    layout = screen.reveal("controller.layout.dualsense-edge", "")
+    assert screen.rows[layout]["choiceValues"] == ["", "positional", "xbox"] and screen.rows[layout]["value"] == screen.rows[layout]["choices"][0]
+    assert screen.setValue(layout, screen.rows[layout]["choices"][1]) is True
+    assert fake.config()["controller"]["layout"] == {"dualsense-edge": "positional"}, "the model's override, A on the right"
+    assert screen.rows[screen.reveal("controller.layout.dualsense-edge", "")]["value"] == screen.rows[layout]["choices"][1]
+    screen.setValue(layout, screen.rows[layout]["choices"][0])
+    assert fake.config()["controller"]["layout"] == {}, "as printed again: the key goes"
     group = screen.groups[0]
     assert group["meta"] == "" and group["rows"] == list(range(len(pad_rows(screen)))), "the pad's battery is by the clock"
 
@@ -311,8 +319,10 @@ def test_two_pads_and_hotplug(started, fake):
     assert [r["key"] for r in screen.rows][:2] == ["device", "test"]
     assert len(screen.groups) == 2, "one card and the Advanced row, the art takes the other column"
 
+    assert rows["controller.layout.dualsense-edge"]["family"] == "dualsense-edge" and "controller.layout.xbox-elite" not in rows
     assert screen.setValue(0, "Xbox Elite Series 2") is True
     assert screen.current == "event40" and screen.family == "xbox-elite"
+    assert "controller.layout.xbox-elite" in rows_by_key(screen), "each pad's card carries its model's row"
     assert macros(screen, "paddle_p1") == ("mangohud", None)
     assert screen.setValue(0, "Nope") is False
 

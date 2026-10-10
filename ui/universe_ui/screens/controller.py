@@ -5,7 +5,7 @@ from PySide6.QtCore import QObject, QTimer, Signal, Slot
 
 from ..gamepad import mapping_fields
 from ..qt import QVARIANT, Property
-from .settings import AdvancedRows, _add, _dig, _group, _row
+from .settings import AdvancedRows, _add, _dig, _group, _row, _to_bus
 from .stream import Stream
 
 log = logging.getLogger("universe.controller")
@@ -50,6 +50,11 @@ TIMING_ROWS = [
 ]
 TIMING_DEFAULTS = {"controller.hold_ms": 600, "controller.volume_step": 2}
 HOME_SUMMONS = ("controller.home_summons", "HOME opens Universe", "HOME pressed in another app brings Universe to the front; off, it does nothing there.")
+# [controller.layout] per model: empty follows the print, which the core names per device.
+LAYOUT_LABEL = "Nintendo games"
+LAYOUT_VALUES = ("", "positional", "xbox")
+LAYOUT_WORDS = {"positional": "A on the right", "xbox": "A at the bottom"}
+LAYOUT_DETAIL = "Where A sits in Nintendo games on every {name}. A game set to one layout for every controller still wins."
 
 
 class Watcher(Stream):
@@ -76,22 +81,32 @@ class FakeWatcher(QObject):
         self.commands = []
         self.started = False
 
+    # `family` may name several, comma-separated: one pad each, event30 up.
     def start(self, families=None):
         self._families = dict(families or {})
         self.started = True
         self.emit({"event": "ready"})
-        if self._family != "none":
-            self.emit(self.device())
+        for n, family in enumerate(f for f in self._family.split(",") if f and f != "none"):
+            self.emit(self.device(f"event{30 + n}", family))
         return True
 
     def device(self, ident="event30", family=None, bus="bluetooth"):
-        family = family or self._family
+        family = family or self._family.split(",")[0]
         spec = self._families.get(family) or {"name": family, "slots": []}
         slots = {}
         for slot in spec.get("slots") or []:
             codes = [] if slot["id"] in self._unbound else (slot.get("codes") or [])
             slots[slot["id"]] = {"code": codes[0] if codes else None, "bound": bool(codes)}
-        return {"event": "device", "id": ident, "name": spec.get("name") or family, "family": family, "bus": bus, "slots": slots}
+        east = next((s.get("label") for s in spec.get("slots") or [] if s.get("id") == "east"), "")
+        return {
+            "event": "device",
+            "id": ident,
+            "name": spec.get("name") or family,
+            "family": family,
+            "bus": bus,
+            "slots": slots,
+            "printed_layout": "positional" if east == "A" else "xbox",
+        }
 
     def send(self, command):
         self.commands.append(dict(command))
@@ -233,6 +248,7 @@ class ControllerScreen(AdvancedRows, QObject):
             "axes": dict(line.get("axes") or {}),
             "sdl": dict(line.get("sdl") or {}),
             "sdl_axes": dict(line.get("sdl_axes") or {}),
+            "printed_layout": str(line.get("printed_layout") or "xbox"),
             "battery": dict(line["battery"]) if isinstance(line.get("battery"), dict) else None,
         }
 
@@ -592,6 +608,7 @@ class ControllerScreen(AdvancedRows, QObject):
 
     def _rebuild(self):
         rows, groups = [], []
+        config = self._client.config()
         device = self._device()
         if device is None and self._status == "off" and self._watcher is not None:
             rows.append(_row("Controller", "", "Controller macros stopped", "info", False, detail="Restarting"))
@@ -620,6 +637,7 @@ class ControllerScreen(AdvancedRows, QObject):
                 row = _row(name, "walk", "Set up the buttons", "action", "Press each one in turn")
                 row.update(display="", family=device["family"], icon="gamepad", action="Start")
                 rows.append(row)
+            rows.append(self._layout_row(device, name, config))
             for slot in slots:
                 binding = device["slots"].get(slot["id"]) or {}
                 bound = bool(binding.get("bound"))
@@ -641,7 +659,6 @@ class ControllerScreen(AdvancedRows, QObject):
                 )
                 rows.append(row)
             groups.append(_group(name, list(range(len(rows)))))
-        config = self._client.config()
         for key, label, choices, detail in TIMING_ROWS:
             value = _dig(config, key)
             row = _row("Timing", key, label, "int", str(TIMING_DEFAULTS[key] if value in (None, "") else value), choices, detail=detail, advanced=True)
@@ -649,6 +666,16 @@ class ControllerScreen(AdvancedRows, QObject):
         key, label, detail = HOME_SUMMONS
         _add(rows, groups, "HOME", _row("HOME", key, label, "bool", _dig(config, key) is not False, detail=detail, advanced=True), caps=True)
         self._set_rows(rows, groups)
+
+    # The override is the model's: every pad of the family follows it.
+    def _layout_row(self, device, name, config):
+        family = device["family"]
+        labels = [f"As printed ({LAYOUT_WORDS.get(device['printed_layout'], LAYOUT_WORDS['xbox'])})", *(LAYOUT_WORDS[v] for v in LAYOUT_VALUES[1:])]
+        chosen = str(_dig(config, f"controller.layout.{family}") or "")
+        value = labels[LAYOUT_VALUES.index(chosen)] if chosen in LAYOUT_VALUES else labels[0]
+        row = _row(name, f"controller.layout.{family}", LAYOUT_LABEL, "enum", value, labels, detail=LAYOUT_DETAIL.format(name=name))
+        row.update(choiceValues=list(LAYOUT_VALUES), family=family)
+        return row
 
     @Slot(int, result="QVariant")
     def row(self, index):
@@ -662,8 +689,7 @@ class ControllerScreen(AdvancedRows, QObject):
     def setValue(self, index, value):
         row = self.row(index)
         if str(row.get("key") or "").startswith("controller."):
-            text = ("true" if value else "false") if row.get("type") == "bool" else str(value)
-            if not self._client.setConfig(row["key"], text):
+            if not self._client.setConfig(row["key"], _to_bus(row, value)):
                 return False
             self.load()
             return True

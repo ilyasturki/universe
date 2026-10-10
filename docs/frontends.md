@@ -1418,7 +1418,9 @@ position. The hint glyphs follow the same rule (`PadNames.hintSlot`). The screen
 `current`, `family` (the current pad's, else the last one seen or the one `setFamily(id)` chose, kept in `api.memory` as
 `controllerFamily`, `xbox` until then: the button glyphs of every look follow it), `families` (`{id, name}`), `connected`, `status` (`off`, `waiting`, `ready`), `passive`, `learning`,
 `testing`, the `rows`/`groups` of one card, titled with the pad's name and nothing under it (a Controller picker row when two pads are connected,
-a "Test the buttons" and a "Set up the buttons" row while the watcher is `ready`, then a row per button of the family — each
+a "Test the buttons" and a "Set up the buttons" row while the watcher is `ready`, a "Nintendo games" enum row whose `key` is
+`controller.layout.<family>` (choices as printed, A on the right, A at the bottom; `choiceValues` `""`, `positional`, `xbox`;
+the printed one named from the device's `printed_layout`), then a row per button of the family — each
 with its `slot` and `family`, so the row draws the button's glyph, and its `press` and `hold`
 macros, each carrying its `label` — the extras (back buttons, Fn) first, then the standard
 buttons) and `bind`, `unbind`, `learn`, `cancelLearn`, `setTesting`, `startWalk`, `finishWalk`, `cancelWalk`,

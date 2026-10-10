@@ -103,7 +103,7 @@ GAME = {
 CONFIG = {
     "components": {"auto_update": True, "catalogue": ""},
     "extensions": {"index": ""},
-    "controller": {"enabled": True, "hold_ms": 600, "home_summons": True, "volume_step": 2, "axes": {}, "buttons": {}, "macros": None},
+    "controller": {"enabled": True, "hold_ms": 600, "home_summons": True, "volume_step": 2, "axes": {}, "buttons": {}, "layout": {}, "macros": None},
     "desktop": {"hide_cursor": True, "cursor_extension": "", "keep_awake": True, "profile": "auto", "whats_new": True},
     "keys": {"prefer_sgdb": False, "sgdb": "", "sgdb_file": "~/.config/steamgriddb/api_key"},
     "system": {"tdp": "", "gpu": "", "refresh": "", "fan": ""},
@@ -2624,7 +2624,10 @@ class FakeCore:
     def controller_state(self):
         state = {k: v for k, v in copy.deepcopy(self._controller()).items() if k != "devices"}
         config = self._config["controller"]
-        return {**state, **{k: config[k] for k in ("enabled", "hold_ms", "home_summons", "volume_step")}}
+        return {
+            **state,
+            **{k: copy.deepcopy(config.get(k, {})) if k == "layout" else config[k] for k in ("enabled", "hold_ms", "home_summons", "volume_step", "layout")},
+        }
 
     def controller_pads(self):
         pads = []
@@ -2634,8 +2637,18 @@ class FakeCore:
             for slot in family.get("slots", []):
                 codes = slot.get("codes") or []
                 slots[slot["id"]] = {"code": codes[0] if codes else None, "bound": bool(codes)}
+            east = next((s.get("label") for s in family.get("slots", []) if s["id"] == "east"), "")
             pads.append(
-                {"id": pad["id"], "name": family["name"], "family": family["id"], "family_name": family["name"], "bus": pad.get("bus", "usb"), "slots": slots}
+                {
+                    "id": pad["id"],
+                    "name": family["name"],
+                    "family": family["id"],
+                    "family_name": family["name"],
+                    "bus": pad.get("bus", "usb"),
+                    "slots": slots,
+                    "layout": (self._config["controller"].get("layout") or {}).get(family["id"], ""),
+                    "printed_layout": "positional" if east == "A" else "xbox",
+                }
             )
         return pads
 
