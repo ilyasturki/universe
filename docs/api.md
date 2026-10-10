@@ -1820,7 +1820,7 @@ profile = "auto"                     # auto | gnome | kde | cinnamon | sway | hy
 hide_cursor = true
 cursor_extension = ""                # empty: the Universe extension hides the pointer after 5 s at rest; another extension's uuid is enabled for the session instead, restored to its prior state after
 keep_awake = true                    # the desktop's idle inhibitors held for the session (see universe keep-awake): a pad is no activity to it, and the screen would blank and suspend mid-game
-whats_new = false                    # the first start after an update opens what changed since the version last run (whats_new()); Settings › Launch › Updates in every look and Universe Desktop
+whats_new = true                     # the first start after an update opens what changed since the version last run (whats_new()); Settings › About and Game defaults › Updates in every look, Preferences › Game Defaults in Universe Desktop
 
 [saves]                              # see Game data
 auto_backup = true                   # a backup of the game's saves after each session

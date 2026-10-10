@@ -810,6 +810,7 @@ impl Application {
             })
             .build();
         let about = gio::ActionEntry::builder("about").activate(|app: &Self, _, _| app.show_about()).build();
+        let whats_new = gio::ActionEntry::builder("whats-new").activate(|app: &Self, _, _| app.show_whats_new()).build();
         let preferences = gio::ActionEntry::builder("preferences")
             .activate(|app: &Self, _, _| {
                 if let Some(win) = app.active_window().and_downcast::<Window>() {
@@ -843,7 +844,7 @@ impl Application {
                 })
                 .build()
         });
-        self.add_action_entries([quit, about, preferences, preferences_page, entry]);
+        self.add_action_entries([quit, about, whats_new, preferences, preferences_page, entry]);
         self.add_action_entries(dialogs);
         if glib::find_program_in_path(BIG_SCREEN).is_some() {
             self.add_action_entries([gio::ActionEntry::builder("big-screen").activate(|app: &Self, _, _| app.big_screen()).build()]);
@@ -887,6 +888,15 @@ impl Application {
             ("window.close", &["<Control>w"]),
         ] {
             self.set_accels_for_action(action, accels);
+        }
+    }
+
+    /// The changelog from this version down; all of it on a build the changelog does not name yet.
+    fn show_whats_new(&self) {
+        let releases = universe::changelog::releases();
+        let from = releases.iter().position(|r| r.version == universe::VERSION).unwrap_or(0);
+        if let Some(win) = self.active_window() {
+            whats_new::present(&win, &releases[from..]);
         }
     }
 

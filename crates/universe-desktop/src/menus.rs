@@ -55,6 +55,7 @@ fn sections() -> gio::Menu {
         &section(&[
             (gettext("_Preferences"), "app.preferences"),
             (gettext("_Keyboard Shortcuts"), "app.shortcuts"),
+            (gettext("_What's New"), "app.whats-new"),
             (gettext("_About Universe Desktop"), "app.about"),
         ]),
     );
@@ -93,7 +94,20 @@ mod tests {
     #[test]
     fn every_page_holds_the_same_main_menu_under_its_own_verbs() {
         let shared = actions(&main());
-        assert_eq!(shared, ["win.rescan", "app.artwork", "app.big-screen", "app.system-check", "app.storage", "app.preferences", "app.shortcuts", "app.about"]);
+        assert_eq!(
+            shared,
+            [
+                "win.rescan",
+                "app.artwork",
+                "app.big-screen",
+                "app.system-check",
+                "app.storage",
+                "app.preferences",
+                "app.shortcuts",
+                "app.whats-new",
+                "app.about"
+            ]
+        );
         assert_eq!(actions(&store()), [&["store.scan".to_string()][..], &shared].concat(), "the store's refresh is its header button");
     }
 

@@ -56,7 +56,7 @@ FocusScope {
     PageTitle {
         anchors.left: parent.left
         anchors.right: parent.right
-        title: page.fresh ? "What's New" : "Changelog"
+        title: "What's New"
         trailing: "Universe " + (api.universe.version() || "development build")
     }
 

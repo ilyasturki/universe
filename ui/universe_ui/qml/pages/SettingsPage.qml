@@ -674,22 +674,32 @@ FocusScope {
             };
         }
         if (sectionId === "about") {
+            var notes = api.screens.changelog;
             rows.push({
                 section: "About",
                 key: "version",
                 label: "Version",
-                type: "static",
+                type: "action",
                 display: api.universe.version() || "development build",
-                detail: ""
+                detail: "",
+                action: "What's new"
             });
             rows.push({
                 section: "About",
                 key: "changelog",
-                label: "Changelog",
+                label: "What's new",
                 type: "action",
-                display: "",
+                display: notes.releases.length > 0 ? notes.releases[0].version : "",
                 detail: "What changed in each version, newest first.",
                 action: "Open"
+            });
+            rows.push({
+                section: "About",
+                key: "whats_new",
+                label: "Show what's new after an update",
+                type: "bool",
+                value: notes.opensAfterUpdate,
+                detail: "Opens once, on the first start after an update."
             });
             rows.push({
                 section: "About",
@@ -712,7 +722,7 @@ FocusScope {
             });
             groups.push({
                 title: "Universe",
-                rows: [0, 1, 2, 3]
+                rows: [0, 1, 2, 3, 4]
             });
             return {
                 rows: rows,
@@ -1217,8 +1227,11 @@ FocusScope {
                     api.screens.storage.act(row.key);
                 cards.forceActiveFocus();
             });
-        } else if (sectionId === "about" && row.key === "changelog") {
+        } else if (sectionId === "about" && (row.key === "changelog" || row.key === "version")) {
             page.changelogRequested();
+        } else if (sectionId === "about" && row.key === "whats_new") {
+            Sound.favourite(!row.value);
+            api.screens.changelog.opensAfterUpdate = !row.value;
         } else if (sectionId === "about" && row.key === "setup") {
             Sound.enter();
             page.setupRequested();

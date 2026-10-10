@@ -781,9 +781,9 @@ def test_reprise_about_shows_the_build(look, fake):
     until(lambda: page.property("sectionId") == "about", "Quit lives in About now")
     content = read(page, "content")
     keys = [r["key"] for r in content["rows"]]
-    assert keys == ["version", "changelog", "setup", "power"]
+    assert keys == ["version", "changelog", "whats_new", "setup", "power"]
     assert content["rows"][0]["display"] == fake.version()
-    assert page.property("acceptLabel") == "", "nothing to select on the version"
+    assert content["rows"][0]["type"] == "action", "A on the version opens what's new"
     assert [s["id"] for s in read(page, "sections")][-4:] == ["sound", "storage", "doctor", "about"], "no Search, Updates or Quit section"
     power = keys.index("power")
     invoke(page, "activate", power, content["rows"][power])

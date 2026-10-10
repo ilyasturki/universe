@@ -587,7 +587,9 @@ FocusScope {
             return [
                 {
                     label: "Universe",
-                    type: "static",
+                    key: "version",
+                    type: "action",
+                    action: "Open",
                     display: api.universe.version() || "development build",
                     detail: ""
                 },
@@ -604,12 +606,20 @@ FocusScope {
                     detail: ""
                 },
                 {
-                    label: "Changelog",
+                    label: "What's New",
                     key: "changelog",
                     type: "action",
                     action: "Open",
-                    display: "",
+                    display: api.screens.changelog.releases.length > 0 ? api.screens.changelog.releases[0].version : "",
                     detail: "What changed in each version, newest first."
+                },
+                {
+                    label: "Show what's new after an update",
+                    key: "whats_new",
+                    type: "bool",
+                    value: api.screens.changelog.opensAfterUpdate,
+                    display: "",
+                    detail: "Opens once, on the first start after an update."
                 },
                 {
                     heading: true,
@@ -641,9 +651,12 @@ FocusScope {
     readonly property var partRows: parts[Math.max(0, Math.min(part, parts.length - 1))].rows
 
     function activate(index, row) {
-        if (sectionId === "about" && row.key === "changelog") {
+        if (sectionId === "about" && (row.key === "changelog" || row.key === "version")) {
             Sound.play("ok");
             shell.push("pages/ChangelogPage.qml", {});
+        } else if (sectionId === "about" && row.key === "whats_new") {
+            Sound.play("select");
+            api.screens.changelog.opensAfterUpdate = !row.value;
         } else if (sectionId === "about" && row.key === "setup") {
             Sound.play("ok");
             shell.push("pages/OnboardingPage.qml", {});

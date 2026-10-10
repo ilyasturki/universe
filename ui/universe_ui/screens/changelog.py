@@ -44,6 +44,7 @@ def _release(r):
 
 class Changelog(QObject):
     pendingChanged = Signal()
+    opensChanged = Signal()
 
     def __init__(self, client, parent=None):
         super().__init__(parent)
@@ -51,6 +52,11 @@ class Changelog(QObject):
         self._releases = None
         # Built once per start: the core records this version as seen whether the page shows or not.
         self._pending = [_release(r) for r in client.whatsNew()]
+        client.configWritten.connect(self._written)
+
+    def _written(self, key):
+        if key == "desktop.whats_new":
+            self.opensChanged.emit()
 
     def _all(self):
         if self._releases is None:
@@ -63,5 +69,14 @@ class Changelog(QObject):
             self._pending = []
             self.pendingChanged.emit()
 
+    def _opens(self):
+        return bool((self._client.config().get("desktop") or {}).get("whats_new"))
+
+    def _set_opens(self, on):
+        if bool(on) != self._opens():
+            self._client.setConfig("desktop.whats_new", "true" if on else "false")
+
     releases = Property(QVARIANT, _all, constant=True)
     pending = Property(QVARIANT, lambda self: self._pending, notify=pendingChanged)
+    # config.toml's desktop.whats_new: the page opens by itself on the first start after an update.
+    opensAfterUpdate = Property(bool, _opens, _set_opens, notify=opensChanged)

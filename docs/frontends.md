@@ -729,9 +729,10 @@ says it, and no group captions) beside one column of `ui/SettingsCards.qml` (`co
 landing on a section folded into another opens that one (`Sections.aliases`: `components` → Runners,
 `updates` → Install, `quit` and `power` → About; Switch 2's `aliases` and PS5's `Sections.aliases`
 fold `components` the same way). Sound is one row per `api.home.outputs` entry, the device as its value and the one
-in use tagged; A on another plays through it (`setOutput`). About is its Version (`static`:
-`api.universe.version()`, the version with the short git rev behind it), Changelog (Open: every
-release, see "What's new"), First-run setup (Run again) and Power, which opens the power menu B held opens (see "Power"). Up and Down in the sidebar switch the section as they go, Right or A enter the cards, Left or
+in use tagged; A on another plays through it (`setOutput`). About is its Version
+(`api.universe.version()`, the version with the short git rev behind it; A opens What's new too), What's
+new (Open: every release, the newest one's version as its value, see "What's new"), the switch "Show what's
+new after an update" (`api.screens.changelog.opensAfterUpdate`), First-run setup (Run again) and Power, which opens the power menu B held opens (see "Power"). Up and Down in the sidebar switch the section as they go, Right or A enter the cards, Left or
 B come back, L2/R2 cycle the section from anywhere. In the cards the hints are A, More and Back:
 Start lists what X and Y do there (Refresh the sections that fetch — Runners, Install, Sound, Storage, Doctor —
 Remove a Launch variable, Enable or Disable a module or a source, Show or Hide advanced), and X and
@@ -1289,7 +1290,9 @@ one line of `Text.RichText` (`styled()`: the Markdown's code in a monospace span
 which `Text.MarkdownText` would shrink; bold; a link's text). `pending` is the core's `whats_new()`,
 asked once as the screens are built: it records this version in `$XDG_STATE_HOME/universe/last-version`
 on every start, whether `desktop.whats_new` is on or not, and hands back the releases since the
-version recorded before only when it is on (Settings › Launch › Updates, off by default). No file —
+version recorded before only when it is on (on by default; its switch is in Settings › About and in
+Game defaults › Updates, both `desktop.whats_new`: `opensAfterUpdate` reads and writes it, and follows
+the other through the client's `configWritten`). No file —
 a first start, or the first after an upgrade from a version that kept none — shows nothing, and so
 does a downgrade. `dismiss()` empties it.
 
@@ -1297,14 +1300,16 @@ Each look's `start()` opens the page as its third branch, after the Themes landi
 setup, so never over the setup and never on a first run: Reprise as `pages/ChangelogPage.qml` through
 `openChangelog(true)` (`openSub` with `{ changelog: true, fresh: true }`), Switch 2 and PS5 their own
 `pages/ChangelogPage.qml` pushed with `{ fresh: true }`. A `fresh` page lists `pending` under "What's
-new" and dismisses it when it closes; Settings › About › Changelog opens the same page on `releases`.
+new" and dismisses it when it closes; Settings › About's What's new and Version rows open the same page
+on `releases`, under the same title.
 Up and Down scroll it, B closes it, and Reprise's `isScreenUp`/`isScreenDown` and `isFirst`/`isLast`
 page and jump.
 
 Universe Desktop records and asks the same way from `core_ready`, after its first-run dialog and
 never with it, nor in a scripted run (`UNIVERSE_DESKTOP_SCRIPT`, which leaves the version
-unrecorded), and presents `dialogs/whats_new.rs` over the window when something is new; its About
-dialog's What's New holds the changelog from this version down (`about_notes`, AppStream markup:
+unrecorded), and presents `dialogs/whats_new.rs` over the window when something is new; the main
+menu's What's New (`app.whats-new`) presents it on the changelog from this version down (all of it on a
+build the changelog does not name), and the About dialog's What's New holds the same (`about_notes`, AppStream markup:
 each older release under a "Version X · date" line, the section headings translated).
 
 ## The artwork pages and section
@@ -1588,9 +1593,9 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
   sort and whether hidden games show; the first run's flag is the core's `onboarded()`, the one
   `onboarded` of earlier versions carried over to it. A recording's frames come
   from `universe::frames`, the Qt host's cache.
-- **Changelog**: About's What's New lists every release from this one down, and with Preferences ›
-  Launch › Updates on, the first start after an update opens what changed since the last (see
-  "What's new").
+- **Changelog**: the main menu's What's New and About's list every release from this one down, and
+  unless Preferences › Game Defaults › Updates is off, the first start after an update opens what
+  changed since the last (see "What's new").
 
 What cost time:
 

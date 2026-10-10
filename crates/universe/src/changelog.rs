@@ -167,4 +167,14 @@ mod tests {
         assert!(whats_new(true).is_empty());
         assert_eq!(recorded(), crate::VERSION);
     }
+
+    #[tokio::test]
+    async fn a_fresh_config_shows_what_is_new_once_after_an_update() {
+        let _env = paths::test_env();
+        let core = crate::core::Core::open_with(crate::config::Config::load().unwrap(), crate::host::Host::memory().0).await.unwrap();
+        std::fs::create_dir_all(paths::last_version_file().parent().unwrap()).unwrap();
+        std::fs::write(paths::last_version_file(), "0.0.0").unwrap();
+        assert!(!core.whats_new().await.is_empty(), "on until turned off");
+        assert!(core.whats_new().await.is_empty(), "once");
+    }
 }

@@ -104,7 +104,7 @@ CONFIG = {
     "components": {"auto_update": True, "catalogue": ""},
     "extensions": {"index": ""},
     "controller": {"enabled": True, "hold_ms": 600, "home_summons": True, "volume_step": 2, "axes": {}, "buttons": {}, "macros": None},
-    "desktop": {"hide_cursor": True, "cursor_extension": "", "keep_awake": True, "profile": "auto", "whats_new": False},
+    "desktop": {"hide_cursor": True, "cursor_extension": "", "keep_awake": True, "profile": "auto", "whats_new": True},
     "keys": {"prefer_sgdb": False, "sgdb": "", "sgdb_file": "~/.config/steamgriddb/api_key"},
     "system": {"tdp": "", "gpu": "", "refresh": "", "fan": ""},
     "saves": {"auto_backup": True, "keep": 5},

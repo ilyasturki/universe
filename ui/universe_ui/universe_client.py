@@ -68,6 +68,8 @@ class CoreClient(QObject):
     mediaChanged = Signal(str)
     modulesChanged = Signal()
     sourcesChanged = Signal()
+    # A config.toml key written, by its dotted name (`desktop.whats_new`).
+    configWritten = Signal(str)
     currentSessionChanged = Signal()
     # The game asked for, before the core has made its session: a runner's pads can hold that back for seconds.
     launchRequested = Signal(str)
@@ -812,7 +814,10 @@ class CoreClient(QObject):
 
     @Slot(str, str, result=bool)
     def setConfig(self, key, value):
-        return self._done(self._core.set_setting, key, str(value))
+        ok = self._done(self._core.set_setting, key, str(value))
+        if ok:
+            self.configWritten.emit(key)
+        return ok
 
     @Slot(str, result="QVariant")
     def screenMode(self, screen):
@@ -836,6 +841,8 @@ class CoreClient(QObject):
         ok = self._done(self._core.set_field, kind, ident, key, str(value))
         if ok and key == "enabled" and kind in ("module", "source"):
             (self.modulesChanged if kind == "module" else self.sourcesChanged).emit()
+        elif ok and kind == "launch":
+            self.configWritten.emit(key)
         return ok
 
     def promoteField(self, kind, ident, key):

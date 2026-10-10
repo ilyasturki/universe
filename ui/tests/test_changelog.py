@@ -6,12 +6,11 @@ from uitest import until
 
 @pytest.fixture
 def upgraded(app, xdg, tmp_path):
-    """A core whose last start ran 0.0.1, the what's-new page on: the fake changelog's 0.0.3 and 0.0.2 are new to it."""
+    """A core on a fresh config whose last start ran 0.0.1: the fake changelog's 0.0.3 and 0.0.2 are new to it."""
     from universe_ui.fake_core import FIXTURE, FakeCore
     from universe_ui.universe_client import CoreClient
 
     core = FakeCore(FIXTURE, tmp_path / "core")
-    core.set_setting("desktop.whats_new", "true")
     (tmp_path / "core" / "state").mkdir(parents=True, exist_ok=True)
     (tmp_path / "core" / "state" / "last-version").write_text("0.0.1")
     client = CoreClient(core)
@@ -23,11 +22,13 @@ def versions(releases):
     return [r["version"] for r in releases]
 
 
-def test_the_launch_page_turns_whats_new_on(api, fake):
-    form = api.screens.launch
+def test_the_game_defaults_switch_and_abouts_are_one(api, fake):
+    form, changelog = api.screens.launch, api.screens.changelog
     form.load()
-    row = until(lambda: next((r for r in form.rows if r["key"] == "desktop.whats_new"), None))
-    assert row["value"] is False and not row["advanced"], "off by default, shown without Advanced"
+    at = until(lambda: next((i for i, r in enumerate(form.rows) if r["key"] == "desktop.whats_new"), None))
+    assert form.rows[at]["value"] is True and not form.rows[at]["advanced"], "on by default, shown without Advanced"
+    form.toggle(at)
+    until(lambda: changelog.opensAfterUpdate is False, "About's switch follows")
 
 
 @pytest.fixture
@@ -58,5 +59,17 @@ def test_an_update_opens_whats_new_once_and_about_opens_the_changelog(look):
     rows = content["rows"] if isinstance(content, dict) else content
     row = next(r for r in rows if r.get("key") == "changelog")
     invoke(about, "activate", rows.index(row), row)
-    page = until(lambda: (p := look.page("changelogPage")).property("fresh") is False and p, "About › Changelog opens it")
+    page = until(lambda: (p := look.page("changelogPage")).property("fresh") is False and p, "About › What's new opens it")
     assert versions(read(page, "releases")) == ["0.0.3", "0.0.2", "0.0.1"]
+    look.press(Qt.Key.Key_Escape)
+
+    about = look.settings("about")
+    content = read(about, "content")
+    rows = content["rows"] if isinstance(content, dict) else content
+    switch = next(r for r in rows if r.get("key") == "whats_new")
+    assert switch["value"] is True, "About holds the switch, on"
+    invoke(about, "activate", rows.index(switch), switch)
+    until(lambda: changelog.opensAfterUpdate is False, "and turns it off")
+    version = next(r for r in rows if r.get("key") == "version")
+    invoke(about, "activate", rows.index(version), version)
+    until(lambda: look.page("changelogPage").property("fresh") is False, "A on the version opens it too")

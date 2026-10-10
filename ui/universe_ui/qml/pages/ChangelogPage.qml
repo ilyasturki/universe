@@ -69,7 +69,7 @@ FocusScope {
         }
 
         Text {
-            text: page.fresh ? "What's new" : "Changelog"
+            text: "What's new"
             color: Theme.text
             font.family: Theme.sans
             font.weight: Font.Bold
