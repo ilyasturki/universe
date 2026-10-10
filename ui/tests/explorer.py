@@ -111,11 +111,16 @@ def _qml_type(item):
 
 
 def _rows(value):
-    """A short name for a list of plain rows by what each one is, or "" for anything else."""
+    """A short name for a menu's rows by their actions (a picker's by its labels, less their live detail), "" for any other list."""
     value = value.toVariant() if hasattr(value, "toVariant") else value
-    if not isinstance(value, list) or not value or not all(isinstance(v, (dict, str, int)) for v in value):
+    if not isinstance(value, list) or not value:
         return ""
-    names = [str(v.get("action") or v.get("id") or v.get("key") or v.get("label") or "") if isinstance(v, dict) else str(v) for v in value]
+    if all(isinstance(v, dict) and ("action" in v or "act" in v) for v in value):
+        names = [str(v.get("action", v.get("act"))) for v in value]
+    elif all(isinstance(v, str) for v in value):
+        names = [v.partition(" · ")[0] for v in value]
+    else:
+        return ""
     return "rows:" + hashlib.sha1("\n".join(names).encode()).hexdigest()[:6]
 
 
