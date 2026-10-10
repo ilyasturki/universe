@@ -897,6 +897,8 @@ import os, signal, threading, time
 last = woke = time.monotonic()
 def worker():
     global last, woke
+    # Python runs the handler in the main thread once it wakes: a SIGTERM taken here would wait out its sleep(1).
+    signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGTERM})
     while True:
         time.sleep(0.005)
         now = time.monotonic()
