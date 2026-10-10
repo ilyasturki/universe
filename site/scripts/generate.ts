@@ -74,12 +74,12 @@ function escapeTags(markdown: string): string {
         else blocks.push({ code, lines: [line] });
     }
     // A code span can wrap across the lines of its paragraph, so spans are matched paragraph by paragraph.
-    const escape = (text: string) =>
+    const outsideSpans = (text: string) =>
         text
             .split(/((`+)[\s\S]*?\2)/)
             .map((part, i) => (i % 3 === 0 ? part.replace(/<(?!!--|https?:|mailto:)(?=[A-Za-z/])/g, '&lt;') : i % 3 === 1 ? part : ''))
             .join('');
-    return blocks.map((b) => (b.code ? b.lines.join('\n') : escape(b.lines.join('\n')))).join('\n');
+    return blocks.map((b) => (b.code ? b.lines.join('\n') : outsideSpans(b.lines.join('\n')))).join('\n');
 }
 
 function rewriteLinks(markdown: string, from: string): string {
