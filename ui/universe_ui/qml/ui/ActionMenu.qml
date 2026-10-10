@@ -43,6 +43,8 @@ FocusScope {
 
     // The row's rect in the menu's coordinates, taken once at show().
     property rect row: Qt.rect(0, 0, 0, 0)
+    // The row's own scale (a focused button grows): the copy, drawn unscaled, is stretched to match.
+    property real zoom: 1
     property real copyMargin: Theme.dp(6)
     property real gap: Theme.dp(28)
     readonly property real gapHeight: Theme.dp(17)
@@ -65,7 +67,9 @@ FocusScope {
         centered = !anchor;
         if (anchor) {
             var p = anchor.mapToItem(menu, rect.x, rect.y);
-            row = Qt.rect(p.x, p.y, rect.width, rect.height);
+            var q = anchor.mapToItem(menu, rect.x + rect.width, rect.y + rect.height);
+            row = Qt.rect(p.x, p.y, q.x - p.x, q.y - p.y);
+            zoom = rect.width > 0 ? row.width / rect.width : 1;
             copy.sourceRect = Qt.rect(rect.x - copyMargin, rect.y - copyMargin, rect.width + copyMargin * 2, rect.height + copyMargin * 2);
         }
         copy.sourceItem = anchor || null;
@@ -225,10 +229,10 @@ FocusScope {
         id: copy
         live: true
         hideSource: false
-        x: menu.row.x - menu.copyMargin
-        y: menu.row.y - menu.copyMargin
-        width: menu.row.width + menu.copyMargin * 2
-        height: menu.row.height + menu.copyMargin * 2
+        x: menu.row.x - menu.copyMargin * menu.zoom
+        y: menu.row.y - menu.copyMargin * menu.zoom
+        width: menu.row.width + menu.copyMargin * menu.zoom * 2
+        height: menu.row.height + menu.copyMargin * menu.zoom * 2
         opacity: menu.open ? 1.0 : 0.0
 
         Behavior on opacity {
