@@ -110,6 +110,15 @@ def _qml_type(item):
     return name.split("_QMLTYPE_")[0] if "_QMLTYPE_" in name else ""
 
 
+def _rows(value):
+    """A short name for a list of plain rows by what each one is, or "" for anything else."""
+    value = value.toVariant() if hasattr(value, "toVariant") else value
+    if not isinstance(value, list) or not value or not all(isinstance(v, (dict, str, int)) for v in value):
+        return ""
+    names = [str(v.get("action") or v.get("id") or v.get("key") or v.get("label") or "") if isinstance(v, dict) else str(v) for v in value]
+    return "rows:" + hashlib.sha1("\n".join(names).encode()).hexdigest()[:6]
+
+
 def _cursor_props(item):
     """The writable int, string and bool properties a QML file declares on `item`: where its cursor stands, what it has open."""
     out = {}
@@ -118,7 +127,12 @@ def _cursor_props(item):
         for i in range(mo.propertyOffset(), mo.propertyCount()):
             p = mo.property(i)
             name = p.name()
-            if not p.isWritable() or p.typeName() not in ("int", "QString", "bool") or name in NOT_CURSOR:
+            if not p.isWritable() or name in NOT_CURSOR:
+                continue
+            # A menu's list swapped for another under the same cursor: Media and Manage pushed over the game menu.
+            if p.typeName() == "QVariant" and (rows := _rows(item.property(name))):
+                out[name] = rows
+            if p.typeName() not in ("int", "QString", "bool"):
                 continue
             value = item.property(name)
             if name in TYPED:
