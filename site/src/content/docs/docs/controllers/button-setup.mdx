@@ -1,0 +1,118 @@
+---
+title: Button setup
+description: Settings › Controller, the guided button setup, learning one button, the button test, and where Universe keeps what it learns.
+sidebar:
+  order: 2
+---
+
+import Shot from '../../../../components/Shot.astro';
+import Clip from '../../../../components/Clip.astro';
+
+Universe already knows the buttons of most pads ([Supported controllers](/docs/controllers/supported/)). Setting them up is for a pad whose buttons land in the wrong place, a button that reads **Unbound**, or a pad Universe doesn't know at all.
+
+## Settings › Controller
+
+Settings › **Controller** shows the pad Universe reads, on a card titled with its family, such as "DualSense Edge" or "Xbox" ("Controller" for a pad with no family of its own).
+
+<Shot name="settings-controller" />
+
+The card's rows, from the top:
+
+- **Controller**, with two pads or more connected, picks the pad the card shows.
+- **Test the buttons** starts the [button test](/docs/controllers/button-setup/#test-the-buttons).
+- **Set up the buttons** starts the [guided setup](/docs/controllers/button-setup/#set-up-the-buttons).
+- **Nintendo games** sets where **A** sits in Nintendo games for every pad of this model (**As printed**, **A on the right** or **A at the bottom**), and its detail says where the print puts it. Only the Emulator controls module reads this row, so with that module off it changes nothing. [Emulator controls](/docs/controllers/emulator-controls/#where-a-sits-in-nintendo-games) explains the choice.
+- Then one row per button, the extra buttons first. A row's value is **Unbound** when the pad sends no code for that button on this connection, and a bare dash when the button carries no macro. Otherwise it lists the button's [macros](/docs/controllers/macros/), such as "Press · Screenshot". The HOME row reads "HOME · press for the menu, hold to go home".
+
+With no pad connected, the card reads **No controller connected**. When a game started from the command line holds the pads, it reads **Macros are running in the game session**. You can still bind macros then, but the test, the setup and learning wait for that game to end.
+
+Below the card, the **Advanced** row opens the Timing and HOME settings ([Macros and paddles](/docs/controllers/macros/#timing)). No macro fires while the Controller section has the focus, so you can look at a button's row without setting it off.
+
+**A** on a button's row opens a menu with **Learn the button** (**Learn the button again** once it has a code), **On press…** and **On hold…** for its macros, and **Clear press** or **Clear hold** for a macro it carries. The HOME row offers learning alone, since HOME is Universe's own.
+
+The Switch 2 look has this page as **Controllers**, in the HOME menu and in System Settings. The PS5 look has it under Settings › **Controllers**.
+
+## Set up the buttons
+
+The guided setup asks for each button in turn, then the sticks.
+
+1. Press **A** on **Set up the buttons**.
+2. The pad drawing fills the page. The button it wants pulses, with a prompt under it such as "Press A", "Pull LT" for a trigger or "Click LS" for a stick click, in the family's own names ("Press Cross" on a DualSense).
+3. Press that button. Universe takes its code and asks for the next one.
+4. A step you don't answer is skipped after 8 seconds. The line under the prompt counts the steps and the seconds left.
+5. The 17 standard buttons come first, then the model's extra buttons. The last steps ask you to hold each stick right, then down ("Hold the left stick right"). Push it past 40% and keep it there for a moment.
+
+While the setup runs, the pad's presses go to the setup alone and move nothing on screen. You steer it from the keyboard, or with a click or a tap on the actions under the prompt:
+
+- **Previous button (←)**, or <kbd>←</kbd>, takes the last step back and asks it again.
+- **Keep and finish (Enter)**, or <kbd>Enter</kbd>, stops and keeps what is set up so far.
+- **Cancel, undo all (Esc)**, or <kbd>Esc</kbd>, stops and puts every button and stick back the way it was.
+
+With a pad alone, let the remaining steps time out and the setup ends by itself.
+
+A button an earlier step already took moves to the current step. Universe says so ("That button was A: it is B now") and counts the earlier step as skipped. The end tallies what happened, such as "DualSense Edge Wireless Controller: 23 set up, 2 skipped: Left Fn, Right Fn".
+
+Leaving the page stops the setup and keeps what it set up. So does another app taking the focus, or the pad going away ("Controller gone: setup stopped").
+
+## Learn one button
+
+To fix one button, or to give a code to one that reads **Unbound**:
+
+1. Press **A** on its row, then **Learn the button** or **Learn the button again**.
+2. The row reads "Press the button on the pad…". Press the button you want there.
+3. Universe names the code it took, as in "Share is now KEY_RECORD".
+
+Any button pressed on that pad counts as the answer, the pad's own **B** included. To stop without learning, press <kbd>Esc</kbd> (the hint bar's **B** · Stop learning). After 30 seconds with no press, learning stops by itself with "No button pressed: learning stopped".
+
+When the code belonged to another button, it moves over and that button loses it. A pad with no HOME button can get one by learning the HOME row from a spare button.
+
+Outside of learning, a press that no button owns shows on the card for a few seconds, such as "BTN_TRIGGER_HAPPY1 is not one of the pad's buttons yet: learn it from a row".
+
+## Test the buttons
+
+**Test the buttons** shows what the pad sends. The drawing fills the page. A press lights its button, the sticks lean as you push them, and the triggers fill with their pull. Beside each stick and trigger, its lean or its pull shows in percent. A dashed button sends no code on this connection, so learn it from its row.
+
+The **HISTORY** column lists each press with the time since the one before. A gap under 30 ms is marked. No finger presses that fast, so the pad sent one press twice.
+
+During the test, the pad drives nothing in the menus. To leave it:
+
+- hold the right-hand face button for a second (**B** on an Xbox pad, ○ on a PlayStation pad, A on a Nintendo pad);
+- press **Start** and **Select** together;
+- press <kbd>Esc</kbd>.
+
+It also ends when you leave the section or the pad goes away.
+
+## The setup offer
+
+The first time Universe sees a pad of a model you have never set up, it asks "Set up the buttons of DualSense Edge Wireless Controller?". **Set up** opens Settings › Controller and starts the guided setup. **Not now** stops the question for that model. A model with learned buttons in `config.toml` is never asked about.
+
+## Where learned buttons are kept
+
+What you learn goes to `config.toml`, per model, and every pad of that family follows it:
+
+```toml
+[controller.buttons.xbox-elite]
+paddle_p1 = ["BTN_TRIGGER_HAPPY8"]
+paddle_p2 = []
+
+[controller.axes.8bitdo-pro-3]
+rx = "ABS_Z"
+ry = "ABS_RZ-"
+```
+
+Under `[controller.buttons.<family>]`, a button's learned list replaces the codes Universe ships for it, and an empty list leaves it unbound. Under `[controller.axes.<family>]`, each stick axis and trigger (`lx`, `ly`, `rx`, `ry`, `lt`, `rt`) names the axis learned for it, with a trailing `-` when it runs backwards. The button and family ids are in [Supported controllers](/docs/controllers/supported/#controller-families).
+
+## From the command line
+
+[`universe controller ls`](/docs/reference/cli/controller/) lists each connected pad with its id (its input node, such as `event30`), name, family and connection, then its buttons with their codes and macros. `universe --json controller ls` adds the button ids and every code each one answers to.
+
+```sh
+universe controller learn xbox-elite paddle_p1
+universe controller forget xbox-elite paddle_p1
+```
+
+`learn` waits up to 30 seconds for a press on a connected pad of that family and gives its code to the button. It prints `paddle_p1 = BTN_TRIGGER_HAPPY8`, adding "(taken from …)" when the code moved from another button. It reads buttons and the D-pad only, so learn a trigger or a stick in the guided setup. `forget` puts back the codes Universe ships for that button. A learned stick or trigger axis goes with `universe config set controller.axes.<family>.<axis>` and no value.
+
+## Universe Desktop
+
+Universe Desktop's Preferences › **Controller** draws the pad live and has **Test the Buttons**, **Set Up the Buttons**, **Nintendo Games**, and one row per button. A button's page has **Learn the Button**, **Restore the Default Codes** and its **Press** and **Hold** macros. With no pad connected, **Controller Type** picks the model to set up, so you can bind a model's macros without its pad. While Big Screen is open it holds the pads, and the test, learning and setup wait until it closes. [Universe Desktop](/docs/using/universe-desktop/) covers the rest of the app.
