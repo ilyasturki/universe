@@ -16,7 +16,10 @@ Item {
     property string variant: "o"
 
     readonly property var spec: Names.glyph(family, slot)
-    readonly property var art: Prompts.paths(Names.style(family), slot)
+    // False draws the slot's own shape and mark instead of the prompt sheet's art.
+    property bool sheet: true
+
+    readonly property var art: sheet ? Prompts.paths(Names.style(family), slot) : null
     // The sheet's 48-unit face button is `unit` on screen.
     readonly property real sheetScale: unit / 48
     readonly property real artWidth: art ? (art.b[2] - art.b[0]) * sheetScale : 0

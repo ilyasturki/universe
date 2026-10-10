@@ -36,12 +36,16 @@ Item {
                 spacing: root.unit * 0.27
 
                 PadGlyph {
+                    id: pad
+
                     anchors.verticalCenter: parent.verticalCenter
                     visible: !cap.visible
                     family: root.family
                     slot: Names.hintSlot(modelData, root.family)
                     unit: root.unit
                     ink: root.ink
+                    // The sheet's Options and Create are slivers at hint size.
+                    sheet: Names.style(root.family) !== "sony" || (pad.slot !== "start" && pad.slot !== "select")
                 }
 
                 Rectangle {

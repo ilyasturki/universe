@@ -78,8 +78,7 @@ Item {
 
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                visible: root.kind !== "add"
-                text: "Library"
+                text: root.kind === "add" ? "Add a game" : "Library"
                 color: Theme.text
                 font.family: Theme.sans
                 font.weight: Font.DemiBold
