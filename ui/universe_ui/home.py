@@ -107,8 +107,7 @@ class Home(QObject):
         self._osd_timer.setInterval(OSD_MS)
         self._osd_timer.timeout.connect(self._osd_done)
         self._shutter = self._load_shutter()
-        # Shots cued at their grab whose file has not come yet.
-        self._cued = 0
+        self._pad_cued = 0
         client.currentSessionChanged.connect(self._on_session)
         client.sessionStarted.connect(self._on_started)
         client.launchRequested.connect(self._on_requested)
@@ -116,8 +115,8 @@ class Home(QObject):
         client.launchFailed.connect(self._on_failed)
         client.sessionShown.connect(self._on_shown)
         controller.buttonPressed.connect(self._on_button)
-        controller.screenshotGrabbed.connect(self._shot_grabbed)
-        controller.screenshotTaken.connect(self._shot_taken)
+        controller.screenshotGrabbed.connect(self._pad_grabbed)
+        controller.screenshotTaken.connect(self._pad_taken)
         controller.volumeReported.connect(self._volume_reported)
         self._unlocks = UnlockWatch(client, self)
         self._unlocks.unlocked.connect(self._unlocked)
@@ -465,20 +464,30 @@ class Home(QObject):
 
     @Slot()
     def screenshot(self):
-        self._client.runAsync(lambda: self._client.screenshot(self._shot_grabbed), lambda path: self._shot_taken(str(path or "")))
+        grabbed = []
 
-    # The pixels are held, the file still to come: the cue now, and it never lands in the shot.
+        def on_grab():
+            grabbed.append(True)
+            self._shot_grabbed()
+
+        self._client.runAsync(lambda: self._client.screenshot(on_grab), lambda path: self._shot_taken(str(path or ""), bool(grabbed)))
+
+    def _pad_grabbed(self):
+        self._pad_cued += 1
+        self._shot_grabbed()
+
+    def _pad_taken(self, path):
+        cued = self._pad_cued > 0
+        self._pad_cued -= cued
+        self._shot_taken(path, cued)
+
     def _shot_grabbed(self):
-        self._cued += 1
         if self._shutter is not None:
             self._shutter.play()
         self._lift(CUE_MS)
         self.screenshotGrabbed.emit()
 
-    def _shot_taken(self, path):
-        cued = self._cued > 0
-        if cued:
-            self._cued -= 1
+    def _shot_taken(self, path, cued):
         if cued and not path:
             self._lift(LOST_MS)
             self.screenshotLost.emit()
