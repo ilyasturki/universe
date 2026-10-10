@@ -12,8 +12,9 @@ from pathlib import Path
 
 import pytest
 from dbusmock import BusType, PrivateDBus, SpawnedMock
-from looks import Look, read
-from PySide6.QtCore import Qt
+from looks import Look, current_row, read, settle
+from PySide6.QtCore import QObject, Qt
+from PySide6.QtTest import QTest
 from uitest import until
 
 universe_core = pytest.importorskip("universe_core")
@@ -100,13 +101,18 @@ class Journey:
         self.look = Look(self.api, look)
         return self.look
 
-    def close(self):
+    def quit_ui(self):
+        """The launcher closed, the profile and the user's systemd left as they are."""
         if self.look is not None:
             self.look.close()
         if self.api is not None:
             self.api.shutdown()
         if self.client is not None:
             self.client.shutdown()
+        self.look = self.api = self.client = None
+
+    def close(self):
+        self.quit_ui()
         for unit in self.games_started():
             with contextlib.suppress(ProcessLookupError, PermissionError):
                 os.killpg(unit["pid"], signal.SIGKILL)
@@ -161,18 +167,86 @@ def journey(app, xdg, rendered_looks, tmp_path, monkeypatch):
                 shown.close()
 
 
-def menu_ids(look):
-    return [i.get("action") for i in read(look.menu(), "items") or []]
+def menu_ids(menu):
+    return [i.get("action") for i in read(menu, "items") or []]
 
 
-def pick(look, action):
-    """Down the open menu to `action`, then A."""
-    menu = look.menu()
-    until(lambda: menu.property("open") is True and action in menu_ids(look), f"no {action} in the menu")
-    target = menu_ids(look).index(action)
-    look.press(Qt.Key.Key_Down, target - menu.property("index"))
-    until(lambda: menu.property("index") == target)
-    look.press(Qt.Key.Key_Return)
+def pick(look, menu, *actions):
+    """Down the open menu to each of `actions` in turn, then A: a submenu's actions follow its parent's."""
+    for action in actions:
+        until(lambda action=action: menu.property("open") is True and action in menu_ids(menu), f"no {action} in {menu.objectName()}")
+        target = menu_ids(menu).index(action)
+        look.press(Qt.Key.Key_Down, target - menu.property("index"))
+        until(lambda target=target: menu.property("index") == target)
+        look.press(Qt.Key.Key_Return)
+
+
+def down_to(look, row, **want):
+    """Down the rows until `row()` holds `want`, whatever their order."""
+
+    def mark(r):
+        return tuple(r.get(k) for k in ("key", "field", "module", "label", "storeId"))
+
+    seen = None
+    while (current := row() or {}) and mark(current) != seen:
+        if all(current.get(k) == v for k, v in want.items()):
+            return current
+        seen = mark(current)
+        look.press(Qt.Key.Key_Down)
+    raise AssertionError(f"no row holds {want}")
+
+
+def walk(look, page, key):
+    """The cursor onto `key` on a page of cards, whatever their order: each card of the sidebar in turn, down its rows."""
+    for _ in read(page, "sections"):
+        if not page.property("inRows"):
+            look.press(Qt.Key.Key_Right)
+        with contextlib.suppress(AssertionError):
+            return down_to(look, lambda: current_row(page), key=key)
+        look.press(Qt.Key.Key_Left)
+        look.press(Qt.Key.Key_Down)
+    raise AssertionError(f"no {key} row on any card")
+
+
+def settings(look, section):
+    """Settings by keys: across the tabs, down the sidebar to `section`, into its rows; the page and its rows' cursor."""
+    root = look.root
+    for _ in range(4):
+        if root.property("tabIndex") == root.property("settingsTab"):
+            break
+        look.press(Qt.Key.Key_E)
+    page = until(lambda: (p := root.property("activePage")) is not None and p.objectName() == "settingsPage" and p, "Settings is shown")
+    ids = [s["id"] for s in read(page, "sections")]
+    step = ids.index(section) - page.property("section")
+    look.press(Qt.Key.Key_Down if step > 0 else Qt.Key.Key_Up, abs(step))
+    until(lambda: page.property("sectionId") == section)
+    look.press(Qt.Key.Key_Right)
+    cards = next(c for c in page.findChildren(QObject) if c.metaObject().className().startswith("SettingsCards"))
+    until(lambda: cards.property("activeFocus"), f"the cursor is on {section}'s rows")
+    return page, lambda: read(cards, "currentRow") or {}
+
+
+def type_text(look, text):
+    for ch in text:
+        QTest.keyClick(look.window, ch)
+
+
+def back_home(look):
+    """B until Home has the focus again: a card's rows, then its page, give way one press each."""
+    for _ in range(4):
+        if look.root.property("returnLaunches") not in (None, ""):
+            return
+        look.press(Qt.Key.Key_Escape)
+        settle(look.window)
+    until(lambda: look.root.property("returnLaunches") not in (None, ""), "B is back on Home")
+
+
+def quit_game(look, client):
+    """Quit from the playing game's menu on Home, until its session is over."""
+    until(lambda: not look.root.property("launching") and look.root.property("playingId"))
+    look.press(Qt.Key.Key_F1)
+    pick(look, look.menu(), "stop")
+    until(lambda: client.currentSession is None, "Quit ends the session")
 
 
 @needs_tree
@@ -189,13 +263,125 @@ def test_a_game_launched_from_home_and_quit_from_its_menu_leaves_a_session_row(j
     session = client.currentSession["session_id"]
     until(lambda: look.root.property("playingId") == game and not look.root.property("launching"))
     look.press(Qt.Key.Key_F1)
-    assert {"resume", "stop"} <= set(menu_ids(look)), "the playing game's menu resumes or quits it"
-    pick(look, "stop")
-    until(lambda: client.currentSession is None, "Quit ends the session")
+    assert {"resume", "stop"} <= set(menu_ids(look.menu())), "the playing game's menu resumes or quits it"
+    look.press(Qt.Key.Key_Escape)
+    quit_game(look, client)
     rows = until(lambda: journey.sessions(game))
     assert [(r["session"], r["unit"], r["stopped"], r["crashed"]) for r in rows] == [(session, started[0]["unit"], True, False)], rows
-    ended = [u for u in journey.units() if "stop_post" in u]
+    ended = until(lambda: [u for u in journey.units() if "stop_post" in u])
     assert [u["stop_post"] for u in ended] == [0], ended
     sessions = journey.api.screens.sessions
     sessions.load(game)
     assert [(r["session"], r["end"], r["live"]) for r in sessions.rows] == [(session, "stopped", False)]
+
+
+@needs_tree
+@pytest.mark.slow
+def test_arguments_set_on_the_games_page_reach_it_on_every_launch_after_a_restart(journey):
+    game = journey.sample()
+    look = journey.start()
+    until(lambda: look.root.property("returnLaunches") == game)
+    look.press(Qt.Key.Key_F1)
+    pick(look, look.menu(), "manage", "settings")
+    page = look.page("gameSettingsPage")
+    until(lambda: page.property("activeFocus") and read(page, "sections"))
+    look.press(Qt.Key.Key_F)
+    until(lambda: journey.api.screens.gameSettings.showAdvanced, "Y shows the advanced rows")
+    walk(look, page, "launch.args")
+    look.press(Qt.Key.Key_Return)
+    sheet = until(lambda: (s := page.findChild(QObject, "textSheet")) is not None and s.property("open") is True and s)
+    type_text(look, "--delay,0")
+    look.press(Qt.Key.Key_Return)
+    until(lambda: journey.game(game)["launch"].get("args") == ["--delay", "0"], "game.toml holds the game's own arguments")
+    until(lambda: sheet.property("open") is False)
+    back_home(look)
+    look.press(Qt.Key.Key_Return)
+    quit_game(look, journey.client)
+    journey.quit_ui()
+    look = journey.start()
+    form = journey.api.screens.gameSettings
+    form.load(game)
+    assert next(r for r in form.rows if r["key"] == "launch.args")["value"] == "--delay,0", "the page shows them after a restart"
+    until(lambda: look.root.property("returnLaunches") == game)
+    look.press(Qt.Key.Key_Return)
+    quit_game(look, journey.client)
+    assert [u["argv"][-3:] for u in journey.games_started()] == [[str(journey.root / "sample" / "sample-game"), "--delay", "0"]] * 2
+
+
+MINI_METRO = "1434554947"
+LIBRARY = [{"id": MINI_METRO, "title": "Mini Metro", "owned": True, "installed": False, "release_year": 2015}]
+
+
+def gog_info(folder, game_id, name, exe):
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / exe).write_bytes(b"MZ")
+    info = {"gameId": game_id, "rootGameId": game_id, "name": name, "buildId": "B1", "playTasks": [{"isPrimary": True, "type": "FileTask", "path": exe}]}
+    (folder / f"goggame-{game_id}.info").write_text(json.dumps(info))
+
+
+def store(journey):
+    """The GOG account's listing as the core cached it, and umu's id for its game: nothing a store verb needs is fetched."""
+    journey.write("data/sources/gog/library.json", json.dumps(LIBRARY))
+    journey.write("data/sources/gog/umu.json", json.dumps({MINI_METRO: "umu-287980"}))
+
+
+def store_row(journey, store_id):
+    return next((r for r in journey.api.screens.sources.rows if r["id"] == store_id), {})
+
+
+@pytest.mark.slow
+def test_a_store_game_installed_from_settings_joins_the_library_installed(journey):
+    store(journey)
+    look = journey.start()
+    page, row = settings(look, "install")
+    until(lambda: store_row(journey, MINI_METRO), "the cached listing, no store reached")
+    assert store_row(journey, MINI_METRO)["installed"] is False
+    down_to(look, row, storeId=MINI_METRO)
+    look.press(Qt.Key.Key_Return)
+    pick(look, page.findChild(QObject, "settingsMenu"), "install")
+    pick(look, page.findChild(QObject, "dialog"), "yes")
+    until(lambda: store_row(journey, MINI_METRO).get("game_id") == "mini-metro", "the row is the library game's once installed", 10000)
+    assert store_row(journey, MINI_METRO)["installed"] is True
+    folder = journey.root / "games" / "Mini Metro"
+    assert (folder / f"goggame-{MINI_METRO}.info").is_file(), "gogdl downloaded into the source's games folder"
+    game = journey.game("mini-metro")
+    assert (game["source"]["kind"], game["source"]["id"], game["source"]["dir"]) == ("gog", MINI_METRO, str(folder))
+    until(lambda: journey.api.allGames.byId("mini-metro") is not None, "Home lists it")
+
+
+@pytest.mark.slow
+def test_uninstall_from_settings_trashes_the_folder_and_keeps_the_game(journey):
+    store(journey)
+    folder = journey.root / "games" / "Mini Metro"
+    gog_info(folder, MINI_METRO, "Mini Metro", "Mini Metro.exe")
+    journey.write(
+        "data/games/mini-metro/game.toml",
+        f'schema = 1\nid = "mini-metro"\ntitle = "Mini Metro"\n[source]\nkind = "gog"\nid = "{MINI_METRO}"\ndir = "{folder}"\nbuild_id = "B1"\n'
+        f'[launch]\nrunner = "proton"\nexe = "{folder}/Mini Metro.exe"\n',
+    )
+    look = journey.start()
+    page, row = settings(look, "install")
+    until(lambda: store_row(journey, MINI_METRO).get("game_id") == "mini-metro")
+    down_to(look, row, storeId=MINI_METRO)
+    look.press(Qt.Key.Key_Return)
+    pick(look, page.findChild(QObject, "settingsMenu"), "uninstall")
+    pick(look, page.findChild(QObject, "settingsMenu"), "yes")
+    until(lambda: not folder.exists(), "the install folder goes")
+    assert (journey.home / ".local" / "share" / "Trash" / "files" / "Mini Metro").is_dir(), "to the trash, not deleted"
+    until(lambda: store_row(journey, MINI_METRO).get("installed") is False)
+    game = journey.game("mini-metro")
+    assert "dir" not in game["source"] and "exe" not in game["launch"] and not game.get("removed_at"), "still in the library, not installed"
+
+
+@needs_tree
+@pytest.mark.slow
+def test_remove_from_the_games_menu_takes_it_off_home_and_keeps_its_files(journey):
+    game = journey.sample()
+    look = journey.start()
+    until(lambda: look.root.property("returnLaunches") == game)
+    look.press(Qt.Key.Key_F1)
+    pick(look, look.menu(), "manage", "remove", "yes")
+    until(lambda: journey.api.allGames.byId(game) is None, "Home drops it")
+    toml = journey.game(game)
+    assert toml["removed_at"] and toml["hidden"] is True, "archived in game.toml"
+    assert (journey.root / "sample" / "sample-game").is_file(), "its files stay"

@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-import json, os, sys, time
+import json
+import os
+import sys
+import time
 from pathlib import Path
 
 args = sys.argv[1:]
@@ -119,5 +122,6 @@ elif verb in ("download", "update"):
             }
         )
     )
+    (folder / "Mini Metro.exe").touch()
     (folder / ".gogdl-resume").unlink(missing_ok=True)
     sys.exit(int(os.environ.get("SHIM_EXIT", "0")))
