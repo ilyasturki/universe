@@ -247,7 +247,7 @@ function runnersPage(runners: Runner[]) {
         const options = r.options.map(
             (o) => `- ${o.label}: ${code(o.key)}, default ${code(o.default)}${o.choices.length ? `, one of ${o.choices.map(code).join(', ')}` : ''}`,
         );
-        return `${facts.join(' · ')}.${options.length ? `\n\nOptions (\`universe runner set ${r.id} <key> <value>\`):\n\n${options.join('\n')}` : ''}`;
+        return `${facts.join(' · ')}.${options.length ? `\n\nOptions (\`universe runner set ${r.id} <key>=<value>\`):\n\n${options.join('\n')}` : ''}`;
     };
     const body = kinds.flatMap(({ kind, title }) => {
         const group = runners.filter((r) => r.kind === kind);
