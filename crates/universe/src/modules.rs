@@ -514,12 +514,12 @@ pub async fn run_lines(hooker: &Hooker, hook: &str, env: &HookEnv, mut on_line: 
         .map_err(|e| crate::Error::Io(format!("{}: {e}", exe.display())))?;
     let mut stdout = tokio::io::BufReader::new(child.stdout.take().expect("piped"));
     let mut stderr = child.stderr.take().expect("piped");
-    let errors = tokio::spawn(async move {
+    let errors = async {
         let mut text = Vec::new();
-        let _ = stderr.read_to_end(&mut text).await;
-        String::from_utf8_lossy(&text).into_owned()
-    });
-    let run = async {
+        stderr.read_to_end(&mut text).await?;
+        Ok::<_, std::io::Error>(String::from_utf8_lossy(&text).into_owned())
+    };
+    let printed = async {
         let (mut printed, mut line) = (String::new(), Vec::new());
         while stdout.read_until(b'\n', &mut line).await? > 0 {
             let text = String::from_utf8_lossy(&line);
@@ -527,12 +527,16 @@ pub async fn run_lines(hooker: &Hooker, hook: &str, env: &HookEnv, mut on_line: 
             printed.push_str(&text);
             line.clear();
         }
-        Ok::<_, std::io::Error>((child.wait().await?, printed))
+        Ok::<_, std::io::Error>(printed)
+    };
+    let run = async {
+        let (stdout, stderr) = tokio::try_join!(printed, errors)?;
+        Ok::<_, std::io::Error>((child.wait().await?, stdout, stderr))
     };
     let timeout = hooker.timeout();
     match tokio::time::timeout(timeout, run).await {
-        Ok(Ok((status, stdout))) => {
-            let o = HookOutcome { status: status.code().unwrap_or(-1), stdout, stderr: errors.await.unwrap_or_default() };
+        Ok(Ok((status, stdout, stderr))) => {
+            let o = HookOutcome { status: status.code().unwrap_or(-1), stdout, stderr };
             if o.status != 0 {
                 tracing::warn!("hook {}:{hook} exited {}: {}", hooker.id(), o.status, o.stderr.trim());
             }
