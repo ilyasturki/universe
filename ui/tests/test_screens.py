@@ -893,31 +893,40 @@ def test_thumbnails_are_announced_as_they_land(api, tmp_path):
 def test_selecting_a_recording_drops_the_frames_another_was_waiting_for(api, monkeypatch, tmp_path):
     from universe_ui.screens import media
 
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    started = tmp_path / "started"
+    # A thumbnail comes out at once; a frame runs until it is stopped, each saying which file it writes and as which process.
+    (bin_dir / "ffmpeg").write_text(
+        f'#!/bin/sh\nfor out; do :; done\ncase "$out" in *{media.THUMB:02d}.part.jpg) printf "\\377\\330" > "$out"; exit 0;; esac\n'
+        f'echo "$$ $out" >> {started}\nexec sleep 30\n'
+    )
+    (bin_dir / "ffmpeg").chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
     monkeypatch.setattr(media, "_cache_dir", lambda: str(tmp_path / "frames"))
-    recordings = api.screens.recordings
-    started = []
-
-    def extract(self, job, frames, vaapi):
-        started.append(job)
-        self._running[job] = None
-
-    monkeypatch.setattr(media.RecordingsList, "_extract", extract)
-    monkeypatch.setattr(media.RecordingsList, "_stop", lambda self, job, proc: self._running.pop(job, None))
+    recordings = media.RecordingsList(api.universe)
+    recordings._vaapi = None
     recordings.load("the-technomancer")
     first, second = recordings.rows[0]["session"], recordings.rows[1]["session"]
-    recordings._queue.clear()
-    recordings._running.clear()
-    started.clear()
+    until(lambda: all(media.THUMB in recordings._frames[s].extracted for s in (first, second)), "the thumbnails come first")
+
+    def runs():
+        rows = [line.split() for line in started.read_text().splitlines()] if started.exists() else []
+        dirs = {recordings._frames[s].dir: s for s in (first, second)}
+        return [(int(pid), dirs[os.path.dirname(out)], int(os.path.basename(out)[:2])) for pid, out in rows]
+
     recordings.select(first)
-    assert started == [(first, 0), (first, 1)] and len(recordings._queue) == 14 and all(j[0] == first for j in recordings._queue), (
-        "two at a time, the picked one first"
-    )
-    started.clear()
+    until(lambda: {r[1:] for r in runs()} == {(first, 0), (first, 1)}, "two at a time, the picked one first")
     recordings.select(second)
+    until(lambda: len(runs()) == 4)
     recordings.select(first)
-    assert started == [(second, 0), (second, 1), (first, 0), (first, 1)], "the other session's running frames are stopped, the picked one starts at once"
-    others = [j for j in recordings._queue if j[0] != first]
-    assert others == [(second, media.THUMB)], "the other session's frames are dropped, its thumbnail stays"
+    until(lambda: len(runs()) == 6)
+    assert [{r[1:] for r in runs()[2:4]}, {r[1:] for r in runs()[4:]}] == [{(second, 0), (second, 1)}, {(first, 0), (first, 1)}], (
+        "the other's frames stop, the picked one's start at once"
+    )
+    assert not any(os.path.exists(f"/proc/{pid}") for pid, session, _ in runs() if session == second), "the other session's ffmpegs are killed"
+    assert [j for j in recordings._queue if j[0] != first] == [], "the other session's frames still waiting are dropped"
+    recordings.shutdown()
     assert media._ffmpeg_args("/r.mkv", 1.5, "/out.jpg", "/dev/dri/renderD129")[3:9] == [
         "-hwaccel",
         "vaapi",
@@ -927,8 +936,6 @@ def test_selecting_a_recording_drops_the_frames_another_was_waiting_for(api, mon
         "vaapi",
     ]
     assert "scale=640:-2" in media._ffmpeg_args("/r.mkv", 1.5, "/out.jpg", None)
-    recordings._running.clear()
-    recordings._queue.clear()
 
 
 def test_a_frame_killed_midway_is_not_taken_for_extracted(api, monkeypatch, tmp_path):
