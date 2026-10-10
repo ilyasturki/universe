@@ -20,10 +20,12 @@ in
     package = lib.mkOption {
       type = lib.types.package;
       default = universePkg;
+      description = "The universe CLI, with the modules and sources that ship with it.";
     };
     ui = lib.mkOption {
       type = lib.types.package;
       default = uiPkg;
+      description = "Universe Big Screen (universe-ui), the app you drive with a controller.";
     };
     desktop = lib.mkOption {
       type = lib.types.nullOr lib.types.package;
