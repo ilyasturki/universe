@@ -24,7 +24,9 @@ A speed budget is a test named `…_within_its_budget` whose limit comes from `s
 
 A pad change is checked against the recorded pads in tests/pads: `just test-pads` replays each as a uinput pad on this desktop, `just test vm` through the real kernel drivers in a VM; `universe controller dump --walk --json` records a new one.
 
-The full check is `just verify` (lint and every suite; the pre-push hook runs it). To see a UI change, follow the run-ui skill (.claude/skills/run-ui/SKILL.md).
+A test of a transition (a page, a menu or a list swapped) traces it frame by frame with `FocusTrace` (ui/tests/looks.py).
+
+The full check is `just verify` (lint and every suite; the pre-push hook runs it). To see a UI change, follow the run-ui skill (.claude/skills/run-ui/SKILL.md). For a navigation change, `just crawl` walks every screen of each look by its keys and fails on lost focus, dead ends and pages no key reaches; `just crawl-report` shows every screen before and after the change. Neither is part of `just verify`.
 
 ## Docs
 
