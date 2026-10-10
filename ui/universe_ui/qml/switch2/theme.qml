@@ -31,7 +31,7 @@ FocusScope {
             });
     }
 
-    // Under the startup animation: the ground alone, then the row slides in and the bars settle as it fades, all at once after a skip.
+    // Under the startup animation: the ground alone, then the row slides in and the bars settle as it opens, all at once after a skip.
     property real rowReveal: 1.0
     property real chromeReveal: 1.0
 

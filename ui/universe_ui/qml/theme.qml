@@ -25,7 +25,7 @@ FocusScope {
             openChangelog(true);
     }
 
-    // Under the startup animation: the ground alone, then the backdrop, the page and the bars come in as it fades, all at once after a skip.
+    // Under the startup animation: the ground alone, then the backdrop, the page and the bars come in as it opens, all at once after a skip.
     property real backdropReveal: 1.0
     property real pageReveal: 1.0
     property real chromeReveal: 1.0

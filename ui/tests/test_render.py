@@ -9,6 +9,7 @@ from PySide6.QtTest import QTest
 from uitest import descendant, own, pump, record, until
 
 from universe_ui import host
+from universe_ui.themes import THEMES
 
 
 def count_frames(window, ms):
@@ -79,7 +80,9 @@ def test_the_intro_plays_then_leaves_home_the_focus_and_no_press(fake, tmp_path,
         home = look.home()
         start = until(lambda: game_id(home))
         assert api.boot.running and boot.property("visible")
-        until(lambda: boot.property("ring") > 0, "the mark comes in")
+        accent = next(t["accent"] for t in THEMES if t["id"] == name)
+        assert boot.property("accent").name() == api.theme.accent == accent, "the look's accent reaches the intro"
+        until(lambda: boot.property("t") > 0, "it plays from the first frame")
         if skip:
             QTest.keyClick(look.window, Qt.Key.Key_Right)
             until(lambda: not api.boot.running, "a press skips it", 1000)

@@ -227,6 +227,7 @@ class ThemeSelector(QObject):
     # Whether the look bridges the swap with the game's last frame; without it HOME need not wait for one.
     frame = Property(bool, lambda self: bool(self._current["frame"]), notify=changed)
     ground = Property(str, lambda self: self._current["ground"], notify=changed)
+    accent = Property(str, lambda self: self._current["accent"], notify=changed)
     # The heading of the overlay's card for an achievement unlocked mid-game, in the look's own words.
     unlocked = Property(str, lambda self: self._current["unlocked"], notify=changed)
     fontPath = Property(str, _font, _set_font, notify=fontChanged)
