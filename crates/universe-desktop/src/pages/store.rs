@@ -721,9 +721,11 @@ impl StorePage {
     fn listing_line(&self, count: usize) -> String {
         let imp = self.imp();
         let store = self.store();
-        let games = ngettext("{} game in your {} account", "{} games in your {} account", count as u32)
-            .replacen("{}", &count.to_string(), 1)
-            .replacen("{}", &text(&store, "name"), 1);
+        let games = ngettext("{} game in your {} account", "{} games in your {} account", count as u32).replacen("{}", &count.to_string(), 1).replacen(
+            "{}",
+            &text(&store, "name"),
+            1,
+        );
         let at = chrono::DateTime::parse_from_rfc3339(&text(&store, "library_at")).map(|t| t.timestamp()).ok();
         let age = at.map(|at| format::ago(at, chrono::Local::now()));
         match (imp.error.borrow().is_empty(), age) {
