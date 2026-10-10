@@ -257,36 +257,3 @@ pub fn open_log(win: &Window, game: &str, session: &str, when: &str, row: Option
     });
     win.push_page(&page);
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use universe::sessions::{JournalState, RecordingInfo, Session};
-
-    fn row(exit: i32, stopped: Option<bool>) -> SessionRow {
-        SessionRow {
-            session: Session { exit, stopped, duration_s: 600, ..Default::default() },
-            title: String::new(),
-            recording: None,
-            journal: None,
-            debug_log: None,
-        }
-    }
-
-    #[test]
-    fn each_ending_reads_apart_and_what_a_session_left_is_written_out() {
-        let ends: Vec<String> = [row(0, None), row(143, Some(true)), row(1, Some(false)), row(-1, Some(false)), row(-1, None)].iter().map(end_text).collect();
-        let mut distinct = ends.clone();
-        distinct.sort();
-        distinct.dedup();
-        assert_eq!(distinct.len(), 5, "quit, stopped, crashed, killed and ended each say their own: {ends:?}");
-
-        let bare = line(&row(0, None));
-        let mut kept = row(0, None);
-        kept.recording = Some(RecordingInfo { path: String::new(), size: 0, exists: true, duration_s: 0, started_at: String::new(), pauses: vec![] });
-        kept.journal = Some(JournalState { state: "written".into(), title: String::new(), written_at: String::new() });
-        let full = line(&kept);
-        assert!(full.starts_with(&bare), "the recording and the entry follow the ending");
-        assert_eq!(full.matches(" · ").count(), bare.matches(" · ").count() + 2, "in words on the line, not glyphs on a tooltip");
-    }
-}

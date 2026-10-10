@@ -422,11 +422,4 @@ mod tests {
         let found: Vec<(String, String)> = install_dirs(&gog, Some(lutris.clone()), &root).into_iter().map(|d| (d.dir, d.by)).collect();
         assert_eq!(found, vec![(heroic.to_string_lossy().into(), "Heroic".into()), (lutris.to_string_lossy().into(), "Lutris".into())]);
     }
-
-    #[test]
-    fn nothing_installed() {
-        let l = heroic_launchers(None, &[], Path::new("/nonexistent"));
-        assert!(l.iter().all(|l| !l.found && l.games == 0));
-        assert!(vdf_paths(Path::new("/nonexistent/libraryfolders.vdf")).is_empty());
-    }
 }

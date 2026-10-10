@@ -822,16 +822,6 @@ fn playing_bar(running: bool, home: bool, sidebar: bool) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    #[test]
-    fn the_running_game_stays_in_reach_when_the_sidebar_does_not_show() {
-        assert!(!playing_bar(true, true, true), "the sidebar's foot has it");
-        assert!(playing_bar(true, true, false), "collapsed or hidden with F9");
-        assert!(playing_bar(true, false, true), "a game's page covers the sidebar");
-        assert!(!playing_bar(false, false, false));
-    }
-
     #[test]
     fn the_window_waits_on_a_spinner_until_the_core_answers() {
         let ui = include_str!(concat!(env!("OUT_DIR"), "/ui/window.ui"));

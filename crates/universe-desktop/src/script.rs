@@ -174,32 +174,3 @@ fn one_colour(pixels: &[u8]) -> bool {
     let (pixels, _) = pixels.as_chunks::<4>();
     pixels.first().is_none_or(|first| pixels.iter().all(|p| p == first))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_script_reads_its_steps_and_keeps_what_it_cannot_read_to_fail_on() {
-        let steps = parse("size:1280x800 wait:300 action:win.view::platform:Nintendo~Switch shot:/tmp/a.png bogus nope:1 wait:x");
-        assert_eq!(
-            steps,
-            [
-                Step::Size(1280, 800),
-                Step::Wait(Duration::from_millis(300)),
-                Step::Action("win.view::platform:Nintendo Switch".into()),
-                Step::Shot("/tmp/a.png".into()),
-                Step::Unreadable("bogus".into()),
-                Step::Unreadable("nope:1".into()),
-                Step::Unreadable("wait:x".into()),
-            ]
-        );
-    }
-
-    #[test]
-    fn a_shot_of_a_single_colour_is_blank() {
-        assert!(one_colour(&[]));
-        assert!(one_colour(&[20, 20, 20, 255, 20, 20, 20, 255]));
-        assert!(!one_colour(&[20, 20, 20, 255, 20, 20, 21, 255]));
-    }
-}

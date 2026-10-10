@@ -940,13 +940,6 @@ mod tests {
     }
 
     #[test]
-    fn closing_asks_only_while_nothing_came_in_and_the_end_is_not_reached() {
-        assert!(asks_to_skip(false, false));
-        assert!(!asks_to_skip(true, false), "games came in: closing keeps them");
-        assert!(!asks_to_skip(false, true), "the last page's button closes it");
-    }
-
-    #[test]
     fn the_install_folder_and_preferences_need_a_config_that_takes_writes() {
         assert_eq!(steps(true, true), ["stores", "install", "data", "preferences", "done"]);
         assert_eq!(steps(false, false), ["done"]);

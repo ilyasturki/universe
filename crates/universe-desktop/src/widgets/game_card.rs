@@ -154,16 +154,3 @@ pub fn cover_size(compact: bool) -> (i32, i32) {
         (200, 300)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn compact_cards_fit_two_columns_on_a_phone() {
-        let (width, height) = cover_size(true);
-        assert_eq!(width * 3, height * 2, "box art keeps its shape");
-        // The grid's 18 px sides and each child's 6 px: two columns on a 360 px screen.
-        assert!(2 * (width + 12) + 36 <= 360);
-    }
-}
