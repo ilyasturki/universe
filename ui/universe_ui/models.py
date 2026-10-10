@@ -441,17 +441,26 @@ class RecentOrderGames(GameProxy):
         self._sort_name = "recentAt"
         self._descending = True
         self._playing = ""
+        # When each game's session ended in this run, in ms: it ranks as played then before the library's last_played says so.
+        self._ended = {}
 
     def _set_playing(self, ident):
         ident = str(ident or "")
         if ident == self._playing:
             return
-        self._playing = ident
+        ended, self._playing = self._playing, ident
         self.playingIdChanged.emit()
-        self.invalidate()
+        if ended:
+            self._ended[ended] = QDateTime.currentMSecsSinceEpoch()
+        # The game that ended stays first, ranked by its end: no new layout, which a view takes as a reset of every delegate.
+        if ident or self._sort_name != "recentAt" or not self._descending:
+            self.invalidate()
 
     def sortKey(self, game):
-        return (2 if game.id == self._playing else 0, *super().sortKey(game))
+        key = super().sortKey(game)
+        if (ended := self._ended.get(game.id)) is not None:
+            key = max(key, (1, ended))
+        return (2 if game.id == self._playing else 0, *key)
 
     playingId = Property(str, lambda self: self._playing, _set_playing, notify=playingIdChanged)
 
@@ -459,7 +468,7 @@ class RecentOrderGames(GameProxy):
 @QmlElement
 class RecentGames(RecentOrderGames):
     def acceptsGame(self, game, source_row):
-        return game.playCount > 0 or game.addedAt is not None or game.id == self._playing
+        return game.playCount > 0 or game.addedAt is not None or game.id == self._playing or game.id in self._ended
 
 
 @QmlElement

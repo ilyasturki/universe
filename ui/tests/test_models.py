@@ -1,4 +1,4 @@
-from uitest import until
+from uitest import record, until
 
 from universe_ui.models import (
     Game,
@@ -47,7 +47,10 @@ def test_recent_games(api):
     recent.playingId = api.allGames.byId("mirrors-edge").id
     assert titles(recent)[:2] == ["Mirror's Edge", "The Technomancer"] and recent.count == 8
     recent.playingId = "dead-cells"
-    assert titles(recent)[:2] == ["Dead Cells", "The Technomancer"] and recent.count == 7
+    assert titles(recent)[:3] == ["Dead Cells", "Mirror's Edge", "The Technomancer"] and recent.count == 8, "an ended game stays ahead"
+    reordered = record(recent.layoutChanged)
+    recent.playingId = ""
+    assert titles(recent)[0] == "Dead Cells" and not reordered, "a session's end changes no layout, which a view takes for a reset"
 
 
 def test_anchor_follows_the_game_across_a_reorder(api):
@@ -64,24 +67,21 @@ def test_anchor_follows_the_game_across_a_reorder(api):
     anchor.moved.connect(follow)
     anchor.index = 3
     assert anchor.game.id == "dead-cells"
-    recent.playingId = "mirrors-edge"
-    assert anchor.game.id == "dead-cells"
-    until(lambda: moves == [4])
-    assert anchor.game.id == "dead-cells"
-    recent.playingId = ""
-    until(lambda: moves == [4, 3])
-    anchor.hold("mini-metro")
-    assert moves == [4, 3, 2] and anchor.game.id == "mini-metro"
     anchor.hold("mirrors-edge")
-    assert moves == [4, 3, 2] and anchor.game.id == "mini-metro", "not in the rows yet: held until it shows up"
+    assert moves == [] and anchor.game.id == "dead-cells", "not in the rows yet: held until it shows up"
     recent.playingId = "mirrors-edge"
-    until(lambda: moves == [4, 3, 2, 0])
+    until(lambda: moves == [0])
     assert anchor.game.id == "mirrors-edge"
+    anchor.hold("dead-cells")
+    assert moves == [0, 4] and anchor.game.id == "dead-cells"
+    recent.playingId = "control"
+    until(lambda: moves == [0, 4, 5])
+    assert anchor.game.id == "dead-cells"
     anchor.hold("no-such-game")
     anchor.index = 3
-    recent.playingId = ""
-    until(lambda: moves == [4, 3, 2, 0, 2], "the cursor's move re-holds")
-    assert anchor.game.id == "mini-metro", "the cursor's move re-holds"
+    recent.playingId = "lego-batman"
+    until(lambda: moves == [0, 4, 5, 4], "the cursor's move re-holds")
+    assert anchor.game.id == "batman-arkham-origins", "the cursor's move re-holds"
     library = LibraryGames()
     library.setSourceModel(api.allGames)
     anchor.model = library
@@ -89,7 +89,7 @@ def test_anchor_follows_the_game_across_a_reorder(api):
     assert anchor.game.id == "the-technomancer"
     library.setSourceModel(api.collections.get(0).games)
     until(lambda: anchor.game is library.get(0), "a reset is another list: the row stands")
-    assert moves == [4, 3, 2, 0, 2, 1]
+    assert moves == [0, 4, 5, 4, 6]
 
 
 def test_sorted_and_limited(api):

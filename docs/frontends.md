@@ -375,7 +375,9 @@ overlay window (the desktop) HOME itself is that. A dock still up when the windo
 the full one in place, the cursor back on Resume, and freezes the game then if `pause_on_home` asks.
 
 From there the launcher is home again, with the game pinned first on the rail (`RecentGames.
-playingId`, played before or not) under a PLAYING mark (PAUSED while frozen), its art the last
+playingId`, played before or not; once its session ends it stays there, ranked by that end, with no
+new layout: a view takes a hint-less layout change as a reset of every delegate) under a PLAYING
+mark (PAUSED while frozen), its art the last
 frame gamescope painted when HOME brought the launcher up (`api.home.frame`, `nest_frame`), its
 hero's first button reading "Resume", and the tab bar's badge "<title> · m:ss" on every tab; the badge is a
 chrome slot past the glass and the power button: A resumes, Start opens the game menu. A resumes on the pinned game
