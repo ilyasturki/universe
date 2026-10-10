@@ -102,7 +102,8 @@ FocusScope {
                     type: "enum",
                     display: r.display,
                     choices: r.choices,
-                    value: r.value
+                    value: r.value,
+                    form: i
                 });
             else if (String(r.key).indexOf("controller.layout.") === 0)
                 out.push({
@@ -319,7 +320,7 @@ FocusScope {
                 index: choices.indexOf(String(row.value))
             }, function (i) {
                 if (i >= 0)
-                    controller.setValue(index, choices[i]);
+                    controller.setValue(row.form, choices[i]);
             });
         } else if (row.slot !== undefined) {
             Sound.play("ok");

@@ -4,6 +4,7 @@ from PySide6.QtCore import QObject, Qt
 from uitest import until
 
 from universe_ui.fake_radios import PASSWORD
+from universe_ui.screens.controller import FakeWatcher
 
 PAD = "98:B6:E9:12:34:56"
 KEYBOARD = "F0:3E:90:AB:CD:EF"
@@ -203,3 +204,26 @@ def test_the_controllers_page_searches_for_pads(look, api, fake):
     until(lambda: read(settings, "sectionId") == "bluetooth" and shows(settings, key="device", address=PAD))
     kinds = {r["kind"] for r in content_rows(settings) if r.get("key") == "device"}
     assert kinds == {"pad"}, "the search shows pads alone"
+
+
+@pytest.mark.parametrize("look", ["switch2", "ps5"], indirect=True)
+def test_the_controllers_page_picks_a_pad_and_its_models_layout(look, api, fake):
+    api.screens.controller.start(FakeWatcher("dualsense-edge,xbox-elite"))
+    page = look.open("pages/ControllersPage.qml")
+    until(lambda: any(r.get("key") == "device" for r in read(page, "entries")) and page.findChild(QObject, "pairController"))
+    entries = read(page, "entries")
+    i = next(i for i, r in enumerate(entries) if r.get("key") == "device")
+    invoke(page, "activate", i, entries[i])
+    menu = look.menu()
+    until(lambda: menu.property("open") is True)
+    look.press(Qt.Key.Key_Down)
+    look.press(Qt.Key.Key_Return)
+    until(lambda: api.screens.controller.current == "event31", "the second pad picked")
+    until(lambda: menu.property("open") is False)
+    entries = read(page, "entries")
+    i = next(i for i, r in enumerate(entries) if r.get("key") == "controller.layout.xbox-elite")
+    invoke(page, "activate", i, entries[i])
+    until(lambda: menu.property("open") is True)
+    look.press(Qt.Key.Key_Down)
+    look.press(Qt.Key.Key_Return)
+    until(lambda: fake.config()["controller"]["layout"] == {"xbox-elite": "positional"}, "the model's layout set from its card")

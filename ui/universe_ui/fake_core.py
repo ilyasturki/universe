@@ -415,7 +415,7 @@ class FakeCore:
             **(self._config.get("launch") or {}),
         }
         for section, defaults in CONFIG.items():
-            self._config[section] = {**defaults, **(self._config.get(section) or {})}
+            self._config[section] = {**copy.deepcopy(defaults), **(self._config.get(section) or {})}
         self._tmp = tempfile.TemporaryDirectory(prefix="universe-fake-") if root is None else None
         self._root = Path(self._tmp.name if self._tmp is not None else str(root))
         self._cache = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "universe", "fake-art")
