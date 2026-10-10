@@ -154,6 +154,11 @@ def drift(core, fake, path=""):
         yield f"{path.rstrip('.')}: {'|'.join(sorted(_types(core)))} | {'|'.join(sorted(_types(fake)))}"
 
 
+# The machine's own desktop and session, which a core would read instead of the profile's.
+HOST_VARS = ("DISPLAY", "WAYLAND_DISPLAY", "GAMESCOPE_WAYLAND_DISPLAY", "SWAYSOCK", "HYPRLAND_INSTANCE_SIGNATURE", "NIRI_SOCKET", "XDG_CURRENT_DESKTOP")
+HOST_VARS += ("SteamGameId", "UNIVERSE_SESSION", "UNIVERSE_OWN_GAMESCOPE")
+
+
 @pytest.fixture(scope="module")
 def cores(app, tmp_path_factory):
     with pytest.MonkeyPatch.context() as env, seeded(tmp_path_factory.mktemp("contract"), env) as both:
@@ -188,6 +193,10 @@ def seeded(root, env, files=None):
     index = root / "index.json"
     index.write_text(json.dumps({"schema": 1, "extensions": json.loads(EXTENSIONS.read_text())["extensions"][:1]}))
     env.setenv("PATH", f"{os.environ['PATH']}{os.pathsep}{stubs}")
+    for name in HOST_VARS:
+        env.delenv(name, raising=False)
+    env.setenv("HOME", str(root / "home"))
+    env.setenv("DBUS_SYSTEM_BUS_ADDRESS", "unix:path=/dev/null/bus")
     env.setenv("UNIVERSE_EXTENSIONS_INDEX", str(index))
     for kind in ("data", "config", "state", "cache"):
         env.setenv(f"UNIVERSE_{kind.upper()}_HOME", str(root / kind))
@@ -408,8 +417,6 @@ KNOWN_SESSION = {}
 def test_a_stopped_session_ends_alike_on_both_cores(profile, user_systemd, tmp_path, monkeypatch):
     from uitest import until
 
-    for name in ("DISPLAY", "WAYLAND_DISPLAY", "GAMESCOPE_WAYLAND_DISPLAY", "SWAYSOCK", "HYPRLAND_INSTANCE_SIGNATURE", "NIRI_SOCKET"):
-        monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("PATH", f"{Path(__file__).with_name('shims')}{os.pathsep}{os.environ['PATH']}")
     game = tmp_path / "sleeper"
     game.write_text("#!/bin/sh\nexec sleep 600\n")
