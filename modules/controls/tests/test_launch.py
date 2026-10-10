@@ -192,11 +192,8 @@ def pro3_device(layout):
 def test_each_pad_held_gets_its_own_face_unless_the_game_names_one(universe, launch, layout, override):
     universe("module", "set", "controls", f"layout={layout}")
     held = ["EDGE", "PRO3_DINPUT"]
-    if layout == "pad":
-        # Cross counts as A, so the Edge's A sits at the bottom; the Pro 3's A is printed on the right, or where its model is set.
-        expected = {"EDGE": "xbox", "PRO3_DINPUT": override or "positional"}
-    else:
-        expected = dict.fromkeys(held, layout)
+    # On `pad`, Cross counts as A, so the Edge's A sits at the bottom; the Pro 3's A is printed on the right, or where its model is set.
+    expected = {"EDGE": "xbox", "PRO3_DINPUT": override or "positional"} if layout == "pad" else dict.fromkeys(held, layout)
 
     launch("double-dash", held, [pro3_device(override)])
     gcpads = launch.ini("dolphin-emu", "GCPadNew.ini")
