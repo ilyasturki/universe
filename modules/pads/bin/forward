@@ -41,7 +41,36 @@ class Forwarder:
         self.sent: dict[int, float] = {}
         self.frozen = False
         self.stopping = False
+        self.reconnecting = False
         self.epoch = time.monotonic_ns()
+
+    def on_signal(self, signum, _frame):
+        if signum == signal.SIGUSR1:
+            self.frozen = True
+        elif signum == signal.SIGUSR2:
+            self.frozen = False
+        elif signum == signal.SIGHUP:
+            self.reconnecting = True
+        else:
+            self.stopping = True
+
+    def recreate(self):
+        """Every player's virtual pad destroyed and made again, same name, product and uniq: the emulator sees it unplugged and
+        back under the same GUID. The physical pads are let go and taken up afresh as SDL lists them again."""
+        self.reconnecting = False
+        for pad in self.held.values():
+            pad.close()
+        self.held.clear()
+        players = [s.player for s in self.slots]
+        for slot in self.slots:
+            slot.close()
+        self.slots = [VirtualPad(p) for p in players]
+        log(f"recreated {len(self.slots)} virtual pad(s)")
+        self.sdl.SDL_QuitSubSystem(_sdl.INIT_GAMEPAD)
+        if not self.sdl.SDL_InitSubSystem(_sdl.INIT_GAMEPAD):
+            log(f"SDL_InitSubSystem: {self.sdl.SDL_GetError().decode(errors='replace')}")
+        quiet(self.sdl)
+        self.publish()
 
     def tick_us(self):
         return (time.monotonic_ns() - self.epoch) // 1000
@@ -155,6 +184,13 @@ class Event:
         self._as_parameter_ = ctypes.cast(self.raw, ctypes.c_void_p)
 
 
+def quiet(sdl):
+    """Only a pad's whole report wakes the loop; set again after a re-init, which may start SDL's events afresh."""
+    for kind in QUIET:
+        sdl.SDL_SetEventEnabled(kind, False)
+    sdl.SDL_SetEventEnabled(_sdl.EVENT_GAMEPAD_UPDATE_COMPLETE, True)
+
+
 def unit_state(unit):
     r = subprocess.run(["systemctl", "--user", "is-active", unit], capture_output=True, text=True, check=False)
     return r.stdout.strip()
@@ -175,22 +211,11 @@ def main():
     if not sdl.SDL_Init(_sdl.INIT_GAMEPAD):
         log(f"SDL_Init: {sdl.SDL_GetError().decode(errors='replace')}")
         return 1
-    for kind in QUIET:
-        sdl.SDL_SetEventEnabled(kind, False)
-    sdl.SDL_SetEventEnabled(_sdl.EVENT_GAMEPAD_UPDATE_COMPLETE, True)
+    quiet(sdl)
 
     fw = Forwarder(sdl, session_id, guide)
-
-    def on_signal(signum, _frame):
-        if signum == signal.SIGUSR1:
-            fw.frozen = True
-        elif signum == signal.SIGUSR2:
-            fw.frozen = False
-        else:
-            fw.stopping = True
-
-    for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGUSR1, signal.SIGUSR2):
-        signal.signal(signum, on_signal)
+    for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGUSR1, signal.SIGUSR2, signal.SIGHUP):
+        signal.signal(signum, fw.on_signal)
 
     event = Event()
     try:
@@ -208,6 +233,8 @@ def main():
         seen = False
         next_check = began
         while not fw.stopping:
+            if fw.reconnecting:
+                fw.recreate()
             if sdl.SDL_WaitEventTimeout(event, 1):
                 fw.dispatch(event.raw)
             fw.pump(event)

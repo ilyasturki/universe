@@ -2,7 +2,9 @@ import importlib.machinery
 import importlib.util
 import json
 import math
+import os
 import shutil
+import signal
 import stat
 import struct
 import sys
@@ -176,3 +178,62 @@ def test_a_forwarder_that_never_comes_up_does_not_hide_the_pads(hook):
     env, args = run(EDEN)
     assert env == ""
     assert args is not None
+
+
+class FakeSdl:
+    """The forwarder's SDL, as far as a re-init goes: what was asked of it."""
+
+    def __init__(self):
+        self.calls = []
+
+    def SDL_QuitSubSystem(self, flags):
+        self.calls.append(("quit", flags))
+
+    def SDL_InitSubSystem(self, flags):
+        self.calls.append(("init", flags))
+        return True
+
+    def SDL_SetEventEnabled(self, kind, on):
+        pass
+
+
+def uhid_events(data):
+    """The (type, name, uniq, product) of each event written to /dev/uhid, in order."""
+    out, at = [], 0
+    while at < len(data):
+        (kind,) = struct.unpack_from("<I", data, at)
+        if kind == _pads.UHID_CREATE2:
+            _, name, _phys, uniq, rd_size, _bus, _vendor, product, _version, _country = struct.unpack_from("<I128s64s64sHHIIII", data, at)
+            out.append(("create", name.rstrip(b"\0").decode(), uniq.rstrip(b"\0").decode(), product))
+            at += struct.calcsize("<I128s64s64sHHIIII") + rd_size
+        else:
+            out.append(("destroy" if kind == _pads.UHID_DESTROY else kind, "", "", 0))
+            at += 4
+    return out
+
+
+def test_a_hangup_makes_every_virtual_pad_again_under_its_own_name_and_uniq(tmp_path, monkeypatch):
+    uhid = tmp_path / "uhid"
+    os.mkfifo(uhid)
+    reader = os.open(uhid, os.O_RDONLY | os.O_NONBLOCK)
+    monkeypatch.setattr(_pads, "UHID", str(uhid))
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    forward = _script("forward")
+    sdl = FakeSdl()
+    fw = forward.Forwarder(sdl, "s1", False)
+    fw.add_slot()
+    fw.add_slot()
+    created = uhid_events(os.read(reader, 65536))
+    previous = signal.signal(signal.SIGHUP, fw.on_signal)
+    try:
+        os.kill(os.getpid(), signal.SIGHUP)
+    finally:
+        signal.signal(signal.SIGHUP, previous)
+    assert fw.reconnecting, "the hook's signal reaches the forwarder"
+    fw.recreate()
+    again = uhid_events(os.read(reader, 65536))
+    assert [e[0] for e in again] == ["destroy", "destroy", "create", "create"]
+    assert again[2:] == created, "each player's pad back under the same name, uniq and product"
+    assert sdl.calls == [("quit", forward._sdl.INIT_GAMEPAD), ("init", forward._sdl.INIT_GAMEPAD)], "the physical pads are listed afresh"
+    fw.close()
+    os.close(reader)

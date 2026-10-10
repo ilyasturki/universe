@@ -43,6 +43,8 @@ _SIGNATURES = {
     "SDL_SetHint": (ctypes.c_bool, [ctypes.c_char_p, ctypes.c_char_p]),
     "SDL_Init": (ctypes.c_bool, [ctypes.c_uint32]),
     "SDL_Quit": (None, []),
+    "SDL_InitSubSystem": (ctypes.c_bool, [ctypes.c_uint32]),
+    "SDL_QuitSubSystem": (None, [ctypes.c_uint32]),
     "SDL_GetError": (ctypes.c_char_p, []),
     "SDL_SetEventEnabled": (None, [ctypes.c_uint32, ctypes.c_bool]),
     "SDL_WaitEventTimeout": (ctypes.c_bool, [_P, ctypes.c_int32]),

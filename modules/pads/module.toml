@@ -14,6 +14,7 @@ runner_kinds = ["emulator"]
 pre-launch  = "bin/pre"
 freeze      = "bin/freeze"
 thaw        = "bin/thaw"
+reconnect   = "bin/reconnect"
 session-end = "bin/stop"
 timeout_s   = 10
 
