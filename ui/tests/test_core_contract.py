@@ -176,11 +176,15 @@ def seeded(root, env, files=None):
     # The core leaves out a module whose binary is missing: a stub stands in for each one this machine lacks.
     stubs = root / "bin"
     stubs.mkdir()
+
+    def stub(name):
+        if shutil.which(name) is None:
+            (stubs / name).write_text("#!/bin/sh\nexit 1\n")
+            (stubs / name).chmod(0o755)
+
     for manifest in [*ROOT.glob("modules/*/module.toml"), *ROOT.glob("sources/*/source.toml")]:
         for name in tomllib.loads(manifest.read_text()).get("requires", {}).get("bins", []):
-            if shutil.which(name) is None:
-                (stubs / name).write_text("#!/bin/sh\nexit 1\n")
-                (stubs / name).chmod(0o755)
+            stub(name)
     index = root / "index.json"
     index.write_text(json.dumps({"schema": 1, "extensions": json.loads(EXTENSIONS.read_text())["extensions"][:1]}))
     env.setenv("PATH", f"{os.environ['PATH']}{os.pathsep}{stubs}")
@@ -189,9 +193,14 @@ def seeded(root, env, files=None):
         env.setenv(f"UNIVERSE_{kind.upper()}_HOME", str(root / kind))
     for kind in ("modules", "sources"):
         env.setenv(f"UNIVERSE_{kind.upper()}_PATH", str(ROOT / kind))
-    fake = FakeCore(FIXTURE, root / "fake")
+    core, fake = universe_core.Core(), FakeCore(FIXTURE, root / "fake")
+    # A runner the fixture finds on PATH is on this machine's too, whatever it has installed.
+    found = {r["id"] for r in json.loads(FIXTURE.read_text())["runners"] if r.get("source") == "path"}
+    for runner in core.runners():
+        if runner["id"] in found and runner["binaries"]:
+            stub(runner["binaries"][0])
     try:
-        yield universe_core.Core(), fake
+        yield core, fake
     finally:
         fake.shutdown()
 
