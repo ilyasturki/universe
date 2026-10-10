@@ -1396,7 +1396,10 @@ nodes, and load uhid at boot; on NixOS `programs.universe.controller.enable`) or
 SDL3, the hook logs why and the game gets the physical pads.
 `$XDG_RUNTIME_DIR/universe/pads-<session>.json` holds `{ready, pid, players: [{player, name, vendor,
 product, pad}]}` while the forwarder runs; it stops with the session, or by itself once the game's
-unit is gone.
+unit is gone. Its `reconnect` hook (Reconnect in the dock, `universe controller reconnect`) sends the
+forwarder SIGHUP: every virtual pad is destroyed and made again under the same name, product and
+uniq, so the emulator sees it unplugged and back with the same GUID, and SDL lists the physical pads
+afresh.
 
 ## Emulator controls
 
@@ -1640,6 +1643,7 @@ written as `<key>.<name>` (`entry_key`), `""` removing it.
 |---|---|---|---|
 | `controller_state()` | `controller_state()` | `universe controller ls` | `{enabled, hold_ms, volume_step (a percent, number), home_summons, families: [{id, name, slots: [{id, label, codes, extra}]}], macros: [Macro], presets: [{id, label, hold_only}]}`; the CLI adds `devices`, the pads readable now with every slot's code or `bound: false` |
 | `controller_pads()` | `controller_pads()` | — | the `devices` list alone, in the shape `watch` announces; for a frontend whose watcher waits on the lock |
+| `controller_reconnect(id)` | `controller_reconnect(id)` | `universe controller reconnect [id\|all]` | `[{id, name, bus, outcome}]` for the pad `id` (every pad for `all` or empty; an id no pad has is `NotFound`): a Bluetooth pad (its device `address`) is disconnected through BlueZ, then connected again for up to 5 s — `back`, or `asleep` when it switched itself off and waits for its PS or HOME button; a pad on a cable is `cable` (re-plugging one in software needs root: pull it out and back); `failed` when BlueZ cannot be asked. Then the running game's modules' `reconnect` hooks run, as `freeze` does |
 | `set_controller_macro(macro)` | same | `universe controller bind <family> <button> <press\|hold> <action> [--keys K] [--command C]` | validates, replaces the macro with the same family, button and trigger |
 | `remove_controller_macro(family, button, trigger)` | same | `universe controller unbind <family> <button> [trigger]` | an empty trigger removes both |
 | `set_controller_button(family, slot, codes)` | same | `universe controller learn <family> <slot>` · `forget` | the codes a slot answers to: a list (empty leaves it unbound), `None` restores the seeds. `learn` reads the pad instead: the next button pressed becomes the slot's, taken from whichever slot had it |
@@ -1697,8 +1701,10 @@ real pad is connected, so the pad shown is the one with its own family and extra
 game, SDL or Proton reads the same node untouched), rescans every 2 s (hotplug, and pads
 InputPlumber hides by chmod 000 are dropped while hidden), and with `--json` speaks one object per
 line: out — `{"event":"ready"}`, `{"event":"device","id":"event30","name","family","family_name",
-"bus","vendor","product","slots":{"<slot>":{"code","bound"}},"axes":{"<role>":"ABS_Z"},"sdl":{"<slot>":"b3"},"sdl_axes":{"<role>":"a2"},"layout","printed_layout","battery"}`
-(`axes` names the evdev axis behind `lx ly rx ry lt rt`, by the pad's shape — Z/RZ are triggers next
+"bus","vendor","product","slots":{"<slot>":{"code","bound"}},"axes":{"<role>":"ABS_Z"},"sdl":{"<slot>":"b3"},"sdl_axes":{"<role>":"a2"},"layout","printed_layout","address","battery"}`
+(`layout` is `[controller.layout]`'s choice for the pad's family, empty when its print decides, and `printed_layout` the
+print's, `positional` for A on the right; `address` is BlueZ's for a pad on Bluetooth, empty on a cable;
+`axes` names the evdev axis behind `lx ly rx ry lt rt`, by the pad's shape — Z/RZ are triggers next
 to RX/RY, the right stick without them — or as `[controller.axes.<family>]` learned it, `-` on one
 thrown backwards; `sdl`/`sdl_axes` number the same as SDL's Linux joystick does, `~` on a backwards
 axis; `battery {percent, charging}` when the watcher reads it itself, since the kernel keeps no
@@ -1715,7 +1721,11 @@ changed), `learn {id, slot}` or `learn {id, axis}` (a role `lx ly rx ry lt rt`, 
 held past 40 % for 150 ms, the furthest thrown when several: `ABS_Z`, or `ABS_Z-` when it went the other way; `except`, a list of
 axis names, keeps those from answering — the walk names the stick it has already placed), `cancel`, `rumble {id}`, `run {action, keys, command}` (fire an action as a
 macro would — `mangohud`, `keys` with a combo, `screenshot`…: the launcher's home menu types
-through the watcher, the process that owns the key typist, and only once the game is thawed), `quit`. Stdin's end stops a `--json` watcher. A
+through the watcher, the process that owns the key typist, and only once the game is thawed), `rescan`
+or `rescan {id}` (every pad, or the one, closed and opened again, and every event node passed over
+— one that would not open, or no pad at first sight — tried again: a node is otherwise only retried
+once it disappears; answered by `rescanned {devices, skipped}`, the pads held now and the nodes
+passed over again), `quit`. Stdin's end stops a `--json` watcher. A
 watcher also reloads by itself when `config.toml`'s mtime moves (checked on the 2 s scan), so a
 bind from a terminal or from a launcher whose own watcher is waiting reaches the one holding the
 pads. Either reload rereads config.toml and the module list only, never the library, so pad
@@ -1920,6 +1930,7 @@ pre-launch   = "bin/pre"          # blocking, before the game's unit; may write 
 post-launch  = "bin/start"        # async (transient unit); anything that must last the session goes in its own unit with BindsTo=$SESSION_UNIT
 freeze       = "bin/freeze"       # blocking, right after the game's unit froze (HOME over the game); thaw = right after it thawed
 thaw         = "bin/thaw"
+reconnect    = "bin/reconnect"    # blocking, after a pad of the running game's was reconnected (the dock's Reconnect)
 session-end  = "bin/stop"         # short and blocking, inside the game unit's ExecStopPost; this is where a recording is filed
 post-process = "bin/process"      # async (transient unit), after the session-end hooks
 screenshot   = "bin/shot"         # on demand: prints the png's path, and before it `grabbed` (flushed) the moment it holds the pixels
