@@ -113,10 +113,14 @@ Item {
         landing = true;
         Qt.callLater(function () {
             landing = false;
-            if (scroller.view)
+            if (scroller.alive && scroller.view)
                 scroller.show(scroller.view.currentIndex, true);
         });
     }
+
+    // A page closed in the same turn takes its functions with it; the call queued above finds this false.
+    property bool alive: true
+    Component.onDestruction: alive = false
 
     onSpanChanged: if (follow)
         land()
