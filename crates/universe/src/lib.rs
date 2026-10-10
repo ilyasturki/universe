@@ -73,7 +73,7 @@ pub fn dies_with_parent(cmd: &mut tokio::process::Command) -> &mut tokio::proces
     // SAFETY: the closure runs between fork and exec, and calls only async-signal-safe functions and allocates nothing.
     unsafe {
         cmd.pre_exec(move || {
-            if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) != 0 {
+            if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL as libc::c_ulong) != 0 {
                 return Err(std::io::Error::last_os_error());
             }
             // The parent may have died before prctl armed the signal.
