@@ -1,0 +1,16 @@
+name: nightly
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+jobs:
+  # Every recorded pad of tests/pads through the real kernel drivers in a NixOS VM (KVM): too slow for every push
+  vm-pads:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: DeterminateSystems/nix-installer-action@v23
+      - uses: DeterminateSystems/magic-nix-cache-action@v15
+        with:
+          use-flakehub: disabled
+      - run: nix build .#vmChecks.x86_64-linux.pads --no-link -L
