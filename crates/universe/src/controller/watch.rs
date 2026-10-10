@@ -481,6 +481,157 @@ pub fn enumerate_json(cfg: &ControllerConfig) -> Vec<serde_json::Value> {
     out
 }
 
+/// A pad as tests/pads keeps it, read off its node: ids, name, keys, axis ranges and rumble, its family's print, the driver bound to the
+/// device the node hangs off and the HID report descriptor beneath it. `device` (the sysfs device) is for a module's view to find it by.
+fn record_of(id: &str, path: &Path, dev: &Device) -> serde_json::Value {
+    let c = describe(dev);
+    let input = dev.input_id();
+    let abs: serde_json::Map<String, serde_json::Value> = dev
+        .get_absinfo()
+        .map(|it| it.map(|(code, i)| (format!("{code:?}"), serde_json::json!([i.minimum(), i.maximum(), i.fuzz(), i.flat()]))).collect())
+        .unwrap_or_default();
+    let rumble = dev.supported_ff().is_some_and(|ff| ff.contains(evdev::FFEffectCode::FF_RUMBLE));
+    let device = device_of(Path::new("/sys"), path);
+    let driver = device.as_ref().and_then(|d| std::fs::read_link(d.join("driver")).ok()).and_then(|l| l.file_name().map(|f| f.to_string_lossy().into_owned()));
+    let descriptor = device.as_ref().and_then(|d| std::fs::read(d.join("report_descriptor")).ok()).filter(|d| !d.is_empty());
+    let today = format!("captured on {}", chrono::Local::now().format("%Y-%m-%d"));
+    let mut source = serde_json::json!({"evdev": today});
+    let mut out = serde_json::json!({
+        "id": id,
+        "pad": c.family.name,
+        "family": c.family.id,
+        "bus": bus_name(dev),
+        "driver": driver.unwrap_or_default(),
+        "print": c.family.slots().take(4).map(|s| (s.id.to_string(), serde_json::json!(s.label))).collect::<serde_json::Map<_, _>>(),
+        "evdev": {
+            "name": c.name,
+            "vendor": format!("{:04x}", input.vendor()),
+            "product": format!("{:04x}", input.product()),
+            "version": format!("{:04x}", input.version()),
+            "keys": c.keys.iter().map(|k| keys::key_name(*k)).collect::<Vec<_>>(),
+            "abs": abs,
+            "ff": rumble,
+        },
+        "device": device.map(|d| d.to_string_lossy().into_owned()).unwrap_or_default(),
+    });
+    if let Some(descriptor) = descriptor {
+        source["hid"] = serde_json::json!(today);
+        out["hid"] = serde_json::json!({"descriptor": descriptor.iter().map(|b| format!("{b:02x}")).collect::<String>()});
+    }
+    out["source"] = source;
+    out
+}
+
+/// Every pad `controller ls` shows, recorded as tests/pads keeps one (`record_of`); `id` keeps that one.
+pub fn record_json(id: &str) -> Vec<serde_json::Value> {
+    let pads: Vec<(PathBuf, Device)> = evdev::enumerate().filter(|(_, dev)| is_pad(dev)).collect();
+    let ids: Vec<(u16, u16)> = pads.iter().map(|(_, d)| (d.input_id().vendor(), d.input_id().product())).collect();
+    let shown = shown_pads(crate::deck::model().is_some(), &ids);
+    let mut out: Vec<serde_json::Value> = pads
+        .into_iter()
+        .zip(shown)
+        .filter(|(_, shown)| *shown)
+        .map(|((path, dev), _)| (path.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default(), path, dev))
+        .filter(|(name, _, _)| id.is_empty() || name == id)
+        .map(|(name, path, dev)| record_of(&name, &path, &dev))
+        .collect();
+    out.sort_by(|a, b| a["id"].as_str().cmp(&b["id"].as_str()));
+    out
+}
+
+/// How long a step of the walk waits for its button before it is skipped.
+const WALK_STEP: Duration = Duration::from_secs(10);
+/// A stick or trigger past 60% of its throw from where it rested: the step's answer.
+const WALK_THROW: f64 = 0.6;
+const WALK_AXES: [(&str, &str); 6] = [
+    ("lx", "push the left stick right"),
+    ("ly", "push the left stick down"),
+    ("rx", "push the right stick right"),
+    ("ry", "push the right stick down"),
+    ("lt", "pull the left trigger"),
+    ("rt", "pull the right trigger"),
+];
+
+/// Each slot of the pad's family pressed in turn, then each stick pushed and trigger pulled: what the pad reports for each, as
+/// tests/pads keeps them under `buttons` (slot → `BTN_…` or `ABS_…±`) and `axes` (role → `ABS_…`, `-` when it runs backwards).
+/// `ask` names each step (its id, what to do); one left alone for `WALK_STEP` is skipped.
+pub async fn walk(path: &Path, ask: impl Fn(&str, &str)) -> crate::Result<(serde_json::Value, serde_json::Value)> {
+    let dev = Device::open(path)?;
+    let family = describe(&dev).family;
+    let ranges: BTreeMap<u16, (i32, i32, i32)> =
+        dev.get_absinfo().map(|it| it.map(|(c, i)| (c.0, (i.minimum(), i.maximum(), i.value()))).collect()).unwrap_or_default();
+    let mut stream = dev.into_event_stream()?;
+    let mut rest: BTreeMap<u16, i32> = ranges.iter().map(|(c, (_, _, v))| (*c, *v)).collect();
+    // How far an axis is from where it rested, as a share of its range, signed.
+    let thrown = |code: u16, value: i32, rest: &BTreeMap<u16, i32>| {
+        let (min, max, _) = ranges.get(&code).copied().unwrap_or((-1, 1, 0));
+        f64::from(value - rest.get(&code).copied().unwrap_or(0)) / f64::from((max - min).max(1))
+    };
+    let mut buttons = serde_json::Map::new();
+    for slot in family.slots() {
+        ask(slot.id, slot.label);
+        let mut axis: Option<Source> = None;
+        let answer = tokio::time::timeout(WALK_STEP, async {
+            loop {
+                // A trigger crossing its throw waits a moment for the click at the end of its pull, which a slot is read by first.
+                let next = match axis {
+                    Some(_) => tokio::time::timeout(Duration::from_millis(300), stream.next_event()).await,
+                    None => Ok(stream.next_event().await),
+                };
+                let Ok(event) = next else { return axis };
+                match event.ok()?.destructure() {
+                    EventSummary::Key(_, key, 1) => return Some(Source::Key(key.code())),
+                    EventSummary::AbsoluteAxis(_, a, v) if (16..=23).contains(&a.0) && v != 0 && axis.is_none() => {
+                        return Some(Source::Axis { code: a.0, positive: v > 0 })
+                    }
+                    EventSummary::AbsoluteAxis(_, a, v) if !(16..=23).contains(&a.0) && axis.is_none() && thrown(a.0, v, &rest).abs() > WALK_THROW / 2.0 => {
+                        axis = Some(Source::Axis { code: a.0, positive: thrown(a.0, v, &rest) > 0.0 });
+                    }
+                    _ => {}
+                }
+            }
+        })
+        .await
+        .ok()
+        .flatten();
+        if let Some(source) = answer {
+            buttons.insert(slot.id.into(), serde_json::json!(source.to_string()));
+        }
+        settle(&mut stream, &mut rest).await;
+    }
+    let mut axes = serde_json::Map::new();
+    for (role, what) in WALK_AXES {
+        ask(role, what);
+        let answer = tokio::time::timeout(WALK_STEP, async {
+            loop {
+                if let EventSummary::AbsoluteAxis(_, a, v) = stream.next_event().await.ok()?.destructure() {
+                    if !(16..=23).contains(&a.0) && thrown(a.0, v, &rest).abs() > WALK_THROW {
+                        return Some(format!("{a:?}{}", if thrown(a.0, v, &rest) < 0.0 && !matches!(role, "lt" | "rt") { "-" } else { "" }));
+                    }
+                }
+            }
+        })
+        .await
+        .ok()
+        .flatten();
+        if let Some(name) = answer {
+            axes.insert(role.into(), serde_json::json!(name));
+        }
+        settle(&mut stream, &mut rest).await;
+    }
+    Ok((serde_json::Value::Object(buttons), serde_json::Value::Object(axes)))
+}
+
+/// Until nothing has moved for half a second (two at most): what the last step pressed is let go, and where each axis sits now is its rest.
+async fn settle(stream: &mut evdev::EventStream, rest: &mut BTreeMap<u16, i32>) {
+    let until = Instant::now() + Duration::from_secs(2);
+    while let Ok(Ok(event)) = tokio::time::timeout(Duration::from_millis(500).min(until.saturating_duration_since(Instant::now())), stream.next_event()).await {
+        if let EventSummary::AbsoluteAxis(_, a, v) = event.destructure() {
+            rest.insert(a.0, v);
+        }
+    }
+}
+
 fn pad_task(
     id: String,
     dev: Device,

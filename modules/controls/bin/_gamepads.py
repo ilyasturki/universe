@@ -79,6 +79,61 @@ class Pad:
     device: str = ""
 
 
+FULL = (-32768, 32767)
+
+
+def _element(inp):
+    if inp.kind == BIND_BUTTON:
+        return f"b{inp.index}"
+    if inp.kind == BIND_HAT:
+        return f"h{inp.index}.{inp.mask}"
+    return f"a{inp.index}" if (inp.lo, inp.hi) == FULL else f"a{inp.index}:{inp.lo}:{inp.hi}"
+
+
+def _input(element):
+    kind, rest = element[0], element[1:]
+    if kind == "b":
+        return Input(BIND_BUTTON, int(rest))
+    if kind == "h":
+        hat, mask = rest.split(".")
+        return Input(BIND_HAT, int(hat), int(mask))
+    index, *span = rest.split(":")
+    lo, hi = (int(span[0]), int(span[1])) if span else FULL
+    return Input(BIND_AXIS, int(index), lo=lo, hi=hi)
+
+
+def view(pad):
+    """SDL3's view of a pad as tests/pads keeps it: each output (b<button>, a<axis>) to its input in SDL's element notation (b3, h0.4,
+    a2 over the full range, a4:0:32767 over part of it)."""
+    return {
+        "name": pad.name,
+        "joystick_name": pad.joystick_name,
+        "guid": pad.guid.hex(),
+        "gamepad_type": pad.gamepad_type,
+        "axes": pad.axes,
+        "gyro": pad.gyro,
+        "labels": list(pad.labels),
+        "bindings": {f"{'b' if kind == BIND_BUTTON else 'a'}{index}": _element(inp) for (kind, index), inp in sorted(pad.bindings.items())},
+        "mapping": pad.mapping,
+    }
+
+
+def from_view(seen, **session):
+    """The pad a `view` describes; `session` holds what one session decides: its index, player and sysfs device."""
+    return Pad(
+        name=seen["name"],
+        guid=bytes.fromhex(seen["guid"]),
+        bindings={(BIND_BUTTON if out[0] == "b" else BIND_AXIS, int(out[1:])): _input(element) for out, element in seen["bindings"].items()},
+        gyro=seen["gyro"],
+        joystick_name=seen["joystick_name"],
+        gamepad_type=seen["gamepad_type"],
+        axes=seen["axes"],
+        labels=tuple(seen["labels"]),
+        mapping=seen["mapping"],
+        **session,
+    )
+
+
 def device_of(path, sysfs="/sys"):
     name = os.path.basename(path or "")
     link = os.path.join(sysfs, "class/hidraw", name, "device") if name.startswith("hidraw") else os.path.join(sysfs, "class/input", name, "device/device")

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 from _controls import ini_section
-from controls_fixtures import PRO3_DINPUT
+from controls_fixtures import CORPUS, EDGE, PRO3_DINPUT
 
 MODULE = Path(__file__).resolve().parents[1]
 SESSION = "20261006-213000"
@@ -202,3 +202,14 @@ def test_each_pad_held_gets_its_own_face_unless_the_game_names_one(universe, lau
     launch("mk8", held, [pro3_device(override)])
     controls = ini_section(launch.ini("eden", "qt-config.ini"), "Controls")
     assert [eden_faces(controls, RAW[p], n) for n, p in enumerate(held)] == [NINTENDO[expected[p]] for p in held]
+
+
+# `universe controller dump` records what this hook prints of each pad SDL3 lists: the format tests/pads keeps.
+def test_the_pads_hook_prints_sdls_view_as_the_recorded_pads_keep_it():
+    env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parent / "launch"), "CONTROLS_PADS": "EDGE,PRO3_DINPUT"}
+    out = subprocess.run([MODULE / "bin" / "pads"], cwd=MODULE, env=env, capture_output=True, text=True, timeout=10, check=True)
+    lines = [json.loads(line) for line in out.stdout.splitlines()]
+    assert [(line["device"], line["vendor"], line["product"]) for line in lines] == [(EDGE.device, 0x054C, 0x0DF2), (PRO3_DINPUT.device, 0x2DC8, 0x6009)]
+    assert [line["sdl"] for line in lines] == [
+        json.loads((CORPUS / f"{name}.json").read_text())["sdl"] for name in ("dualsense-edge-bt", "8bitdo-pro-3-dinput-bt")
+    ]

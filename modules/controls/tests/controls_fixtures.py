@@ -3,7 +3,7 @@ import importlib.util
 import json
 from pathlib import Path
 
-from _gamepads import BIND_AXIS, BIND_BUTTON, BIND_HAT, Input, Pad
+from _gamepads import BIND_AXIS, BIND_BUTTON, Input, Pad, from_view
 
 BIN_DIR = Path(__file__).resolve().parents[1] / "bin"
 CORPUS = Path(__file__).resolve().parents[3] / "tests" / "pads"
@@ -11,34 +11,8 @@ CORPUS = Path(__file__).resolve().parents[3] / "tests" / "pads"
 B, A = BIND_BUTTON, BIND_AXIS
 
 
-def _input(element):
-    """SDL's element notation: b3, h0.4, a2 over the full range, a4:0:32767 over part of it."""
-    kind, rest = element[0], element[1:]
-    if kind == "b":
-        return Input(BIND_BUTTON, int(rest))
-    if kind == "h":
-        hat, mask = rest.split(".")
-        return Input(BIND_HAT, int(hat), int(mask))
-    index, *span = rest.split(":")
-    lo, hi = (int(span[0]), int(span[1])) if span else (-32768, 32767)
-    return Input(BIND_AXIS, int(index), lo=lo, hi=hi)
-
-
 def recorded(name, **session):
-    """A pad of tests/pads as SDL3 lists it; `session` holds what one session decides: its index, player and sysfs device."""
-    view = json.loads((CORPUS / f"{name}.json").read_text())["sdl"]
-    return Pad(
-        name=view["name"],
-        guid=bytes.fromhex(view["guid"]),
-        bindings={(B if out[0] == "b" else A, int(out[1:])): _input(element) for out, element in view["bindings"].items()},
-        gyro=view["gyro"],
-        joystick_name=view["joystick_name"],
-        gamepad_type=view["gamepad_type"],
-        axes=view["axes"],
-        labels=tuple(view["labels"]),
-        mapping=view["mapping"],
-        **session,
-    )
+    return from_view(json.loads((CORPUS / f"{name}.json").read_text())["sdl"], **session)
 
 
 # SDL3's HIDAPI PS5 driver on a DualSense Edge over Bluetooth.

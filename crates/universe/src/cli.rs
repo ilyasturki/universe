@@ -762,6 +762,14 @@ pub enum ControllerCmd {
     },
     /// Forget a learned button (the shipped codes apply again)
     Forget { family: String, slot: String },
+    /// A pad as tests/pads records it: ids, keys, axis ranges, driver, HID report descriptor and what the modules see (SDL3's view)
+    Dump {
+        /// A pad's id from `controller ls`; every pad when none
+        id: Option<String>,
+        /// Ask for each button, stick and trigger in turn and record what the pad reports for it
+        #[arg(long)]
+        walk: bool,
+    },
     /// Drop a Bluetooth pad's link and bring it back, then tell the running game's modules (a cable's pad has to be re-plugged)
     Reconnect {
         /// A pad's id from `controller ls`, or `all`
@@ -2111,6 +2119,33 @@ async fn controller(core: Core, action: ControllerCmd, json: bool) -> anyhow::Re
         ControllerCmd::Forget { family, slot } => {
             core.set_controller_button(&family, &slot, None).await?;
             report(json, true, "forgotten");
+        }
+        ControllerCmd::Dump { id, walk } => {
+            let mut pads = core.controller_record(id.as_deref().unwrap_or("")).await?;
+            if walk {
+                if pads.len() > 1 {
+                    anyhow::bail!("{} pads connected: name the one to walk (controller ls)", pads.len());
+                }
+                let path = std::path::Path::new("/dev/input").join(s(&pads[0], "id"));
+                let ask = |step: &str, what: &str| {
+                    if json {
+                        eprintln!("{}", serde_json::json!({"walk": step, "label": what}));
+                    } else {
+                        eprintln!("{what} ({step}), or wait 10 s to skip…");
+                    }
+                };
+                let (buttons, axes) = controller::watch::walk(&path, ask).await?;
+                pads[0]["buttons"] = buttons;
+                pads[0]["axes"] = axes;
+                pads[0]["source"]["buttons"] = pads[0]["source"]["evdev"].clone();
+            }
+            if json {
+                return print_json(&if id.is_some() { pads.remove(0) } else { Value::Array(pads) });
+            }
+            for p in &pads {
+                let views: Vec<&str> = ["hid", "sdl", "buttons"].into_iter().filter(|k| !p[*k].is_null()).collect();
+                println!("{} {} · {} · {} · {}", s(p, "id").dimmed(), s(&p["evdev"], "name").bold(), s(p, "family"), s(p, "driver"), views.join(" "));
+            }
         }
         ControllerCmd::Reconnect { id } => {
             let outcomes = core.controller_reconnect(&id).await?;

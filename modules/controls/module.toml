@@ -10,6 +10,7 @@ runner_kinds = ["emulator"]
 [hooks]
 pre-launch  = "bin/pre"
 session-end = "bin/stop"
+pads        = "bin/pads"
 timeout_s   = 10
 
 [[settings]]

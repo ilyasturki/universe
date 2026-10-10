@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _gamepads
+from _controls import vendor_product
+
+
+def main():
+    try:
+        pads = _gamepads.pads({})
+    except OSError as e:
+        print(f"SDL3 could not list the pads: {e}", file=sys.stderr)
+        return 1
+    for pad in pads:
+        vendor, product = vendor_product(pad.guid)
+        print(json.dumps({"device": pad.device, "vendor": vendor, "product": product, "sdl": _gamepads.view(pad)}))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

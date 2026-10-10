@@ -1644,6 +1644,7 @@ written as `<key>.<name>` (`entry_key`), `""` removing it.
 | `controller_state()` | `controller_state()` | `universe controller ls` | `{enabled, hold_ms, volume_step (a percent, number), home_summons, layout: {family: positional or xbox}, families: [{id, name, slots: [{id, label, codes, extra}]}], macros: [Macro], presets: [{id, label, hold_only}]}` (`layout` is `[controller.layout]`); the CLI adds `devices`, the pads readable now with every slot's code or `bound: false` |
 | `controller_pads()` | `controller_pads()` | — | the `devices` list alone, in the shape `watch` announces; for a frontend whose watcher waits on the lock |
 | `controller_reconnect(id)` | `controller_reconnect(id)` | `universe controller reconnect [id\|all]` | `[{id, name, bus, outcome}]` for the pad `id` (every pad for `all` or empty; an id no pad has is `NotFound`): a Bluetooth pad (its device `address`) is disconnected through BlueZ, then connected again for up to 5 s — `back`, or `asleep` when it switched itself off and waits for its PS or HOME button; a pad on a cable is `cable` (re-plugging one in software needs root: pull it out and back); `failed` when BlueZ cannot be asked. Then the running game's modules' `reconnect` hooks run, as `freeze` does |
+| `controller_record(id)` | — | `universe controller dump [id] [--walk]` | each pad shown (the one `id` names, else every one; none is `NotFound`) as `tests/pads` records it: `{id, pad, family, bus, driver, print, evdev: {name, vendor, product, version, keys, abs: {ABS_*: [min, max, fuzz, flat]}, ff}, hid: {descriptor}, source}` — `driver` the kernel driver of the device the node hangs off, `hid.descriptor` its HID report descriptor in hex (absent for a pad no HID driver reads, xpad's), `print` its family's face labels, `source` each part's `captured on <date>`; each available module's `pads` hook adds its view (the controls module: `sdl`, SDL3's). `--walk` (one pad) asks for each slot of its family, then each stick and trigger, and adds what the pad reported: `buttons` (slot → `BTN_…` or `ABS_…±`) and `axes` (role → `ABS_…`, `-` when it runs backwards); with `--json` each step's question is a `{walk, label}` line on stderr. The CLI prints one object for an `id`, else a list |
 | `set_controller_macro(macro)` | same | `universe controller bind <family> <button> <press\|hold> <action> [--keys K] [--command C]` | validates, replaces the macro with the same family, button and trigger |
 | `remove_controller_macro(family, button, trigger)` | same | `universe controller unbind <family> <button> [trigger]` | an empty trigger removes both |
 | `set_controller_button(family, slot, codes)` | same | `universe controller learn <family> <slot>` · `forget` | the codes a slot answers to: a list (empty leaves it unbound), `None` restores the seeds. `learn` reads the pad instead: the next button pressed becomes the slot's, taken from whichever slot had it |
@@ -1935,6 +1936,7 @@ session-end  = "bin/stop"         # short and blocking, inside the game unit's E
 post-process = "bin/process"      # async (transient unit), after the session-end hooks
 screenshot   = "bin/shot"         # on demand: prints the png's path, and before it `grabbed` (flushed) the moment it holds the pixels
 check        = "bin/check"        # blocking, from doctor, while the module is on (available or not) and set up: one check per stdout line
+pads         = "bin/pads"         # blocking, from `universe controller dump`, while the module is available: its view of each pad per stdout line
 timeout_s    = 20                 # for blocking hooks; the sum bounds the game unit's TimeoutStopSec
 
 [limits]                          # applied to the transient units of async hooks
@@ -2018,6 +2020,13 @@ required binary is missing, so it can say how to get it. Each stdout line that i
 `check`, `fix` shows only when not `ok`, `component` optionally names the component or system tool whose
 install fixes it); a line whose `check` is a required binary's replaces doctor's own line for it. A hook
 that prints none and exits non-zero, or times out, is one failed `check` check naming its error.
+
+A `pads` hook runs outside any game and session, as `check` does, whether the module is on or off. Each
+stdout line that is a JSON object `{"device", "vendor", "product", <view>: …}` adds `<view>` to the pad
+`universe controller dump` records on that sysfs `device`, else to the one with that `vendor` and
+`product`. The controls module's prints `sdl`: SDL3's view of the pad at its default hints, each gamepad
+output (`b<button>`, `a<axis>`) bound to its input in SDL's element notation (`b3`, `h0.4`, `a2` over the
+full range, `a4:0:32767` over part of it), with the name, the GUID, the four face labels and the mapping.
 
 ## Source protocol
 

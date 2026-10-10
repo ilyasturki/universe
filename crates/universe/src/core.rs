@@ -1720,6 +1720,54 @@ impl Core {
         Ok(out)
     }
 
+    /// Each pad shown, as tests/pads records it (`controller::watch::record_json`), with what every available module's `pads` hook
+    /// says of it: a line `{device, vendor, product, <view>: …}` lands on the pad of that sysfs device, else of those ids.
+    pub async fn controller_record(&self, id: &str) -> Result<Vec<serde_json::Value>> {
+        let mut pads = crate::controller::watch::record_json(id);
+        if pads.is_empty() {
+            return Err(Error::NotFound(if id.is_empty() { "no controller connected".into() } else { format!("no controller {id}") }));
+        }
+        let cfg = self.config.read().await.clone();
+        let modules = self.modules.read().await.clone();
+        let today = format!("captured on {}", chrono::Local::now().format("%Y-%m-%d"));
+        for m in modules.into_iter().filter(|m| m.available && m.hook("pads").is_some()) {
+            let mut env = crate::modules::HookEnv::default();
+            for (k, v) in passthrough_env() {
+                env.set(&k, v);
+            }
+            env.set("MODULE_SETTINGS_JSON", serde_json::Value::Object(m.merged_settings(&cfg, None)).to_string());
+            let id = m.id().to_string();
+            let out = match crate::modules::run_blocking(&Hooker::Module(m), "pads", &env).await {
+                Ok(out) => out,
+                Err(e) => {
+                    tracing::warn!("{id} pads: {e}");
+                    continue;
+                }
+            };
+            for line in out.stdout.lines().filter_map(|l| serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(l).ok()) {
+                let ids = |p: &serde_json::Value| {
+                    ["vendor", "product"]
+                        .iter()
+                        .all(|k| line.get(*k).and_then(|v| v.as_u64()) == p["evdev"][*k].as_str().and_then(|h| u64::from_str_radix(h, 16).ok()))
+                };
+                let device = line.get("device").and_then(|d| d.as_str()).filter(|d| !d.is_empty());
+                let Some(pad) = pads.iter().position(|p| device.is_some() && p["device"].as_str() == device).or_else(|| pads.iter().position(ids)) else {
+                    continue;
+                };
+                for (key, view) in line.into_iter().filter(|(k, _)| !matches!(k.as_str(), "device" | "vendor" | "product")) {
+                    pads[pad]["source"][&key] = serde_json::json!(today);
+                    pads[pad][key] = view;
+                }
+            }
+        }
+        for p in &mut pads {
+            if let Some(map) = p.as_object_mut() {
+                map.remove("device");
+            }
+        }
+        Ok(pads)
+    }
+
     pub async fn set_controller_macro(&self, m: crate::controller::Macro) -> Result<()> {
         m.validate()?;
         let cfg = self.config.read().await.clone();
