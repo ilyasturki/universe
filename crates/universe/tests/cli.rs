@@ -370,3 +370,47 @@ async fn bluetooth_watch_pairs_through_its_own_agent_over_stdin() {
     let status = tokio::time::timeout(std::time::Duration::from_secs(5), child.wait()).await.expect("a closed stdin ends the watch").unwrap();
     assert!(status.success());
 }
+
+// A pad's screenshot macro: the grab reported as the hook prints it, the path once the file is written.
+#[tokio::test]
+async fn the_controller_watch_reports_a_shots_grab_before_its_path() {
+    use std::os::unix::fs::PermissionsExt;
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+    let dir = tempfile::tempdir().unwrap();
+    let config = "schema = 1\n[desktop]\nprofile = \"none\"\n[controller]\nenabled = false\nmacros = []\n[modules]\nenabled = [\"screenshot\"]\n[sources]\nenabled = []\n";
+    std::fs::create_dir_all(dir.path().join("config")).unwrap();
+    std::fs::write(dir.path().join("config/config.toml"), config).unwrap();
+    let module = dir.path().join("modules/screenshot");
+    std::fs::create_dir_all(module.join("bin")).unwrap();
+    std::fs::write(module.join("module.toml"), "api = 2\nid = \"screenshot\"\nname = \"Screenshots\"\n[hooks]\nscreenshot = \"bin/shot\"\n").unwrap();
+    std::fs::write(module.join("bin/shot"), "#!/bin/sh\necho grabbed\nsleep 0.3\necho \"$SCREENSHOTS_DIR/x.png\"\n").unwrap();
+    std::fs::set_permissions(module.join("bin/shot"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    std::fs::create_dir_all(dir.path().join("run")).unwrap();
+    let runtime = dir.path().join("run");
+    let mut cmd = tokio::process::Command::from(command(
+        &dir,
+        &["controller", "watch", "--json"],
+        &[NO_BUS, ("DBUS_SYSTEM_BUS_ADDRESS", "unix:path=/dev/null/bus"), ("XDG_RUNTIME_DIR", runtime.to_str().unwrap())],
+    ));
+    for var in ["UNIVERSE_SESSION", "SteamGameId", "GAMESCOPE_WAYLAND_DISPLAY"] {
+        cmd.env_remove(var);
+    }
+    let mut child = cmd.stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::piped()).kill_on_drop(true).spawn().unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    let mut lines = tokio::io::BufReader::new(child.stdout.take().unwrap()).lines();
+    let mut next = async |event: &str| loop {
+        let line =
+            tokio::time::timeout(std::time::Duration::from_secs(5), lines.next_line()).await.expect("no line within 5 s").unwrap().expect("the watch ended");
+        let v: serde_json::Value = serde_json::from_str(&line).unwrap();
+        if v["event"] == event {
+            return (v, std::time::Instant::now());
+        }
+    };
+    next("ready").await;
+    stdin.write_all(b"{\"cmd\": \"run\", \"action\": \"screenshot\"}\n").await.unwrap();
+    let (grabbed, at) = next("screenshot").await;
+    assert_eq!(grabbed, serde_json::json!({"event": "screenshot", "phase": "grabbed"}));
+    let (saved, saved_at) = next("screenshot").await;
+    assert!(saved["path"].as_str().is_some_and(|p| p.ends_with("/x.png")) && saved.get("phase").is_none(), "{saved}");
+    assert!(saved_at - at >= std::time::Duration::from_millis(250), "the grab is told as the hook prints it");
+}

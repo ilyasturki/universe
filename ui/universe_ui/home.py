@@ -15,6 +15,8 @@ HOLD_MS = 600
 ESCAPE_MS = 5000
 # The overlay stays painted over the game this long for the flash the theme draws on a shot.
 CUE_MS = 450
+# And this long for a shot lost after its shutter: Notices' 8 s for an error, and its fade.
+LOST_MS = 8500
 OSD_MS = 1500
 # And this long for an unlock's banner.
 BANNER_MS = 5000
@@ -33,7 +35,9 @@ class Home(QObject):
     volumeChanged = Signal()
     osdChanged = Signal()
     outputsChanged = Signal()
+    screenshotGrabbed = Signal()
     screenshotTaken = Signal(str)
+    screenshotLost = Signal()
     achievementUnlocked = Signal(QVARIANT)
     bannersWaitingChanged = Signal()
     stopping = Signal(str)
@@ -102,8 +106,9 @@ class Home(QObject):
         self._osd_timer.setSingleShot(True)
         self._osd_timer.setInterval(OSD_MS)
         self._osd_timer.timeout.connect(self._osd_done)
-        self._shutter = None
-        self._no_shutter = False
+        self._shutter = self._load_shutter()
+        # Shots cued at their grab whose file has not come yet.
+        self._cued = 0
         client.currentSessionChanged.connect(self._on_session)
         client.sessionStarted.connect(self._on_started)
         client.launchRequested.connect(self._on_requested)
@@ -111,6 +116,7 @@ class Home(QObject):
         client.launchFailed.connect(self._on_failed)
         client.sessionShown.connect(self._on_shown)
         controller.buttonPressed.connect(self._on_button)
+        controller.screenshotGrabbed.connect(self._shot_grabbed)
         controller.screenshotTaken.connect(self._shot_taken)
         controller.volumeReported.connect(self._volume_reported)
         self._unlocks = UnlockWatch(client, self)
@@ -459,13 +465,23 @@ class Home(QObject):
 
     @Slot()
     def screenshot(self):
-        self._client.runAsync(self._client.screenshot, lambda path: self._shot_taken(str(path or "")))
+        self._client.runAsync(lambda: self._client.screenshot(self._shot_grabbed), lambda path: self._shot_taken(str(path or "")))
 
-    # The hook answers after the grab: the cue never lands in the shot.
+    # The pixels are held, the file still to come: the cue now, and it never lands in the shot.
+    def _shot_grabbed(self):
+        self._cued += 1
+        if self._shutter is not None:
+            self._shutter.play()
+        self._lift(CUE_MS)
+        self.screenshotGrabbed.emit()
+
     def _shot_taken(self, path):
-        if path:
-            self._play_shutter()
-            self._lift(CUE_MS)
+        cued = self._cued > 0
+        if cued:
+            self._cued -= 1
+        if cued and not path:
+            self._lift(LOST_MS)
+            self.screenshotLost.emit()
         self.screenshotTaken.emit(path)
 
     def _unlocked(self, item):
@@ -516,17 +532,15 @@ class Home(QObject):
         if not (self._open or self._closing or self._cue.isActive() or self._osd_timer.isActive()):
             self._overlay_state(False, 0)
 
-    def _play_shutter(self):
-        if self._shutter is None and not self._no_shutter:
-            try:
-                from PySide6.QtMultimedia import QSoundEffect
-            except ImportError:
-                self._no_shutter = True
-                return
-            self._shutter = QSoundEffect(self)
-            self._shutter.setSource(QUrl.fromLocalFile(SHUTTER))
-        if self._shutter is not None:
-            self._shutter.play()
+    # Loaded up front: a first shot would otherwise wait on the wav's decode.
+    def _load_shutter(self):
+        try:
+            from PySide6.QtMultimedia import QSoundEffect
+        except ImportError:
+            return None
+        shutter = QSoundEffect(self)
+        shutter.setSource(QUrl.fromLocalFile(SHUTTER))
+        return shutter
 
     @Slot(str, result="QVariantList")
     def launchChoices(self, key):

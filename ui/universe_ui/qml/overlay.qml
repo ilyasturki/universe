@@ -204,9 +204,35 @@ Window {
 
         Connections {
             target: api.home
-            function onScreenshotTaken(path) {
-                if (path)
-                    flashAnim.restart();
+            function onScreenshotGrabbed() {
+                flashAnim.restart();
+            }
+        }
+    }
+
+    // A shot lost after its shutter, said over the game while Home holds the window up; an open dock says it in its own row.
+    Item {
+        objectName: "lostShot"
+
+        readonly property real s: overlay.height > 0 ? overlay.height / 1080 : 1
+
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: parent.top
+        anchors.topMargin: 36 * s
+        width: lostPill.width
+        height: lostPill.height
+        visible: !api.home.open && Notices.current !== null && Notices.current.key === "shotLost"
+        z: 6
+
+        NoticePill {
+            id: lostPill
+        }
+
+        Connections {
+            target: api.home
+            function onScreenshotLost() {
+                if (!api.home.open)
+                    Notices.fail("Screenshot not saved", "shotLost");
             }
         }
     }

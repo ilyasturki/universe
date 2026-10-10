@@ -128,6 +128,7 @@ class ControllerScreen(AdvancedRows, QObject):
     unknownPressed = Signal(str, str)
     learned = Signal(str, str, str)
     macroNotice = Signal(str)
+    screenshotGrabbed = Signal()
     screenshotTaken = Signal(str)
     volumeReported = Signal(object)
     message = Signal(str)
@@ -289,6 +290,8 @@ class ControllerScreen(AdvancedRows, QObject):
             self.unknownPressed.emit(ident, str(line.get("code") or ""))
         elif kind == "hud":
             self.macroNotice.emit(self._hud_notice(line))
+        elif kind == "screenshot" and line.get("phase") == "grabbed":
+            self.screenshotGrabbed.emit()
         elif kind == "screenshot":
             self.screenshotTaken.emit(str(line.get("path") or ""))
         elif kind == "volume":

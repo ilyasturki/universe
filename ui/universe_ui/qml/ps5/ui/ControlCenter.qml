@@ -696,6 +696,11 @@ FocusScope {
             if (cc.open && cc.vals.pause !== api.home.pauseOnHome)
                 cc.patch("pause", api.home.pauseOnHome);
         }
+        // The cards come back at the grab; the file's word and the strip's refresh after.
+        function onScreenshotGrabbed() {
+            if (cc.open)
+                cc.hidden = false;
+        }
         function onScreenshotTaken(path) {
             if (!cc.open)
                 return;

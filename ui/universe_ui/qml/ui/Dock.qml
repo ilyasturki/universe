@@ -473,6 +473,11 @@ FocusScope {
             if (dock.open && dock.vals.pause !== api.home.pauseOnHome)
                 patch("pause", api.home.pauseOnHome);
         }
+        // The band comes back at the grab; the file's word comes after.
+        function onScreenshotGrabbed() {
+            if (dock.open)
+                dock.hidden = false;
+        }
         function onScreenshotTaken(path) {
             if (!dock.open)
                 return;

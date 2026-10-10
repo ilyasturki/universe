@@ -372,8 +372,20 @@ impl Core {
     fn keyboard_layout(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.value_infallible(py, |c| async move { c.keyboard_layout() })
     }
-    fn screenshot(&self, py: Python<'_>) -> PyResult<String> {
-        self.run(py, |c| c.screenshot())
+    #[pyo3(signature = (grabbed=None))]
+    fn screenshot(&self, py: Python<'_>, grabbed: Option<Py<PyAny>>) -> PyResult<String> {
+        self.run(py, |c| async move {
+            c.screenshot_with(|| {
+                if let Some(cb) = &grabbed {
+                    Python::attach(|py| {
+                        if let Err(e) = cb.call0(py) {
+                            e.print(py);
+                        }
+                    })
+                }
+            })
+            .await
+        })
     }
     fn screenshots(&self, py: Python<'_>, id: String) -> PyResult<Py<PyAny>> {
         self.value(py, |c| async move { c.screenshots(&id).await })

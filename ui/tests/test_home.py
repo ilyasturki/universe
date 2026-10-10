@@ -46,17 +46,27 @@ class Overlay:
         pass
 
 
-def test_a_shot_from_the_pad_or_the_dock_cues_the_same_way(api, fake):
-    home = api.home
-    taken = []
-    home.screenshotTaken.connect(taken.append)
-    api.screens.controller._on_event({"event": "screenshot", "path": "/tmp/x.png"})
-    assert taken == ["/tmp/x.png"], "the watcher's event reaches the theme through api.home"
-    api.screens.controller._on_event({"event": "screenshot", "path": ""})
-    assert taken == ["/tmp/x.png", ""], "a failed shot is reported too, silently"
+def test_a_shot_from_the_pad_or_the_dock_cues_at_its_grab(api, reprise, monkeypatch):
+    from PySide6.QtMultimedia import QSoundEffect
+
+    _look, overlay = reprise
+    shutters = []
+    monkeypatch.setattr(QSoundEffect, "play", lambda _effect: shutters.append(1))
+    home, controller = api.home, api.screens.controller
+    grabbed, taken = record(home.screenshotGrabbed), record(home.screenshotTaken)
+    lost = overlay.findChild(QObject, "lostShot")
+    controller._on_event({"event": "screenshot", "phase": "grabbed"})
+    assert (len(shutters), len(grabbed), taken) == (1, 1, []), "the shutter and the flash at the grab, the file still to come"
+    controller._on_event({"event": "screenshot", "path": "/tmp/x.png"})
+    assert len(shutters) == 1 and taken == [("/tmp/x.png",)], "the path reaches the theme for its lists, without a second shutter"
+    controller._on_event({"event": "screenshot", "path": ""})
+    assert taken[-1] == ("",) and not lost.property("visible"), "a shot that never grabbed fails as before"
+    controller._on_event({"event": "screenshot", "phase": "grabbed"})
+    controller._on_event({"event": "screenshot", "path": ""})
+    assert lost.property("visible"), "lost after its shutter: said over the game"
     home.screenshot()
-    until(lambda: len(taken) == 3)
-    assert taken[2].endswith("screenshot.png"), "the dock's shot goes through the same signal"
+    until(lambda: len(taken) == 4)
+    assert taken[3][0].endswith("screenshot.png") and len(shutters) == len(grabbed) == 3, "the dock's shot cues at its grab the same way"
 
 
 def test_a_volume_macro_shows_its_level_on_the_overlay_for_a_moment(api, fake, monkeypatch):

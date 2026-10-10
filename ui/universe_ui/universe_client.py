@@ -438,9 +438,10 @@ class CoreClient(QObject):
             log.warning("adopt_scope: %s", e.message)
             return ""
 
+    # `grabbed` runs on the GUI thread once the pixels are held, before the path comes back.
     @Slot(result=str)
-    def screenshot(self):
-        return self._guarded("", self._core.screenshot)
+    def screenshot(self, grabbed=None):
+        return self._guarded("", self._core.screenshot, None if grabbed is None else lambda: self._deliver.emit(grabbed))
 
     @Slot(str, result="QVariantList")
     def screenshots(self, ident):

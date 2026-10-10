@@ -33,7 +33,7 @@ One context property, `api`:
 | `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written, a game's sessions and their logs, a game's data and the storage view, the changelog, Wi-Fi and Bluetooth) |
 | `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed` and `--size` turn it off) |
 | `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `overlay`, `osd`, `frame`, `ground`, `accent`, `detail`, `unlocked`, `screenshot`, `installed`, `unavailable`; the built-in ones, then the installed themes, see "Themes"), `current`, `frame`, `set(id)` (false for one that is `unavailable`), `rescan()`, `failed()`, `escape()`, `takeNotice()`, `landing` / `takeLanding()`, `fontPath` (the current look's own font file, stored under `<id>Font`: `switch2Font`, `ps5Font`), `soundsPath` (a folder of WAVs, stored under `<id>Sounds`) and `soundFiles` (`{name: url}` of the WAVs in it, the name lowercased: each replaces the look's bundled sound of that name, `sound/SoundPool.qml`'s `overrides`; Switch 2 offers it in Settings › Themes), `bootIntro` (the startup animation's switch, every look's: on until `ui-memory.json`'s `bootIntro` is false) |
-| `api.home` | the HOME button over a running game (see "HOME and the dock"): `shown` (`game` / `launcher`), `underGame` (the game is on screen over the launcher, inside gamescope), `open`, `loading` (a session this client launched has no window up yet), `paused`, `pauseOnHome`, `flipped`, `frame`, `volumePercent`, `muted`, `outputs` (`loadOutputs()` fills it); `pressed()`, `stopping(title)`; `openDock()`, `closeDock()`, `dockClosed()`, `toGame()`, `toLauncher(landing?)` / `takeLanding()`, `covered()`, `stop()`, `setPauseOnHome(on)`, `screenshot()` (→ `screenshotTaken(path)`), `volume(change, value)`, `setOutput(id)`, `runtime()` / `setRuntime(key, value)` (the running game's HUD, frame limit and filter, for this session alone), `launchChoices(key)`, `setLaunchValueAll(key, value)` (every game's default, the game following it), `screenRefresh()`, `escapeHeld()` (HOME held 5 s) |
+| `api.home` | the HOME button over a running game (see "HOME and the dock"): `shown` (`game` / `launcher`), `underGame` (the game is on screen over the launcher, inside gamescope), `open`, `loading` (a session this client launched has no window up yet), `paused`, `pauseOnHome`, `flipped`, `frame`, `volumePercent`, `muted`, `outputs` (`loadOutputs()` fills it); `pressed()`, `stopping(title)`; `openDock()`, `closeDock()`, `dockClosed()`, `toGame()`, `toLauncher(landing?)` / `takeLanding()`, `covered()`, `stop()`, `setPauseOnHome(on)`, `screenshot()` (→ `screenshotGrabbed()` at the grab, then `screenshotTaken(path)`, and `screenshotLost()` when it fails after the grab), `volume(change, value)`, `setOutput(id)`, `runtime()` / `setRuntime(key, value)` (the running game's HUD, frame limit and filter, for this session alone), `launchChoices(key)`, `setLaunchValueAll(key, value)` (every game's default, the game following it), `screenRefresh()`, `escapeHeld()` (HOME held 5 s) |
 | `api.boot` | the startup animation (see "Startup animation"): `running`, `started()` (its first frame is on screen), `skipped()`, `landed(skipped)` (the mark is done: each look builds its home), `land()`, `finish()` |
 
 A `Game` exposes `id`, `title`, `sortTitle`, `favorite` (writable), `hidden`, `playTime`,
@@ -419,14 +419,18 @@ launcher comes up as for Home, and the theme's `landHome` takes the landing (`ta
 and opens that page on the playing game over Home, the frame fading rather than shrinking into the tile.
 
 The shutter is the launcher's, not the shell's, so it is the same for the dock's camera, a pad
-macro and `universe screenshot`: `api.home` plays `qml/assets/sounds/shutter.wav` and emits
-`screenshotTaken(path)` when the shot returns — the dock's through its own call, the pad's through
-the watcher's `screenshot` event (`api.screens.controller.screenshotTaken`) — and `overlay.qml`,
-outside the theme's loader, answers a non-empty path with a white flash. Inside gamescope
-`api.home` lifts the overlay window to opaque for 450 ms around it when the dock is not already
-holding it up; on the desktop there is no window over the game, so only the shutter is heard (the
-hook answers before either, see api.md § Screenshots). A failed shot emits an empty path: the dock
-toasts it, the flash stays off.
+macro and `universe screenshot`: at the grab, before the file is written, `api.home` plays
+`qml/assets/sounds/shutter.wav` (loaded at start) and emits `screenshotGrabbed()`, then
+`screenshotTaken(path)` once the file is there — the dock's through its own call (the core's
+`grabbed` callback), the pad's through the watcher's two `screenshot` events
+(`api.screens.controller.screenshotGrabbed`, `screenshotTaken`). `overlay.qml`, outside the theme's
+loader, answers the grab with a white flash, and the dock brings its band back then; the "saved"
+toast and the shots' refresh wait for the path. Inside gamescope `api.home` lifts the overlay window
+to opaque for 450 ms around the flash when the dock is not already holding it up; on the desktop
+there is no window over the game, so only the shutter is heard (see api.md § Screenshots). A failed
+shot emits an empty path: the dock toasts it. One that fails after its shutter also emits
+`screenshotLost()`, and `overlay.qml` says "Screenshot not saved" over the game (`api.home` holds the
+window up for it) unless the dock is open.
 Its volume row is the controller's macro by another route (◀ ▶ `volume("up" | "down")`, ▶ unmuting, A `"mute"`,
 `controller.volume_step` per step, GNOME's OSD through `desktop::show_osd` on every change but a
 `get`). Muted, the row keeps the level, dimmed beside the mute glyph, as the PS5 Control Center's

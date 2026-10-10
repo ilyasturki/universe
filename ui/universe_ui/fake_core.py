@@ -1530,7 +1530,9 @@ class FakeCore:
         self.powered.append(action)
 
     # A shot during a session lands in the game's screenshots dir, named by the moment, as the capture module's does.
-    def screenshot(self):
+    def screenshot(self, grabbed=None):
+        if grabbed is not None:
+            grabbed()
         current = self.current()
         if not current:
             return os.path.join(self._cache, "screenshot.png")

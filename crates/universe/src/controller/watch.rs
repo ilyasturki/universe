@@ -851,11 +851,14 @@ impl Watcher {
                     t.set(&up, false);
                 });
             }
-            // The hook answers once the pixels are grabbed: the launcher's cue (the flash, the shutter) follows the event.
+            // The launcher's cue (the flash, the shutter) follows the grab; the path comes once the file is written.
             "screenshot" => {
                 let out = self.out;
                 tokio::spawn(async move {
-                    let path = core.screenshot().await.inspect_err(|e| tracing::warn!("screenshot: {e}")).unwrap_or_default();
+                    let grabbed = || {
+                        out.emit(serde_json::json!({"event": "screenshot", "phase": "grabbed"}));
+                    };
+                    let path = core.screenshot_with(grabbed).await.inspect_err(|e| tracing::warn!("screenshot: {e}")).unwrap_or_default();
                     out.emit(serde_json::json!({"event": "screenshot", "path": path}));
                 });
             }

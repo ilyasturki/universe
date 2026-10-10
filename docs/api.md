@@ -310,7 +310,7 @@ every 10 s, since the 30-minute timeout writes no file.
 | `host_gamescope(screen)` | `host_gamescope(screen)` | — | the gamescope a launcher starts itself in: `[env, MANGOHUD_CONFIGFILE=<state>/mangoapp.conf, XKB_DEFAULT_LAYOUT=…, XKB_DEFAULT_VARIANT=…, gamescope, args…]` from `launch.gamescope_bin`, the global `gamescope_*` fields at the screen's mode, `launch.gamescope_args`, `--mangoapp` whenever mangoapp is installed and `--hdr-enabled` when `launch.hdr` is, `--prefer-output` and `--hide-cursor-delay` when it gets the screen to itself (see Gamescope), the keyboard layout (see below); writes that conf with the HUD hidden (a game shows it). `None` when the binary is not installed |
 | `keyboard_layout()` | `keyboard_layout()` | — | `{layout, variant}`, the session's xkb keyboard layout (`fr` / `bepo`, `us` / `intl`…): `XKB_DEFAULT_LAYOUT` and `XKB_DEFAULT_VARIANT` when set, else what the desktop keeps — GNOME's `org.gnome.desktop.input-sources` (the most recently used source, else the first), Cinnamon's `org.cinnamon.desktop.input-sources`, Hyprland's `input:kb_layout`, KDE's `kxkbrc`, the active layout sway (`swaymsg -t get_inputs`) and niri (`niri msg keyboard-layouts`) name, turned back into its code through xkeyboard-config's `rules/evdev.lst` (`XKB_CONFIG_ROOT`, else `X11/xkb` or `xkeyboard-config-2` under `XDG_DATA_DIRS`) — else `localectl`'s X11 layout or the console keymap up to its charset, else `us`. gamescope builds a US keymap of its own whatever the session's, so both the launcher's gamescope and a game's own get it as `XKB_DEFAULT_LAYOUT` / `XKB_DEFAULT_VARIANT` (which libxkbcommon reads), and a frontend draws its on-screen keyboard from it |
 | `adopt_scope()` | `adopt_scope()` | — (`universe play` does it unless `--no-wait`) | moves the calling process into the transient scope `universe-launcher-<pid>.scope` (`StartTransientUnit` on the user manager) and returns its name; every later `launch` binds the game to it. Idempotent. `Unavailable` without a user systemd |
-| `screenshot()`, `screenshot_with(grabbed)` | `screenshot()` | `universe screenshot` | runs the `screenshot` hook of each enabled module declaring one (the screenshot module), the first path printed winning; returns the PNG path (see Screenshots). `grabbed` is called once, when a hook prints `grabbed` (it holds the pixels; the file comes later), or with the path from a hook that never prints it. `Unavailable` when no module is on for the game, `Io` naming each hook's last stderr line when every one failed |
+| `screenshot()`, `screenshot_with(grabbed)` | `screenshot(grabbed=None)` | `universe screenshot` | runs the `screenshot` hook of each enabled module declaring one (the screenshot module), the first path printed winning; returns the PNG path (see Screenshots). `grabbed` is called once, when a hook prints `grabbed` (it holds the pixels; the file comes later), or with the path from a hook that never prints it. `Unavailable` when no module is on for the game, `Io` naming each hook's last stderr line when every one failed |
 | `current()` | `current()` | `universe status` | `{session_id, id, title, unit, screen, started_at, gamescope_pid, launcher_pid}` (`gamescope_pid` is the launcher's gamescope the game was started into and `launcher_pid` that launcher, both `0` for a gamescope of the game's own), or `None`. The CLI wraps it: `status --json` prints `{"current": … or null, "recent": [the 10 newest session rows across the library], "pending_journals": [see Journal]}` |
 | `sessions(id)` | `sessions(id)` | `universe sessions <name>` | `[SessionRow]`, newest first (by `ended_at`); `id = ""` spans every visible game (not removed, not hidden) |
 | `session_log(id, session_id, tail)` | `session_log(id, session_id="", tail=0)` | `universe logs <name> [session] [-n N] [-f]` | what a session's processes wrote (see Logs): `[{time, source, priority, message}]`, oldest first, the last `tail` lines (0: all). `session_id` `""` is the running session, else the newest played; `NotFound` for a session that never was, `[]` once the journal has let the unit go, and for an import |
@@ -1236,11 +1236,12 @@ the module's global settings). `taken_at` is the name's
 moment; `session` is the session whose span covers it, with the journal module's own grace (90 s
 before the start, 120 s after the end), or empty. The hook prints `grabbed` on a line of its own,
 flushed, the moment it holds the pixels, and the path once the file is written (gamescope encodes a
-4K png in about 0.6 s on one core). The hook answers once the pixels are grabbed, so
-a cue that follows its return never lands in the shot: the launcher plays the shutter and, inside
-gamescope, paints a flash over the game (see `frontends.md`); the pad's `screenshot` macro reports
-back as a `screenshot` event on the watcher (`{"event": "screenshot", "path": …}`, the path empty
-when it failed). A journal entry names them by basename, which resolves to `screenshots/`.
+4K png in about 0.6 s on one core). The launcher's cue follows the grab, so it comes at the press
+and never lands in the shot: it plays the shutter and, inside gamescope, paints a flash over the game
+(see `frontends.md`). The pad's `screenshot` macro reports back as two `screenshot` events on the
+watcher: `{"event": "screenshot", "phase": "grabbed"}` at the grab, then `{"event": "screenshot",
+"path": …}` once the file is written, the path empty when it failed. A journal entry names them by
+basename, which resolves to `screenshots/`.
 
 The **screenshot** module takes them, apart from recording: its own `enabled` switch, per game, is
 whether a game takes screenshots at all, and capture's settings have no say. Inside the launcher's
@@ -1606,8 +1607,9 @@ level kept under the mute, the output labelled as GNOME's own volume keys print 
 active route, else the sink, as `outputs()` labels it). Inside the launcher's gamescope the
 launcher's overlay draws it over the game, whatever the desktop; on the desktop it shows on the
 desktop's OSD (see Desktop), the latest level only, and where there is none the macro runs
-silently. `screenshot` is `screenshot()`, reported back as a `screenshot` event
-(`{"event": "screenshot", "path"}`) that the launcher turns into its flash and shutter. `keys` types through uinput; `mangohud` is `set_mangohud(None)` — no key: the running
+silently. `screenshot` is `screenshot_with(grabbed)`, reported back as two `screenshot` events:
+`{"event": "screenshot", "phase": "grabbed"}`, which the launcher turns into its flash and shutter,
+then `{"event": "screenshot", "path"}` once the file is written (see Screenshots). `keys` types through uinput; `mangohud` is `set_mangohud(None)` — no key: the running
 game's HUD flipped for this session alone, no setting written (see MangoHud) — and the watcher reports the
 outcome as a `hud` event, which the launcher toasts: "MangoHud shown · <title>", "MangoHud hidden ·
 <title>", "MangoHud: no game running".
