@@ -352,6 +352,7 @@ WRITES = {
     ),
     "remove": (lambda c: {"listed": D in [g["id"] for g in c.list()], "game": c.get(D)}, [("remove", D, False)]),
     "artwork": (lambda c: c.get(T)["media"], [lambda c: c.media_set_slot(T, "banner", png(c))]),
+    "runner": (lambda c: by_id(c.runners(), "dolphin"), [("set_runner_setting", "dolphin", "exe", "/opt/dolphin/dolphin-emu")]),
 }
 # What the fake knowingly writes otherwise, per case, as globs of `<path>: <core> | <fake>`.
 KNOWN_WRITES = {}
