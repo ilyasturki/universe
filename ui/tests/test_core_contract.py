@@ -1,6 +1,8 @@
 import base64
+import contextlib
 import json
 import os
+import re
 import shutil
 import tomllib
 from fnmatch import fnmatch
@@ -28,7 +30,7 @@ SEED = {
     'description = "On Mars."\nmetacritic = 61\nplayers = 2\n'
     '[source]\nkind = "gog"\n[launch]\nexe = "/mnt/games/PC/The Technomancer/TheTechnomancer.exe"\n[modules.capture]\ncursor = false\n',
     "data/games/the-technomancer/sessions.jsonl": f'{{"session": "{SESSION}", "game": "the-technomancer", "started_at": "2026-09-13T12:00:00+02:00",'
-    ' "ended_at": "2026-09-13T13:00:00+02:00", "duration_s": 3600, "exit": 0, "recording": "/nowhere/20260913-120000.mkv"}\n',
+    ' "ended_at": "2026-09-13T13:00:00+02:00", "duration_s": 3600, "exit": 0, "stopped": false, "recording": "/nowhere/20260913-120000.mkv"}\n',
     f"data/games/the-technomancer/journal/{SESSION}.json": json.dumps(
         {"session": SESSION, "game": "the-technomancer", "written_at": "2026-09-13T13:10:00+02:00", "title": "First", "paragraphs": ["p"]}
     ),
@@ -154,8 +156,20 @@ def drift(core, fake, path=""):
 
 @pytest.fixture(scope="module")
 def cores(app, tmp_path_factory):
-    root = tmp_path_factory.mktemp("contract")
-    for name, content in SEED.items():
+    with pytest.MonkeyPatch.context() as env, seeded(tmp_path_factory.mktemp("contract"), env) as both:
+        yield both
+
+
+@pytest.fixture
+def profile(app, xdg, fixture_art, tmp_path, monkeypatch):
+    """Both cores on a seed of the test's own, for writes; `profile(files)` adds files to the seed."""
+    with contextlib.ExitStack() as stack:
+        yield lambda files=None: stack.enter_context(seeded(tmp_path, monkeypatch, files))
+
+
+@contextlib.contextmanager
+def seeded(root, env, files=None):
+    for name, content in {**SEED, **(files or {})}.items():
         path = root / name
         path.parent.mkdir(parents=True, exist_ok=True)
         (path.write_bytes if isinstance(content, bytes) else path.write_text)(content)
@@ -169,15 +183,16 @@ def cores(app, tmp_path_factory):
                 (stubs / name).chmod(0o755)
     index = root / "index.json"
     index.write_text(json.dumps({"schema": 1, "extensions": json.loads(EXTENSIONS.read_text())["extensions"][:1]}))
-    with pytest.MonkeyPatch.context() as env:
-        env.setenv("PATH", f"{os.environ['PATH']}{os.pathsep}{stubs}")
-        env.setenv("UNIVERSE_EXTENSIONS_INDEX", str(index))
-        for kind in ("data", "config", "state", "cache"):
-            env.setenv(f"UNIVERSE_{kind.upper()}_HOME", str(root / kind))
-        for kind in ("modules", "sources"):
-            env.setenv(f"UNIVERSE_{kind.upper()}_PATH", str(ROOT / kind))
-        fake = FakeCore(FIXTURE, root / "fake")
+    env.setenv("PATH", f"{os.environ['PATH']}{os.pathsep}{stubs}")
+    env.setenv("UNIVERSE_EXTENSIONS_INDEX", str(index))
+    for kind in ("data", "config", "state", "cache"):
+        env.setenv(f"UNIVERSE_{kind.upper()}_HOME", str(root / kind))
+    for kind in ("modules", "sources"):
+        env.setenv(f"UNIVERSE_{kind.upper()}_PATH", str(ROOT / kind))
+    fake = FakeCore(FIXTURE, root / "fake")
+    try:
         yield universe_core.Core(), fake
+    finally:
         fake.shutdown()
 
 
@@ -263,3 +278,175 @@ def test_the_ui_reads_every_field_the_core_sends_of_a_game(cores):
         assert game.assets.boxFront.toLocalFile() == (raw["media"]["box_front"] or ""), raw["id"]
     played = next(g for g in games if g["id"] == "the-technomancer")
     assert played["metadata"]["developers"] and played["stats"]["play_count"] and played["release_year"], "the seed fills what the UI reads"
+
+
+T, D = "the-technomancer", "dead-cells"
+TIME = re.compile(r"^\d{4}-\d{2}-\d{2}T")
+
+
+def plain(value, core):
+    """`value` less what differs only by whose profile it is: the data home in paths, the clock's times."""
+    if isinstance(value, dict):
+        return {k: plain(v, core) for k, v in value.items()}
+    if isinstance(value, list):
+        return [plain(v, core) for v in value]
+    if isinstance(value, str):
+        return "<time>" if TIME.match(value) else value.replace(core.data_home(), "<data>")
+    return value
+
+
+def changes(before, after, path=""):
+    """Each path the writes changed, with its new value; a key gone reads None."""
+    if isinstance(before, dict) and isinstance(after, dict):
+        out = {}
+        for key in before.keys() | after.keys():
+            out.update(changes(before.get(key), after.get(key), f"{path}.{key}".lstrip(".")))
+        return out
+    return {} if before == after else {path: after}
+
+
+def by_id(rows, ident):
+    return next(r for r in rows if r["id"] == ident)
+
+
+def fields(rows):
+    return {f["key"]: (f.get("value"), f.get("origin")) for f in rows}
+
+
+def macros(state):
+    return {f"{m['family']}/{m['button']}/{m['trigger']}": m["action"] for m in state["macros"]}
+
+
+def png(core):
+    path = Path(core.data_home()).parent / "banner.png"
+    path.write_bytes(PNG)
+    return str(path)
+
+
+LAUNCH = [("set_field", "game", T, "launch.fps_limit", "60"), ("set_field", "game", T, "launch.env.DXVK_HUD", "fps")]
+# Each: what to read, and the writes between two reads; a write is a call, or a function of the core for one that names its own data.
+WRITES = {
+    "game flags": (
+        lambda c: c.get(T),
+        [("set", T, "favorite", "false"), ("set", T, "hidden", "true"), ("set", T, "tags", "racing,mars"), ("set", T, "sort_title", "Techno")],
+    ),
+    "game launch": (lambda c: c.get(T), LAUNCH),
+    "game form": (lambda c: fields(c.form("game", T, SCREEN)), LAUNCH),
+    "global launch": (lambda c: {"set": c.settings()["set"], "game": c.get(D)["effective"]}, [("set_setting", "launch.fps_limit", "30")]),
+    "promote": (
+        lambda c: {"set": c.settings()["set"], "game": c.get(T)["launch"]},
+        [("set_field", "game", T, "launch.mangohud", "true"), ("promote_field", "game", T, "launch.mangohud")],
+    ),
+    "every game": (lambda c: {g: c.get(g)["effective"]["mangohud"] for g in (T, D)}, [("set_field_all", "game", T, "launch.mangohud", "true")]),
+    "module": (
+        lambda c: {"listed": by_id(c.modules(), "capture"), "settings": c.module_settings("capture", T)},
+        [("enable_module", "capture", False), ("set_module_setting", "capture", T, "cursor", "true")],
+    ),
+    "source": (lambda c: c.source_settings("gog"), [("set_source_setting", "gog", "games_dir", "/games")]),
+    "macro": (
+        lambda c: macros(c.controller_state()),
+        [
+            ("set_controller_macro", {"family": "*", "button": "south", "trigger": "hold", "action": "screenshot"}),
+            ("remove_controller_macro", "dualsense-edge", "fn_left", "press"),
+        ],
+    ),
+    "remove": (lambda c: {"listed": D in [g["id"] for g in c.list()], "game": c.get(D)}, [("remove", D, False)]),
+    "artwork": (lambda c: c.get(T)["media"], [lambda c: c.media_set_slot(T, "banner", png(c))]),
+}
+# What the fake knowingly writes otherwise, per case, as globs of `<path>: <core> | <fake>`.
+KNOWN_WRITES = {}
+
+
+def written(core, read, writes):
+    before = plain(read(core), core)
+    for write in writes:
+        if callable(write):
+            write(core)
+        else:
+            getattr(core, write[0])(*write[1:])
+    return changes(before, plain(read(core), core))
+
+
+def unlike(core, fake):
+    for path in sorted(core.keys() | fake.keys()):
+        if core.get(path, "unchanged") != fake.get(path, "unchanged"):
+            yield f"{path}: {core.get(path, 'unchanged')!r} | {fake.get(path, 'unchanged')!r}"
+
+
+@needs_manifests
+@pytest.mark.parametrize("name", WRITES)
+def test_the_fake_writes_as_the_core_does(profile, name):
+    read, writes = WRITES[name]
+    core, fake = (written(c, read, writes) for c in profile())
+    assert core, "the writes change what the core reads back"
+    found, known = list(unlike(core, fake)), KNOWN_WRITES.get(name, {})
+    assert [d for d in found if not any(fnmatch(d, k) for k in known)] == []
+    assert [k for k in known if not any(fnmatch(d, k) for d in found)] == [], "the fake writes as the core does now: drop it from KNOWN_WRITES"
+
+
+# A launch that starts nothing but the game: no hooks, no gamescope or HUD of the machine's, no saves backup after.
+QUIET = (
+    'schema = 1\n[desktop]\nprofile = "none"\nkeep_awake = false\n[saves]\nauto_backup = false\n[modules]\nenabled = []\n'
+    "[launch]\ngamescope = false\nmangohud = false\nhide_cursor = false\n[sources]\nenabled = []\n"
+)
+# The row's own values the two cores fill alike; the rest names the unit, the command and the clock.
+SESSION_KEYS = ("game", "title", "end", "stopped", "crashed", "exit", "source", "recording", "journal", "debug_log")
+KNOWN_SESSION = {}
+
+
+@needs_manifests
+def test_a_stopped_session_ends_alike_on_both_cores(profile, user_systemd, tmp_path, monkeypatch):
+    from uitest import until
+
+    for name in ("DISPLAY", "WAYLAND_DISPLAY", "GAMESCOPE_WAYLAND_DISPLAY", "SWAYSOCK", "HYPRLAND_INSTANCE_SIGNATURE", "NIRI_SOCKET"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("PATH", f"{Path(__file__).with_name('shims')}{os.pathsep}{os.environ['PATH']}")
+    game = tmp_path / "sleeper"
+    game.write_text("#!/bin/sh\nexec sleep 600\n")
+    game.chmod(0o755)
+    rows = []
+    for core in profile({"config/config.toml": QUIET}):
+        for module in core.modules():
+            core.enable_module(module["id"], False)
+        ident = core.add_game({"runner": "linux", "exe": str(game), "title": "Sleeper"})
+        session = core.launch(ident, "")
+        assert core.current()["session_id"] == session
+        core.stop(session)
+        until(lambda core=core: core.current() is None, "the stop ends the session")
+        core.reload_game(ident)  # as the client does once the session is over
+        rows.append({k: plain(v, core) for k, v in core.sessions(ident)[0].items() if k in SESSION_KEYS})
+    found = list(unlike(*rows))
+    assert [d for d in found if not any(fnmatch(d, k) for k in KNOWN_SESSION)] == []
+
+
+STARDEW = "1207666883"
+
+
+@needs_manifests
+def test_an_install_lands_alike_on_both_cores(profile, tmp_path, monkeypatch):
+    shims = tmp_path / "gogdl"
+    shims.mkdir()
+    (shims / "gogdl").symlink_to(ROOT / "sources" / "gog" / "tests" / "shims" / "gogdl")
+    monkeypatch.setenv("PATH", f"{shims}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setenv("SHIM_LOG", str(tmp_path / "gogdl.log"))
+    for name in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"):
+        monkeypatch.setenv(name, "http://127.0.0.1:9")
+    listing = [{"id": STARDEW, "title": "Stardew Valley", "owned": True, "installed": False}]
+    core, fake = profile({"data/sources/gog/library.json": json.dumps(listing), "data/sources/gog/umu.json": json.dumps({STARDEW: "umu-413150"})})
+    core.set_source_setting("gog", "games_dir", str(tmp_path / "games"))
+    landed = []
+    for c in (core, fake):
+        before = {g["id"] for g in c.list()}
+        returned = c.install("gog", STARDEW, None)
+        new = {g["id"] for g in c.list()} - before
+        row = next(r for r in c.library("gog", False) if r["id"] == STARDEW)
+        game = c.get(next(iter(new))) if new else {}
+        landed.append(
+            {
+                "returns the new game": [returned] == list(new),
+                "listed installed, as it": (row["installed"], row.get("game_id") in new),
+                "store": (game.get("source", {}).get("kind"), game.get("source", {}).get("id")),
+                "runner": game.get("effective", {}).get("runner"),
+            }
+        )
+    assert landed[0] == landed[1]

@@ -12,7 +12,6 @@ import tomllib
 from pathlib import Path
 
 import pytest
-from dbusmock import BusType, PrivateDBus, SpawnedMock
 from looks import Look, current_row, read, settle
 from PySide6.QtCore import QObject, Qt
 from PySide6.QtTest import QTest
@@ -57,11 +56,11 @@ def closed_port():
 class Journey:
     """A sealed profile under `root` and, once `start`ed, the real core with the UI on it."""
 
-    def __init__(self, root):
+    def __init__(self, root, units_log):
         self.root = root
         self.data, self.config, self.state = root / "data", root / "config", root / "state"
         self.home = root / "home"
-        self.units_log = root / "units.jsonl"
+        self.units_log = units_log
         self.look = self.api = self.client = None
 
     def write(self, rel, content):
@@ -121,7 +120,7 @@ class Journey:
 
 
 @pytest.fixture
-def journey(app, xdg, rendered_looks, tmp_path, monkeypatch):
+def journey(app, xdg, rendered_looks, tmp_path, monkeypatch, user_systemd):
     from universe_ui import universe_client
 
     root = tmp_path
@@ -156,17 +155,12 @@ def journey(app, xdg, rendered_looks, tmp_path, monkeypatch):
         monkeypatch.setenv(name, proxy)
     monkeypatch.setenv("DBUS_SYSTEM_BUS_ADDRESS", "unix:path=/dev/null/bus")
     monkeypatch.setattr(universe_client, "SESSION_POLL_MS", 50)
-    shown = Journey(root)
+    shown = Journey(root, user_systemd)
     shown.write("config/config.toml", CONFIG.format(root=root))
-    monkeypatch.delenv("DBUS_SESSION_BUS_ADDRESS", raising=False)
-    with PrivateDBus(BusType.SESSION) as bus:
-        monkeypatch.setenv("DBUS_SESSION_BUS_ADDRESS", bus.address)
-        params = {"log": str(shown.units_log)}
-        with open(root / "systemd.log", "w") as out, SpawnedMock.spawn_with_template(str(TESTS / "user_systemd.py"), params, BusType.SESSION, out, out):
-            try:
-                yield shown
-            finally:
-                shown.close()
+    try:
+        yield shown
+    finally:
+        shown.close()
 
 
 def menu_ids(menu):

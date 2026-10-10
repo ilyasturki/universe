@@ -1,6 +1,7 @@
 import os
 import sys
 import traceback
+from pathlib import Path
 
 import pytest
 
@@ -174,3 +175,18 @@ def api(fake, rendered_looks, tmp_path):
     api = Api(fake, memory_path=str(tmp_path / "memory.json"), power_root=FAKE, net_root=FAKE_NET)
     yield api
     api.shutdown()
+
+
+@pytest.fixture
+def user_systemd(tmp_path, monkeypatch):
+    """The user's systemd on a private session bus (user_systemd.py): the path of its JSON lines, one per unit started and one
+    per game's ExecStopPost. A game started there outlives the bus: the test stops it."""
+    from dbusmock import BusType, PrivateDBus, SpawnedMock
+
+    log = tmp_path / "units.jsonl"
+    monkeypatch.delenv("DBUS_SESSION_BUS_ADDRESS", raising=False)
+    with PrivateDBus(BusType.SESSION) as bus:
+        monkeypatch.setenv("DBUS_SESSION_BUS_ADDRESS", bus.address)
+        template = str(Path(__file__).with_name("user_systemd.py"))
+        with open(tmp_path / "systemd.log", "w") as out, SpawnedMock.spawn_with_template(template, {"log": str(log)}, BusType.SESSION, out, out):
+            yield log

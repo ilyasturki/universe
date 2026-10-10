@@ -902,6 +902,7 @@ class FakeCore:
         game = self._game(ident)
         game["removed"] = True
         game["hidden"] = True
+        game["removed_at"] = _now()
         if purge:
             shutil.rmtree(self._game_dir(ident), ignore_errors=True)
         else:
@@ -1290,7 +1291,7 @@ class FakeCore:
             def wait():
                 code = process.wait()
                 if self._process is process:
-                    self._end_session(code)
+                    self._end_session(-1 if code < 0 else code)
 
             threading.Thread(target=wait, daemon=True, name="fake-session").start()
         elif SESSION_S is not None:
@@ -1332,7 +1333,7 @@ class FakeCore:
                     "started_at": current["started_at"],
                     "ended_at": _now(),
                     "duration_s": duration,
-                    "source": "daemon",
+                    "source": "universe",
                     "unit": current["unit"],
                     "screen": current["screen"],
                     "exit": exit_code,
@@ -1342,7 +1343,8 @@ class FakeCore:
                 },
             )
             self._write_sessions(current["id"])
-            self._pend_journal(current["id"], current["session_id"])
+            if self._journals(current["id"]):
+                self._pend_journal(current["id"], current["session_id"])
             with contextlib.suppress(OSError):
                 self._marker().unlink()
 
@@ -1351,7 +1353,7 @@ class FakeCore:
         if self._process is not None:
             self._process.kill()
         elif self._session:
-            self._end_session(-15)
+            self._end_session(-1)
         else:
             raise UniverseError("NotFound", "no session running")
 
@@ -1604,7 +1606,7 @@ class FakeCore:
 
     def _session_row(self, ident, line):
         row = copy.deepcopy(line)
-        for key in ("recording_duration_s", "command", "stopped"):
+        for key in ("recording_duration_s", "command"):
             row.pop(key, None)
         row["title"] = self._game(ident)["title"]
         row["crashed"] = bool(line.get("crashed"))
@@ -1776,7 +1778,7 @@ class FakeCore:
             }
             self._data["games"].append(game)
         if stamp and (not game.get("added_at") or game.get("removed")):
-            game.update({"added_at": _now(), "removed": False, "hidden": False})
+            game.update({"added_at": _now(), "removed": False, "removed_at": "", "hidden": False})
         self._write_game(game)
         return ident
 
@@ -2030,6 +2032,11 @@ class FakeCore:
             for e in entries
             if e.get("state") == "pending"
         ]
+
+    def _journals(self, ident):
+        """The journal module is on, and the game does not turn it off."""
+        on = any(m["id"] == "journal" and m.get("enabled") for m in self._data.get("modules", []))
+        return on and ((self._game(ident).get("modules") or {}).get("journal") or {}).get("enabled") is not False
 
     def _pend_journal(self, ident, session_id):
         entries = self._data.setdefault("journal", {}).setdefault(ident, [])
