@@ -601,6 +601,40 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
             "learn them in Settings › Controller".into(),
             "controller",
         );
+        let sys = std::path::Path::new("/sys");
+        let hid: Vec<(String, Vec<std::path::PathBuf>)> = pads
+            .iter()
+            .map(|p| {
+                (
+                    p["name"].as_str().unwrap_or("").to_string(),
+                    crate::controller::watch::hidraw_nodes(sys, std::path::Path::new(p["path"].as_str().unwrap_or(""))),
+                )
+            })
+            .filter(|(_, nodes)| !nodes.is_empty())
+            .collect();
+        if !hid.is_empty() {
+            let shut: Vec<String> = hid
+                .iter()
+                .filter(|(_, nodes)| !nodes.iter().all(|n| crate::controller::watch::readable(n)))
+                .map(|(name, nodes)| format!("{name} ({})", nodes.iter().map(|n| n.display().to_string()).collect::<Vec<_>>().join(", ")))
+                .collect();
+            let detail = if shut.is_empty() {
+                hid.iter().map(|(name, _)| format!("{name}: readable")).collect::<Vec<_>>().join("; ")
+            } else {
+                format!("not readable: {}. Emulators then lose the gyro, the touchpad and the extra buttons", shut.join("; "))
+            };
+            push("pad-hidraw", "Controller extras (hidraw)", shut.is_empty(), detail, hidraw_fix(family), "controller");
+        }
+        if switch2_pro_unread(&usb_ids(sys), &pads) {
+            push(
+                "switch2-pro",
+                "Switch 2 Pro Controller",
+                false,
+                "plugged in, but Linux has no driver for it yet: emulators read it over USB through SDL, Universe's menus cannot".into(),
+                "play it in emulators over USB; for the menus, wait for hid-nintendo's Switch 2 driver".into(),
+                "controller",
+            );
+        }
     }
     let enabled_missing: Vec<&str> = config.modules.enabled.iter().filter(|e| !modules.iter().any(|m| m.id() == e.as_str())).map(|s| s.as_str()).collect();
     let fix = match enabled_missing.iter().find(|e| sources.iter().any(|s| s.id() == **e)) {
@@ -629,6 +663,32 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
     out.extend(reported);
     attach_components(&mut out, config, crate::system_install::available().await);
     out
+}
+
+fn hidraw_fix(family: Family) -> String {
+    match family {
+        Family::NixOs => "add pkgs.game-devices-udev-rules to services.udev.packages, then replug the pad".into(),
+        Family::Arch => "install game-devices-udev (AUR), then replug the pad".into(),
+        Family::Debian => "install steam-devices, then replug the pad".into(),
+        Family::Fedora => "install steam-devices (RPM Fusion), then replug the pad".into(),
+        Family::Other => "install game-devices-udev or steam-devices, whose rules give your session the pad's hidraw node, then replug it".into(),
+    }
+}
+
+/// (vendor, product) of every USB device sysfs lists.
+fn usb_ids(sysfs: &std::path::Path) -> Vec<(u16, u16)> {
+    let hex = |dir: &std::path::Path, file: &str| std::fs::read_to_string(dir.join(file)).ok().and_then(|s| u16::from_str_radix(s.trim(), 16).ok());
+    std::fs::read_dir(sysfs.join("bus/usb/devices"))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| Some((hex(&e.path(), "idVendor")?, hex(&e.path(), "idProduct")?)))
+        .collect()
+}
+
+/// A Switch 2 Pro on the USB bus that no evdev node reads: SDL drives it over libusb, the kernel has no driver for it yet.
+fn switch2_pro_unread(usb: &[(u16, u16)], pads: &[serde_json::Value]) -> bool {
+    usb.contains(&(0x057e, 0x2069)) && !pads.iter().any(|p| p["family"] == "switch2-pro")
 }
 
 /// In the Universe session gamescope has the screen to itself: no desktop to find, and it hides the cursor itself.
@@ -668,6 +728,23 @@ choices = ["codex"]
         )
         .unwrap();
         Module { available: true, missing: vec![], incompatible: String::new(), unset: vec![], enabled: true, dir: dir.to_path_buf(), manifest }
+    }
+
+    // sysfs's USB devices, as a hub and a Switch 2 Pro on the cable list them.
+    #[test]
+    fn a_switch_2_pro_on_usb_without_an_evdev_node_is_named() {
+        let sys = tempfile::tempdir().unwrap();
+        for (dir, vendor, product) in [("usb3", "1d6b", "0003"), ("3-2", "057e", "2069")] {
+            let d = sys.path().join("bus/usb/devices").join(dir);
+            std::fs::create_dir_all(&d).unwrap();
+            std::fs::write(d.join("idVendor"), format!("{vendor}\n")).unwrap();
+            std::fs::write(d.join("idProduct"), format!("{product}\n")).unwrap();
+        }
+        let usb = usb_ids(sys.path());
+        assert!(usb.contains(&(0x057e, 0x2069)) && usb.contains(&(0x1d6b, 0x0003)), "{usb:?}");
+        assert!(switch2_pro_unread(&usb, &[serde_json::json!({"family": "dualsense-edge"})]));
+        assert!(!switch2_pro_unread(&usb, &[serde_json::json!({"family": "switch2-pro"})]), "a kernel that drives it lists it as a pad");
+        assert!(!switch2_pro_unread(&[(0x1d6b, 0x0003)], &[]));
     }
 
     #[tokio::test]

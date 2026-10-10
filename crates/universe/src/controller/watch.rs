@@ -178,14 +178,22 @@ fn battery_of(vendor: u16, report: &[u8]) -> Option<(u8, bool)> {
     Some((level, report[14] & 0x80 != 0 || level == 100))
 }
 
+/// The hidraw nodes of the HID device an evdev node hangs off; none for a pad no HID driver reads (xpad's).
+pub fn hidraw_nodes(sysfs: &Path, event: &Path) -> Vec<PathBuf> {
+    let Some(dir) = device_of(sysfs, event) else { return vec![] };
+    let mut nodes: Vec<PathBuf> =
+        std::fs::read_dir(dir.join("hidraw")).into_iter().flatten().flatten().map(|e| Path::new("/dev").join(e.file_name())).collect();
+    nodes.sort();
+    nodes
+}
+
 /// The hidraw node of the HID device an evdev node hangs off, opened for reading without blocking; none for a pad without one or one out of reach.
 fn hidraw_of(path: &Path, vendor: u16) -> Option<AsyncFd<std::fs::File>> {
     if vendor != EIGHTBITDO {
         return None;
     }
-    let sysfs = device_of(Path::new("/sys"), path)?.join("hidraw");
-    let node = std::fs::read_dir(sysfs).ok()?.flatten().next()?.file_name();
-    let fd = rustix::fs::open(Path::new("/dev").join(node), rustix::fs::OFlags::RDONLY | rustix::fs::OFlags::NONBLOCK, rustix::fs::Mode::empty()).ok()?;
+    let node = hidraw_nodes(Path::new("/sys"), path).into_iter().next()?;
+    let fd = rustix::fs::open(node, rustix::fs::OFlags::RDONLY | rustix::fs::OFlags::NONBLOCK, rustix::fs::Mode::empty()).ok()?;
     AsyncFd::new(std::fs::File::from(fd)).ok()
 }
 
@@ -434,7 +442,7 @@ fn slots_json(slots: &BTreeMap<String, Option<Source>>) -> serde_json::Map<Strin
     slots.iter().map(|(s, src)| (s.clone(), serde_json::json!({"code": src.map(|x| x.to_string()), "bound": src.is_some()}))).collect()
 }
 
-fn readable(path: &Path) -> bool {
+pub fn readable(path: &Path) -> bool {
     rustix::fs::access(path, rustix::fs::Access::READ_OK).is_ok()
 }
 
@@ -1152,6 +1160,9 @@ mod tests {
         let device = device_of(sys.path(), Path::new("/dev/input/event257")).unwrap();
         assert_eq!(device, hid.canonicalize().unwrap());
         assert_eq!(device_of(sys.path(), Path::new("/dev/input/event9")), None, "a node gone from sysfs names nothing");
+        assert!(hidraw_nodes(sys.path(), Path::new("/dev/input/event257")).is_empty(), "no hidraw: a pad xpad reads");
+        std::fs::create_dir_all(hid.join("hidraw/hidraw7")).unwrap();
+        assert_eq!(hidraw_nodes(sys.path(), Path::new("/dev/input/event257")), [PathBuf::from("/dev/hidraw7")]);
         let file = sys.path().join("active-pad");
         record_active(&file, &device).unwrap();
         assert_eq!(std::fs::read_to_string(&file).unwrap(), format!("{}\n", device.display()));
