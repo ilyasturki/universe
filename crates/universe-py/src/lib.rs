@@ -627,6 +627,9 @@ impl Core {
     fn set_controller_button(&self, py: Python<'_>, family: String, slot: String, codes: Option<Vec<String>>) -> PyResult<()> {
         self.run(py, |c| async move { c.set_controller_button(&family, &slot, codes).await })
     }
+    fn controller_reconnect(&self, py: Python<'_>, id: String) -> PyResult<Py<PyAny>> {
+        self.value(py, |c| async move { c.controller_reconnect(&id).await })
+    }
 }
 
 /// The launcher's gamescope command for `screen` from the config alone, so a host re-execs before opening the core; `None` on the desktop.

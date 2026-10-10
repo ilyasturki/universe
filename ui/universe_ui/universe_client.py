@@ -888,6 +888,10 @@ class CoreClient(QObject):
     def controllerSetButton(self, family, slot, codes):
         return self._done(self._core.set_controller_button, family, slot, json.loads(codes) if isinstance(codes, str) else codes)
 
+    # Seconds on a Bluetooth pad: the core waits for it to come back.
+    def controllerReconnectAsync(self, ident, on_reply):
+        self._call_async(lambda: self._core.controller_reconnect(ident), lambda out: on_reply(list(out or [])), on_error=lambda e: on_reply([]))
+
     def _rewatch(self):
         games = self._data / "games"
         for d in (games, self._state):

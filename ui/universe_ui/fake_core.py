@@ -456,6 +456,7 @@ class FakeCore:
         self.focus = ""
         self.summons = 0
         self.frozen = False
+        self.reconnects = []
         self._runtime = {}
         self.fps_limit_writes = 0
         self.frames = 0
@@ -2651,6 +2652,11 @@ class FakeCore:
                 }
             )
         return pads
+
+    # A Bluetooth pad is back at once; the core's outcomes otherwise: `asleep`, `cable`, `failed`.
+    def controller_reconnect(self, ident):
+        self.reconnects.append(ident)
+        return [{"id": ident, "name": "", "bus": "bluetooth", "outcome": "back"}]
 
     def set_controller_macro(self, macro):
         state = self._controller()

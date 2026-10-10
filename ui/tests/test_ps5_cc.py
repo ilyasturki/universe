@@ -8,6 +8,7 @@ from PySide6.QtTest import QTest
 from uitest import until
 
 from universe_ui import host
+from universe_ui.screens.controller import FakeWatcher
 
 
 @pytest.fixture
@@ -78,6 +79,13 @@ def test_the_bar_opens_a_panel_over_its_icon_and_b_steps_back_out(api, fake, ps5
     assert api.home.pauseOnHome is (not was)
     key(overlay, Qt.Key.Key_Escape)
     assert cc.property("zone") == "bar"
+    api.screens.controller.start(FakeWatcher("dualsense-edge"))
+    cc.setProperty("icon", [i["id"] for i in read(cc, "icons")].index("controllers"))
+    key(overlay, Qt.Key.Key_Return)
+    until(lambda: cc.property("zone") == "panel")
+    assert [r["id"] for r in read(cc, "panelRows")] == ["pad:event30", "find"], "each pad the watcher reads, then Find Controllers"
+    key(overlay, Qt.Key.Key_Return)
+    until(lambda: fake.core.reconnects == ["event30"], "✕ on a pad reconnects it")
     key(overlay, Qt.Key.Key_Escape)
     until(lambda: api.home.open is False, "B closes the Control Center")
 

@@ -112,6 +112,12 @@ FocusScope {
             id: "shot",
             glyph: "capture",
             label: "Screenshot"
+        },
+        {
+            id: "controllers",
+            glyph: "controllers",
+            label: "Controllers",
+            panel: true
         }
     ].concat(listsAchievements ? [
         {
@@ -227,6 +233,24 @@ FocusScope {
                     kind: "value"
                 }
             ];
+        // Each pad the launcher reads, reconnected by ✕, then a look for pads it may have missed.
+        if (id === "controllers")
+            return api.screens.controller.devices.map(function (d) {
+                return {
+                    id: "pad:" + d.id,
+                    pad: d.id,
+                    glyph: "gamepad",
+                    label: d.name,
+                    kind: "action"
+                };
+            }).concat([
+                {
+                    id: "find",
+                    glyph: "search",
+                    label: "Find Controllers",
+                    kind: "action"
+                }
+            ]);
         if (id === "system")
             return api.system.controls.map(function (c) {
                 return {
@@ -454,9 +478,18 @@ FocusScope {
     }
 
     function act(id) {
+        if (id.indexOf("pad:") === 0) {
+            Sound.play("ok");
+            api.screens.controller.reconnect(id.substring(4));
+            return;
+        }
         switch (id) {
         case "resume":
             close();
+            break;
+        case "find":
+            Sound.play("ok");
+            api.screens.controller.rescan();
             break;
         case "home":
             Sound.play("home");

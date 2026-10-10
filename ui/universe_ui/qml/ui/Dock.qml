@@ -84,8 +84,8 @@ FocusScope {
             icon: "camera",
             label: "Screenshot",
             kind: "action"
-        }
-    ].concat(listsAchievements ? [achievements] : []).concat([
+        },
+        controllers].concat(listsAchievements ? [achievements] : []).concat([
         {
             id: "perf",
             icon: "pulse",
@@ -147,6 +147,36 @@ FocusScope {
             ]
         }
     ]).concat(system ? [system] : [])
+    // The pads the launcher reads, each reconnected by A, then a look for pads it may have missed.
+    readonly property var controllers: ({
+            id: "controllers",
+            icon: "controllers",
+            label: "Controllers",
+            kind: "group",
+            children: api.screens.controller.devices.map(function (d) {
+                return {
+                    id: "pad:" + d.id,
+                    pad: d.id,
+                    icon: "gamepad",
+                    label: d.name,
+                    kind: "action",
+                    value: padValue(d)
+                };
+            }).concat([
+                {
+                    id: "find",
+                    icon: "search",
+                    label: "Find controllers",
+                    kind: "action"
+                }
+            ])
+        })
+
+    function padValue(d) {
+        var bus = d.bus === "bluetooth" ? "Bluetooth" : d.bus === "usb" ? "USB" : d.bus;
+        return d.battery ? bus + " · " + d.battery.percent + "%" : bus;
+    }
+
     // The source's switch (GOG's `achievements`), read on open: off, the game keeps its list but the dock shows none.
     property bool tracksAchievements: true
     readonly property bool listsAchievements: tracksAchievements && (game ? game.achievementsTotal > 0 : false)
@@ -359,6 +389,11 @@ FocusScope {
     }
 
     function act(item) {
+        if (item.pad) {
+            Sound.enter();
+            api.screens.controller.reconnect(item.pad);
+            return;
+        }
         switch (item.id) {
         case "resume":
             Sound.cancel();
@@ -377,6 +412,10 @@ FocusScope {
             break;
         case "achievements":
             openTray("achievements");
+            break;
+        case "find":
+            Sound.enter();
+            api.screens.controller.rescan();
             break;
         case "shot":
             Sound.enter();

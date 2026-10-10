@@ -138,6 +138,26 @@ FocusScope {
                     hold: r.hold
                 });
         }
+        // Each pad reconnected by A, then a look for pads missed: from the HOME menu while a game runs too.
+        controller.devices.forEach(function (d) {
+            out.push({
+                key: "reconnect:" + d.id,
+                pad: d.id,
+                label: d.name,
+                type: "action",
+                display: "Reconnect",
+                detail: d.bus === "bluetooth" ? "Bluetooth" : "Cable: pull it out and plug it back in",
+                icon: "gamepad"
+            });
+        });
+        out.push({
+            key: "find",
+            label: "Find Controllers",
+            type: "action",
+            display: "",
+            detail: "Look again for a controller Universe does not show",
+            icon: "search"
+        });
         if (buttons.length > 0) {
             out.push({
                 heading: true,
@@ -284,6 +304,12 @@ FocusScope {
             startWalk();
         } else if (row.key === "pair") {
             pairController();
+        } else if (row.pad) {
+            Sound.play("ok");
+            controller.reconnect(row.pad);
+        } else if (row.key === "find") {
+            Sound.play("ok");
+            controller.rescan();
         } else if (row.key === "device") {
             Sound.play("ok");
             var choices = row.choices || [];

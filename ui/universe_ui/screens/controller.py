@@ -56,6 +56,13 @@ LAYOUT_VALUES = ("", "positional", "xbox")
 LAYOUT_CHOICES = ("As printed", "A on the right", "A at the bottom")
 LAYOUT_PRINTED = {"positional": "on the right", "xbox": "at the bottom"}
 LAYOUT_DETAIL = "Where A sits in Nintendo games on every {name}. As printed, A is {printed}."
+# What a reconnect came to, by the core's outcome.
+RECONNECTED = {
+    "back": "{name} is back",
+    "asleep": "{name} switched itself off: press its PS or HOME button",
+    "cable": "{name} is on a cable: pull it out and plug it back in",
+    "failed": "{name} could not be reconnected",
+}
 
 
 class Watcher(Stream):
@@ -109,8 +116,15 @@ class FakeWatcher(QObject):
             "printed_layout": "positional" if east == "A" else "xbox",
         }
 
+    # A rescan closes every pad and opens it again, as the watcher does.
     def send(self, command):
         self.commands.append(dict(command))
+        if command.get("cmd") == "rescan" and self.started:
+            pads = [f for f in self._family.split(",") if f and f != "none"]
+            for n, family in enumerate(pads):
+                self.emit({"event": "gone", "id": f"event{30 + n}"})
+                self.emit(self.device(f"event{30 + n}", family))
+            self.emit({"event": "rescanned", "devices": len(pads), "skipped": []})
         return True
 
     def emit(self, line):
@@ -151,6 +165,7 @@ class ControllerScreen(AdvancedRows, QObject):
     mapping = Signal(int, int, str)
     walkChanged = Signal()
     walkOffered = Signal(str, str)
+    rescanRequested = Signal()
 
     def __init__(self, client, memory, power, parent=None):
         super().__init__(parent)
@@ -313,6 +328,9 @@ class ControllerScreen(AdvancedRows, QObject):
             self.screenshotTaken.emit(str(line.get("path") or ""))
         elif kind == "volume":
             self.volumeReported.emit({"percent": int(line.get("percent") or 0), "muted": bool(line.get("muted")), "output": str(line.get("output") or "")})
+        elif kind == "rescanned":
+            found = int(line.get("devices") or 0)
+            self.macroNotice.emit(f"{found} controller{'' if found == 1 else 's'} found" if found else "No controller found")
         elif kind == "learned":
             self._learned(line)
         elif kind == "learn_timeout":
@@ -707,6 +725,26 @@ class ControllerScreen(AdvancedRows, QObject):
         row = self.row(index)
         if row.get("type") == "bool":
             self.setValue(index, not row.get("value"))
+
+    # Find controllers: the watcher closes and opens every pad, nodes it passed over included, and the launcher's SDL lists them again.
+    @Slot()
+    def rescan(self):
+        self._send({"cmd": "rescan"})
+        self.rescanRequested.emit()
+
+    # A Bluetooth pad dropped and brought back, a cable's told to be re-plugged; the outcome comes as a notice.
+    @Slot(str, result=bool)
+    def reconnect(self, ident):
+        device = self._device(ident)
+        if device is None:
+            return False
+        name = device["name"]
+        self._client.controllerReconnectAsync(ident, lambda outcomes: self._reconnected(name, outcomes))
+        return True
+
+    def _reconnected(self, name, outcomes):
+        outcome = str((outcomes[0] if outcomes else {}).get("outcome") or "failed")
+        self.macroNotice.emit(RECONNECTED.get(outcome, RECONNECTED["failed"]).format(name=name))
 
     @Slot(str, str, str, str, str, result=bool)
     def bind(self, slot, trigger, action, keys, command):

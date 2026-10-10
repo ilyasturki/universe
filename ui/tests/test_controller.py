@@ -335,6 +335,17 @@ def test_two_pads_and_hotplug(started, fake):
     assert screen.bind("south", "press", "screenshot", "", "") is False
 
 
+def test_find_controllers_opens_every_pad_again_and_a_reconnect_tells_how_it_went(started, fake):
+    screen, watcher = started
+    notices, rescans = record(screen.macroNotice), record(screen.rescanRequested)
+    screen.rescan()
+    assert {"cmd": "rescan"} in watcher.commands and rescans == [()], "the watcher and the launcher's own SDL both look again"
+    assert len(notices) == 1 and [d["id"] for d in screen.devices] == ["event30"], "the pads found, told once"
+    assert screen.reconnect("event30") is True
+    until(lambda: fake.core.reconnects == ["event30"] and len(notices) == 2)
+    assert screen.reconnect("event99") is False, "a pad gone meanwhile"
+
+
 def test_learn_timeout_and_error_clear_learning(started, fake):
     screen, watcher = started
     said = record(screen.message)

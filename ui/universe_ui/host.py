@@ -442,6 +442,7 @@ def run(argv=None):
         gamepad = GamepadThread(app, pad=api.pad)
         gamepad.stick.connect(api.pad.set, Qt.ConnectionType.QueuedConnection)
         api.screens.controller.mapping.connect(gamepad.setMapping)
+        api.screens.controller.rescanRequested.connect(gamepad.rescan)
 
         def cover():
             gamepad.setCovered(api.home.padCovered or not api.focus.active)

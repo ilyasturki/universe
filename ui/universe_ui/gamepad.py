@@ -202,8 +202,14 @@ class GamepadThread(QThread):
         self.mapper = Mapper()
         self._mappings = {}
         self._pending = []
+        self._rescan = False
         self._lock = threading.Lock()
         self.key.connect(self._post, Qt.ConnectionType.QueuedConnection)
+
+    # Find controllers: the loop lets SDL go and starts it again, each pad found added afresh with its mapping.
+    @Slot()
+    def rescan(self):
+        self._rescan = True
 
     # A mapping from the watcher's reading of the pad, applied by the loop: SDL's tables are edited from its own thread.
     @Slot(int, int, str)
@@ -272,6 +278,9 @@ class GamepadThread(QThread):
         event = sdl2.SDL_Event()
         try:
             while self._running:
+                if self._rescan:
+                    self._rescan = False
+                    self._restart(sdl2, controllers)
                 while sdl2.SDL_PollEvent(event):
                     self._handle(sdl2, event, controllers)
                 if self._pending:
@@ -289,6 +298,17 @@ class GamepadThread(QThread):
             for c in controllers.values():
                 sdl2.SDL_GameControllerClose(c)
             sdl2.SDL_Quit()
+
+    def _restart(self, sdl2, controllers):
+        for c in controllers.values():
+            sdl2.SDL_GameControllerClose(c)
+        controllers.clear()
+        for key, pressed, repeat in self.mapper.release_all():
+            self.key.emit(key, pressed, repeat)
+        flags = sdl2.SDL_INIT_GAMECONTROLLER | sdl2.SDL_INIT_JOYSTICK
+        sdl2.SDL_QuitSubSystem(flags)
+        if sdl2.SDL_InitSubSystem(flags) != 0:
+            log.warning("gamepad restart: %s", sdl2.SDL_GetError())
 
     def _handle(self, sdl2, event, controllers):
         t = event.type

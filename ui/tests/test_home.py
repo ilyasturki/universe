@@ -8,6 +8,7 @@ from PySide6.QtTest import QTest
 from uitest import descendant, record, until
 
 from universe_ui import host
+from universe_ui.screens.controller import FakeWatcher
 
 
 def stop(api):
@@ -538,6 +539,7 @@ def current_output(api):
 def test_the_dock_renders_over_a_running_game(api, fake, reprise, tmp_path):
     look, overlay = reprise
     root = look.root
+    api.screens.controller.start(FakeWatcher("dualsense-edge"))
     fake.launch("mirrors-edge", "")
     until(lambda: api.home.shown == "game")
     dock = open_dock(api, overlay)
@@ -559,6 +561,12 @@ def test_the_dock_renders_over_a_running_game(api, fake, reprise, tmp_path):
     game = ids(read(dock, "current")["children"])
     assert set(game) == {"details", "journal", "recordings", "sessions"}
     key(overlay, Qt.Key.Key_Escape)
+    assert buttons.index("controllers") == buttons.index("shot") + 1, "Controllers right after Screenshot"
+    dock.setProperty("index", buttons.index("controllers"))
+    key(overlay, Qt.Key.Key_Return)
+    assert ids(read(dock, "current")["children"]) == ["pad:event30", "find"], "each pad the watcher reads, then Find controllers"
+    key(overlay, Qt.Key.Key_Return)
+    until(lambda: fake.core.reconnects == ["event30"], "A on a pad reconnects it")
     dock.setProperty("index", buttons.index("perf"))
     key(overlay, Qt.Key.Key_Return)
     assert api.home.pauseOnHome is True

@@ -409,7 +409,8 @@ HOME pressed while another app has the focus is not HOME: see "Focus".
 The dock is `ui/Dock.qml` in the overlay window: the game's card at the left (its art, PLAYING or
 PAUSED, the title), a row of round buttons at the right (`row` in `Dock.qml`), a group's settings
 in a card above its button — Resume, Home, Quit, then Game (Details, Journal, Recordings, Sessions), Screenshot,
-Achievements (while the game's `achievementsTotal` is not 0 and its source's `achievements` switch,
+Controllers (a row per pad of `api.screens.controller.devices`, its bus and charge as the value, A
+`reconnect(id)`; then Find controllers, `rescan()`), Achievements (while the game's `achievementsTotal` is not 0 and its source's `achievements` switch,
 read through `sourceSettingsOf` on opening, is not off), Performance (MangoHud, FPS limit, Filter, Sharpness while the filter is FSR or NIS, the two
 gamescope sharpens, and Pause on HOME) and Sound (Volume, where A mutes, and Output). A recording shows as REC by the
 clock; what it records is the game's Video capture settings. ◀ ▶ move
@@ -1424,7 +1425,12 @@ its detail naming the printed side from the device's `printed_layout`; Switch 2 
 with its `slot` and `family`, so the row draws the button's glyph, and its `press` and `hold`
 macros, each carrying its `label` — the extras (back buttons, Fn) first, then the standard
 buttons) and `bind`, `unbind`, `learn`, `cancelLearn`, `setTesting`, `startWalk`, `finishWalk`, `cancelWalk`,
-`skipStep`, `backStep`, `declineWalk`, `suspend`, `resume`. Macros and families come from the core's `controller_state`; a write goes
+`skipStep`, `backStep`, `declineWalk`, `suspend`, `resume`, `rescan` (the watcher's `rescan`, and `rescanRequested`, which
+the host hands the gamepad thread: it lets SDL go and lists the pads again; the watcher's `rescanned`
+comes back as a `macroNotice` saying how many pads it found) and `reconnect(id)` (the core's
+`controller_reconnect` off the main thread, its outcome a `macroNotice`; false for a pad not listed).
+The PS5 Control Center's Controllers tile and the Switch 2 Controllers page (a row per pad, then
+Find Controllers) call the same two. Macros and families come from the core's `controller_state`; a write goes
 through `set_controller_macro`/`remove_controller_macro` and is followed by a `reload` to the watcher.
 
 The walk (`startWalk`, from the "Set up the buttons" row) learns the pad's buttons one after the
