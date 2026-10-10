@@ -37,7 +37,7 @@ PER_REGION = 16
 # Suspects of B never getting home walked again, at most: each costs a new window.
 CONFIRMED = 15
 # Tries of a button in a region that found no page earlier ones had: the button is worked out there.
-SATURATED = 3
+SATURATED = 6
 # Longer text is an excerpt, cut on purpose.
 EXCERPT = 60
 # A property that names data rather than where the cursor stands.
