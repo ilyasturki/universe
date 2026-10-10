@@ -272,7 +272,7 @@ const CONFIG_KEYS: &[ConfigKey] = &[
         )
     },
     config_key("Folders", "paths.games_root", "path", "Games", "Where sources install games."),
-    config_key("Folders", "paths.prefixes_root", "path", "Wine prefixes", "Where a game's prefix is made when it names none."),
+    config_key("Folders", "paths.prefixes_root", "path", "Windows game folders", "Where a Windows game's Wine prefix is made when it names none."),
     config_key("Folders", "paths.saves_root", "path", "Save backups", "Where each game's save backups are kept."),
     config_key("Folders", "paths.recordings_root", "path", "Recordings", "Where the capture module files its videos."),
     ConfigKey {

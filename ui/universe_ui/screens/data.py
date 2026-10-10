@@ -21,7 +21,7 @@ OWNER_DETAILS = {
 }
 ROOTS = {
     "games": "Games",
-    "prefixes": "Wine prefixes",
+    "prefixes": "Windows game folders",
     "saves": "Save backups",
     "recordings": "Recordings",
     "library": "Library data",

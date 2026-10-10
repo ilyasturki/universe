@@ -56,7 +56,7 @@ impl StorageView {
     fn show(&self, storage: &Value, me: Weak<StorageView>) {
         let names = [
             ("games", gettext("Games")),
-            ("prefixes", gettext("Wine Prefixes")),
+            ("prefixes", gettext("Windows Game Folders")),
             ("saves", gettext("Save Backups")),
             ("recordings", gettext("Recordings")),
             ("library", gettext("Library Data")),

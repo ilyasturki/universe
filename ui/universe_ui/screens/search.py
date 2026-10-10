@@ -63,7 +63,7 @@ SYNONYMS = {
     "gamesdb_id": ["gog galaxy", "gamesdb", "metadata", "description", "artwork"],
     "steam_appid": ["steam", "app id", "metadata", "description", "artwork"],
     "games_root": ["install folder", "library folder", "games directory"],
-    "prefixes_root": ["wineprefix", "pfx", "bottles"],
+    "prefixes_root": ["wine prefixes", "wineprefix", "pfx", "bottles"],
     "saves_root": ["savegames", "save data", "backups", "ludusavi"],
     "auto_backup": ["savegames", "save data", "backup", "ludusavi"],
     "keep": ["backups", "retention", "history", "savegames"],
