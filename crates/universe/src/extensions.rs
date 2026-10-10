@@ -363,14 +363,18 @@ pub async fn prepare(origin: Origin, mut progress: Option<Progress<'_, '_>>, can
     let text = std::fs::read_to_string(dir.join(format!("{kind}.toml")))?;
     let bad = |e: toml::de::Error| Error::Invalid(format!("{kind}.toml: {e}"));
     let header: Header = toml::from_str(&text).map_err(bad)?;
-    match kind {
-        "module" => drop(toml::from_str::<crate::modules::Manifest>(&text).map_err(bad)?),
-        "source" if toml::from_str::<crate::sources::Manifest>(&text).map_err(bad)?.exe.is_empty() => {
-            return Err(Error::Invalid("source.toml names no exe".into()));
+    let requires = match kind {
+        "module" => toml::from_str::<crate::modules::Manifest>(&text).map_err(bad)?.requires,
+        "source" => {
+            let manifest = toml::from_str::<crate::sources::Manifest>(&text).map_err(bad)?;
+            if manifest.exe.is_empty() {
+                return Err(Error::Invalid("source.toml names no exe".into()));
+            }
+            manifest.requires
         }
         "theme" if !dir.join(THEME_ENTRY).is_file() => return Err(Error::Invalid(format!("a theme starts at its {THEME_ENTRY}, which it lacks"))),
-        _ => {}
-    }
+        _ => crate::modules::Requires::default(),
+    };
     let id = header.id;
     if !valid_id(&id) {
         return Err(Error::Invalid(format!("{kind}.toml: id {id:?} is not lowercase letters, digits, - and _")));
@@ -381,7 +385,8 @@ pub async fn prepare(origin: Origin, mut progress: Option<Progress<'_, '_>>, can
     if let Some(l) = listed.as_ref().filter(|l| l.version != header.version) {
         return Err(Error::Invalid(format!("the index lists {id} {}, its archive holds {id} {}", l.version, header.version)));
     }
-    if let Some(why) = unsupported(header.api) {
+    let why = crate::modules::incompatible(header.api, &requires);
+    if !why.is_empty() {
         return Err(Error::Invalid(format!("{id}: {why}")));
     }
     if let Some(why) = held(kind, &id).or_else(|| other_kind_holds(kind, &id)) {
@@ -432,10 +437,13 @@ fn place(staged: Staged) -> Result<Installed> {
     Ok(installed)
 }
 
-/// `registry` or `unlisted` for an installed extension's folder, empty for a shipped one or the user's own.
+/// `registry` or `unlisted` for an installed extension's folder, `local` for the user's own, `builtin` for a shipped one.
 pub fn origin_of(kind: &str, dir: &Path) -> String {
+    if shipped_and_user(kind).is_some_and(|(_, user)| dir.parent() == Some(user.as_path())) {
+        return "local".into();
+    }
     if dir.parent() != Some(paths::extensions_dir(kind).as_path()) {
-        return String::new();
+        return "builtin".into();
     }
     let sidecar = std::fs::read_to_string(dir.with_extension("json")).ok().and_then(|s| serde_json::from_str::<Installed>(&s).ok());
     sidecar.map(|i| i.origin).filter(|o| !o.is_empty()).unwrap_or_else(|| "unlisted".into())
@@ -496,11 +504,19 @@ fn take_out(kind: &str, id: &str) -> Result<()> {
     }
 }
 
+/// Whether the index's `listed` version replaces the `installed` one: a higher X.Y.Z, or any other one when either is not X.Y.Z.
+fn newer(listed: &str, installed: &str) -> bool {
+    match (crate::modules::version(listed), crate::modules::version(installed)) {
+        (Some(l), Some(i)) => l > i,
+        _ => listed != installed,
+    }
+}
+
 fn row(listed: Option<&Listed>, mine: Option<&Installed>, enabled: bool) -> serde_json::Value {
     let pick = |l: fn(&Listed) -> &String, i: fn(&Installed) -> &String| mine.map(i).or(listed.map(l)).cloned().unwrap_or_default();
     let api = mine.map(|i| i.api).or(listed.map(|l| l.api)).unwrap_or_default();
     let update = match (listed, mine) {
-        (Some(l), Some(i)) if i.origin == "registry" && l.version != i.version && unsupported(l.api).is_none() => l.version.clone(),
+        (Some(l), Some(i)) if i.origin == "registry" && newer(&l.version, &i.version) && unsupported(l.api).is_none() => l.version.clone(),
         _ => String::new(),
     };
     serde_json::json!({
@@ -591,7 +607,7 @@ impl Core {
             let origin = match t.origin.as_str() {
                 "registry" => match index.as_ref().expect("fetched for a registry extension") {
                     Ok(index) => match index.extensions.iter().find(|l| l.kind == t.kind && l.id == t.id) {
-                        Some(l) if l.version == t.version => continue,
+                        Some(l) if !newer(&l.version, &t.version) => continue,
                         Some(l) => match unsupported(l.api) {
                             Some(why) => Err(Error::Invalid(format!("{} {}: {why}", t.id, l.version))),
                             None => Ok(Origin::Listed(Box::new(l.clone()), url.clone())),
@@ -792,6 +808,8 @@ mod tests {
         core.reload_modules().await;
         core.extension_remove("hello").await.unwrap();
         assert!(core.config.read().await.modules.enabled.iter().any(|e| e == "hello"), "the user's own hello stays on");
+        let own = core.modules().await.into_iter().find(|m| m["id"] == "hello").unwrap();
+        assert_eq!(own["origin"], "local", "the user's own folder says so");
     }
 
     #[tokio::test]
@@ -810,6 +828,12 @@ mod tests {
         assert!(refused(core.extension_install(&future.to_string_lossy(), true, None).await).contains("extension api"));
         let bare = tree(&work, "module", "bare", "1.0.0", 0);
         assert!(refused(core.extension_install(&bare.to_string_lossy(), true, None).await).contains("no extension api"));
+        let ahead = tree(&work, "module", "ahead", "1.0.0", API);
+        let manifest = std::fs::read_to_string(ahead.join("module.toml")).unwrap();
+        std::fs::write(ahead.join("module.toml"), format!("{manifest}[requires]\ncore = \">=99.0.0\"\n")).unwrap();
+        assert!(refused(core.extension_install(&ahead.to_string_lossy(), true, None).await).contains("needs Universe >=99.0.0"));
+        let shipped = core.modules().await.into_iter().find(|m| m["id"] == "capture").unwrap();
+        assert_eq!(shipped["origin"], "builtin", "a shipped module says so");
         assert!(refused(core.extension_install("http://example.org/x.tar.gz", true, None).await).contains("https://"));
         assert!(refused(core.extension_remove("capture").await).contains("ships with Universe"));
         let as_source = tree(&work, "source", "capture", "1.0.0", API);
@@ -859,6 +883,11 @@ mod tests {
         assert_eq!(core.extension_update("", None).await.unwrap().len(), 1);
         assert_eq!(ran(&core, "source", "shop").await, "shop 2.0.0");
         assert!(core.extension_update("", None).await.unwrap().is_empty(), "current: nothing to fetch");
+        write("1.0.0", &one, &sha(&one), API);
+        let listing = core.extensions().await.unwrap();
+        let shop = listing["extensions"].as_array().unwrap().iter().find(|r| r["id"] == "shop").cloned().unwrap();
+        assert_eq!(shop["update"], "", "an older version in the index is no update");
+        assert!(core.extension_update("", None).await.unwrap().is_empty(), "nor is it fetched");
 
         write("2.5.0", &two, &sha(&two), API);
         assert!(

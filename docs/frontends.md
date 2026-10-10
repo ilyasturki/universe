@@ -1020,12 +1020,16 @@ every row.
 
 `api.screens.modules` is Settings › Modules and `api.screens.sourceList` Settings › Sources, the
 same list (`screens/settings.py`'s `ListForm`): one `action` row per entry (`module` its id, its
-name, `value` whether it runs, `switch: true` so the row draws its state as a switch ahead of the
-chevron, `display` On / Off / Unavailable, `meta` the version, `warning` what is missing, `source`
-which list it is), the ones running first, the others in an "Off" card. A opens the entry's page;
-△ (Y in Reprise, X in the Switch 2 look) toggles it in the list (`toggle(index)`, refused with a
-warning while it is off). `indexOf(id)` finds an entry's row for the cursor to land on again. An
-installed extension's `origin` reads `unlisted` as a `tag` and in `meta`. Each list ends on a
+name, `value` whether it runs, `display` On / Off / Set it up / Unavailable, drawn as text ahead of
+the chevron since A opens a page, `detail` the entry's description, or what is missing or waiting,
+`meta` an add-on's version and where it came from, `warning` what is missing, `source` which list it
+is), the ones running first, the others in an "Off" card. No row draws a switch: A opens the
+entry's page, which starts with its Enabled switch; Y in the Universe look, X in the consoles'
+(each hinted) toggles it in the list (`toggle(index)`, refused with a warning while it is off).
+`indexOf(id)` finds an entry's row for the cursor to land on again. A built-in's `meta` is empty: its
+version is the app's own. An add-on's reads `v1.2.0 · from the index`, `· Unlisted` or `· your own
+folder` by its `origin`, and `unlisted` is also its `tag`. The consoles mark the row with `opens: true`
+for their chevron. Each list ends on a
 "Get more…" row of its own card (`key: "more"`, `addons` the kind, `module` or `source`; no switch,
 `toggle` leaves it); each look's Settings › Themes builds one of its own, `addons: "theme"` (see
 "Themes"). Picking it opens `api.screens.addons` (`AddonsForm`, over the core's

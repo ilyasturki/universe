@@ -331,7 +331,7 @@ pub(crate) fn unavailable(incompatible: &str, missing: &[String]) -> String {
     }
 }
 
-fn version(text: &str) -> Option<(u64, u64, u64)> {
+pub(crate) fn version(text: &str) -> Option<(u64, u64, u64)> {
     let mut parts = text.split('.').map(|p| p.parse::<u64>().ok());
     let v = (parts.next()??, parts.next().unwrap_or(Some(0))?, parts.next().unwrap_or(Some(0))?);
     parts.next().is_none().then_some(v)

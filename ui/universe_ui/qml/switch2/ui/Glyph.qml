@@ -145,6 +145,11 @@ Canvas {
             ctx.lineTo(9 * s, 12 * s);
             ctx.lineTo(14.5 * s, 18 * s);
             ctx.stroke();
+        } else if (kind === "chevron") {
+            ctx.moveTo(9.5 * s, 6 * s);
+            ctx.lineTo(15 * s, 12 * s);
+            ctx.lineTo(9.5 * s, 18 * s);
+            ctx.stroke();
         } else if (kind === "film") {
             rr(3.5, 5, 17, 14, 2);
             ctx.stroke();

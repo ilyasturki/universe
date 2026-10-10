@@ -98,9 +98,16 @@ def advanced_row(shown):
     return row
 
 
+# A built-in's version is the app's own, so only these show theirs.
+ADDON_ORIGINS = {"registry": "from the index", "unlisted": "Unlisted", "local": "your own folder"}
+
+
 def _meta(entry):
+    origin = ADDON_ORIGINS.get(str(entry.get("origin") or ""))
+    if origin is None:
+        return ""
     version = entry.get("version")
-    return " · ".join(p for p in (f"v{version}" if version else "", "Unlisted" if entry.get("origin") == "unlisted" else "") if p)
+    return " · ".join(p for p in (f"v{version}" if version else "", origin) if p)
 
 
 def _dig(data, dotted, default=None):
@@ -678,7 +685,6 @@ class ListForm(RowsForm):
                 display="Unavailable" if warning else "Set it up" if setup else "On" if enabled else "Off",
                 action="Open",
                 runner="",
-                switch=True,
                 meta=_meta(entry),
                 warning=warning,
                 source=self.source,
@@ -687,7 +693,7 @@ class ListForm(RowsForm):
                 if warning
                 else f"On, {setup}"
                 if setup
-                else _meta(entry),
+                else str(entry.get("description") or "").replace("`", ""),
             )
             (on if enabled else off).append(len(rows))
             rows.append(row)

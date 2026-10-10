@@ -15,7 +15,6 @@ Item {
     readonly property bool hasFix: entry.fix !== undefined && entry.fix !== ""
     readonly property bool explains: info && (hasFix || entry.wraps === true)
     readonly property real naturalHeight: explains ? notes.y + notes.height + Theme.dp(20) : baseHeight
-    readonly property bool hasSwitch: entry.switch === true
     // A pad button reads its macros by name, the hold one marked, and nothing without one; with no code it keeps "Unbound".
     readonly property bool button: entry.bound === true && entry.home !== true
     readonly property string value: button ? [entry.press && entry.press.label, entry.hold && "Hold · " + entry.hold.label].filter(Boolean).join(" · ") : entry.display || ""
@@ -325,21 +324,13 @@ Item {
 
             Text {
                 anchors.verticalCenter: parent.verticalCenter
-                visible: text !== "" && !(row.hasSwitch && !row.entry.warning)
+                visible: text !== ""
                 text: row.value
                 color: row.focused ? row.onFocus : row.entry.accent === true || row.changed ? Theme.accent : Theme.textSecondary
                 font.family: Theme.sans
                 font.pixelSize: Theme.dp(21)
                 elide: Text.ElideMiddle
                 width: Math.min(implicitWidth, row.valueMax)
-            }
-
-            SettingsToggle {
-                visible: row.hasSwitch
-                anchors.verticalCenter: parent.verticalCenter
-                on: row.entry.value === true
-                focused: row.focused
-                opacity: row.entry.warning && row.entry.value !== true ? 0.35 : 1.0
             }
 
             Canvas {

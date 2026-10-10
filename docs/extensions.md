@@ -65,7 +65,8 @@ would break an extension written for api 2 bumps the number, and Universe then r
 still supports.
 
 `[requires] core` (comparators on Universe's version) still applies on top, for an extension that
-needs a feature added later in the same api.
+needs a feature added later in the same api: an install refuses a module or a source it rules out, with
+the version it needs.
 
 A source's `[[tools]]` pins only stand in for its own programs: it pins nothing while it is off, a
 shipped source's pin wins over an extension's of the same id, and a pin is only fetched for the
@@ -94,7 +95,8 @@ runs.
 Installing does not switch an extension on: `universe module enable <id>` or
 `universe source enable <id>` does, and so do the Modules and Sources pages. A theme is picked in
 Settings › Themes. An update replaces the folder in place. An index install takes the index's
-newer version. Any other install is fetched again from its URL, archive or folder. Removing
+version when it is newer: X.Y.Z compared as numbers, so an index that goes back offers nothing (a
+version that is not X.Y.Z offers any other). Any other install is fetched again from its URL, archive or folder. Removing
 switches a module or a source off, then
 deletes its folder; removing the theme in use puts the default look back. What it saved under
 `$XDG_DATA_HOME/universe/{modules,sources}/<id>/` stays.

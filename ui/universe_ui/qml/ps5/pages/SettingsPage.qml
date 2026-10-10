@@ -344,9 +344,9 @@ FocusScope {
                     module: m.module,
                     value: m.value,
                     display: m.display,
-                    switch: true,
+                    opens: true,
                     warning: m.warning,
-                    detail: m.warning ? m.detail : (m.tag ? m.tag + " · " : "") + Details.enabledSentence(m.label, m.source),
+                    detail: (m.tag && !m.warning ? m.tag + " · " : "") + m.detail,
                     form: i,
                     dim: m.warning !== "" && m.value !== true
                 };

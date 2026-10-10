@@ -108,12 +108,15 @@ def test_modules_list(api, fake):
     form.load()
     *modules, more = form.rows
     assert [r["module"] for r in modules] == ["capture", "journal", "screenshot", "controls"], "the manifests' order, sources apart"
-    assert all(r["type"] == "action" and r["key"] == "module" and r["switch"] is True and r["source"] is False for r in modules)
+    assert all(r["type"] == "action" and r["key"] == "module" and r["source"] is False for r in modules)
+    assert all(r["meta"] == "" for r in modules), "a built-in shows no version: it is the app's own"
     assert (more["key"], more["addons"]) == ("more", "module"), "the list ends on the add-ons"
     assert sorted(i for g in form.groups for i in g["rows"]) == list(range(len(form.rows)))
     assert all(g["off"] is not form.rows[i]["value"] for g in form.groups for i in g["rows"]), "the modules turned off share a card of their own"
     capture, journal = (form.rows[form.indexOf(m)] for m in ("capture", "journal"))
     assert capture["value"] is True and capture["warning"] == ""
+    described = next(m for m in fake.modules() if m["id"] == "capture")["description"].replace("`", "")
+    assert capture["detail"] == described, "a working module's caption says what it does"
     assert journal["value"] is False and "ffmpeg" in journal["warning"]
     next(m for m in fake.core._data["modules"] if m["id"] == "capture").update(available=False, missing=["gsr-cli"])
     form.load()
@@ -133,6 +136,11 @@ def test_modules_list(api, fake):
     assert sorted(i for g in form.doctorGroups for i in g["rows"]) == list(range(len(form.doctor)))
     assert all(form.doctor[i]["value"] for g in cards for i in g["rows"]), "a card keeps its count but not its failures"
     assert all(len({form.doctor[i]["module"] for i in g["rows"]}) == 1 for g in cards), "a module's or a source's checks share a card"
+    fake.core.extension_install("/home/me/lights", True)
+    next(m for m in fake.core._data["modules"] if m["id"] == "screenshot").update(origin="local", version="0.3.0")
+    form.load()
+    lights, own = (form.rows[form.indexOf(m)] for m in ("lights", "screenshot"))
+    assert "1.0.0" in lights["meta"] and "0.3.0" in own["meta"], "an add-on and the user's own folder keep their version"
 
 
 def test_sources_list(api, fake):
@@ -144,7 +152,7 @@ def test_sources_list(api, fake):
         return [r for r in form.rows if r["key"] == "module"]
 
     assert [r["module"] for r in sources()] == ["gog", "epic", "itch", "steam"], "the running ones first"
-    assert all(r["switch"] is True and r["source"] is True for r in sources())
+    assert all(r["source"] is True and r["meta"] == "" for r in sources()), "a built-in store shows no version"
     assert [r["value"] for r in sources()] == [True, False, False, False]
     assert (form.rows[-1]["key"], form.rows[-1]["addons"]) == ("more", "source"), "the list ends on the add-ons"
 

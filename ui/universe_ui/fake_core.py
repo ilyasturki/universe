@@ -317,6 +317,11 @@ def _semver(version):
     return tuple(int(p) for p in parts) if len(parts) == 3 and all(p.isdigit() for p in parts) else None
 
 
+def _newer(listed, installed):
+    a, b = _semver(listed), _semver(installed)
+    return a > b if a is not None and b is not None else listed != installed
+
+
 def _epoch(value):
     if not value:
         return 0
@@ -1631,7 +1636,7 @@ class FakeCore:
         return out
 
     def _manifests(self, kind):
-        out = [{"dir": "", "hooks": {}, "incompatible": "", "origin": "", **entry} for entry in copy.deepcopy(self._data.get(kind, []))]
+        out = [{"dir": "", "hooks": {}, "incompatible": "", "origin": "builtin", **entry} for entry in copy.deepcopy(self._data.get(kind, []))]
         for entry in out:
             entry["settings"] = [{"platforms": [], "required": False, "runners": [], **s} for s in entry.get("settings", [])]
             for setting in entry["settings"]:
@@ -2324,7 +2329,7 @@ class FakeCore:
         either = mine or listed
         api = (mine or {}).get("api", (listed or {}).get("api", 0))
         incompatible = "" if api == EXTENSION_API else f"written for extension api {api}: this Universe reads api {EXTENSION_API}"
-        newer = listed and mine and mine["origin"] == "registry" and listed["version"] != mine["version"] and listed["api"] == EXTENSION_API
+        newer = listed and mine and mine["origin"] == "registry" and _newer(listed["version"], mine["version"]) and listed["api"] == EXTENSION_API
         update = listed["version"] if newer else ""
         enabled = any(e["id"] == either["id"] and e.get("enabled") for e in self._data.get(either["kind"] + "s", []))
         return {

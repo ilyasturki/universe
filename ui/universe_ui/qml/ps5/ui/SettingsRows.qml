@@ -484,7 +484,7 @@ FocusScope {
                         id: control
                         x: parent.width - width
                         height: rows.rowHeight
-                        width: toggle.visible ? toggle.width : radio.visible ? radio.width : valueText.visible ? valueText.width + (row.hasValueMark ? valueMark.width + Theme.dp(16) : 0) : check.visible ? check.width : 0
+                        width: toggle.visible ? toggle.width : radio.visible ? radio.width : valueText.visible ? valueText.width + (row.hasValueMark ? valueMark.width + Theme.dp(16) : 0) + (opens.visible ? opens.width + Theme.dp(8) : 0) : check.visible ? check.width : 0
 
                         Image {
                             id: valueMark
@@ -502,7 +502,7 @@ FocusScope {
 
                         Toggle {
                             id: toggle
-                            visible: row.entry.type === "bool" || (row.entry.switch === true && !row.entry.warning)
+                            visible: row.entry.type === "bool"
                             anchors.verticalCenter: parent.verticalCenter
                             on: row.entry.value === true
                             opacity: row.disabled ? 0.4 : 1.0
@@ -529,10 +529,23 @@ FocusScope {
                             }
                         }
 
+                        // A row whose A opens a page of its own.
+                        Glyph {
+                            id: opens
+                            visible: row.entry.opens === true && valueText.visible
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: Theme.dp(30)
+                            height: width
+                            kind: "chevron"
+                            tint: Theme.textMuted
+                        }
+
                         Label {
                             id: valueText
                             visible: row.entry.type !== "bool" && row.entry.type !== "radio" && !row.info && !toggle.visible
-                            anchors.right: parent.right
+                            anchors.right: opens.visible ? opens.left : parent.right
+                            anchors.rightMargin: opens.visible ? Theme.dp(8) : 0
                             anchors.verticalCenter: parent.verticalCenter
                             text: row.entry.display || ""
                             color: row.disabled ? Theme.textDisabled : Theme.textSecondary
