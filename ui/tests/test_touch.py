@@ -1,127 +1,58 @@
 import pytest
-from PySide6.QtCore import Property, QCoreApplication, QEvent, QObject, QUrl, Signal, Slot
-from PySide6.QtQuick import QQuickView
+from looks import Look
+from PySide6.QtCore import Q_ARG, Q_RETURN_ARG, QMetaObject, QPointF, Qt
 from uitest import until
 
-from universe_ui import gamepad, host
-
-SCENE = """
-import QtQuick
-import "UI_DIR"
-
-Rectangle {
-    id: root
-    width: 800
-    height: 600
-    property alias current: tile.current
-    property int picks: 0
-
-    Flickable {
-        id: view
-        objectName: "view"
-        anchors.fill: parent
-        contentHeight: 3000
-        interactive: false
-
-        Rectangle {
-            id: tile
-            property bool current: false
-            x: 100; y: 100; width: 200; height: 200
-            Pointer {
-                current: tile.current
-                onPicked: { root.picks++; tile.current = true; }
-            }
-        }
-        Scroller {}
-    }
-}
-"""
-
-
-class Keys(QObject):
-    modeChanged = Signal()
-
-    def __init__(self):
-        super().__init__()
-        self.calls = []
-
-    @Slot(str)
-    def hold(self, action):
-        self.calls.append(("hold", action))
-
-    @Slot(str)
-    def release(self, action):
-        self.calls.append(("release", action))
-
-    @Slot(str)
-    def press(self, action):
-        self.calls.append(("press", action))
-
-    mode = Property(str, lambda self: "pad", notify=modeChanged)
-
-
-class Api(QObject):
-    def __init__(self):
-        super().__init__()
-        self._keys = Keys()
-
-    keys = Property(QObject, lambda self: self._keys, constant=True)
+from universe_ui import gamepad
 
 
 @pytest.fixture
-def scene(app, tmp_path):
-    path = tmp_path / "scene.qml"
-    path.write_text(SCENE.replace("UI_DIR", (host.QML_DIR / "ui").as_uri()))
-    api = Api()
-    view = QQuickView()
-    view.rootContext().setContextProperty("api", api)
-    view.setSource(QUrl.fromLocalFile(str(path)))
-    assert view.status() == QQuickView.Status.Ready, view.errors()
-    view.show()
-    until(view.isExposed)
-    yield view, api.keys
-    view.close()
-    view.deleteLater()
-    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+def reprise(api):
+    shown = Look(api, "reprise")
+    yield shown
+    shown.close()
 
 
-def test_a_first_tap_picks_and_the_next_one_is_a(scene):
-    view, keys = scene
-    root = view.rootObject()
-    gamepad.touch(view, [(200, 200)])
-    until(lambda: root.property("picks") == 1)
-    assert keys.calls == [], "the first tap moves the ring only"
-    gamepad.touch(view, [(200, 200)])
-    until(lambda: keys.calls)
-    assert keys.calls == [("press", "Accept")], "a tap on the item holding the ring is A, once, at the release"
+def game_id(home):
+    game = home.property("currentGame")
+    return game.property("id") if game is not None else None
 
 
-def test_a_long_press_holds_a_until_the_finger_lifts(scene):
-    view, keys = scene
-    view.rootObject().setProperty("current", True)
-    gamepad.touch(view, [(200, 200)], hold_ms=400)
-    until(lambda: keys.calls == [("hold", "Accept"), ("release", "Accept")], "held as a held A opens the game menu")
+def tile_centre(home, i):
+    def items(item):
+        for child in item.childItems():
+            yield child
+            yield from items(child)
+
+    rail = next(v for v in items(home) if v.metaObject().className().startswith("QQuickListView") and v.property("pitch"))
+    tile = QMetaObject.invokeMethod(rail, "itemAtIndex", Q_RETURN_ARG("QQuickItem*"), Q_ARG(int, i))
+    p = tile.mapToScene(QPointF(tile.width() / 2, tile.height() * 0.6))
+    return p.x(), p.y()
 
 
-def test_a_swipe_scrolls_the_view_and_is_no_tap(scene):
-    view, keys = scene
-    root = view.rootObject()
-    root.setProperty("current", True)
-    flick = root.findChild(QObject, "view")
-    gamepad.touch(view, [(200, 500 - k * 40) for k in range(10)])
-    until(lambda: flick.property("contentY") > 300, "the content follows the finger up, and the fling carries it on")
-    assert keys.calls == [] and root.property("picks") == 0, "a finger that lands to scroll presses nothing"
+def test_a_first_tap_picks_a_tile_a_held_one_opens_its_menu_and_the_next_tap_is_a(reprise, fake):
+    home = reprise.home()
+    first = until(lambda: game_id(home))
+    gamepad.touch(reprise.window, [tile_centre(home, 1)])
+    picked = until(lambda: game_id(home) != first and game_id(home))
+    assert fake.currentSession is None, "the first tap moves the ring only"
+    gamepad.touch(reprise.window, [tile_centre(home, 1)], hold_ms=800)
+    until(lambda: reprise.root.property("menuOpen"), "held, the tile under the ring opens its menu as a held A does")
+    reprise.press(Qt.Key.Key_Escape)
+    until(lambda: not reprise.root.property("menuOpen"))
+    gamepad.touch(reprise.window, [tile_centre(home, 1)])
+    until(lambda: fake.currentSession, "a tap on the tile holding the ring is A: the game starts")
+    assert fake.currentSession["id"] == picked
 
 
-def test_a_finger_is_the_pads_glyphs_and_no_cursor(api, scene):
-    from PySide6.QtCore import QEvent, QPointF, Qt
+def test_a_finger_is_the_pads_glyphs_and_no_cursor(api, reprise):
+    from PySide6.QtCore import QEvent
     from PySide6.QtGui import QMouseEvent
 
-    view, _ = scene
-    api.keys.watch(view)
+    window = reprise.window
     p = QPointF(10, 10)
-    api.keys.eventFilter(view, QMouseEvent(QEvent.Type.MouseMove, p, p, p, Qt.MouseButton.NoButton, Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier))
+    api.keys.eventFilter(window, QMouseEvent(QEvent.Type.MouseMove, p, p, p, Qt.MouseButton.NoButton, Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier))
     assert api.keys.mode == "mouse"
-    gamepad.touch(view, [(500, 500)])
+    gamepad.touch(window, [(window.width() / 2, 40)])
     until(lambda: api.keys.mode == "pad", "Qt's mouse events made from the touch leave it there")
-    assert view.cursor().shape() == Qt.CursorShape.BlankCursor
+    assert window.cursor().shape() == Qt.CursorShape.BlankCursor
