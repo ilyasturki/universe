@@ -162,8 +162,7 @@ fn sony_pad_env(mode: &str) -> Option<(String, String)> {
     Some((key.into(), "1".into()))
 }
 
-/// Every Proton launch: winedbg writes `<time>_appid-<n>_crash.log` into `dir` when the game dies of an unhandled exception, which a game
-/// exiting 0 through umu-run would not show otherwise.
+/// winedbg writes `<time>_appid-<n>_crash.log` into `dir` on an exception Wine does not handle.
 pub fn crash_env(kind: crate::runners::Kind, dir: &Path) -> BTreeMap<String, String> {
     match kind {
         crate::runners::Kind::Proton => BTreeMap::from([("PROTON_CRASH_REPORT_DIR".to_string(), dir.to_string_lossy().into_owned())]),
@@ -171,7 +170,6 @@ pub fn crash_env(kind: crate::runners::Kind, dir: &Path) -> BTreeMap<String, Str
     }
 }
 
-/// A report `crash_env`'s winedbg left in `dir`.
 pub fn crash_report_in(dir: &Path) -> bool {
     std::fs::read_dir(dir).into_iter().flatten().flatten().any(|e| e.file_name().to_string_lossy().ends_with("_crash.log"))
 }

@@ -872,6 +872,7 @@ fn day(ts: &str, loc: &Locale) -> String {
 /// The row's `end`, the exit code behind a crash.
 fn fmt_end(r: &Value) -> String {
     match s(r, "end").as_str() {
+        "crashed" if r["exit"].as_i64() == Some(0) => "crashed".into(),
         "crashed" => format!("crashed ({})", r["exit"].as_i64().unwrap_or(-1)),
         other => other.to_string(),
     }
@@ -1129,6 +1130,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 if let Some(s) = sessions::read(&path).unwrap_or_default().into_iter().find(|s| s.session == sid) {
                     if !json {
                         let end = match sessions::end_of(&s) {
+                            "crashed" if s.exit == 0 => "crashed".red().to_string(),
                             "crashed" => format!("crashed ({})", s.exit).red().to_string(),
                             other => other.yellow().to_string(),
                         };
