@@ -1,0 +1,73 @@
+---
+title: Launch settings
+description: How a game's own launch settings sit over the defaults every game shares, where each one is set, and how the settings rows read.
+sidebar:
+  order: 2
+---
+
+import Shot from '../../../../components/Shot.astro';
+import Clip from '../../../../components/Clip.astro';
+
+Most launch settings have a default that all games share. A game can set its own value over it, and whatever it leaves unset comes from the default. The defaults live in `~/.config/universe/config.toml`, under `[launch]`, and a game's own values in its `game.toml`, in `~/.local/share/universe/games/`.
+
+<Shot name="settings-game-defaults" />
+
+## Where each one is set
+
+Open a game's **Game settings** from the **Game settings** button on its page, or with **Start** on the game › **Manage** › **Game settings**. Its cards are **Display**, **Overlay**, the runner's card (**Proton** on a Proton game; a Wine game's **Wine** card holds advanced rows only), **Launch** and **Desktop and library**, then one for each feature and for the store when they have settings per game.
+
+Settings › **Game defaults** holds the defaults, in **Display**, **Overlay**, **Saves** and **Updates**, and under Show advanced in **Environment**, **Programs**, **Folders**, **API keys**, **Desktop** and **Proton builds**.
+
+The Proton and Wine defaults sit on the runner's page instead, Settings › **Emulators & Proton** › **Proton** (or **Wine**). There you find **Proton build**, **Wayland**, **HDR** and **PlayStation controller**, then under Show advanced the sync modes, the upscaler upgrades and **Debug log**. Game defaults doesn't show them.
+
+Some settings belong to one game only: **Wrapper command**, **Arguments**, **Working directory**, **Before the game**, **After the game**, **Wine prefix**, **Architecture**, **umu id**, **Store** and **DLL overrides**. Two exist only as defaults, **Gamescope program** and **umu-run program**.
+
+A runner's page adds a level in between for its **Gamescope** switch and an emulator's options. There, a game's own value wins over the runner page's, which wins over the default.
+
+The Switch 2 and PS5 looks call the game's page **Game Settings**, in the game's menu, and the PS5 look names the defaults **Game Defaults**.
+
+## Advanced settings
+
+The rows for power users stay hidden until you ask for them. **Y** shows or hides them on Game defaults, on a game's settings and on a runner's page, and the **More** menu (**Start**) lists **Show advanced** too. They fold into the basic cards under a rule (**Advanced**, **Advanced · Scaling**) or come as cards of their own, and every page opens with them hidden.
+
+A game's or a runner's page keeps showing an advanced row it sets itself, even with the others hidden. Game defaults hides them all.
+
+## How a row reads
+
+A value of `auto` shows what it comes to on this machine, as in "auto · 144" for the refresh rate on a 144 Hz screen, or "auto · On" for adaptive sync on a screen that supports it. On Game defaults, an unset scaling row shows what gamescope does without it, such as "default · linear".
+
+On a game's page and a runner's page, a value the page doesn't set names where it comes from:
+
+- **Default** is Universe's own default.
+- **Global** is a default you set, on Game defaults or, for the Proton and Wine settings, on the runner's page.
+- **Runner** comes from the runner's page.
+- **Found** is the program Universe found.
+
+A value the page sets itself shows **CHANGED**, with a bar along the row's left edge.
+
+Some pickers, such as the scaler's, the filter's and adaptive sync's, open on an entry that drops the page's own value, and that entry reads where the value would come from then ("Default · linear"). The pickers for a resolution, a rate or a sharpness end on **Type a value…** for one they don't list.
+
+## Reset, and every game at once
+
+On a game's or a runner's page, **X** resets the row, so the page's own value goes and the inherited one shows again. On an environment variable or a DLL override, **X** removes it. The **More** menu lists the same as **Reset** or **Remove**. Game defaults has no reset; there you choose the default value again, or the picker's first entry where it has one, and **X** (**Remove**) deletes an environment variable.
+
+A game's settings can also change a value for every game it reaches. In a picker, **Y** applies the choice to **All games**, or to a narrower set the row names, like **All Proton games** or **All Dolphin games**. The value becomes the default, this game drops its own, and games that set their own keep theirs. After you type a value or add a variable, Universe asks whether it's for **This game** or for all of them. For a switch, the **More** menu has **Turn on for all …** and **Turn off for all …**, and for a value the game sets itself, **Apply to all …** makes it the default. A notice confirms the new value and which games it reached.
+
+## From the command line
+
+[`universe set`](/docs/reference/cli/set/) writes a game's own values, and [`universe config`](/docs/reference/cli/config/) the defaults:
+
+```sh
+universe set <game> fps_limit=60 gamescope_filter=fsr
+universe set <game> fps_limit=
+universe set <game> options.fullscreen=false
+universe config set launch.fps_limit 120
+universe config set launch.fps_limit
+universe config get launch
+```
+
+`universe set` takes the launch keys without their `launch.` prefix and a runner option as `options.<key>`, and an empty value removes the game's own. `universe config set` with no value removes a default. A key set at the wrong level is refused, with an error like `launch.umu_run is a global key`. A list, such as `args`, is split on commas.
+
+[`universe launch-keys`](/docs/reference/cli/launch-keys/) prints every key with its type, default and scope. The [Launch keys](/docs/reference/launch-keys/) page lists them all, and [config.toml](/docs/reference/config/) covers the rest of the file.
+
+When Home Manager writes your config.toml (`programs.universe.settings`), the file is read-only. The pages show the defaults but can't change them, and `universe config set` fails.

@@ -1,0 +1,114 @@
+---
+title: Troubleshooting
+description: System check and universe doctor, a game's logs and how each session ended, the debug log, crash reports and the Wine prefix tools.
+sidebar:
+  order: 5
+---
+
+import Shot from '../../../../components/Shot.astro';
+import Clip from '../../../../components/Clip.astro';
+
+When a game won't start or misbehaves, run System check first, then read the game's log. For the settings to change once you know more, see [Game fixes](/docs/running/game-fixes/).
+
+## System check
+
+Settings › **System check** runs every check Universe has. A tally at the top counts the checks that pass and the ones that need attention. The **Needs attention** card lists the failing ones, each with what's wrong and a **To fix:** line. Then come a card per area (**Core**, **Runners**, **Media**, **Controller**) and one for each feature or store with checks of its own.
+
+<Shot name="settings-system-check" />
+
+On a failing row that an install fixes, **A** reads **Install**; Universe asks first, then installs the build or your distribution's package. **X** (**Refresh**) runs the checks again.
+
+The checks you're most likely to meet:
+
+- **Proton launcher (umu-run)** fails when umu-run is missing and there's no `python3` to run the build Universe would fetch.
+- **Proton (proton-ge)**, named after your Proton build, fails when no build of that name is on the machine and umu-run would fall back to its own UMU-Proton. A missing `proton-ge` passes, since umu-run downloads the latest GE-Proton at the first launch.
+- Under **Runners**, the row of a runner a game uses fails when its program wasn't found.
+- **Gamescope**, **HUD inside Gamescope (mangoapp)** and **Screen resolution** appear while gamescope is on.
+- **Frame rate limit (MangoHud)** and **MangoHud in 32-bit games** look for MangoHud and its 32-bit layer.
+- **Game logs kept across reboots** looks for a persistent journal, which keeps the logs [below](/docs/running/troubleshooting/#a-games-logs).
+
+In the Switch 2 look it's System Settings › **System check**, in the PS5 look **System Check**, and both refresh on **Y**. Universe Desktop has it in its main menu.
+
+## universe doctor
+
+[`universe doctor`](/docs/reference/cli/doctor/) runs the same checks in a terminal. A passing check prints ✓ and its detail. A failing one prints ✗, its area and its id, then the detail and a `fix:` line:
+
+```text
+✗ Game logs kept across reboots  core        journal-persistent
+    no /var/log/journal: a reboot drops the games' logs
+    fix: set Storage=persistent in journald.conf
+```
+
+It ends on "all N checks pass", or on how many pass and how many need attention, in which case it exits with 1. A fix that an install covers starts with `universe component install <id> (Settings › Emulators & Proton)`. `--json` prints the checks for a script. [`universe setup`](/docs/reference/cli/setup/) runs them too, after installing the Universe Shell extension on GNOME.
+
+## A game's logs
+
+What a game prints goes to the systemd user journal, in the unit `universe-game-<id>-<session>.service`. To read it, press **Start** on the game › **Manage** › **Sessions and logs**, or during a game HOME › **Game** › **Sessions**. The **SESSIONS** page lists each session with how it ended. **A** (**Read the log**) shows its last 400 lines, the command it launched first, and **B** goes back to the list. "The journal no longer holds this session." means the journal dropped it.
+
+From a terminal, [`universe logs`](/docs/reference/cli/logs/) prints the running session's log, or the last one's:
+
+```sh
+universe logs <game>
+universe logs <game> <session> -n 0
+universe logs <game> -f
+```
+
+It prints the last 200 lines by default and `-n 0` prints them all; `-f` keeps following a running game. [`universe sessions <game>`](/docs/reference/cli/sessions/) lists the session ids. The logs survive a reboot only with a persistent journal, which `Storage=persistent` in journald.conf turns on.
+
+The Switch 2 and PS5 looks call this page **Play Log**.
+
+## How a session ended
+
+The **SESSIONS** page gives each session one of these:
+
+- **Quit** means the game exited with code 0.
+- **Stopped** means you stopped it from Universe.
+- **Crashed (exit 1)** means it exited on its own with an error code, here 1.
+- **Crashed** alone means Proton filed a crash report for it.
+- **Killed** means a signal Universe didn't send ended it, such as the system's out-of-memory killer.
+- **Ended** marks an older session whose record can't tell.
+- **Playing now** is the session running now.
+
+umu-run can exit with 0 after the game crashed, so a Proton game's crash may read **Quit** when Proton filed no report. After a crash or a kill, a notice says how long the game ran and points to Sessions and logs. A game that can't start at all gets a **Could not launch** notice with the reason.
+
+## Debug log
+
+**Debug log**, off by default, has Proton, Wine and DXVK write their full logs for each session. They're large, so turn it on for a game that misbehaves and off again after. For one game it's in the **Proton** card of its Game settings (its **Logs** card for a Wine game), under Show advanced, or:
+
+```sh
+universe set <game> debug_log=true
+```
+
+For every game, it's on Settings › Emulators & Proton › **Proton** (or **Wine**), under Show advanced.
+
+The files go to `~/.local/state/universe/logs/<id>/<session>/`: Proton's `steam-<GAMEID>.log`, DXVK's logs such as `<exe>_d3d11.log`, and `launch.txt`, the command line and every variable the game started with. Wine's and umu's own output stay in the journal. The game's **Data and saves** page shows the size and path of `~/.local/state/universe/logs/<id>/`, which holds every session's folder, under **Storage** › **Logs**, and [`universe data <game>`](/docs/reference/cli/data/) prints it too. `universe sessions <game> --json` names each session's folder (`debug_log`).
+
+## Crash reports
+
+Every Proton launch hands Proton the session's log folder for crash reports, debug log or not. When a game dies on an error Wine doesn't handle, a file ending in `_crash.log` lands there, and the session reads **Crashed** even though umu-run exited with 0.
+
+## universe status and universe info
+
+[`universe status`](/docs/reference/cli/status/) prints the running session, with its title, session id, unit and start time, or "no session running", then the ten latest sessions and how each ended.
+
+[`universe info <game>`](/docs/reference/cli/info/) prints what a launch would use: the store, the runner and its program (or "not found"), the platform, the game's program, the prefix and Proton build (an emulator's options instead), the switches that are on, the wrapper, gamescope, the frame rate limit, the environment, the hours played and the features in use. With `--json` it prints the whole game, the values a launch works out included, such as the umu id, the PlayStation controller mode and the Proton build's path.
+
+## Prefix tools
+
+A Proton or Wine game's prefix has its tools on the game's **Data and saves** page (**Start** › **Manage** › **Data and saves**), under **Wine Prefix**. They run with the game's own Proton and prefix, as a launch sets them up:
+
+- **Wine Configuration** opens winecfg.
+- **Winetricks** installs runtimes and fonts.
+- **Run a Program in the Prefix…** starts an installer or a tool there.
+- **Stop the Prefix's Programs** ends wineserver and everything running in the prefix.
+- **Reset the Prefix…** backs up the game's saves, then trashes the prefix, and the next launch makes a fresh one. It's offered for a prefix Universe made that no other game shares.
+
+```sh
+universe data <game> winecfg
+universe data <game> winetricks vcrun2022
+universe data <game> run <installer.exe>
+universe data <game> kill
+universe data <game> reset-prefix
+```
+
+`winetricks` with no verb opens its window. The Switch 2 look calls the page **Data Management**, the PS5 look **Saved Data and Storage**. [Saves and cloud saves](/docs/library/saves/) covers the backups.
