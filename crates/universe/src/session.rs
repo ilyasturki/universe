@@ -1044,6 +1044,37 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
+    async fn a_module_runs_its_hooks_only_for_the_runner_kinds_it_applies_to() {
+        let _sb = sandbox();
+        let root = std::path::PathBuf::from(std::env::var_os("UNIVERSE_MODULES_PATH").unwrap());
+        let log = paths::state_home().join("hooks.log");
+        use std::os::unix::fs::PermissionsExt;
+        for (id, kinds) in [("emu", "emulator"), ("pc", "proton")] {
+            let dir = root.join(id);
+            std::fs::create_dir_all(dir.join("bin")).unwrap();
+            std::fs::write(
+                dir.join("module.toml"),
+                format!("api = 2\nid = \"{id}\"\n[applies]\nrunner_kinds = [\"{kinds}\"]\n[hooks]\npre-launch = \"bin/pre\"\n"),
+            )
+            .unwrap();
+            let exe = dir.join("bin/pre");
+            std::fs::write(&exe, format!("#!/bin/sh\necho {id} >> {}\n", log.display())).unwrap();
+            std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        std::fs::write(
+            paths::config_home().join("config.toml"),
+            "[launch]\ngamescope = false\nmangohud = false\nfps_limit = \"none\"\n[modules]\nenabled = [\"emu\", \"pc\"]\n",
+        )
+        .unwrap();
+        let (core, _memory) = open().await;
+        let json = core.get("sample").await.unwrap().to_json();
+        let listed: Vec<&str> = json["effective"]["modules"].as_object().unwrap().keys().map(String::as_str).collect();
+        assert_eq!(listed, ["emu"], "a Dolphin game carries no Proton module's settings");
+        core.launch("sample", "", "").await.unwrap();
+        assert_eq!(std::fs::read_to_string(&log).unwrap(), "emu\n", "the Proton module's hook stays out of an emulator's launch");
+    }
+
+    #[tokio::test]
     async fn the_games_own_source_runs_its_hooks_around_the_session() {
         let _sb = sandbox();
         let store = std::path::PathBuf::from(std::env::var_os("UNIVERSE_SOURCES_PATH").unwrap()).join("store");

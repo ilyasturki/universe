@@ -623,13 +623,15 @@ impl Core {
         self.sources.read().await.iter().find(|s| s.active() && s.id() == game.source.kind).cloned()
     }
 
-    /// The active modules declaring `hook` and switched on for `game`, or globally without one.
+    /// The active modules declaring `hook` and switched on for `game`, or globally without one; a game's runner kind must be one
+    /// the module's `[applies]` takes.
     async fn modules_with_hook(&self, cfg: &Config, game: Option<&Game>, hook: &str) -> Vec<Module> {
+        let kind = game.map(|g| crate::runners::spec(&g.runner_id()).map(|s| s.kind.as_str()).unwrap_or_default());
         self.modules
             .read()
             .await
             .iter()
-            .filter(|m| m.active() && m.hook(hook).is_some())
+            .filter(|m| m.active() && m.hook(hook).is_some() && kind.is_none_or(|k| m.manifest.applies.takes(k)))
             .filter(|m| m.merged_settings(cfg, game).get("enabled").and_then(|v| v.as_bool()).unwrap_or(true))
             .cloned()
             .collect()

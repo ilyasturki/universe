@@ -1503,8 +1503,11 @@ A game's page (the `Form::Game` form, every look's game settings) shows a module
 only on the games `applies.runner_kinds` names by their runner's kind (`emulator`, `proton`, `wine`,
 `linux`), and of those only the settings whose `runners` holds the game's runner (its canonical id) and
 whose `platforms` holds its platform; an empty list takes every game. A source's game-scope setting
-follows its own `runners` and `platforms` the same way. Nothing else changes: a hidden setting keeps
-its value and still reaches the hooks.
+follows its own `runners` and `platforms` the same way. A setting hidden by its `runners` or
+`platforms` keeps its value and still reaches the hooks. `applies` also decides which games the
+module serves at all: its hooks (pre-launch to post-process, freeze, thaw, screenshot) run
+only for a game of a kind it names, and only those games list it in `effective.modules` (`universe
+info`, `UNIVERSE_GAME_JSON`).
 `label` names the setting in a few words; `description`, empty when the manifest gives none, says what it
 does and shows under it. `choice_labels` is what a choice reads as, by stored value: a frontend shows the
 label and writes the value, and a value without one reads as itself.
@@ -1915,7 +1918,7 @@ timeout_s    = 20                 # for blocking hooks; the sum bounds the game 
 cpu_weight   = 100                # default 20
 memory_high  = "4G"               # default 2G
 
-[applies]                         # optional: the games whose page shows the game-scope settings
+[applies]                         # optional: the games the module serves (its hooks, its game-scope settings)
 runner_kinds = ["emulator"]       # emulator, proton, wine, linux; absent or empty: every game
 
 [[settings]]

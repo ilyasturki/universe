@@ -22,7 +22,7 @@ pub struct Manifest {
     pub applies: Applies,
 }
 
-/// The games whose page shows the module's game-scope settings.
+/// The games the module serves: its hooks run for them alone, and their pages and `effective.modules` alone carry its settings.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct Applies {
