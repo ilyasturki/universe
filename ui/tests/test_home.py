@@ -3,7 +3,7 @@ import threading
 
 import pytest
 from looks import Look, invoke, lit_fraction, read, settle
-from PySide6.QtCore import QObject, Qt
+from PySide6.QtCore import QObject, Qt, QTimer
 from PySide6.QtTest import QTest
 from uitest import descendant, record, until
 
@@ -820,8 +820,46 @@ def red_fraction(image):
     return red / (small.width() * small.height())
 
 
+# Held by the test: a wrapper PySide made from childItems() deletes its item when collected.
+def tile_of(look, game):
+    page = look.page("homePage")
+    return until(lambda: descendant(page, "tile:" + game), f"no tile for {game}")
+
+
+def layers(tile):
+    return tile.findChild(QObject, "cover").childItems()
+
+
+def whole(tile):
+    """One of the tile's art layers is decoded and fully opaque: it shows a picture, never its empty card."""
+    return any(layer.property("ready") and layer.property("opacity") == 1.0 for layer in layers(tile))
+
+
+@pytest.fixture
+def sampled():
+    """`sampled(probe)` reads `probe()` every few milliseconds the event loop runs, into the returned timer's `seen`, until it is
+    stopped or the test ends."""
+    timers = []
+
+    def sample(probe):
+        timer = QTimer(interval=4)
+        timer.seen = []
+        timer.timeout.connect(lambda: timer.seen.append(probe()))
+        timer.start()
+        timers.append(timer)
+        return timer
+
+    yield sample
+    for timer in timers:
+        timer.stop()
+
+
+def shown_layer(tile, source):
+    return next(layer for layer in layers(tile) if layer.property("ready") and layer.property("source").toString() == source)
+
+
 @pytest.mark.parametrize("look", ["reprise"], indirect=True)
-def test_home_from_the_game_zooms_the_frame_into_its_tile(api, fake, monkeypatch, look):
+def test_home_from_the_game_zooms_the_frame_into_its_tile(api, fake, monkeypatch, look, sampled):
     from PySide6.QtGui import QColor, QImage
 
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
@@ -833,7 +871,10 @@ def test_home_from_the_game_zooms_the_frame_into_its_tile(api, fake, monkeypatch
     flip = look.find("homeFlip")
     fake.launch("mirrors-edge", "")
     until(lambda: api.home.shown == "game")
+    tile = tile_of(look, "mirrors-edge")
+    until(lambda: whole(tile), "the tile's cover is up")
     root.goToTab(elsewhere)
+    blank = sampled(lambda: whole(tile))
     swaps = []
     real_focus = fake.core.focus_pid
     monkeypatch.setattr(fake.core, "focus_pid", lambda pid: (swaps.append(flip.property("covering")), real_focus(pid)))
@@ -845,6 +886,10 @@ def test_home_from_the_game_zooms_the_frame_into_its_tile(api, fake, monkeypatch
     assert fake.core.game_shown is False
     assert look.page("homePage").property("currentGame").property("id") == "mirrors-edge", "the cursor lands on the playing game"
     until(lambda: 0.005 < red_fraction(window.grabWindow()) < 0.2, "the frame is the tile's art now")
+    blank.stop()
+    assert all(blank.seen), "from the cover to the frame the tile never showed its empty card"
+    sizes = (shown_layer(tile, api.home.frame).property("sourceSize"), flip.findChild(QObject, "frame").property("sourceSize"))
+    assert sizes[0] == sizes[1], "the tile asks for the frame at the flip's size: one decode serves both"
     invoke(root, "resumeSession")
     assert flip.property("growing") is True and api.home.shown == "launcher", "the tile grows first"
     until(lambda: api.home.shown == "game" and fake.core.game_shown is True)

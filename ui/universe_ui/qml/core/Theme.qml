@@ -48,6 +48,8 @@ QtObject {
     readonly property real edgeMargin: 80
     readonly property real heroBand: 610
     readonly property real heroDetail: 620
+    // The game's last frame, as the home flip and its tile both ask for it: one size, one decode of a 4K png.
+    readonly property size frameSize: Qt.size(1920, 0)
 
     readonly property int durQuick: 160
     readonly property int durDismiss: 200

@@ -69,10 +69,11 @@ Item {
 
         Image {
             id: frame
+            objectName: "frame"
             anchors.fill: parent
             source: api.home.frame
             fillMode: Image.PreserveAspectCrop
-            sourceSize.width: 1920
+            sourceSize: Theme.frameSize
             asynchronous: true
             onStatusChanged: {
                 if (!flip.pending)

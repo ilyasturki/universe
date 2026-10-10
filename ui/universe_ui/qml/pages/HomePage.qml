@@ -107,6 +107,10 @@ FocusScope {
         rail.slideToCurrent();
     }
 
+    function coverOf(assets) {
+        return String(assets.square) !== "" ? assets.square : assets.boxFront;
+    }
+
     function playingIndex() {
         for (var i = 0; i < railCount; i++)
             if (railModel.get(i).id === playingId)
@@ -540,6 +544,7 @@ FocusScope {
 
                 CoverCard {
                     id: tileArt
+                    objectName: "tile:" + model.id
 
                     pointable: true
                     current: tile.selected && rail.activeFocus
@@ -551,7 +556,8 @@ FocusScope {
                     x: (parent.width - width) / 2 + (tile.delta === 0 ? 0 : (tile.delta < 0 ? -page.spread : page.spread))
 
                     game: model
-                    artSource: model.id === page.playingId && api.home.frame !== "" ? api.home.frame : String(model.assets.square) !== "" ? model.assets.square : model.assets.boxFront
+                    artSource: page.coverOf(model.assets)
+                    frameSource: model.id === page.playingId ? api.home.frame : ""
                     playing: model.id === page.playingId
                     arriving: model.installing
                     progress: model.progress

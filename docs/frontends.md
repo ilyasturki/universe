@@ -463,8 +463,10 @@ the Universe look's `ui/HomeFlip.qml` paints the frame full screen and calls it 
 `focusLauncher` (`COVER_MS` later regardless), without one it swaps at once; `flipped` says the
 host did it (a game that exits by itself leaves the launcher on screen too, with nothing to zoom). The Universe look then lands on Home with the
 cursor on the playing game (`HomePage.landOnPlaying`, every detail, sub page and search closed)
-and shrinks the frame into that tile, which shows the same frame as its art; resuming grows the
-tile back to full screen (`HomePage.playingTileRect`) and only then `toGame()`.
+and shrinks the frame into that tile, which shows the same frame as its art: both ask for it at
+`Theme.frameSize`, one decode. A tile's art is `ui/CrossfadeImage.qml` in its opaque mode: a new
+picture fades in over the old one, never over the empty card. Resuming grows the tile back to full
+screen (`HomePage.playingTileRect`) and only then `toGame()`.
 
 The host owns what the QML cannot: the overlay window is created once (`create_overlay`,
 `Home.attachOverlay`) with `STEAM_OVERLAY=1`, mapped at opacity 0 and never unmapped — gamescope

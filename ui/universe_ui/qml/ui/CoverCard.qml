@@ -8,6 +8,8 @@ Item {
     property var game: null
     property bool selected: false
     property url artSource: game ? game.assets.boxFront : ""
+    // The running game's last frame, drawn over the art while set.
+    property url frameSource: ""
     property real cornerRadius: Theme.dp(Theme.radiusCover)
     property real selectedScale: 1.05
     property real idleScale: 1.0
@@ -26,7 +28,9 @@ Item {
 
     readonly property bool hovered: pointer.item !== null && pointer.item.hovering
 
-    readonly property bool artMissing: String(artSource) === "" || cover.status === Image.Error
+    readonly property bool showsFrame: String(frameSource) !== ""
+    readonly property url shownSource: showsFrame ? frameSource : artSource
+    readonly property bool artMissing: String(shownSource) === "" || cover.status === Image.Error
 
     Behavior on ringOpacity {
         enabled: root.selected
@@ -90,16 +94,18 @@ Item {
                 color: Theme.cardBase
             }
 
-            Image {
+            CrossfadeImage {
                 id: cover
+                objectName: "cover"
 
                 anchors.fill: parent
-                source: root.artSource
-                // The running tile's art is gamescope's frame at output size: decoded small, not at 4K.
-                sourceSize.width: root.playing ? 640 : 0
+                source: root.shownSource
+                // A cover at the card's largest drawn size; the frame at the flip's, so the two share a decode.
+                sourceSize: root.showsFrame ? Theme.frameSize : Qt.size(Math.ceil(root.width * Math.max(root.selectedScale, root.idleScale)), Math.ceil(root.height * Math.max(root.selectedScale, root.idleScale)))
                 fillMode: Image.PreserveAspectCrop
-                asynchronous: true
                 mipmap: true
+                opaque: true
+                duration: Theme.durBase
                 opacity: root.arriving ? 0.45 : 1.0
             }
 
