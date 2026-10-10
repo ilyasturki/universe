@@ -55,6 +55,8 @@ def test_every_slot_has_a_glyph(engine, fake):
             spec = glyph.property("spec").toVariant()
             assert spec["shape"], (family, slot)
             assert spec["text"] or spec["symbol"] or spec["shape"] == "dpad", (family, slot)
+    marks = {f: create(engine, "PadGlyph.qml", family=f, slot="select").property("spec").toVariant()["symbol"] for f in ("dualshock4", "dualsense")}
+    assert marks == {"dualshock4": "share", "dualsense": "create"}, "a DualShock 4 has Share where a DualSense has Create"
 
 
 def test_hint_glyphs_follow_the_pad(engine, fake):

@@ -1,7 +1,7 @@
 .pragma library
 
 var STYLE = {
-    "dualsense-edge": "sony", "dualsense": "sony", "dualshock4": "sony",
+    "dualsense-edge": "sony", "dualsense": "sony", "dualshock4": "sony-ds4",
     "xbox": "xbox", "xbox-elite": "xbox", "generic": "xbox",
     "switch-pro": "nintendo", "8bitdo-pro-3": "eightbitdo", "steam-deck": "deck"
 };
@@ -11,6 +11,9 @@ var FACE = {
     sony: { south: ["", "cross"], east: ["", "circle"], north: ["", "triangle"], west: ["", "square"],
             lb: ["L1"], rb: ["R1"], lt: ["L2"], rt: ["R2"], select: ["", "create"], start: ["", "menu"],
             guide: ["PS"], ls: ["L3"], rs: ["R3"] },
+    "sony-ds4": { south: ["", "cross"], east: ["", "circle"], north: ["", "triangle"], west: ["", "square"],
+                  lb: ["L1"], rb: ["R1"], lt: ["L2"], rt: ["R2"], select: ["", "share"], start: ["", "menu"],
+                  guide: ["PS"], ls: ["L3"], rs: ["R3"] },
     xbox: { south: ["A"], east: ["B"], north: ["Y"], west: ["X"],
             lb: ["LB"], rb: ["RB"], lt: ["LT"], rt: ["RT"], select: ["", "view"], start: ["", "menu"],
             guide: ["", "xbox"], ls: ["LS"], rs: ["RS"] },

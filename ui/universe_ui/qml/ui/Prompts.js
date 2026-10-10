@@ -92,6 +92,8 @@ var DECK_SONY = { lb: true, rb: true, lt: true, rt: true, ls: true, rs: true };
 function paths(style, slot) {
     if (style === "deck")
         return slot === "guide" ? null : (DECK_SONY[slot] ? PROMPTS.sony : PROMPTS.xbox)[slot] || null;
+    if (style === "sony-ds4")
+        return PROMPTS.sony[slot === "select" ? "share" : slot] || null;
     var table = PROMPTS[style] || PROMPTS.xbox;
     if (style === "eightbitdo" && !table[slot])
         table = PROMPTS.nintendo;

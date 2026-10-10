@@ -139,6 +139,7 @@ fn glyph(family: &str, slot: &str) -> (&'static str, &'static str) {
         _ => "xbox",
     };
     let face: Option<(&str, &str)> = match (style, slot) {
+        ("sony", "select") if family == "dualshock4" => Some(("", "share")),
         ("sony", "south") => Some(("", "cross")),
         ("sony", "east") => Some(("", "circle")),
         ("sony", "north") => Some(("", "triangle")),
@@ -804,6 +805,7 @@ mod tests {
         assert!(slots("8bitdo-pro-3").contains(&"paddle_l4") && slots("8bitdo-pro-3").contains(&"star"));
         assert_eq!(glyph("switch-pro", "east"), ("A", ""));
         assert_eq!(glyph("dualsense", "south"), ("", "cross"));
+        assert_eq!((glyph("dualshock4", "select"), glyph("dualsense", "select")), (("", "share"), ("", "create")));
         let deck = slots("steam-deck");
         assert!(["grip_l5", "grip_r4", "quick", "pad_left", "pad_right"].iter().all(|s| deck.contains(s)), "{deck:?}");
         assert_eq!((glyph("steam-deck", "guide"), glyph("steam-deck", "lb"), glyph("steam-deck", "quick")), (("", "steam"), ("L1", ""), ("", "more")));
