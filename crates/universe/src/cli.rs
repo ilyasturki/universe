@@ -420,9 +420,13 @@ pub enum Cmd {
     /// Completion candidates for the shell: games | sources | modules | …
     #[command(name = "__complete", hide = true)]
     Complete { what: String },
-    /// Write the Fish completions and the man pages under <dir>
+    /// Write the Fish completions and the man pages under <dir>, or with --markdown one Markdown page per command (the site's CLI reference)
     #[command(name = "__generate", hide = true)]
-    Generate { dir: std::path::PathBuf },
+    Generate {
+        dir: std::path::PathBuf,
+        #[arg(long)]
+        markdown: bool,
+    },
 }
 
 const MEDIA_SLOTS: [&str; 6] = ["box_front", "square", "banner", "background", "logo", "screenshot"];
@@ -1018,7 +1022,8 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
     // Shell helpers stay off Core::open: a Tab must not reconcile a session or probe logins.
     match &cmd {
         Cmd::Complete { what } => return complete(what),
-        Cmd::Generate { dir } => return generate(dir),
+        Cmd::Generate { dir, markdown: true } => return generate_markdown(dir),
+        Cmd::Generate { dir, markdown: false } => return generate(dir),
         Cmd::LaunchKeys => return launch_keys(json),
         Cmd::Splash { image, cmd } => std::process::exit(crate::splash::run(image.as_deref(), cmd)),
         Cmd::KeepAwake { reason } => return keep_awake(reason).await,
@@ -2982,6 +2987,122 @@ fn generate(dir: &std::path::Path) -> anyhow::Result<()> {
     std::fs::create_dir_all(&man)?;
     clap_mangen::generate_to(cmd, &man)?;
     Ok(())
+}
+
+fn generate_markdown(dir: &std::path::Path) -> anyhow::Result<()> {
+    use clap::CommandFactory;
+    let mut cmd = Cli::command().disable_help_subcommand(true);
+    cmd.build();
+    std::fs::create_dir_all(dir)?;
+    let mut top = String::new();
+    markdown_command(&cmd, 1, true, &mut top);
+    std::fs::write(dir.join("universe.md"), top)?;
+    for sub in cmd.get_subcommands().filter(|c| !c.is_hide_set()) {
+        let mut page = String::new();
+        markdown_command(sub, 1, false, &mut page);
+        std::fs::write(dir.join(format!("{}.md", sub.get_name())), page)?;
+    }
+    Ok(())
+}
+
+fn markdown_command(cmd: &clap::Command, level: usize, top: bool, out: &mut String) {
+    let path = cmd.get_bin_name().unwrap_or(cmd.get_name());
+    out.push_str(&format!("{} {path}\n\n", "#".repeat(level)));
+    if let Some(about) = cmd.get_long_about().or(cmd.get_about()) {
+        out.push_str(&format!("{}\n\n", markdown_escape(&about.to_string())));
+    }
+    let aliases: Vec<&str> = cmd.get_visible_aliases().collect();
+    if !aliases.is_empty() {
+        out.push_str(&format!("Also `{}`.\n\n", aliases.join("`, `")));
+    }
+    out.push_str(&format!("```text\n{}\n```\n\n", cmd.clone().render_usage().to_string().trim()));
+    let args: Vec<&clap::Arg> =
+        cmd.get_arguments().filter(|a| !a.is_hide_set() && !matches!(a.get_id().as_str(), "help" | "version") && (top || !a.is_global_set())).collect();
+    let mut list = |title: &str, args: Vec<&&clap::Arg>| {
+        if args.is_empty() {
+            return;
+        }
+        out.push_str(&format!("{} {title}\n\n", "#".repeat(level + 1)));
+        for a in args {
+            let mut said: Vec<String> = a.get_long_help().or(a.get_help()).map(|h| markdown_escape(h.to_string().trim_end_matches('.'))).into_iter().collect();
+            if a.get_action().takes_values() {
+                let values: Vec<String> = a.get_possible_values().iter().filter(|v| !v.is_hide_set()).map(|v| v.get_name().to_string()).collect();
+                if !values.is_empty() {
+                    said.push(format!("One of `{}`", values.join("`, `")));
+                }
+                let defaults: Vec<String> = a.get_default_values().iter().map(|v| v.to_string_lossy().into_owned()).filter(|v| !v.is_empty()).collect();
+                if !defaults.is_empty() {
+                    said.push(format!("Default `{}`", defaults.join(" ")));
+                }
+            }
+            out.push_str(&format!("- `{}`", markdown_arg(a)));
+            if !said.is_empty() {
+                out.push_str(&format!(": {}.", said.join(". ")));
+            }
+            out.push('\n');
+        }
+        out.push('\n');
+    };
+    list("Arguments", args.iter().filter(|a| a.is_positional()).collect());
+    list("Options", args.iter().filter(|a| !a.is_positional()).collect());
+    if top {
+        out.push_str(&format!("{} Commands\n\n", "#".repeat(level + 1)));
+        for sub in cmd.get_subcommands().filter(|c| !c.is_hide_set()) {
+            let about = sub.get_about().map(|a| markdown_escape(&a.to_string())).unwrap_or_default();
+            out.push_str(&format!("- `{}`: {about}\n", sub.get_name()));
+        }
+        out.push('\n');
+    }
+    if let Some(after) = cmd.get_after_long_help().or(cmd.get_after_help()) {
+        out.push_str(&format!("```text\n{}\n```\n\n", after.to_string().trim()));
+    }
+    if !top {
+        for sub in cmd.get_subcommands().filter(|c| !c.is_hide_set()) {
+            markdown_command(sub, level + 1, false, out);
+        }
+    }
+}
+
+fn markdown_arg(a: &clap::Arg) -> String {
+    let names = a.get_value_names().map(|n| n.iter().map(|n| n.to_string()).collect::<Vec<_>>()).unwrap_or_else(|| vec![a.get_id().as_str().to_uppercase()]);
+    let many = if matches!(a.get_action(), clap::ArgAction::Append) || a.get_num_args().is_some_and(|n| n.max_values() > 1) { "..." } else { "" };
+    if a.is_positional() {
+        let name = names.join(" ");
+        return if a.is_required_set() { format!("<{name}>{many}") } else { format!("[{name}]{many}") };
+    }
+    let value = format!("{}{many}", names.iter().map(|n| format!("<{n}>")).collect::<Vec<_>>().join(" "));
+    let flag = match (a.get_short(), a.get_long()) {
+        (Some(s), Some(l)) => format!("-{s}, --{l}"),
+        (Some(s), None) => format!("-{s}"),
+        (None, Some(l)) => format!("--{l}"),
+        (None, None) => a.get_id().to_string(),
+    };
+    if a.get_action().takes_values() {
+        format!("{flag} {value}")
+    } else {
+        flag
+    }
+}
+
+// Backtick spans stay as they are; elsewhere `<id>` would read as an HTML tag and `*` or `_` as emphasis.
+fn markdown_escape(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for (i, part) in text.split('`').enumerate() {
+        if i > 0 {
+            out.push('`');
+        }
+        if i % 2 == 1 {
+            out.push_str(part);
+            continue;
+        }
+        for c in part.chars() {
+            if matches!(c, '\\' | '*' | '_' | '[' | ']' | '<' | '>' | '|') {
+                out.push('\\');
+            }
+            out.push(c);
+        }
+    }
+    out
 }
 
 fn keeps_old_path(owner: &str, from: &str) -> Option<String> {

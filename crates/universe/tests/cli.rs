@@ -309,6 +309,24 @@ fn screen_mode_answers_zeros_for_a_connector_that_is_not_there() {
 }
 
 #[test]
+fn generate_markdown_writes_a_page_per_visible_command_and_the_global_options_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let pages = dir.path().join("pages");
+    let out = universe(&dir, &["__generate", "--markdown", pages.to_str().unwrap()], &[]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let names: Vec<String> = std::fs::read_dir(&pages).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+    for page in ["universe.md", "ls.md", "launch-keys.md", "media.md", "controller.md"] {
+        assert!(names.iter().any(|n| n == page), "no {page}: {names:?}");
+    }
+    for hidden in ["__generate.md", "__complete.md", "osd.md", "session-end.md", "splash.md"] {
+        assert!(!names.iter().any(|n| n == hidden), "{hidden} is hidden: {names:?}");
+    }
+    let read = |name: &str| std::fs::read_to_string(pages.join(name)).unwrap();
+    assert!(read("media.md").contains("\n## universe media refresh\n"), "{}", read("media.md"));
+    assert!(read("universe.md").contains("`--json`") && !read("ls.md").contains("--json"), "{}", read("ls.md"));
+}
+
+#[test]
 fn osd_takes_a_dash_led_label_past_the_dashes_and_refuses_a_bad_argument_as_usage() {
     let dir = no_desktop();
     // clap exits 2 on a usage error; a call it parsed and the desktop cannot show exits 1.
