@@ -369,7 +369,7 @@ colours stripped, non-UTF-8 lines dropped) with the launched command line as a f
 session's `command`, which survives the journal. `universe logs <name>` prints the newest session's
 (or the running one's), `universe logs <name> <session>` an older one's, `-f` follows the running
 one, `--json` the rows; `universe sessions` and `status` carry the `End` column, and a failed
-`universe play` points at `logs`. In the UI a game's Sessions (Reprise: the Sessions pill on its
+`universe play` points at `logs`. In the UI a game's Sessions (the Universe look: the Sessions pill on its
 details, or More → Sessions and logs; Switch 2: Software Options → Play Log) lists every session
 with its end and opens the log's last 400 lines, the running session first.
 
@@ -1168,7 +1168,7 @@ its `api` rules it out, else "")}`.
 | `media_search(id, query)` | `media_search(id, query)` | `universe media <name> search [query…]` | `[{provider, id, name, year, verified, current}]`: SteamGridDB's games for the query with the user's key, else GOG GamesDB's (the title when empty), `current` on the one the art comes from — the id `media_pin` takes under `provider` when the match is wrong |
 | `media_pin(id, provider, provider_id)` | `media_pin(…)` | `universe media <name> pin <provider> <id>` | `provider ∈ steam, gamesdb, sgdb` → `metadata.steam_appid`, `metadata.gamesdb_id`, `metadata.sgdb_id`; candidates and refresh follow it |
 
-`slot ∈ box_front, square, banner, background, logo, screenshot`. `square` is a 1:1 picture (SteamGridDB's 1024×1024, then 512×512, with the user's key; else 512×512 made from the box front, the cover whole over a blurred fill of itself): Reprise's home rail and the Switch 2 tiles; `banner` the 920×430 header (Steam's, or GamesDB's 796×364 crop of its wide artwork): the Switch 2 news card and info pane when they have no picture, and the backdrops and launch poster when the game has no background (after its screenshots). On disk a slot is read under its own stem or Pegasus's and Lutris's, own stem first: `boxFront`, `cover`; `tile`, `icon` (Pegasus's square); `steam`, `grid` (Pegasus's banner); `hero`, `fanart`.
+`slot ∈ box_front, square, banner, background, logo, screenshot`. `square` is a 1:1 picture (SteamGridDB's 1024×1024, then 512×512, with the user's key; else 512×512 made from the box front, the cover whole over a blurred fill of itself): the Universe look's home rail and the Switch 2 tiles; `banner` the 920×430 header (Steam's, or GamesDB's 796×364 crop of its wide artwork): the Switch 2 news card and info pane when they have no picture, and the backdrops and launch poster when the game has no background (after its screenshots). On disk a slot is read under its own stem or Pegasus's and Lutris's, own stem first: `boxFront`, `cover`; `tile`, `icon` (Pegasus's square); `steam`, `grid` (Pegasus's banner); `hero`, `fanart`.
 
 Two layers per slot: the **default** under `games/<id>/media/`, which `refresh` fills and `.sync.json`'s `sources` attributes to its provider, and the **pick** under `games/<id>/media/picked/`, which `media_set_slot` writes and always shows first (`media_of`: `media/picked/`, then `media/`). Removing the pick falls back to the default, so a pick never loses what was fetched.
 
@@ -1845,7 +1845,7 @@ catalogue = ""                       # a URL or a file; empty: the project's cat
 index = ""                           # an https:// URL or a file (UNIVERSE_EXTENSIONS_INDEX wins); empty: the registry's (see Extensions)
 
 [modules]
-enabled = []                         # a module is opt-in: `universe module enable capture`, or Settings › Modules
+enabled = []                         # a module is opt-in: `universe module enable capture`, or Settings › Features
 
 [modules.capture]                    # the settings rows: `universe module settings capture`
 # ffmpeg_video_opts = "rc_mode=CQP;qp=20"   # config-only: replaces the quality preset
@@ -1892,7 +1892,7 @@ description = "Records each session."   # optional, one or two sentences; the mo
 [requires]
 core = ">=0.0.9, <0.1.0"          # optional: comparators (>=, >, <=, <, =) on Universe's version, comma-separated, a bare version meaning >=
 bins = ["gpu-screen-recorder"]    # a missing binary makes the module "unavailable" and it is never run
-system = ["gpu-screen-recorder"]  # system tools (gamescope, mangohud, gpu-screen-recorder) Settings › Runners proposes to install while the module is on
+system = ["gpu-screen-recorder"]  # system tools (gamescope, mangohud, gpu-screen-recorder) Settings › Emulators & Proton proposes to install while the module is on
 
 [hooks]                           # paths relative to the module directory
 pre-launch   = "bin/pre"          # blocking, before the game's unit; may write UNIVERSE_ENV_FILE

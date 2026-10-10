@@ -6,7 +6,7 @@ links the Rust crate, or imports `universe_core` (the PyO3 module) and calls the
 CLI calls. [`api.md`](api.md) is the full surface.
 
 Two frontends ship. `universe-ui` (Universe Big Screen) lives in `ui/`: a PySide6 host around three
-QML looks, the [Reprise](https://github.com/ilyasturki/pegasus-theme-reprise) theme, the
+QML looks, the Universe look (a port of the [Reprise](https://github.com/ilyasturki/pegasus-theme-reprise) Pegasus theme), the
 Switch 2 HOME menu (`qml/switch2/`) and the PS5 home screen (`qml/ps5/`), each of the last two with
 its README. `universe-desktop` (Universe Desktop) lives in
 `crates/universe-desktop/`: a GTK 4 and libadwaita app for mouse and keyboard, § Universe Desktop.
@@ -20,19 +20,19 @@ One context property, `api`:
 
 | Member | What it is |
 |---|---|
-| `api.keys` | `is{Accept,Cancel,Details,Filters,PageUp,PageDown,PrevPage,NextPage,Menu}(event)` — the Pegasus key-action contract (Backspace is a Cancel too) — plus `isScreenUp` / `isScreenDown` (`[` / `]`, the right stick up and down): a screenful in a long list, and `isFirst` / `isLast` (Home / End): the ends of one; `cancelHeld()` fires when B (Escape, not Backspace) is held 450 ms on the window, whatever has the focus (an event filter, so the press still lands): every look opens its power menu on it; `dropHold()` from a question B just closed keeps the hold from asking again. `mode` is the last device used, `pad`, `keyboard` or `mouse` (the pad's presses are told from the keyboard's by `gamepad.POSTED`, which every posted key goes through; a finger on a touchscreen counts as the pad, and the mouse events Qt makes from an unhandled touch count as nothing; the cursor is shown under a mouse only), `labels` maps a pad glyph to its key (`A` → `Enter`), `press` / `hold` / `release(action)` post an action's key as the pad would, for a click or the wheel, and `layout` is the physical keyboard's rows for the on-screen ones (`keyboard.rows` over the core's `keyboard_layout()`): `name` (`fr`, `fr:bepo`) and `rows` — `AE` (the number row), `AD`, `AC`, `AB` (the letter rows), each a list of `{value, shift}` left to right, dead keys left out, the digits leading the number row whichever level the layout keeps them on; `us` when libxkbcommon or the layout is missing. Reprise's `ui/VirtualKeyboard.qml` shows eleven keys of the first three rows and ten of the last, staggered, ⌫ closing the last; the Switch 2 `ui/KeyPanel.qml` eleven of each, the PS5 `ps5/ui/KeyPanel.qml` eleven of each over a row of wide keys (⇧, symbols, Space, ⌫, Done) |
+| `api.keys` | `is{Accept,Cancel,Details,Filters,PageUp,PageDown,PrevPage,NextPage,Menu}(event)` — the Pegasus key-action contract (Backspace is a Cancel too) — plus `isScreenUp` / `isScreenDown` (`[` / `]`, the right stick up and down): a screenful in a long list, and `isFirst` / `isLast` (Home / End): the ends of one; `cancelHeld()` fires when B (Escape, not Backspace) is held 450 ms on the window, whatever has the focus (an event filter, so the press still lands): every look opens its power menu on it; `dropHold()` from a question B just closed keeps the hold from asking again. `mode` is the last device used, `pad`, `keyboard` or `mouse` (the pad's presses are told from the keyboard's by `gamepad.POSTED`, which every posted key goes through; a finger on a touchscreen counts as the pad, and the mouse events Qt makes from an unhandled touch count as nothing; the cursor is shown under a mouse only), `labels` maps a pad glyph to its key (`A` → `Enter`), `press` / `hold` / `release(action)` post an action's key as the pad would, for a click or the wheel, and `layout` is the physical keyboard's rows for the on-screen ones (`keyboard.rows` over the core's `keyboard_layout()`): `name` (`fr`, `fr:bepo`) and `rows` — `AE` (the number row), `AD`, `AC`, `AB` (the letter rows), each a list of `{value, shift}` left to right, dead keys left out, the digits leading the number row whichever level the layout keeps them on; `us` when libxkbcommon or the layout is missing. The Universe look's `ui/VirtualKeyboard.qml` shows eleven keys of the first three rows and ten of the last, staggered, ⌫ closing the last; the Switch 2 `ui/KeyPanel.qml` eleven of each, the PS5 `ps5/ui/KeyPanel.qml` eleven of each over a row of wide keys (⇧, symbols, Space, ⌫, Done) |
 | `api.allGames` | the library model |
 | `api.collections` | collections, one per platform |
 | `api.memory` | `get`/`set`/`has`/`unset`, persisted to `$XDG_STATE_HOME/universe/ui-memory.json` |
 | `api.universe` | the client: every core call, plus the signals below. `adoptScope()` and `pendingJournals()` wrap `adopt_scope` and `pending_journals`; their failures get a log line, not a toast. `recordings(id)` is the client's own: `sessions(id)` kept to the rows with a `recording` |
 | `api.pad` | `rightX`: the right stick as a value, 0 without a controller |
 | `api.focus` | whether the launcher has the desktop's focus (see "Focus"): `active` (it has, or nobody can tell), `elsewhere` (another app has: neither the launcher nor its game), `mode` (`always`, `host`, `qt`), `changed()` |
-| `api.power` | the batteries the kernel lists under `/sys/class/power_supply`: `sources` (`kind` `system` or `pad`, `percent`, `charging`, `inputs` — the pad's evdev nodes), `count`; polled every 10 s, plus what the controller watcher reads off a pad the kernel keeps no supply for (an 8BitDo's HID report, BlueZ's `Battery1` for a pad in BLE mode), reported through `report(event, name, battery)` and dropped with the pad; the kernel's reading wins where both exist. Reprise and the PS5 look draw them next to every clock (`ui/PowerBadge.qml`: one glyph and percent per source, the pad the controller page has current in green, one at 15 % or under in red); the Switch 2 look, like the console, puts the machine's own battery by its clock as a bare cell and a pad's charge on its controller page, next to the pad it belongs to; `--fake` reads `fixtures/power_supply` |
+| `api.power` | the batteries the kernel lists under `/sys/class/power_supply`: `sources` (`kind` `system` or `pad`, `percent`, `charging`, `inputs` — the pad's evdev nodes), `count`; polled every 10 s, plus what the controller watcher reads off a pad the kernel keeps no supply for (an 8BitDo's HID report, BlueZ's `Battery1` for a pad in BLE mode), reported through `report(event, name, battery)` and dropped with the pad; the kernel's reading wins where both exist. The Universe look and the PS5 look draw them next to every clock (`ui/PowerBadge.qml`: one glyph and percent per source, the pad the controller page has current in green, one at 15 % or under in red); the Switch 2 look, like the console, puts the machine's own battery by its clock as a bare cell and a pad's charge on its controller page, next to the pad it belongs to; `--fake` reads `fixtures/power_supply` |
 | `api.network` | the link the machine is online through, NetworkManager's while the network watch runs and NM answers (`api.screens.network` follows it), else read from `/sys/class/net` every 10 s: `kind` (`wifi`, `wired` — a cable wins — or `""` offline; links with no device, such as `lo` or a VPN, never count), `bars` (the Wi-Fi signal as 1–3 arcs, from NM's percent or `/proc/net/wireless`, 0 otherwise). The Switch 2 look draws it between its clock and battery; `--fake` reads `fixtures/net` |
-| `api.system` | what logind will do with the machine: `actions`, the ones of `suspend`, `reboot` and `power_off` it would carry out (the core's `power_actions()`, read once at startup), `run(action)` (`power(action)` off the UI thread; `reboot` and `power_off` stop a running session first, so its `session-end` runs before the machine goes down), `failed(action, message)` when logind refuses. `--fake` records the call and does nothing. `steam`: the launcher runs in Steam's Game Mode (the core's `under_steam()`): no power actions (the menu keeps Quit Universe alone, and says Steam's menu has the rest), no Sound section, no dock over a game, no MangoHud, frame limit or Pause on HOME rows. `session`: the launcher runs as the Universe session a display manager started (the core's `nest::session()`): its way out logs out, so every look's power menu says Log out for Quit Universe (action `logout`), and the PS5 Control Center's Power panel adds a Log Out of its own. `deck`: `lcd` or `oled` on a Steam Deck. `controls`: the core's `system_controls()`, read after `apply_system()` at startup, on `reload()` and as a session starts or ends (a game's own `[system]` goes on and off with it); `set(id, value)` (the machine's own), `setFor(game, id, value)` (the game's own, the machine's own for an empty `game`) and `setAll(game, id, value)` (the machine's own, the game letting its own go) show the value at once and write it off the UI thread, a refusal raising `controlFailed(id, message)` and reading the machine back; `control(id)` one of them. Reprise lists them under Settings › System and in the dock's System group (a step writes once the cursor rests, 400 ms), Switch 2 under System Settings › Performance, the PS5 look under Settings › Performance and in the Control Center's System panel; `ui/Controls.js` turns one into rows any look uses. `network` / `bluetooth`: NetworkManager lists a Wi-Fi card / BlueZ an adapter, outside Game Mode: the looks' Network and Bluetooth pages show. `--fake` lists an OLED Deck's under `UNIVERSE_DECK`, and plays Game Mode under `GAMESCOPE_WAYLAND_DISPLAY` with `UNIVERSE_FAKE_STEAM=1`, the Universe session with `UNIVERSE_FAKE_SESSION=1` |
+| `api.system` | what logind will do with the machine: `actions`, the ones of `suspend`, `reboot` and `power_off` it would carry out (the core's `power_actions()`, read once at startup), `run(action)` (`power(action)` off the UI thread; `reboot` and `power_off` stop a running session first, so its `session-end` runs before the machine goes down), `failed(action, message)` when logind refuses. `--fake` records the call and does nothing. `steam`: the launcher runs in Steam's Game Mode (the core's `under_steam()`): no power actions (the menu keeps Quit Universe alone, and says Steam's menu has the rest), no Sound section, no dock over a game, no MangoHud, frame limit or Pause on HOME rows. `session`: the launcher runs as the Universe session a display manager started (the core's `nest::session()`): its way out logs out, so every look's power menu says Log out for Quit Universe (action `logout`), and the PS5 Control Center's Power panel adds a Log Out of its own. `deck`: `lcd` or `oled` on a Steam Deck. `controls`: the core's `system_controls()`, read after `apply_system()` at startup, on `reload()` and as a session starts or ends (a game's own `[system]` goes on and off with it); `set(id, value)` (the machine's own), `setFor(game, id, value)` (the game's own, the machine's own for an empty `game`) and `setAll(game, id, value)` (the machine's own, the game letting its own go) show the value at once and write it off the UI thread, a refusal raising `controlFailed(id, message)` and reading the machine back; `control(id)` one of them. The Universe look lists them under Settings › Performance and in the dock's System group (a step writes once the cursor rests, 400 ms), Switch 2 under System Settings › Performance, the PS5 look under Settings › Performance and in the Control Center's System panel; `ui/Controls.js` turns one into rows any look uses. `network` / `bluetooth`: NetworkManager lists a Wi-Fi card / BlueZ an adapter, outside Game Mode: the looks' Network and Bluetooth pages show. `--fake` lists an OLED Deck's under `UNIVERSE_DECK`, and plays Game Mode under `GAMESCOPE_WAYLAND_DISPLAY` with `UNIVERSE_FAKE_STEAM=1`, the Universe session with `UNIVERSE_FAKE_SESSION=1` |
 | `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written, a game's sessions and their logs, a game's data and the storage view, the changelog, Wi-Fi and Bluetooth) |
 | `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed` and `--size` turn it off) |
-| `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `overlay`, `osd`, `frame`, `ground`, `accent`, `detail`, `unlocked`, `screenshot`, `installed`, `unavailable`; the built-in ones, then the installed themes, see "Themes"), `current`, `frame`, `set(id)` (false for one that is `unavailable`), `rescan()`, `failed()`, `escape()`, `takeNotice()`, `landing` / `takeLanding()`, `fontPath` (the current look's own font file, stored under `<id>Font`: `switch2Font`, `ps5Font`), `soundsPath` (a folder of WAVs, stored under `<id>Sounds`) and `soundFiles` (`{name: url}` of the WAVs in it, the name lowercased: each replaces the look's bundled sound of that name, `sound/SoundPool.qml`'s `overrides`; Switch 2 offers it in Settings › Themes), `bootIntro` (the startup animation's switch, every look's: on until `ui-memory.json`'s `bootIntro` is false) |
+| `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `overlay`, `osd`, `frame`, `ground`, `accent`, `detail`, `unlocked`, `screenshot`, `installed`, `unavailable`; the built-in ones, then the installed themes, see "Themes"), `current`, `frame`, `set(id)` (false for one that is `unavailable`), `rescan()`, `failed()`, `escape()`, `takeNotice()`, `landing` / `takeLanding()`, `fontPath` (the current look's own font file, stored under `<id>Font`: `switch2Font`, `ps5Font`), `soundsPath` (a folder of WAVs, stored under `<id>Sounds`) and `soundFiles` (`{name: url}` of the WAVs in it, the name lowercased: each replaces the look's bundled sound of that name, `sound/SoundPool.qml`'s `overrides`; Switch 2 offers it in Settings › Appearance), `bootIntro` (the startup animation's switch, every look's: on until `ui-memory.json`'s `bootIntro` is false) |
 | `api.home` | the HOME button over a running game (see "HOME and the dock"): `shown` (`game` / `launcher`), `underGame` (the game is on screen over the launcher, inside gamescope), `open`, `loading` (a session this client launched has no window up yet), `paused`, `pauseOnHome`, `flipped`, `frame`, `volumePercent`, `muted`, `outputs` (`loadOutputs()` fills it); `pressed()`, `stopping(title)`; `openDock()`, `closeDock()`, `dockClosed()`, `toGame()`, `toLauncher(landing?)` / `takeLanding()`, `covered()`, `stop()`, `setPauseOnHome(on)`, `screenshot()` (→ `screenshotGrabbed()` at the grab, then `screenshotTaken(path)`, and `screenshotLost()` when it fails after the grab), `volume(change, value)`, `setOutput(id)`, `runtime()` / `setRuntime(key, value)` (the running game's HUD, frame limit and filter, for this session alone), `launchChoices(key)`, `setLaunchValueAll(key, value)` (every game's default, the game following it), `screenRefresh()`, `escapeHeld()` (HOME held 5 s) |
 | `api.boot` | the startup animation (see "Startup animation"): `running`, `started()` (its first frame is on screen), `skipped()`, `landed(skipped)` (the mark is done: each look builds its home), `land()`, `finish()` |
 
@@ -58,8 +58,8 @@ agent's question waiting on the user (`id`, `kind` — `confirm`, `authorize`, `
 `display` — `address`, `name`, `deviceKind`, `code`, `entered`, `title`, `detail`), answered with
 `answer(yes)` or `answerText(value)`, and null again once answered or withdrawn. Each look's theme
 puts it up over whatever page shows; a question that comes while a game holds the screen is refused
-with a notice instead. The text sheets take `secret` (Reprise's `prompt(…, "secret")`, the consoles'
-`{secret: true}`): the password shows as dots until Start (Reprise) or R shows it. `--fake` plays
+with a notice instead. The text sheets take `secret` (the Universe look's `prompt(…, "secret")`, the consoles'
+`{secret: true}`): the password shows as dots until Start (the Universe look) or R shows it. `--fake` plays
 both from `fake_radios.py`: `UNIVERSE_FAKE_NETWORK=offline` starts off every network (the first-run
 setup then opens on "Connect to the internet"), `none` has no NetworkManager,
 `UNIVERSE_FAKE_BLUETOOTH=none` no adapter; every fixture network takes `hunter22`.
@@ -85,7 +85,7 @@ until extracted), `complete` and `duration`, for the listed sessions only, built
 time since `started_at` and cannot be opened), `deferred` (`reason` and `retryText`, the instant it
 is owed another run), `failed` (`reason` is the module's message, its one paragraph) or `none` —
 a session the module never wrote for, which carries the session's own date and duration and nothing
-else, so an imported recording is one action away from an entry; Reprise's row reads that date over
+else, so an imported recording is one action away from an entry; the Universe look's row reads that date over
 that duration, and its pane "No entry yet". `write(gameId, session, rewrite)`
 hands it to the core (`journal_write`): A on a row that is not `written`, "Write the entry" / "Try
 again now" / "Write it again" in its Start menu. `durationText` is the session's length — `42 min`,
@@ -98,7 +98,7 @@ to rows — `session`, `started_at`, `dateText`, `durationText`, `end`, `endText
 and `currentSessionChanged`; the running session leads as a `live` row with an empty `session`.
 `openLog(session)` reads that session's last 400 journal lines off the UI thread (`session_log`)
 into `log` (`time` as a clock, `source`, `message`, `error`, `warning`) with `logSession`,
-`logLoading` and `logError` beside it; `closeLog()` drops it. Reprise's `pages/SessionsPage.qml`
+`logLoading` and `logError` beside it; `closeLog()` drops it. The Universe look's `pages/SessionsPage.qml`
 (the Sessions pill of the details page, More → Sessions and logs) lists the rows on the left and the
 highlighted one's log on the right, A scrolling the log; Switch 2's `pages/PlayLogPage.qml`
 (Software Options → Play Log) lists them and A pushes `pages/SessionLogPage.qml`.
@@ -161,7 +161,7 @@ is overridden by changing it; X is `reset(index)` where `resettable(row)` says s
 the page's own value goes, the key leaves the file, so the row inherits again; a map's entry goes
 out of the map). Where `promotable(row)` says so (`Field.promotable`, `Entry.promotable`: a game's
 own value of a key with a global twin) `promote(index)` makes it the global value and clears the
-game's, which follows it from then on, other games keeping theirs: Reprise's More menu and Switch
+game's, which follows it from then on, other games keeping theirs: the Universe look's More menu and Switch
 2's + list it as Apply to all Dolphin games (the row's `reach`), PS5's Options as Apply to All
 Dolphin Games, the GTK dialog as a button beside the reset one.
 On a game's page a row with a global twin carries its `reach` (`Field.reach`, `Dolphin games`),
@@ -175,15 +175,15 @@ page's own value (`choiceValues[0]` is empty), worded by where the value then co
 it reads: `Default · auto`, `Global · 60`. A runner picker's `valueIcon` is the picked runner's logo, drawn by the value;
 `icons` are the choices'. A `path` row under a pad opens the folder sheet (`ui/PathSheet.qml`,
 Switch 2 `FolderSheet`, over `api.screens.paths`: the value's nearest folder, Y to type the path
-instead; Switch 2 shows the shortcuts as chips, Reprise's Start opens a menu of Use this folder,
-Type a path… and Go to ›, the shortcuts, X and Y still doing the first two); under a keyboard or a mouse Reprise opens the keyboard sheet
+instead; Switch 2 shows the shortcuts as chips, the Universe look's Start opens a menu of Use this folder,
+Type a path… and Go to ›, the shortcuts, X and Y still doing the first two); under a keyboard or a mouse the Universe look opens the keyboard sheet
 first, the value in the field, the folders one hop away (Start / F1, or the field's Browse
 button). A map key (`launch.env`, `launch.dll_overrides`) is one `string` row per
 entry (`launch.env.FOO`, `entry` naming the map, on a game's page `origin` per entry: the game's
 own or the global's), then an `action` row with `map: true`, `fields` (`["Variable", "Value"]`) and
 `action: "Add"`; `setMapEntry(index, name, value)` from either writes one entry, the name cleaned
 to one key, an empty value removing it. `api.screens.search` is the settings index: the look hands it
-its `sections` (`[{id, label}]`: Reprise's tab bar search from `ui/Sections.js`, the Switch 2 settings page its own), `load()` rebuilds the index off the UI thread from the same
+its `sections` (`[{id, label}]`: the Universe look's tab bar search from `ui/Sections.js`, the Switch 2 settings page its own), `load()` rebuilds the index off the UI thread from the same
 row builders the forms use (`build_launch`, `build_runner`, `build_page`, `build_game`), setting
 `query` recomputes `results` at once — rows with `path`, `display`, `detail`, `tag`, `kind`
 (`setting`, `section`, `game`, `gamekey`, `gamerow`) and a `target` (`{page, id, key, module}`)
@@ -193,16 +193,16 @@ the page opens; `expand(index)` unfolds a `gamekey` head into its games.
 
 `main.qml` is a window with one `Loader` whose source is `api.theme.entry`, so a theme is a root
 QML file under `qml/` and switching one for another rebuilds the tree in place: no restart, and
-the new look opens on its own Settings › Themes (`set(id)` leaves `landing = "themes"`, which the
+the new look opens on its own Settings › Appearance (`set(id)` leaves `landing = "themes"`, which the
 theme reads and `takeLanding()` clears). `overlay.qml` is the second window, the one gamescope
-paints over the game; its `Loader` takes `api.theme.overlay` — Reprise's `ui/Dock.qml`, the PS5
+paints over the game; its `Loader` takes `api.theme.overlay` — the Universe look's `ui/Dock.qml`, the PS5
 look's `ps5/ui/ControlCenter.qml`, nothing for the Switch 2 look, whose HOME goes straight to its HOME
 menu. A second `Loader` takes `api.theme.osd`, the level a pad's volume macro shows over the game for
-a moment while the dock is closed (`api.home.osd`): Reprise's `ui/VolumeOsd.qml`, a card in its own
+a moment while the dock is closed (`api.home.osd`): the Universe look's `ui/VolumeOsd.qml`, a card in its own
 colours, Archivo and timings; the PS5 and Switch 2 looks share `ui/VolumePill.qml`. Each scales by the
-window's `unit` (its height over 1080) the overlay hands it, not `Theme.dp`, which only Reprise's root
+window's `unit` (its height over 1080) the overlay hands it, not `Theme.dp`, which only the Universe look's root
 drives. The choice lives in `ui-memory.json` (`theme`), `--theme ID` overrides it
-for one run, and every look offers it in Settings › Themes. A theme calls the same `api` and the same `api.screens` objects;
+for one run, and every look offers it in Settings › Appearance. A theme calls the same `api` and the same `api.screens` objects;
 `api.screens.album` and `api.screens.news` are the recordings and journal lists across every
 visible game (`loadAll()`, over `sessions("")`), which the Switch 2 look shows as its Album and News
 and the PS5 look as its Media Gallery and Journal;
@@ -213,8 +213,8 @@ Beside the three built-in looks, `api.theme.themes` lists the installed themes
 ([`extensions.md`](extensions.md)): a folder under `$XDG_DATA_HOME/universe/extensions/theme/<id>/`
 holding a `theme.toml` and a QML tree of its own whose root is `theme.qml`. `themes.py` reads them
 through the core's `themes()` at start and again on `rescan()`: after an add-on install, update or
-removal, and whenever a look opens its Settings › Themes. An installed theme's row carries
-`installed`, `screenshot` (the manifest's picture as a file URL: Reprise's Theme menu draws it by the
+removal, and whenever a look opens its Settings › Appearance. An installed theme's row carries
+`installed`, `screenshot` (the manifest's picture as a file URL: the Universe look's Theme menu draws it by the
 name, the Switch 2 and PS5 rows in place of the swatch) and `unavailable` (why it cannot be picked:
 an `api` this Universe does not read, or no `theme.qml`); `set(id)` refuses such a one and the looks
 list it dimmed. It draws in the main window alone: its `overlay` is empty, so HOME over a game
@@ -226,9 +226,9 @@ So do the current theme gone or unusable on a `rescan()`, and a remembered theme
 start, which leaves `ui-memory.json` without a `theme`. A theme that loads but leaves no way out (it
 breaks once running, or offers no other look) is left by holding HOME on the pad for 5 s: the host
 reads that hold (`api.home`'s `escapeHeld()`), not the theme, and `escape()` puts the default look
-back with the same notice and writes it to `ui-memory.json`. Each look's Settings › Themes follows
+back with the same notice and writes it to `ui-memory.json`. Each look's Settings › Appearance follows
 the looks with a "Get more…" row (`key: "more"`, `addons: "theme"`) that lists the index's themes,
-as Modules and Sources do (see "The launch and modules sections"). `examples/theme/` is a minimal
+as Features and Stores do (see "The launch and modules sections"). `examples/theme/` is a minimal
 theme, the one the tests install.
 
 ### What a theme can rely on
@@ -252,7 +252,7 @@ see `extensions.md`) holds these, and an older theme keeps working while they on
 
 The rest (`api.screens`, `api.universe`, `api.focus`, `api.pad` and the members not listed) is the
 built-in looks' own, and changes with them. A theme offers a way to the other looks, as each built-in
-one does in Settings › Themes: the sample's Start lists `api.theme.themes` and A calls `set(id)`.
+one does in Settings › Appearance: the sample's Start lists `api.theme.themes` and A calls `set(id)`.
 
 ## Startup animation
 
@@ -263,7 +263,7 @@ sweeps in from edge-on, the planet rises inside it and the wordmark settles
 (`qml/assets/brand/`, the icon split into `ring-back`, `planet` and `ring-front` layers, and the
 wordmark for a light or a dark ground); under the software scenegraph (offscreen) the whole mark
 only fades in. Then `api.boot.land()` emits `landed(false)` and the layer fades out over each look
-building its home: PS5 runs its back-from-a-game `home.rebuild()`, Reprise brings in the backdrop,
+building its home: PS5 runs its back-from-a-game `home.rebuild()`, the Universe look brings in the backdrop,
 the page and the bars in turn (`backdropReveal`, `pageReveal`, `chromeReveal` on its root), Switch 2
 slides its row in and settles its bars (`rowReveal`, `chromeReveal`). Each root blanks those parts
 in `Component.onCompleted` while `api.boot.running`, and only then runs `start()`, its Themes
@@ -286,7 +286,7 @@ restart in place after a wedge (`UNIVERSE_UI_RESTARTS`), no session running, not
 Game Mode (Steam played its own). So the tests (`Api(boot=False)` by default), `just ui-shot` and
 `just ui-record` (`--size`, `--keys`) never see it. `--boot` and `--no-boot` force it on or off for
 one run, the hook for a session chain that covers the machine's boot itself (Plymouth hands over to
-gamescope, whose first frame is the intro's). Settings › Themes › Startup animation (`boot_intro`,
+gamescope, whose first frame is the intro's). Settings › Appearance › Startup animation (`boot_intro`,
 `api.theme.bootIntro`) turns it off in every look, and wins over `--boot`.
 
 ## Changes
@@ -384,11 +384,11 @@ never from the SDL mapper — the game holds the focus, so no key would reach th
 `guide` slot (the core refuses one, `macros_for` ignores an old config's, the Controller section
 offers only Learn on its row), and a hold of `controller.hold_ms` from the game goes home
 (`toLauncher`) whatever the press opened. What a press does is the theme's: the Switch 2 look
-flips to its HOME menu over the game (`toLauncher`) and back (`toGame`); Reprise opens its
+flips to its HOME menu over the game (`toLauncher`) and back (`toGame`); the Universe look opens its
 **dock** over the live game (`openDock`), a second press or B closes it, and from home a press
 resumes; the PS5 look opens its **Control Center** the same way (the dock contract: `open`,
 `closeDock()`, `dockClosed()` once its fade ends, `loading` for the reduced row), the hold going
-home as the console's does. With no session, Reprise treats it as Start (the game menu). Held 5 s
+home as the console's does. With no session, the Universe look treats it as Start (the game menu). Held 5 s
 (`home.ESCAPE_MS`), whatever the look, it raises `escapeHeld()`, on which `api.theme.escape()` leaves
 an installed theme for the default look (see "Themes"); under a built-in look it does nothing.
 HOME pressed while another app has the focus is not HOME: see "Focus".
@@ -444,9 +444,9 @@ dock's Home or Quit — reuses what the press took, or waits for it to land. A l
 `frame: False` (the Switch 2 and PS5 ones) paints nothing and waits for none; the PS5 look blanks
 its home while the game is shown and builds it back up in beats when it returns. `toLauncher` then sets
 `frame` (`""` when none came) and `shown`; with a frame it waits for the theme's `covered()` —
-Reprise's `ui/HomeFlip.qml` paints the frame full screen and calls it once the image is up — before
+the Universe look's `ui/HomeFlip.qml` paints the frame full screen and calls it once the image is up — before
 `focusLauncher` (`COVER_MS` later regardless), without one it swaps at once; `flipped` says the
-host did it (a game that exits by itself leaves the launcher on screen too, with nothing to zoom). Reprise then lands on Home with the
+host did it (a game that exits by itself leaves the launcher on screen too, with nothing to zoom). The Universe look then lands on Home with the
 cursor on the playing game (`HomePage.landOnPlaying`, every detail, sub page and search closed)
 and shrinks the frame into that tile, which shows the same frame as its art; resuming grows the
 tile back to full screen (`HomePage.playingTileRect`) and only then `toGame()`.
@@ -495,7 +495,7 @@ the game's own the same way: a step lands in the game's `game.toml [system]`
 launches and taken off by its session's end, which returns the machine to its own value. Y makes
 the row's value the machine's own (`setAll` → `set_system_all`): the game lets its own go, and the
 value stays after the game, for every game without its own. The Control Center's System panel does
-the same on △. Settings › System (and Performance in the other looks) set the machine's own value.
+the same on △. Settings › Performance (in every look) set the machine's own value.
 
 ## Focus
 
@@ -517,7 +517,7 @@ While another app has the focus (`active` false):
   the right stick is centred, a press already on its way is dropped with its release);
 - B held as the focus leaves opens no power menu (`keys.dropHold()`);
 - the Controller section's learn, walk and test stop (`focusLost()`);
-- `Theme.covered` holds every loop and clock, and a playing recording pauses (Reprise's
+- `Theme.covered` holds every loop and clock, and a playing recording pauses (the Universe look's
   Recordings, the PS5 and Switch 2 players), staying paused when the focus comes back;
 - HOME from that app brings the launcher up and does nothing more: `summon()` activates its window
   (gamescope's when nested) and asks the desktop again. With `controller.home_summons` off (the
@@ -536,7 +536,7 @@ These cost real time to discover; they are properties of Qt 6.11 / PySide6 6.11,
 
 - **`QtQml.Models.SortFilterProxyModel` cannot carry the theme's filters.** It has no `get()`, no
   `ExpressionFilter`, and its `FunctionFilter` segfaults. Every proxy the theme needs is instead a
-  `QSortFilterProxyModel` subclass. `SortedGames`, `RecentGames`, `RecentFirstGames` (Reprise's
+  `QSortFilterProxyModel` subclass. `SortedGames`, `RecentGames`, `RecentFirstGames` (the Universe look's
   Library: every game in `RecentGames`' order, the never played last), `LimitedGames`, `SearchGames`
   and `LibraryGames` are exported to QML as `import Universe`;
   `CollectionGames` is instantiated Python-side, one per collection. `get(i)` returns the `Game`;
@@ -587,7 +587,7 @@ These cost real time to discover; they are properties of Qt 6.11 / PySide6 6.11,
   picks the game to follow, and the anchor holds the one whose session just ended.
 - **Collections are platforms.** A collection's `shortName` comes from the core's platform
   string, which `api.py` maps (`windows`, `switch`, `wii`, `gamecube`, `nds`, `ps3`, …), falling
-  back to the source id. The Switch 2 look groups its software by them; Reprise shows none.
+  back to the source id. The Switch 2 look groups its software by them; the Universe look shows none.
 - **Gamepad.** SDL2 in a `QThread`, `SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS=1`, hot-plug. Each
   button becomes the keyboard key Pegasus already bound to that action, so the theme's key logic is
   untouched. Axes use hysteresis — 0.5 to press, 0.3 to release — and arrows repeat after 350 ms
@@ -639,7 +639,7 @@ one showing, `cancel()` pops before it closes.
 ## The hint bar
 
 Every page and overlay exposes `hints`, `[{ glyph, label, dim }]`, and the bar on screen shows
-the one with the focus (`theme.qml` picks the menu's, the tab bar's or the page's). Reprise's
+the one with the focus (`theme.qml` picks the menu's, the tab bar's or the page's). The Universe look's
 lists stay short — the main action, More (Start) and Back where there is one — and leave out the
 shortcuts they would repeat on every page: X (details) and Y (favourite) still work unlisted.
 `theme.qml` adds `LB RB` Tabs itself, on the tab bar and on a tab page that is not modal.
@@ -655,7 +655,7 @@ Toasts are `core/Notices.qml`, a singleton the looks, the dock and the Control C
 `fail(text, key)` for a failure (a red mark, 8 s on screen instead of 4 s). One shows at a time,
 the rest wait their turn, and a message repeating the last one is dropped. A message with a key
 takes the place of the one with the same key, on screen or waiting: "Journal: writing …" becomes
-its result (`journal:<session>`), "Quitting …" the session's end line (`stop`). Reprise draws
+its result (`journal:<session>`), "Quitting …" the session's end line (`stop`). The Universe look draws
 them in the hint bar's middle (`ui/NoticePill.qml`, in every `HintBar`, so the bar of a sub page
 has it too): centred, pushed aside by the hints and then elided, never over them or the page.
 The dock draws them at the left of its status row, Switch 2 in its card at the top left.
@@ -666,7 +666,7 @@ with the key's name (`api.keys.labels`) in place of the pad button, the d-pad as
 
 ## The mouse and the touchscreen
 
-Reprise takes a mouse or a finger on top of the pad without a second path. Hovering only brightens
+The Universe look takes a mouse or a finger on top of the pad without a second path. Hovering only brightens
 what is under the cursor; a click or a tap picks it — the focus ring lands where the pad would have
 moved it — and one on the item that already holds the ring is A, pressed at the release (so a
 second tap on a cover launches it, as on the Deck's own UI). Held past 180 ms it is A held until the
@@ -694,7 +694,7 @@ bar and the page by it.
 finger — so none of them fights another (`horizontal` for a strip, `nested` for a strip inside a
 page that scrolls — plain y then goes to the page), its `DragHandler` taking the axis the view
 scrolls on, so a vertical drag on a sideways strip goes to the page. The cursor's moves slide in
-`Theme.durView` (300 ms) OutQuint on every Reprise page, each step setting off from where the
+`Theme.durView` (300 ms) OutQuint on every page of the Universe look, each step setting off from where the
 content is, so a held key never leaves the cursor behind. In a `ListView` or `GridView` it follows
 `currentIndex` by itself, keeping the item between `rangeBegin` and `rangeEnd` (the view sets
 `highlightFollowsCurrentItem: false`, or Qt also drifts it after the cursor at 400 px/s); a cursor
@@ -711,9 +711,9 @@ dialogs, the sheets, the lightbox, the search overlay) carries a bare `HoverHand
 
 ## Power
 
-B held anywhere (`api.keys.cancelHeld`) opens the power menu, in Reprise also Settings › About ›
+B held anywhere (`api.keys.cancelHeld`) opens the power menu, in the Universe look also Settings › About ›
 Power: Quit Universe first, then Suspend, Reboot and Power off as `api.system.actions` lists them,
-then Stay. Reprise asks it with `ConfirmDialog.choose`, the centered question with more than two
+then Stay. The Universe look asks it with `ConfirmDialog.choose`, the centered question with more than two
 answers; the Switch 2 look with its picker (Power Options: Quit Universe, Sleep Mode, Restart, Turn
 Off). Quit Universe and Suspend act at once; Reboot and Power off ask again, the focus on Cancel, and
 say when the running game closes first. Suspend leaves the game running. A refusal (an inhibitor,
@@ -723,11 +723,17 @@ builds its list in `powerItems()`, which `askPower()` shows.
 
 ## The Settings tab
 
-`pages/SettingsPage.qml` is a sidebar (`ui/SectionList.qml` over `ui/Sections.js`: Launch, Runners,
-Controller, Sources, Install, Modules, Artwork, Themes, Sound, System, Storage, Doctor, About; no title, the tab
-says it, and no group captions) beside one column of `ui/SettingsCards.qml` (`columns: 1`). A
-landing on a section folded into another opens that one (`Sections.aliases`: `components` → Runners,
-`updates` → Install, `quit` and `power` → About; Switch 2's `aliases` and PS5's `Sections.aliases`
+`pages/SettingsPage.qml` is a sidebar (`ui/SectionList.qml` over `ui/Sections.js`, under the headers
+of their `group`: Games (Stores, Downloads, Controller, Game defaults, Emulators & Proton), Extras
+(Features, Artwork, Appearance), System (Network, Bluetooth, Sound, Performance, Storage) and Universe
+(System check, About); no title, the tab says it) beside one column of `ui/SettingsCards.qml`
+(`columns: 1`). The ids stay those of the old names (`sources`, `install`, `launch`, `runners`,
+`modules`, `themes`, `system`, `doctor`), and the settings search still finds a section by its old name
+(`search.py`'s `FORMER_NAMES`, matched as a word of its name). Switch 2 and PS5 group their own sections
+under the same headers and words, each keeping its own for what it has alone (Updates, Internet,
+Accessories, Data Management), and Universe Desktop's Preferences pages read the same. A
+landing on a section folded into another opens that one (`Sections.aliases`: `components` → Emulators &
+Proton, `updates` → Downloads, `quit` and `power` → About; Switch 2's `aliases` and PS5's `Sections.aliases`
 fold `components` the same way). Sound is one row per `api.home.outputs` entry, the device as its value and the one
 in use tagged; A on another plays through it (`setOutput`). About is its Version
 (`api.universe.version()`, the version with the short git rev behind it; A opens What's new too), What's
@@ -781,7 +787,7 @@ failed with `cancelled`, the toast says what was kept, and the row turns `partia
 "Paused · X of Y kept", `action` `Resume`. Reloads after a job, an uninstall or a removal stay off
 the network.
 
-Reprise keeps it as Settings › Install: with two stores or more a Store card first (one row, the
+The Universe look keeps it as Settings › Downloads: with two stores or more a Store card first (one row, the
 store's name; A opens the menu of them), an Installing card (running and paused, a hairline of
 progress under a paused row), an Updates card when some are pending (one row, Update everything,
 `updateAll()`; a game's own Update is in its row's menu), then On this PC (its meta the folders
@@ -869,7 +875,7 @@ from whichever came last.
 
 Where each look has them:
 
-- Reprise: the game menu's Manage › "Data and saves" opens `pages/DataPage.qml` (`openSub`, `{game}`):
+- The Universe look: the game menu's Manage › "Data and saves" opens `pages/DataPage.qml` (`openSub`, `{game}`):
   the headings become the sidebar's sections and the rows a card each (`CardSections`), A runs a row,
   a `question` asks first (`ConfirmDialog`), `run` opens the value editor's folder sheet on a file.
   Settings › Storage lists `api.screens.storage` in the settings cards, loaded when the section opens;
@@ -892,7 +898,7 @@ common. The hidden locked ones are not rows: their `icon_locked` is a greyed cop
 fold into one last row, key `hidden`, carrying their count in `hidden` (*31 hidden achievements*,
 *Keep playing to find out.*, no icon, no rarity; the PS5 look says *trophies*). Each row says a fact
 once: its name over its description, its date once unlocked or its rarity while locked, the row
-dimmed while locked. Reprise lists them in one column under *n / m* and a thin bar
+dimmed while locked. The Universe look lists them in one column under *n / m* and a thin bar
 (`ui/AchievementList.qml`, 80 dp rows, the dock's tray too); Switch 2 as `SettingsRows` (the
 description as the row's `secondary` line, the store's icon, *n / m* in the header); PS5 as wide
 `ps5/ui/TrophyCard.qml` cards under one *n/m · %* line and a gold bar, the console's grade (Common,
@@ -966,7 +972,7 @@ row instead unfolds into its games. B closes the search from anywhere in it.
 
 ## The launch and modules sections
 
-`api.screens.launch` is Settings › Launch, what every game starts with, each row a `config.toml`
+`api.screens.launch` is Settings › Game defaults, what every game starts with, each row a `config.toml`
 key: the core's launch form (`client.form("launch", "", screen)`), the launch keys tied to no
 runner in the catalogue's order, then the config's own keys. Each field's `section` is the card —
 Display (the gamescope switch, resolution, refresh rate, adaptive sync; the card's meta is the
@@ -987,7 +993,7 @@ upscaler upgrades) are set on that runner's page instead (below). `load()` reads
 The game settings page (`pages/GameSettingsPage.qml`, `switch2/pages/GameSettingsPage.qml`: a
 sidebar of the form's cards — the game's own, then the modules' — beside the picked card's rows,
 Y showing the power user's rows inside them under their rules (the sidebar never moves with it);
-Reprise's sidebar and rows are `ui/CardSections.qml`, shared with the form page, LT / RT stepping
+the Universe look's sidebar and rows are `ui/CardSections.qml`, shared with the form page, LT / RT stepping
 the cards, B going back to the sidebar, then closing) is the core's game form (`client.form("game",
 id, screen)`: the launch keys of the runner's kind, the module and source settings the game's runner
 and platform take), and mirrors the cards — Display (with Scaling folded in),
@@ -1007,7 +1013,7 @@ look the same way. A picker over a row with a `reach` takes A for this game and 
 them (`ValueEditor.edit(row, after, all)`; PS5 and Switch 2 `rows.edit(row, apply, all)` with
 `shell.pick`'s `alt`, which the hints name: `All Dolphin games`, PS5 `All Dolphin Games`); a value
 typed or browsed (a sheet, a folder, a new variable) is asked about once Done: a two-item picker,
-This game on A, all of them on Y. A switch flips for this game on A; Reprise's More, PS5's Options
+This game on A, all of them on Y. A switch flips for this game on A; the Universe look's More, PS5's Options
 and Switch 2's + list it flipped for all of them (`toggleAll`), with Apply to all of them for a
 value the game already sets (`promote`), Reset and Advanced. A row without a `reach` — the runner,
 the program, a module's switch — offers this game alone. The form's `message` says what came of
@@ -1015,11 +1021,11 @@ it, as a toast.
 
 Upscaling's meta names the GPU (`client.gpu()`: `label`, `AMD Radeon RX 7900 GRE · RDNA 3`) and each
 of its rows ends its `detail` with `Works on your GPU.` or `Not for your GPU.` (`fits`), nothing when
-no GPU is known. In Reprise, `ui/SettingsCards.qml` shows the focused row's `detail` as a caption
+no GPU is known. In the Universe look, `ui/SettingsCards.qml` shows the focused row's `detail` as a caption
 under the cards (two lines, reserved whenever a row has one); the Switch 2 look prints it under
 every row.
 
-`api.screens.modules` is Settings › Modules and `api.screens.sourceList` Settings › Sources, the
+`api.screens.modules` is Settings › Features and `api.screens.sourceList` Settings › Stores, the
 same list (`screens/settings.py`'s `ListForm`): one `action` row per entry (`module` its id, its
 name, `value` whether it runs, `display` On / Off / Set it up / Unavailable, drawn as text ahead of
 the chevron since A opens a page, `detail` the entry's description, or what is missing or waiting,
@@ -1035,7 +1041,7 @@ version is the app's own. An add-on's reads `v1.2.0 · from the index`, `· Unli
 folder` by its `origin`, and `unlisted` is also its `tag`. The consoles mark the row with `opens: true`
 for their chevron. Each list ends on a
 "Get more…" row of its own card (`key: "more"`, `addons` the kind, `module` or `source`; no switch,
-`toggle` leaves it); each look's Settings › Themes builds one of its own, `addons: "theme"` (see
+`toggle` leaves it); each look's Settings › Appearance builds one of its own, `addons: "theme"` (see
 "Themes"). Picking it opens `api.screens.addons` (`AddonsForm`, over the core's
 `extensions()`, fetched again when a list loads, or at once after an install or a removal, once a
 minute at most) in the look's menu: `items(kind)` is one item per add-on of the kind, its `action`
@@ -1045,7 +1051,7 @@ place (`addonsShown` names its kind while it is open).
 `actions(id)` is what the pick does: Install for one not installed, nothing for one written for
 another Universe (`incompatible`), Remove for an installed one, after Update when the index lists
 another version. A single action goes straight to its confirmation, more open a menu
-(`addonsMenu(kind)` and `addonAction(id, action)`: the Reprise Settings page's, the stacked looks'
+(`addonsMenu(kind)` and `addonAction(id, action)`: the Universe look's Settings page's, the stacked looks'
 root). `confirm(id, action)` is the question: an install's names the kind, that it runs programs as
 you, and its origin, the index's host (`kind`, `origin`, `runsAsYou` say the same to a test).
 `act(id, action)` installs or updates as a client job, or removes off the UI thread. Each one
@@ -1111,18 +1117,18 @@ square or box art as `image`, its hours as the display, `installed` when it has 
 by title — ending in an "Add a game…" action. `setValue(index, value)` writes through
 `set_runner_setting` (a `launch.*` row through `set_setting`); on the add row it keeps the picked
 file and `pendingTitle()` proposes a title from it, which `addGame(title)` sends to `add_game`. A
-game row opens the Install page's options: Game settings (Reprise: `settingsRequested(game)`, which
+game row opens the Install page's options: Game settings (the Universe look: `settingsRequested(game)`, which
 `theme.qml` `pushSub`s over the runner page, B coming back to the row; Switch 2: its
 GameSettingsPage), Uninstall… when installed, Remove from library…, through `uninstall(id)` /
 `remove(id)` on the form (a `message` when done); Uninstall's confirmation names the store when
 `api.universe.uninstallVia(id)` does ("Uninstall through Steam", "Steam removes the files"), the
 trash otherwise. The page follows `libraryChanged` and the components' listing. Back on the tab,
-the cursor finds the runner again. The Switch 2 look has the same list as System Settings › Runners
+the cursor finds the runner again. The Switch 2 look has the same list as System Settings › Emulators & Proton
 and the same page as `switch2/pages/FormPage.qml`, pushed on its stack, PS5 likewise. The game
 settings page's Launch group follows the runner: a Runner picker (names shown, ids written), then
 the rows the runner takes.
 
-A component row's A is its options, on a runner's page and in Tools alike: Reprise's page and
+A component row's A is its options, on a runner's page and in Tools alike: the Universe look's page and
 section `componentMenu(id, …)` over their `menu.show` and `ConfirmDialog`, Switch 2's and PS5's
 `componentOptions(id, title)` on the shell, over `shell.menu` and `dialogAsk`. The rows' tags in Switch
 2 and PS5 stand in for the value, Updated aside.
@@ -1140,19 +1146,19 @@ first or null — an install's size and the room left, the notice an install mus
 tool's packages and, outside the Universe session, that it asks for the password, a removal,
 an uninstall (what goes and what runs in its place), a rollback — and `act(id, action)` does it: an
 install or an update is a client job (`componentInstall`, `componentUpdate`, `job` the running one
-like the Install page's, drawn by the same bar on Settings › Runners), an install from a proposal
+like the Install page's, drawn by the same bar on Settings › Emulators & Proton), an install from a proposal
 over a system build switches to it (`use:latest`) once in, a finished job toasts through `message`
 (every root shows it, a runner's page included, where the row's tag and hairline follow the job).
 `hideJob()` takes the bar away, running or finished, until the next job: the row keeps its progress
-and Cancel, the end still toasts. Reprise hides it with the bar's × or More's Hide progress, Switch
-2 and PS5 with theirs; Y (Reprise) and X (Switch 2, PS5) do it straight away on a section that
-gives them nothing else to do. `pending` counts the updates and proposals: Reprise's Runners badge,
+and Cancel, the end still toasts. The Universe look hides it with the bar's × or More's Hide progress, Switch
+2 and PS5 with theirs; Y (the Universe look) and X (Switch 2, PS5) do it straight away on a section that
+gives them nothing else to do. `pending` counts the updates and proposals: the Universe look's Runners badge,
 Runners' detail in Switch 2 and PS5. `busyOn(id)` and `needed()` (the missing runners the library
 needs) serve the first-run page. A failed launch whose runner is missing and offered
 (`launchFailed`) emits `installProposed(gameId, id, name, version)`: every root asks "Install … to
 play?" (`question(id)` the size and room), `installFor(gameId, id)` installs, and
 `readyToLaunch(gameId)` launches the game again once it is in. A doctor row carries `component`
-when an install fixes it, its fix naming Settings › Runners: Reprise's A reads Install, Switch 2
+when an install fixes it, its fix naming Settings › Emulators & Proton: the Universe look's A reads Install, Switch 2
 and PS5 turn the row into an action (PS5 loads the listing with its Doctor, so the first press
 installs); each asks, then `installById(id)`. Once a day while the UI runs (the first check 90 s
 after start), with `components.auto_update` on, no session running and no job of the user's, the
@@ -1164,25 +1170,25 @@ The runner page's row is for someone who already knows the runner. Everyone else
 the Library: `ui/CoverGrid.qml` and `switch2/pages/SoftwareGrid.qml` take `addTile`, one more cell
 after the last game (a "+" tile, the cursor on it as `addSelected` / `atAddTile`, never a model
 index; `currentGame` is null there and A emits `addRequested`). With nothing in the library, Home
-and the Library are the prompt: Reprise's hero band reads "Welcome", a line on where games come
+and the Library are the prompt: the Universe look's hero band reads "Welcome", a line on where games come
 from, and Add a game and Set up; its rail tile (`ui/LibraryTile.qml` `kind: "add"`, a plus with no
 words, as the Library's own add tile) adds one instead of opening the Library; the Switch 2
-HOME row's disc does the same and All Software says so under its tile. Reprise's Library is no tab
+HOME row's disc does the same and All Software says so under its tile. The Universe look's Library is no tab
 of its own: `theme.qml` keeps it past the three the bar shows (`libraryTab`), Home's rail tile opens it
 (`libraryRequested`), the bar lights Home while it is up, LB / RB step over it and B returns to Home.
 Its grid runs in Home's order (`RecentFirstGames`) and fades the rows past either edge over 80 px
 rather than cutting them at the hints; the focused row scrolls clear of the fade.
 
-Both open `api.screens.add` — Reprise as `pages/AddGamePage.qml` over the tab (`openSub` with
+Both open `api.screens.add` — the Universe look as `pages/AddGamePage.qml` over the tab (`openSub` with
 `{ add: true }`), the Switch 2 look as `switch2/pages/AddGamePage.qml` on its stack. `load()`
 builds three cards: a "Pick a game file…" action, one action row per source of `sources()`
 (`store`, `loggedIn`; its `display` says whether it is signed in) and "Import from Lutris";
-Reprise joins them into one untitled card under the page's title. The file flow is file first: `setFile(path)` keeps it and sorts `runners()` into `runnerChoices` /
+the Universe look joins them into one untitled card under the page's title. The file flow is file first: `setFile(path)` keeps it and sorts `runners()` into `runnerChoices` /
 `runnerIds` — the ones whose `extensions` take the file first (`linux` takes a bare binary, `.sh`,
 `.x86_64`, `.AppImage`), found before missing, Proton before Wine, then by name — with `runnerIndex` on the
 first; the page shows that list as a picker, `pickRunner(i)` takes the choice, `pendingTitle()`
 proposes the title and `addGame(title)` calls `add_game`, toasting `message`. A signed-in store
-row picks that store (`api.screens.sources.pick`) and leaves the hub for Settings › Install (Reprise:
+row picks that store (`api.screens.sources.pick`) and leaves the hub for Settings › Downloads (the Universe look:
 `installRequested(source, "install")` → `theme.qml` `openSettings(section)`, whose `deliverLanding`
 calls the Settings page's `land(name)` once it is the active page; the Switch 2 and PS5 looks push
 their Install page); one signed out or off (`available` false) opens the source's own page instead
@@ -1201,13 +1207,13 @@ CLI's `universe add` and `universe migrate` are the same calls.
 the GTK app's too, so a machine set up in either is not asked again; a library with games sets it on
 the first read, so an emptied library never brings it up later, and `api.memory`'s `onboarded` of
 earlier versions is carried over to it. Every look opens it from its root's `Component.onCompleted`
-as a dialog over what is on screen — Reprise as `pages/OnboardingPage.qml` (`openSetup()`, `openSub`
+as a dialog over what is on screen — the Universe look as `pages/OnboardingPage.qml` (`openSetup()`, `openSub`
 with `{ setup: true }`, which keeps the tabs visible under it), the Switch 2 look as
 `switch2/pages/OnboardingPage.qml` on its stack (a page whose `overlay` is true leaves the layer
 under it in view), the PS5 look as `ps5/pages/OnboardingPage.qml` on its stack, and on an empty
 library its home row leads with Set Up and Add a Game — after the startup animation, when one plays
 (`start()`, on `api.boot.landed`); Settings › About › "First-run setup" opens it
-again, and so does the empty Home's "Set up" — a second pill beside "Add a game" in Reprise's hero
+again, and so does the empty Home's "Set up" — a second pill beside "Add a game" in the Universe look's hero
 band, a second disc beside the plus in the Switch 2 HOME row — shown while the library is empty,
 whatever the flag says. `load()` asks the core everything in one call off the UI thread —
 `discover()`, `sources()` (whose first call in a process asks every store over the network whether
@@ -1222,7 +1228,7 @@ last step finishes). Every step is one `rows`/`groups` list in the settings form
 look draws it with its settings rows and its value editor; the form leaves `quiet` rows out unless
 every row is one. `found` is a row per launcher found on the machine — an action row (`via`) where
 Universe can take the games over: one verb, `action` "Add" with `verb` set (`display` "Add N games",
-`detail` where they go; Reprise draws no arrow for a `verb` row), `runImport(index)` running
+`detail` where they go; the Universe look draws no arrow for a `verb` row), `runImport(index)` running
 `import_lutris(true)`, `import_roms(true)` for the emulators' folders, or having the source the
 `via` names adopt them (for `heroic-gog` it adds `gog_dirs` to the gog source's `scan_dirs`, any
 other source it turns on; then it starts a `scan(via)` job, whose count is `jobResult(job)`). The two
@@ -1263,9 +1269,9 @@ anything: the looks then put the focus on Continue (Finish on `done`). `added` i
 came in or are on their way. Under the rows sit two buttons, Back ("Skip setup" on the first step,
 "Close" once `added`) and Continue ("Finish" on the last), reached with Down past the last row,
 Left/Right between them, A to press one — B and X do the same from anywhere in the dialog, the
-hint bar showing both in Reprise and PS5, their glyphs on the buttons in Switch 2; B on the first step asks "Skip setup?" first (Keep going, Skip),
-unless `added`. Reprise and Switch 2 count the steps ("2 / 5") over the title, PS5 draws them as
-dots. The Reprise Home rail lands on its first game when it fills while the page is up (the setup
+hint bar showing both in the Universe look and PS5, their glyphs on the buttons in Switch 2; B on the first step asks "Skip setup?" first (Keep going, Skip),
+unless `added`. The Universe look and Switch 2 count the steps ("2 / 5") over the title, PS5 draws them as
+dots. The Universe look's Home rail lands on its first game when it fills while the page is up (the setup
 importing behind the dialog, the add page), as a cold start does.
 
 The GTK app's first run (`dialogs/onboarding.rs`) has the same steps and the same flag: the found
@@ -1297,12 +1303,12 @@ a first start, or the first after an upgrade from a version that kept none — s
 does a downgrade. `dismiss()` empties it.
 
 Each look's `start()` opens the page as its third branch, after the Themes landing and the first-run
-setup, so never over the setup and never on a first run: Reprise as `pages/ChangelogPage.qml` through
+setup, so never over the setup and never on a first run: the Universe look as `pages/ChangelogPage.qml` through
 `openChangelog(true)` (`openSub` with `{ changelog: true, fresh: true }`), Switch 2 and PS5 their own
 `pages/ChangelogPage.qml` pushed with `{ fresh: true }`. A `fresh` page lists `pending` under "What's
 new" and dismisses it when it closes; Settings › About's What's new and Version rows open the same page
 on `releases`, under the same title.
-Up and Down scroll it, B closes it, and Reprise's `isScreenUp`/`isScreenDown` and `isFirst`/`isLast`
+Up and Down scroll it, B closes it, and the Universe look's `isScreenUp`/`isScreenDown` and `isFirst`/`isLast`
 page and jump.
 
 Universe Desktop records and asks the same way from `core_ready`, after its first-run dialog and
@@ -1314,7 +1320,7 @@ each older release under a "Version X · date" line, the section headings transl
 
 ## The artwork pages and section
 
-`api.screens.artwork` is one game's artwork (Reprise: `pages/ArtworkPage.qml`, the Artwork entry of a
+`api.screens.artwork` is one game's artwork (the Universe look: `pages/ArtworkPage.qml`, the Artwork entry of a
 game's menu or a cell of the Settings section; the Switch 2 look: `switch2/pages/ArtworkPage.qml`
 from Software Options, and `ArtworkSlotPage.qml` pushed over it, which shares the screen — only the
 page below unloads it). `load(id)` reads `media_status` into `slots` — one row per slot with `url`
@@ -1325,7 +1331,7 @@ fetched the default, or "Missing"), `originLabel` and `defaultOriginLabel`, `has
 catalogue game the art is matched to ("Name (year)"; `matched` when there is one), GOG GamesDB's, or
 SteamGridDB's once the player's key is set (`sgdbKey`; `catalogue` names the one in use), named
 above the candidates only when `entryDiffers` (its name is not the game's), so a wrong match is
-seen and a right one says nothing. Reprise's page has two levels: the five slots as art cards (`ui/ArtFrame.qml`, the one
+seen and a right one says nothing. The Universe look's page has two levels: the five slots as art cards (`ui/ArtFrame.qml`, the one
 slot tile both the page and the Settings matrix draw — the box front tall on the left, square
 and banner, then background and logo, in two rows beside it, sized to fill the width, each named
 under it and nothing more), then a
@@ -1337,16 +1343,16 @@ thread into `candidates` (`url` is the provider's, `thumb` what the grid shows, 
 `providerLabel`, `votes` — SteamGridDB's only), `more` and `candidatesBusy`; `moreCandidates()`
 takes the next page. Without the player's SteamGridDB key every look ends the candidates with an
 "Add a SteamGridDB key for more art" cell (`kind: "key"` among the Switch 2 and PS5 `cells`): its A
-asks for the key (Reprise's keyboard sheet, the shell's `prompt` in `Artwork.js`) and `addKey(key)`
+asks for the key (the Universe look's keyboard sheet, the shell's `prompt` in `Artwork.js`) and `addKey(key)`
 writes `keys.sgdb` through `setConfig` and reloads the candidates. `apply(slot, url)` runs
 `media_set_url` on a thread, `useFile(slot, path)` `media_set_slot` (the page's menu, through
 `PathSheet` / the shell's `browse`); both emit `mediaChanged` for the game once the pick landed and
-`applied(slot)`. `removeOverride(slot)` runs `media_unset` (X in Reprise, the "Default under it"
+`applied(slot)`. `removeOverride(slot)` runs `media_unset` (X in the Universe look, the "Default under it"
 cell or the options menu on the Switch 2); `refresh()` fetches the missing art. All report
 through `message`. The wrong-match flow is `search(query)` → `hits` (`id` as text — GamesDB's
 pass 2^53 —, `provider`, `name`, `year`, `verified`, `current`) → `pin(id)`, which writes the hit's
 provider's pin (`metadata.gamesdb_id`, or `metadata.sgdb_id` with a key) through `media_pin` and
-reloads the candidates; every look searches the game's own title first — Reprise's Y opens the hits in a sheet
+reloads the candidates; every look searches the game's own title first — the Universe look's Y opens the hits in a sheet
 whose Y takes another name, the Switch 2 look runs it through the shell's `pick` with "Another
 name…" as the last choice, then `prompt` (`switch2/pages/Artwork.js`). Local URLs carry the file's mtime as a query
 (`models.file_url`), so a pick that replaces a file at the same path repaints instead of showing
@@ -1457,7 +1463,7 @@ named by `UNIVERSE_FAKE_PAD` (a family id, or `none` for the empty state), with 
 ## Universe Desktop
 
 `universe-desktop` (app ID `io.github.ilyasturki.UniverseDesktop`) links the Rust crate: GTK 4.22
-and libadwaita 1.9 over the same core, in the same process. Its pages follow Reprise's, less what
+and libadwaita 1.9 over the same core, in the same process. Its pages follow the Universe look's, less what
 belongs to the couch (the HOME dock, the hint bar, the on-screen keyboard, the pad driving the
 screens), plus what the CLI gives a desktop: the hidden games, removal that trashes the Wine prefix,
 rescans, the art fetched again, the store's catalogue search and the GNOME Shell extension's setup.
@@ -1480,7 +1486,7 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
   `component_cancel`). A store's "update all" steps through its games, so each can be cancelled.
   The Store page shows the job; its end is a toast — on the preferences when they are open — and a
   notification for an install or update when the window is not focused.
-- **Runners** (Preferences › Runners, as Settings › Runners in `universe-ui`): the runners found,
+- **Runners** (Preferences › Runners, as Settings › Emulators & Proton in `universe-ui`): the runners found,
   by the games on them, each with the build in use as its subtitle and what waits on it (an update,
   a newer build than the system's, Needed) beside its game count, with the button that does it
   (`components::quick`: Update, or Install… asking first); then "Not Installed" (Universe

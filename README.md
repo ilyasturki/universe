@@ -28,7 +28,7 @@ Art, screenshots, play time, achievements, saves and what it takes on disk.
 
 ## Three looks
 
-Reprise, a port of my [Pegasus theme](https://github.com/ilyasturki/pegasus-theme-reprise), a Switch 2 style HOME menu, or a PS5 style home. Switch live from the settings, or install a theme as an add-on.
+The Universe look, a port of my [Pegasus theme Reprise](https://github.com/ilyasturki/pegasus-theme-reprise), a Switch 2 style HOME menu, or a PS5 style home. Switch live from the settings, or install a theme as an add-on.
 
 ![The Switch 2 look](docs/images/switch2.jpg)
 

@@ -44,7 +44,8 @@ Universe looks extensions up in three places. On the same id, a later one wins:
    `$XDG_DATA_DIRS/universe/{modules,sources}`);
 3. your own, `$XDG_CONFIG_HOME/universe/{modules,sources}/<id>/`, the folder to work on one in.
 
-A theme has only the first: the built-in looks (`reprise`, `switch2`, `ps5`) are not folders, and
+A theme has only the first: the built-in looks (`reprise`, the Universe look, which `universe` also
+names; `switch2`; `ps5`) are not folders, and
 there is no folder of your own for themes.
 
 Installing an id that ships (a built-in look's, for a theme), or that your own folder holds, is
@@ -55,7 +56,7 @@ refused, and so is an id another kind holds: two kinds never share one.
 The manifest's `api` names the extension API it was written for. This Universe reads **api 2**.
 An extension whose `api` it does not read, or that names none, is refused at install. Found later,
 after an update of Universe, it stays listed but unavailable: its hooks never run, its source
-verbs are refused, a theme is listed in Settings › Themes but cannot be picked, and
+verbs are refused, a theme is listed in Settings › Appearance but cannot be picked, and
 `universe doctor` shows an `extension-api` line for it, whether it is on or off.
 
 The API grows without a bump while every change is an addition: a new hook, field, setting key,
@@ -93,8 +94,8 @@ a bare word is always an id of the index. Replacing an installed extension waits
 runs.
 
 Installing does not switch an extension on: `universe module enable <id>` or
-`universe source enable <id>` does, and so do the Modules and Sources pages. A theme is picked in
-Settings › Themes. An update replaces the folder in place. An index install takes the index's
+`universe source enable <id>` does, and so do the Features and Stores pages. A theme is picked in
+Settings › Appearance. An update replaces the folder in place. An index install takes the index's
 version when it is newer: X.Y.Z compared as numbers, so an index that goes back offers nothing (a
 version that is not X.Y.Z offers any other). Any other install is fetched again from its URL, archive or folder. Removing
 switches a module or a source off, then
@@ -106,8 +107,8 @@ way out, because it breaks once running or offers no other look, is left by hold
 pad for 5 s: Universe reads that hold itself, whatever the theme's QML does, puts the default look
 back with the same notice, and no longer remembers the theme as the look to start on.
 
-In the UI, the Modules and Sources pages of every look end on a "Get more…" row, and Settings ›
-Themes has one after the looks. It lists the index's add-ons of that kind and installs one after the
+In the UI, the Features and Stores pages of every look end on a "Get more…" row, and Settings ›
+Appearance has one after the looks. It lists the index's add-ons of that kind and installs one after the
 same confirmation. The UI installs from the index only. An unlisted extension installed from the
 CLI shows an Unlisted tag in the lists and can be removed there.
 
@@ -118,7 +119,7 @@ The CLI is not needed:
 1. Put the folder under `$XDG_DATA_HOME/universe/extensions/module/<id>/` (or `source/<id>/`,
    `theme/<id>/`), named after its manifest's `id`. Make its programs executable.
 2. Switch it on: `universe module enable <id>`, or `enabled` in `config.toml`'s `[modules]` or
-   `[sources]`; a theme shows in Settings › Themes the next time it opens.
+   `[sources]`; a theme shows in Settings › Appearance the next time it opens.
 
 Without a `<id>.json` beside it, it reads as unlisted and `update` leaves it alone. To work on an
 extension, use `$XDG_CONFIG_HOME/universe/modules/<id>/` instead: that folder wins over an
