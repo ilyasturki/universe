@@ -9,11 +9,26 @@ from dataclasses import dataclass, field
 
 import pytest
 from _controls import TAKEN, Context, Skip, ini_section, section_values, sections, taken_buttons
-from controls_fixtures import BIN_DIR, EDGE, PRO3_DINPUT, PRO3_XINPUT, SWITCH_PRO_DIGITAL, script
+from _gamepads import BIND_AXIS, BIND_BUTTON, Pad
+from controls_fixtures import BIN_DIR, EDGE, RECORDED, SWITCH_PRO_DIGITAL, script
 
-PADS = [SWITCH_PRO_DIGITAL, EDGE, PRO3_DINPUT, PRO3_XINPUT]
-# Nintendo labels on positional raw buttons, Nintendo labels on raw buttons in label order, and a Nintendo print SDL reads as an Xbox pad.
-HELD = {"switch-pro": SWITCH_PRO_DIGITAL, "pro3-dinput": PRO3_DINPUT, "pro3-xinput": PRO3_XINPUT}
+
+def listed(pad, index):
+    return Pad(**{**vars(pad), "index": index, "player_index": index})
+
+
+def face(pad):
+    return pad.labels, tuple(pad.bindings.get(out) for out in [(BIND_BUTTON, b) for b in range(4)] + [(BIND_AXIS, 4), (BIND_AXIS, 5)])
+
+
+# A Pro Controller whose triggers read as buttons, then every recorded pad; SDL's joystick 0 is no gamepad, which ScummVM's default would take.
+PADS = [listed(SWITCH_PRO_DIGITAL, 1), *(listed(pad, n) for n, pad in enumerate(RECORDED.values(), 2))]
+# One pad per face, the first of each: Nintendo labels on positional buttons or in label order, a print SDL reads as an Xbox pad, Sony's.
+HELD = {}
+for name, pad in [*RECORDED.items(), ("switch-pro-digital", SWITCH_PRO_DIGITAL)]:
+    if face(pad) not in map(face, HELD.values()):
+        HELD[name] = listed(pad, 0)
+
 SETTINGS = {s["key"]: s for s in tomllib.loads((BIN_DIR.parent / "module.toml").read_text())["settings"]}
 # The two choices of a setting that put every pad's bindings in different places.
 OPPOSITES = {"layout": ("positional", "xbox"), "shoulders": ("standard", "swapped")}
