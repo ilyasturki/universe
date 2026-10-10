@@ -14,7 +14,6 @@ pub enum Kind {
     Install,
     Update,
     Scan,
-    /// One install the store found on disk, into the library.
     Adopt,
     Artwork,
     Component,

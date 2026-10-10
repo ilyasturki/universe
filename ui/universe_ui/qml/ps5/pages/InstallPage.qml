@@ -501,7 +501,7 @@ FocusScope {
                 index: 0
             }, function (k) {
                 if (k === 1)
-                    sources.trash(index);
+                    sources.trash(g.id);
             });
         } else if (id === "remove") {
             shell.dialogAsk({

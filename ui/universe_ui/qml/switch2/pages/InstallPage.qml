@@ -268,7 +268,7 @@ FocusScope {
                                   buttons: ["Cancel", "Uninstall"], danger: 1 }, function(k) { if (k === 1) sources.uninstall(gameId); });
             } else if (a === "trash") {
                 shell.dialogAsk({ message: "Delete " + title + "'s files?", detail: g.dir + " goes to the trash. No game in your library uses it.",
-                                  buttons: ["Cancel", "Delete"], danger: 1, index: 0 }, function(k) { if (k === 1) sources.trash(row); });
+                                  buttons: ["Cancel", "Delete"], danger: 1, index: 0 }, function(k) { if (k === 1) sources.trash(g.id); });
             } else if (a === "remove") {
                 shell.dialogAsk({ message: "Remove " + title + " from the library?", detail: "The entry is archived; the files are left where they are.",
                                   buttons: ["Cancel", "Remove"], danger: 1 }, function(k) { if (k === 1) sources.remove(gameId); });

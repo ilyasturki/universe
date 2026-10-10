@@ -72,7 +72,6 @@ struct Entry {
     image: String,
     owned: Option<bool>,
     installed: bool,
-    /// Where the store found it on disk.
     dir: String,
     /// A stopped download waits on the disk.
     partial: bool,
@@ -468,9 +467,7 @@ impl StorePage {
     }
 
     fn games_dir(&self) -> String {
-        let imp = self.imp();
-        let source = imp.source.borrow();
-        imp.stores.borrow().iter().find(|s| text(s, "id") == *source).map(|s| text(s, "games_dir")).unwrap_or_default()
+        text(&self.store(), "games_dir")
     }
 
     /// A game of the listing or of the search, by store id.
@@ -697,7 +694,6 @@ impl StorePage {
         self.sync_job_row();
     }
 
-    /// The store listed, as `sources()` gives it.
     fn store(&self) -> Value {
         let imp = self.imp();
         let source = imp.source.borrow().clone();
@@ -941,6 +937,9 @@ impl StorePage {
 
     fn confirm_trash(&self, id: &str) {
         let Some(entry) = self.entry(id).filter(|e| e.installed && e.game_id.is_empty()) else { return };
+        if self.app().and_then(|app| app.job()).is_some_and(|job| job.target() == id) {
+            return;
+        }
         let body = gettext("{} goes to the trash. No game in your library uses it.").replace("{}", &tilde(&entry.dir));
         let dialog = adw::AlertDialog::new(Some(&gettext("Delete {}'s Files?").replace("{}", &entry.title)), Some(&body));
         dialog.add_responses(&[("cancel", &gettext("_Cancel")), ("trash", &gettext("_Delete Files"))]);

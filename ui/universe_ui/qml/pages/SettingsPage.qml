@@ -281,6 +281,7 @@ FocusScope {
                     choices: [],
                     detail: g.detail,
                     row: i,
+                    storeId: g.id,
                     installed: g.installed,
                     busy: g.busy,
                     partial: g.partial,
@@ -1485,7 +1486,7 @@ FocusScope {
             Sound.panel();
             menu.confirm("Keep them", "trash", "Move the folder to the trash", "Delete " + row.label + "'s files?", cards, cards.focusRect, function () {
                 Sound.enter();
-                sources.trash(row.row);
+                sources.trash(row.storeId);
             });
             return;
         } else if (action === "remove") {

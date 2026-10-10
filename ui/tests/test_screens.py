@@ -669,15 +669,14 @@ def test_sources_browser_uninstall_and_remove(api, fake):
     browser.remove("no-such-game")
     settle(browser)
     assert len(said) == 4
-    asylum = next(i for i, r in enumerate(browser.rows) if r["installed"] and not r["game_id"])
-    linked = next(i for i, r in enumerate(browser.rows) if r["installed"] and r["game_id"])
+    asylum = next(r["id"] for r in browser.rows if r["installed"] and not r["game_id"])
+    linked = next(r["id"] for r in browser.rows if r["installed"] and r["game_id"])
     browser.trash(linked)
     settle(browser)
     assert len(said) == 4, "a game the library holds goes through its uninstall"
-    title = browser.rows[asylum]["title"]
     browser.trash(asylum)
     settle(browser)
-    assert len(said) == 5 and not next(r for r in browser.rows if r["title"] == title)["installed"], "nobody's files go to the trash"
+    assert len(said) == 5 and not next(r for r in browser.rows if r["id"] == asylum)["installed"], "nobody's files go to the trash"
 
 
 def test_an_installed_game_the_library_lacks_is_added_on_its_own(api, fake):
