@@ -814,8 +814,7 @@ FocusScope {
         function onListingChanged() {
             if (root.addonsShown === "" || !popup.open)
                 return;
-            popup.detailHeights = {};
-            popup.items = root.addonsRows(root.addonsShown);
+            popup.refresh(root.addonsRows(root.addonsShown));
         }
     }
 

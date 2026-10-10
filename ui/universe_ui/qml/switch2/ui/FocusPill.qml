@@ -7,7 +7,7 @@ Rectangle {
     property bool focused: false
 
     radius: Theme.dp(Theme.radiusRow)
-    color: Theme.focusFill
+    color: focused ? Theme.focusFill : "transparent"
     visible: focused
 
     FocusOutline {

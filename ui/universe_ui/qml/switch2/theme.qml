@@ -828,7 +828,7 @@ FocusScope {
         }
         function onListingChanged() {
             if (root.addonsShown !== "" && picker.open)
-                picker.choices = root.addonsChoices(root.addonsShown);
+                picker.refresh(root.addonsChoices(root.addonsShown));
         }
     }
 

@@ -61,6 +61,12 @@ Modal {
         scrollEase.enabled = true;
     }
 
+    // The index before the rows here too: a shorter list keeps its cursor on its last row.
+    function refresh(list) {
+        index = Math.max(0, Math.min(list.length - 1, index));
+        choices = list;
+    }
+
     scrimColor: anchored ? "transparent" : Theme.scrim
     card.anchors.centerIn: anchored ? undefined : picker
     card.x: anchored ? anchor.x + anchor.width / 2 : 0
@@ -159,6 +165,7 @@ Modal {
                 height: picker.rowHeight
 
                 FocusPill {
+                    objectName: "menuRow"
                     anchors.fill: parent
                     focused: parent.focused
                 }

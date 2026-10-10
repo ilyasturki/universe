@@ -100,9 +100,44 @@ def theme_rows(page):
 
 
 def lit_rows(menu):
-    """The rows of a Reprise list drawn lit right now, mid-fade included: the cursor's alone once a list is swapped in."""
+    """The rows of a menu drawn lit right now, mid-fade included: the cursor's alone once a list is swapped in."""
     rows = descendants(menu, "menuRow")
     return [i for i, row in enumerate(rows) if QColor(row.property("color")).alpha() > 0]
+
+
+def focus_names(window):
+    """The objectNames around the item with the active focus, outermost first."""
+    names, item = [], window.activeFocusItem()
+    while item is not None:
+        if item.objectName():
+            names.append(item.objectName())
+        item = item.parentItem()
+    return names[::-1]
+
+
+class FocusTrace:
+    """Every frame the window draws while it runs: where the active focus sits, and how many rows of `menu` are lit."""
+
+    def __init__(self, window, menu=None):
+        self.window = window
+        self.menu = menu
+        self.frames = []
+        window.frameSwapped.connect(self._frame)
+
+    def _frame(self):
+        self.frames.append((focus_names(self.window), len(lit_rows(self.menu)) if self.menu is not None else 0))
+
+    def stop(self):
+        self.window.frameSwapped.disconnect(self._frame)
+        assert self.frames, "no frame drawn while traced"
+        return self
+
+    def foreign(self, *names):
+        """The frames whose focus sits in none of `names`: a transition that showed it elsewhere on the way."""
+        return [focus for focus, _ in self.frames if not any(n in focus for n in names)]
+
+    def most_lit(self):
+        return max(lit for _, lit in self.frames)
 
 
 def page_name(source):

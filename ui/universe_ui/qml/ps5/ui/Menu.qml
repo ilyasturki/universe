@@ -62,6 +62,13 @@ Modal {
         scrollEase.enabled = true;
     }
 
+    // The index before the rows here too: a shorter list keeps its cursor on its last row.
+    function refresh(list) {
+        detailHeights = {};
+        index = Math.max(0, Math.min(list.length - 1, index));
+        items = list;
+    }
+
     function heightOf(i) {
         var item = items[i];
         if (!item || !item.detail)
@@ -207,6 +214,7 @@ Modal {
                     height: menu.heightOf(index)
 
                     Rectangle {
+                        objectName: "menuRow"
                         anchors.fill: parent
                         anchors.leftMargin: Theme.dp(4)
                         anchors.rightMargin: Theme.dp(4)
