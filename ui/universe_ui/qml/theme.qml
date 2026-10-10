@@ -288,14 +288,15 @@ FocusScope {
             return;
         }
         Sound.enter();
+        // A page closed fades out where it stood: the same game opened again, during the fade or after, starts at the top.
+        if (detailLoader.item && detailGame === game)
+            detailLoader.item.reset();
         detailGame = game;
         detailOpen = true;
     }
 
     function closeDetail() {
         Sound.cancel();
-        if (detailLoader.item)
-            detailLoader.item.reset();
         detailOpen = false;
         // Qt clears the loader's focus from C++ without re-evaluating the binding.
         restoreFocus();
@@ -1477,8 +1478,6 @@ FocusScope {
     function clearToHome() {
         subReturn = null;
         subOpen = false;
-        if (detailLoader.item)
-            detailLoader.item.reset();
         detailOpen = false;
         searchOpen = false;
         goToTab(0);

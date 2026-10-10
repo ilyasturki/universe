@@ -487,9 +487,17 @@ def test_the_reprise_detail_page_shows_the_play_time_once_a_game_is_played(look,
         return dict(zip(cells[::2], cells[1::2], strict=True)) if row.isVisible() else {}
 
     root = look.root
-    invoke(root, "openDetail", api.allGames.byId("the-technomancer"))
+    game = api.allGames.byId("the-technomancer")
+    invoke(root, "openDetail", game)
     shown = until(lambda: len(stats()) == 3 and stats())
     assert (shown["PLAY TIME"], shown["SESSIONS"]) == ("41.5 h", "23") and shown["LAST PLAYED"] != "Never played"
+    page = root.findChild(QObject, "detailPage")
+    look.press(Qt.Key.Key_Down, 2)
+    until(lambda: page.property("scrollY") > 0, "down the page")
+    look.press(Qt.Key.Key_Escape)
+    assert root.property("detailOpen") is False and page.property("scrollY") > 0, "B fades the page out where it stands"
+    invoke(root, "openDetail", game)
+    assert page.property("scrollY") == 0 and page.property("section") == 0, "the same game opened again starts at the top"
     invoke(root, "closeDetail")
     invoke(root, "openDetail", api.allGames.byId("mirrors-edge"))
     until(lambda: stats() == {}, "never played: no row")
