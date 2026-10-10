@@ -1261,8 +1261,9 @@ game). On GNOME the extension grabs it (`org.universe.Windows.Screenshot(path, w
 Mutter reads the framebuffer synchronously, so the grab returns at the press, before the PNG is
 encoded, and `desktop-shot` prints `grabbed` then; spectacle, grim and the X server print it once
 the file is written. When the desktop takes none it is a gpu-screen-recorder `-o` capture of `SESSION_SCREEN`
-when gpu-screen-recorder is installed, else the hook fails. The hook passes `desktop-shot`'s
-`grabbed` on as it comes; a hook that never prints it is taken as grabbed with its path.
+when gpu-screen-recorder is installed, else the hook fails; a desktop that printed `grabbed` and then
+failed fails the hook, with no later capture. The hook passes `desktop-shot`'s `grabbed` on as it
+comes; a hook that never prints it is taken as grabbed with its path.
 
 `thumb` is the shot's thumbnail, a 960 px wide JPEG under `$XDG_CACHE_HOME/universe/thumbs/` (one flat
 directory, `<game>--<stem>-<mtime>.jpg`, so a file replaced in place gets a fresh one), and

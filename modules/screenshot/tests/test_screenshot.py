@@ -26,7 +26,8 @@ def fakebin(tmp_path):
         f'''printf "%s\\n" "$@" >> "{logs}/universe.args"
 case "$1" in
   nest-shot) [ "${{FAKE_NEST_OK:-true}}" = true ] || {{ echo "gamescope wrote no screenshot" >&2; exit 1; }};;
-  desktop-shot) [ "${{FAKE_DESKTOP_OK:-true}}" = true ] || {{ echo "grim not on PATH" >&2; exit 1; }};;
+  desktop-shot) [ "${{FAKE_DESKTOP_OK:-true}}" = true ] || {{ echo "grim not on PATH" >&2; exit 1; }}
+    [ "${{FAKE_DESKTOP_LOST:-false}}" = true ] && {{ echo grabbed; echo "encode failed" >&2; exit 1; }};;
 esac
 echo grabbed; {shutil.which("sleep")} "${{FAKE_SAVE_S:-0}}"
 echo fake > "$2"; echo "$2"''',
@@ -91,6 +92,10 @@ def test_a_refused_desktop_grab_falls_back_to_gsr_on_the_sessions_screen(tmp_pat
     assert result.returncode == 0, result.stderr
     assert "grim not on PATH" in result.stderr
     assert gsr_flag(fakebin, "-o") == [path_of(result)] and gsr_flag(fakebin, "-w") == ["HDMI-A-1"]
+    (fakebin["logs"] / "gsr.args").unlink()
+    result = run(env_for(tmp_path, fakebin, {}, FAKE_DESKTOP_LOST="true"))
+    assert result.returncode == 1 and result.stdout == "grabbed\n", "a grab already told is not captured again later"
+    assert not (fakebin["logs"] / "gsr.args").exists()
 
 
 def test_inside_gamescope_its_own_shot_is_taken_and_the_desktop_left_alone(tmp_path, fakebin):

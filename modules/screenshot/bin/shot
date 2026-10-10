@@ -23,7 +23,7 @@ def take_in_gamescope(path, window):
 
 
 def take_on_desktop(path, screen, window, cursor):
-    """The desktop's own grab, as desktop.profile picks it (the GNOME extension, spectacle, grim, the X server); its `grabbed` passed on as it comes."""
+    """(taken, grabbed) of the desktop's own grab, as desktop.profile picks it (the GNOME extension, spectacle, grim, the X server); its `grabbed` passed on as it comes."""
     import subprocess
     import threading
 
@@ -33,19 +33,21 @@ def take_on_desktop(path, screen, window, cursor):
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, text=True)
     except OSError as e:
         log(f"universe desktop-shot: {e}")
-        return False
+        return False, False
+    grabbed = False
     watchdog = threading.Timer(TAKE_TIMEOUT_S, proc.kill)
     watchdog.daemon = True
     watchdog.start()
     with proc:
         for line in proc.stdout or ():
-            if line.strip() == GRABBED:
+            if line.strip() == GRABBED and not grabbed:
+                grabbed = True
                 print(GRABBED, flush=True)
     watchdog.cancel()
     if proc.returncode == 0 and os.path.exists(path) and os.path.getsize(path) > 0:
-        return True
+        return True, grabbed
     log(f"universe desktop-shot {path} failed (exit {proc.returncode})")
-    return False
+    return False, grabbed
 
 
 def take_with_gsr(screen, path):
@@ -79,12 +81,15 @@ def main():
     screen = os.environ.get("SESSION_SCREEN") or ""
 
     window = bool(settings.get("window", True))
-    # No fallback once gamescope has the request: a capture after its `grabbed` would be another moment than the shutter's.
+    # No fallback once a grab is told: a capture after its `grabbed` would be another moment than the shutter's.
     if os.environ.get("GAMESCOPE_WAYLAND_DISPLAY"):
         return take_in_gamescope(path, window)
-    if take_on_desktop(path, screen, window, bool(settings.get("cursor"))):
+    taken, grabbed = take_on_desktop(path, screen, window, bool(settings.get("cursor")))
+    if taken:
         print(path)
         return 0
+    if grabbed:
+        return 1
     import shutil
 
     if not shutil.which("gpu-screen-recorder"):
