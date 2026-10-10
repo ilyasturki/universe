@@ -157,7 +157,11 @@ fn a_ludusavi_lookup_dies_with_the_cli_killed_mid_way() {
         if let Ok(pid) = std::fs::read_to_string(&pid_file) {
             break pid.trim().parse::<i32>().unwrap();
         }
-        assert!(started.elapsed().as_secs() < 10 && cli.try_wait().unwrap().is_none(), "the CLI never ran ludusavi");
+        if started.elapsed().as_secs() >= 10 || cli.try_wait().unwrap().is_some() {
+            let _ = cli.kill();
+            let _ = cli.wait();
+            panic!("the CLI never ran ludusavi");
+        }
         std::thread::sleep(std::time::Duration::from_millis(20));
     };
     cli.kill().unwrap();

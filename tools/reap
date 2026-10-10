@@ -43,9 +43,9 @@ def main(argv: list[str]) -> int:
     libc = ctypes.CDLL(None, use_errno=True)
     if libc.prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) != 0:
         sys.exit(f"reap: prctl: {os.strerror(ctypes.get_errno())}")
-    command = subprocess.Popen(argv)
     # Ctrl-C already reaches COMMAND through the terminal's process group; a TERM sent here is passed on.
     signal.signal(signal.SIGINT, lambda *_: None)
+    command = subprocess.Popen(argv)
     signal.signal(signal.SIGTERM, lambda *_: command.send_signal(signal.SIGTERM))
     while True:
         pid, status = os.wait()

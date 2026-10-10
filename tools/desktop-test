@@ -53,7 +53,7 @@ trap cleanup EXIT
 
 # `timeout` leads a process group of its own: whatever is still in it once the app has quit, the app left behind.
 left_behind() {
-    local stat fields state group
+    local stat fields state group left=
     for _ in $(seq 20); do
         kill -0 -- "-$1" 2>/dev/null || return 0
         sleep 0.05
@@ -61,9 +61,9 @@ left_behind() {
     for stat in /proc/[0-9]*/stat; do
         fields="$(cat "$stat" 2>/dev/null)" || continue
         read -r state _ group _ <<<"${fields##*) }"
-        [ "$group" = "$1" ] && [ "$state" != Z ] && tr '\0' ' ' <"${stat%stat}cmdline" >&2 && echo >&2
+        [ "$group" = "$1" ] && [ "$state" != Z ] && tr '\0' ' ' <"${stat%stat}cmdline" >&2 && echo >&2 && left=1
     done
-    fail "the app quit and left the processes above running ($2)"
+    [ -z "$left" ] || fail "the app quit and left the processes above running ($2)"
 }
 
 shots=(media platform library hidden store game preferences)
