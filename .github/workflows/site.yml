@@ -1,0 +1,106 @@
+name: site
+on:
+  pull_request:
+    paths: &sources
+      - site/**
+      - docs/**
+      - brand/**
+      - CHANGELOG.md
+      - Cargo.toml
+      - flake.lock
+      - nix/*.nix
+      - crates/universe/src/cli.rs
+      - crates/universe/src/launch_keys.rs
+      - crates/universe/src/runners.rs
+      - ui/universe_ui/qml/ui/Sections.js
+      - ui/icons/hicolor/scalable/apps/universe-ui.svg
+      - .github/workflows/site.yml
+  push:
+    branches: [main]
+    paths: *sources
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: The release tag or commit to publish; empty publishes the newest v* tag
+        default: ""
+      strict:
+        description: Refuse to publish a placeholder for a screenshot or clip not recorded yet
+        type: boolean
+        default: true
+permissions:
+  contents: read
+concurrency:
+  group: site-${{ github.event_name == 'workflow_dispatch' && 'deploy' || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read
+    steps:
+      # Every page's last-updated date comes from the history.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Check out the release to publish
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          REF: ${{ inputs.ref }}
+        run: |
+          [ -n "$REF" ] || REF="$(git tag --list 'v*' --sort=-v:refname | head -n 1)"
+          [ -n "$REF" ] || { echo "::error::no v* tag to publish"; exit 1; }
+          git checkout --quiet "$REF"
+          echo "publishing $REF ($(git rev-parse --short HEAD))"
+      - uses: DeterminateSystems/nix-installer-action@v23
+      - uses: nix-community/cache-nix-action/restore@v7
+        with:
+          primary-key: nix-build-${{ github.sha }}
+          restore-prefixes-first-match: nix-build-
+      - name: The universe binary the reference pages come from, and bun
+        run: |
+          nix build .#universe -o "$RUNNER_TEMP/universe" -L
+          nix build --inputs-from . nixpkgs#bun -o "$RUNNER_TEMP/bun"
+          echo "$RUNNER_TEMP/bun/bin" >> "$GITHUB_PATH"
+      - name: The screenshots and clips, from the site-media branch
+        run: |
+          if git rev-parse -q --verify origin/site-media >/dev/null; then
+            git archive origin/site-media src/assets/media public/media | tar -x -C site
+          else
+            echo "no site-media branch yet: every screenshot and clip is a placeholder"
+          fi
+      - run: bun install --cwd site --frozen-lockfile
+      - name: Build
+        working-directory: site
+        env:
+          UNIVERSE_BIN: ${{ runner.temp }}/universe/bin/universe
+          UMAMI_WEBSITE_ID: ${{ vars.UMAMI_WEBSITE_ID }}
+          DOCS_STRICT: ${{ github.event_name == 'workflow_dispatch' && inputs.strict && '1' || '' }}
+        run: bun --bun run build
+      - id: pages
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/configure-pages@v6
+      - name: Pages serves the domain the site is built for
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          HOST: ${{ steps.pages.outputs.host }}
+        run: |
+          want="$(cat site/dist/CNAME)"
+          [ "$HOST" = "$want" ] || { echo "::error::Pages serves $HOST but the site is built for $want: set Settings › Pages › Custom domain to $want, or change site in site/astro.config.ts"; exit 1; }
+      - if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: site/dist
+  deploy:
+    if: github.event_name == 'workflow_dispatch'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

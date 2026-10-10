@@ -21,6 +21,16 @@ jobs:
       - run: gh release create "$GITHUB_REF_NAME" --title "Universe ${GITHUB_REF_NAME#v}" --notes-file notes.md
         env:
           GH_TOKEN: ${{ github.token }}
+  # The github-pages environment deploys from main only, so the site is published by a run on main, told which release to build
+  site:
+    needs: notes
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - run: gh workflow run site.yml --repo "$GITHUB_REPOSITORY" --ref main -f ref="$GITHUB_REF_NAME"
+        env:
+          GH_TOKEN: ${{ github.token }}
   # GTK 4.22 and libadwaita 1.9 are no older distro's: Universe Desktop is built on Arch, for the systems that have them
   desktop:
     needs: notes
