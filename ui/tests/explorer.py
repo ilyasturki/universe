@@ -33,7 +33,7 @@ HINTED = {"X": Qt.Key.Key_I, "Y": Qt.Key.Key_F, "Start": Qt.Key.Key_F1, "LB": Qt
 # B presses from any state to home, at most.
 HOME_WITHIN = 6
 # Cursor states expanded per region before its moves wait for the rest: a grid's every cell is not a new screen.
-PER_REGION = 16
+PER_REGION = 10
 # Suspects of B never getting home walked again, at most: each costs a new window.
 CONFIRMED = 15
 # Tries of a button in a region that found no page earlier ones had: the button is worked out there.
@@ -444,13 +444,13 @@ class Explorer:
             crowded = not s.expanded and expanded.get(s.region, 0) >= PER_REGION
             for key in untried:
                 if key in MOVES:
-                    rank = 9 if crowded else 2
+                    rank = 9 if crowded else 1
                 elif not any(key in t.edges for t in self.by_region[s.region]):
                     rank = 0
                 else:
                     rank = 9 if crowded or self.saturated(s, key) else 1
-                # A button on a row a move just found beats the next move, unless it is a long walk away.
-                order = (4 * rank + min(far, 20), len(self.depth.get(s.key, s.path)))
+                # Nearest first: a button the region never tried is worth a walk of four presses; at a tie, a button before a move.
+                order = (4 * rank + min(far, 20), key in MOVES, len(self.depth.get(s.key, s.path)))
                 if best is None or order < best[0]:
                     best = (order, s, key)
         return best[1:] if best else (None, None)
