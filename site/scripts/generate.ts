@@ -202,7 +202,9 @@ function launchKeysPage(keys: LaunchKey[], runners: Runner[]) {
                 const kinds = k.runners.map((r) => names.get(r) ?? r);
                 const home = kinds.length ? `Settings \u203a Emulators & Proton \u203a ${kinds.join(' or ')}` : 'Settings \u203a Game defaults';
                 const facts = [`Key ${code(k.key)}`, `default ${code(k.default)}`];
-                if (k.choices.length) facts.push(`one of ${k.choices.map(code).join(', ')}`);
+                // An enum or a toggle takes only its choices; a size, a rate or a number takes any value, the choices being suggestions.
+                if (k.choices.length && ['enum', 'toggle'].includes(k.type)) facts.push(`one of ${k.choices.map(code).join(', ')}`);
+                else if (k.choices.length) facts.push(`such as ${k.choices.slice(0, 4).map(code).join(', ')}`);
                 const where = {
                     game: 'Set per game, in its Game settings.',
                     global: `Set for every game, in ${home}.`,
