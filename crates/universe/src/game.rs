@@ -289,6 +289,11 @@ impl Game {
         }
         crate::runners::canonical(&self.launch.runner)
     }
+
+    /// Empty for a runner Universe has no spec for.
+    pub fn runner_kind(&self) -> &'static str {
+        crate::runners::spec(&self.runner_id()).map(|s| s.kind.as_str()).unwrap_or_default()
+    }
 }
 
 pub fn atomic_write(path: &Path, bytes: &[u8]) -> crate::Result<()> {

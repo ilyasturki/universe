@@ -207,7 +207,7 @@ pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Modu
     let journal_count = crate::journal::count_written(&game.journal_dir());
     let achievements = crate::achievements::read(&crate::achievements::path(&game)).map(|c| c.summary()).unwrap_or_default();
     let mut mods = BTreeMap::new();
-    let kind = crate::runners::spec(&game.runner_id()).map(|s| s.kind.as_str()).unwrap_or_default();
+    let kind = game.runner_kind();
     for m in modules.iter().filter(|m| m.active() && m.manifest.applies.takes(kind)) {
         mods.insert(m.id().to_string(), m.merged_settings(config, Some(&game)));
     }

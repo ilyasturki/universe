@@ -629,7 +629,7 @@ impl Core {
     /// The active modules declaring `hook` and switched on for `game`, or globally without one; a game's runner kind must be one
     /// the module's `[applies]` takes.
     async fn modules_with_hook(&self, cfg: &Config, game: Option<&Game>, hook: &str) -> Vec<Module> {
-        let kind = game.map(|g| crate::runners::spec(&g.runner_id()).map(|s| s.kind.as_str()).unwrap_or_default());
+        let kind = game.map(Game::runner_kind);
         self.modules
             .read()
             .await
