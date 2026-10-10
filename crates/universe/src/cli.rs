@@ -762,6 +762,12 @@ pub enum ControllerCmd {
     },
     /// Forget a learned button (the shipped codes apply again)
     Forget { family: String, slot: String },
+    /// Drop a Bluetooth pad's link and bring it back, then tell the running game's modules (a cable's pad has to be re-plugged)
+    Reconnect {
+        /// A pad's id from `controller ls`, or `all`
+        #[arg(default_value = "all")]
+        id: String,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -2105,6 +2111,24 @@ async fn controller(core: Core, action: ControllerCmd, json: bool) -> anyhow::Re
         ControllerCmd::Forget { family, slot } => {
             core.set_controller_button(&family, &slot, None).await?;
             report(json, true, "forgotten");
+        }
+        ControllerCmd::Reconnect { id } => {
+            let outcomes = core.controller_reconnect(&id).await?;
+            if json {
+                return print_json(&outcomes);
+            }
+            if outcomes.is_empty() {
+                println!("{}", "no pad connected".dimmed());
+            }
+            for o in &outcomes {
+                let what = match s(o, "outcome").as_str() {
+                    "back" => "back".green().to_string(),
+                    "asleep" => "switched itself off: press its PS or HOME button".yellow().to_string(),
+                    "cable" => "on a cable: pull it out and plug it back in".to_string(),
+                    _ => "BlueZ could not reconnect it".red().to_string(),
+                };
+                println!("{} {} · {what}", s(o, "id").dimmed(), s(o, "name").bold());
+            }
         }
     }
     Ok(())

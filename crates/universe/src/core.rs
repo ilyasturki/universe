@@ -1686,6 +1686,40 @@ impl Core {
         crate::controller::watch::enumerate_json(&cfg)
     }
 
+    /// The pad `id` (every pad for `all` or empty) dropped and brought back, then the running game's `reconnect` hooks:
+    /// `[{id, name, bus, outcome}]`, `outcome` `back`, `asleep` (it switched itself off: its PS or HOME button wakes it),
+    /// `cable` (a cable's pad is not re-plugged in software: pull it out and back) or `failed`.
+    pub async fn controller_reconnect(&self, id: &str) -> Result<Vec<serde_json::Value>> {
+        let all = id.is_empty() || id == "all";
+        let pads: Vec<serde_json::Value> = self.controller_pads().await.into_iter().filter(|p| all || p["id"] == id).collect();
+        if pads.is_empty() && !all {
+            return Err(Error::NotFound(format!("no controller {id}")));
+        }
+        let wireless = pads.iter().any(|p| p["address"].as_str().is_some_and(|a| !a.is_empty()));
+        let conn = if wireless { crate::bluetooth::system().await.inspect_err(|e| tracing::warn!("reconnect: {e}")).ok() } else { None };
+        let mut out = Vec::new();
+        for p in pads {
+            let outcome = match (p["address"].as_str().unwrap_or(""), &conn) {
+                ("", _) => "cable",
+                (address, Some(conn)) => match crate::bluetooth::reconnect(conn, address).await {
+                    Ok(crate::bluetooth::Reconnected::Back) => "back",
+                    Ok(crate::bluetooth::Reconnected::Asleep) => "asleep",
+                    Err(e) => {
+                        tracing::warn!("reconnect {address}: {e}");
+                        "failed"
+                    }
+                },
+                (_, None) => "failed",
+            };
+            out.push(serde_json::json!({"id": p["id"], "name": p["name"], "bus": p["bus"], "outcome": outcome}));
+        }
+        match self.reconnect_hooks().await {
+            Ok(()) | Err(Error::NotFound(_)) => {}
+            Err(e) => tracing::warn!("reconnect hooks: {e}"),
+        }
+        Ok(out)
+    }
+
     pub async fn set_controller_macro(&self, m: crate::controller::Macro) -> Result<()> {
         m.validate()?;
         let cfg = self.config.read().await.clone();

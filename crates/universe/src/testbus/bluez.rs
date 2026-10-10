@@ -20,6 +20,7 @@ pub enum BluezError {
     AlreadyExists(String),
     DoesNotExist(String),
     NotReady(String),
+    Failed(String),
 }
 
 /// How a device pairs: on its own, or once the agent confirms a passkey.
@@ -34,6 +35,10 @@ struct Agents {
     registered: HashMap<String, OwnedObjectPath>,
     default: Option<(String, OwnedObjectPath)>,
     asked: Option<(String, OwnedObjectPath)>,
+    /// `Connect`/`Disconnect <address>`, in the order the devices were asked.
+    calls: Vec<String>,
+    /// Devices switched off: a Connect to them times out on the page.
+    asleep: Vec<String>,
 }
 
 type Shared = Arc<Mutex<Agents>>;
@@ -186,12 +191,20 @@ impl Device {
     }
 
     async fn connect(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) -> Result<(), BluezError> {
+        {
+            let mut agents = self.agents.lock().unwrap();
+            agents.calls.push(format!("Connect {}", self.address));
+            if agents.asleep.contains(&self.address) {
+                return Err(BluezError::Failed("Page Timeout".into()));
+            }
+        }
         self.flags.lock().unwrap().connected = true;
         self.connected_changed(&emitter).await?;
         Ok(())
     }
 
     async fn disconnect(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) -> Result<(), BluezError> {
+        self.agents.lock().unwrap().calls.push(format!("Disconnect {}", self.address));
         self.flags.lock().unwrap().connected = false;
         self.connected_changed(&emitter).await?;
         Ok(())
@@ -295,6 +308,16 @@ impl Bluez {
 
     pub async fn battery(&self, address: &str, percentage: u8) {
         self.conn.object_server().at(device_path(address), Battery { percentage }).await.unwrap();
+    }
+
+    /// The Connect and Disconnect calls the devices took, oldest first.
+    pub fn calls(&self) -> Vec<String> {
+        self.agents.lock().unwrap().calls.clone()
+    }
+
+    /// The device switches itself off: Connect fails from now on.
+    pub fn sleep(&self, address: &str) {
+        self.agents.lock().unwrap().asleep.push(address.into());
     }
 
     pub fn default_agent(&self) -> Option<String> {

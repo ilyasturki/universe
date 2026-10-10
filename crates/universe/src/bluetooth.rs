@@ -213,6 +213,28 @@ pub async fn cancel_pairing(conn: &zbus::Connection, address: &str) -> Result<()
     timed(CALL, async { proxy(conn, path, DEVICE).await?.call::<_, _, ()>("CancelPairing", &()).await }).await.map_err(failed)
 }
 
+/// How long a reconnect waits for the pad: one still on answers at once, one that switched itself off on the drop never does.
+const RECONNECT: Duration = Duration::from_secs(5);
+
+/// How a reconnect ended: the pad is `back`, or `asleep` and waits for its PS or HOME button.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Reconnected {
+    Back,
+    Asleep,
+}
+
+/// Drops the pad's link and brings it back up: whatever reads it sees it unplugged and plugged in again.
+pub async fn reconnect(conn: &zbus::Connection, address: &str) -> Result<Reconnected> {
+    let path = device(conn, address).await?;
+    let device = proxy(conn, path, DEVICE).await.map_err(failed)?;
+    timed(CALL, device.call::<_, _, ()>("Disconnect", &())).await.map_err(failed)?;
+    Ok(match timed(RECONNECT, device.call::<_, _, ()>("Connect", &())).await {
+        Ok(()) => Reconnected::Back,
+        Err(_) => Reconnected::Asleep,
+    })
+}
+
 pub async fn disconnect(conn: &zbus::Connection, address: &str) -> Result<()> {
     let path = device(conn, address).await?;
     timed(CALL, async { proxy(conn, path, DEVICE).await?.call::<_, _, ()>("Disconnect", &()).await }).await.map_err(failed)
@@ -751,6 +773,22 @@ mod tests {
         assert_eq!((&ask["kind"], &ask["device_kind"], &ask["name"]), (&json!("authorize"), &json!("pad"), &json!("DualSense Wireless Controller")));
         s.send(json!({"cmd": "answer", "id": ask["id"], "yes": true}));
         assert!(asked.await.unwrap().is_ok(), "BlueZ hears the yes");
+    }
+
+    // A pad still on comes back on its own; one that switched itself off on the drop waits for its PS or HOME button.
+    #[tokio::test]
+    async fn a_reconnect_drops_the_link_then_brings_the_pad_back_or_says_it_sleeps() {
+        let bus = Bus::start();
+        let bluez = Bluez::serve(&bus).await;
+        bluez.add(PAD, Some("DualSense Edge Wireless Controller"), "input-gaming", true, Pairing::JustWorks).await;
+        let conn = bus.connect().await;
+        connect(&conn, PAD).await.unwrap();
+        assert_eq!(reconnect(&conn, PAD).await.unwrap(), Reconnected::Back);
+        assert_eq!(bluez.calls(), [format!("Connect {PAD}"), format!("Disconnect {PAD}"), format!("Connect {PAD}")]);
+        bluez.sleep(PAD);
+        assert_eq!(reconnect(&conn, PAD).await.unwrap(), Reconnected::Asleep);
+        assert_eq!(bluez.calls()[3..], [format!("Disconnect {PAD}"), format!("Connect {PAD}")]);
+        assert!(matches!(reconnect(&conn, "00:00:00:00:00:00").await, Err(Error::NotFound(_))));
     }
 
     #[tokio::test]

@@ -171,6 +171,8 @@ struct Pad {
     thrown: BTreeSet<u16>,
     axis_last: BTreeMap<&'static str, i32>,
     battery: Option<(u8, bool)>,
+    /// BlueZ's address for the pad on Bluetooth, empty on a cable
+    address: String,
     cmd: mpsc::Sender<PadCmd>,
 }
 
@@ -357,7 +359,7 @@ impl Pad {
         serde_json::json!({
             "event": "device", "id": self.id, "name": self.name, "family": self.family.id, "family_name": self.family.name, "bus": self.bus,
             "vendor": self.vendor, "product": self.product, "slots": slots_json(&self.slots), "axes": axes, "sdl": sdl, "sdl_axes": sdl_axes,
-            "layout": self.layout, "printed_layout": self.family.printed_layout(),
+            "layout": self.layout, "printed_layout": self.family.printed_layout(), "address": self.address,
             "battery": self.battery.map(|(percent, charging)| serde_json::json!({"percent": percent, "charging": charging})),
         })
     }
@@ -409,6 +411,8 @@ struct Caps {
     keys: Vec<u16>,
     axes: Vec<u16>,
     ranges: BTreeMap<u16, (i32, i32)>,
+    /// the kernel's uniq: a Bluetooth pad's address
+    uniq: String,
 }
 
 fn describe(dev: &Device) -> Caps {
@@ -418,7 +422,7 @@ fn describe(dev: &Device) -> Caps {
     let family = detect_family_on(crate::deck::model().is_some(), id.vendor(), id.product(), &name, &keys);
     let axes: Vec<u16> = dev.supported_absolute_axes().map(|a| a.iter().map(|c| c.0).collect()).unwrap_or_default();
     let ranges = dev.get_absinfo().map(|it| it.map(|(c, i)| (c.0, (i.minimum(), i.maximum()))).collect()).unwrap_or_default();
-    Caps { name, family, vendor: id.vendor(), product: id.product(), keys, axes, ranges }
+    Caps { name, family, vendor: id.vendor(), product: id.product(), keys, axes, ranges, uniq: dev.unique_name().unwrap_or("").to_string() }
 }
 
 fn pad_of(id: String, path: PathBuf, bus: String, c: Caps, cfg: &ControllerConfig, cmd: mpsc::Sender<PadCmd>) -> Pad {
@@ -427,6 +431,7 @@ fn pad_of(id: String, path: PathBuf, bus: String, c: Caps, cfg: &ControllerConfi
         path,
         name: c.name,
         family: c.family,
+        address: if bus == "bluetooth" { c.uniq } else { String::new() },
         bus,
         vendor: c.vendor,
         product: c.product,
@@ -1223,6 +1228,7 @@ mod tests {
             keys: vec![0x130, 0x131],
             axes: vec![0, 1, 2, 3, 4, 5, 16, 17],
             ranges: [(0, (-32768, 32767)), (1, (-32768, 32767)), (2, (0, 1023)), (3, (-32768, 32767)), (4, (-32768, 32767)), (5, (0, 1023))].into(),
+            uniq: String::new(),
         };
         pad_of("pad".into(), PathBuf::new(), "usb".into(), caps, &ControllerConfig::default(), cmd)
     }
@@ -1240,8 +1246,9 @@ mod tests {
                 keys: vec![],
                 axes: vec![],
                 ranges: BTreeMap::new(),
+                uniq: "aa:bb:cc:00:00:01".into(),
             };
-            pad_of("pad".into(), PathBuf::new(), "usb".into(), caps, &cfg, cmd).json()
+            pad_of("pad".into(), PathBuf::new(), "bluetooth".into(), caps, &cfg, cmd).json()
         };
         let seen = |family: &str| {
             let j = json(family);
@@ -1254,6 +1261,7 @@ mod tests {
         assert!(super::super::layout_value("controller.layout.xbox", "positional").is_ok() && super::super::layout_value("controller.layout.xbox", "").is_ok());
         assert!(super::super::layout_value("controller.layout.xbox", "sideways").is_err());
         assert!(super::super::layout_value("controller.layout.gamecube", "xbox").is_err(), "no such family");
+        assert_eq!(json("dualsense-edge")["address"], "aa:bb:cc:00:00:01", "a Bluetooth pad names the address BlueZ reconnects it by");
     }
 
     // The walk moves to the next step while the stick is still where the last one asked: only leaving rest answers.
