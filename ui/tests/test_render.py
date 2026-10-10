@@ -530,7 +530,8 @@ def test_the_reprise_game_page_holds_the_games_tools_and_the_hero_its_page_and_m
     assert page.property("action") == "favourite" and glyphs(read(bar, "hints")) == ["A", "Start", "B"], "on the heart A favourites: no Y"
     look.press(Qt.Key.Key_Right)
     look.press(Qt.Key.Key_Return)
-    look.page("gameSettingsPage")
+    sub = look.page("gameSettingsPage")
+    until(lambda: sub.property("activeFocus") is True)
     look.press(Qt.Key.Key_Escape)
     until(lambda: root.property("subOpen") is False and page.property("activeFocus") is True)
     look.press(Qt.Key.Key_Right)
@@ -539,7 +540,8 @@ def test_the_reprise_game_page_holds_the_games_tools_and_the_hero_its_page_and_m
     assert [i["action"] for i in read(menu, "items")] == ["screenshots", "recordings", "journal"]
     assert read(bar, "hints") == read(menu, "hints"), "the menu over the page has the bar"
     look.press(Qt.Key.Key_Return)
-    look.page("screenshotsPage")
+    sub = look.page("screenshotsPage")
+    until(lambda: sub.property("activeFocus") is True)
     look.press(Qt.Key.Key_Escape)
     until(lambda: root.property("subOpen") is False and page.property("activeFocus") is True)
     look.press(Qt.Key.Key_Right)
@@ -961,7 +963,8 @@ def test_back_from_a_runner_games_settings_lands_on_its_row(look, api):
     invoke(page, "activate", row(), form.rows[row()])
     until(lambda: menu.property("open") is True)
     look.press(Qt.Key.Key_Return)
-    look.page("gameSettingsPage")
+    sub = look.page("gameSettingsPage")
+    until(lambda: sub.property("activeFocus") is True)
     look.press(Qt.Key.Key_Escape)
     back = look.page("formPage")
     body = until(lambda: back.findChild(QObject, "cardSections"))
