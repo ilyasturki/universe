@@ -1,81 +1,96 @@
 .pragma library
 
-// The Settings sidebar in order; the tab bar's search indexes the same entries.
+// The Settings sidebar in order, under its group headers; the tab bar's search indexes the same entries.
 var list = [
     {
-        id: "launch",
-        name: "Launch",
-        icon: "sliders"
+        id: "sources",
+        name: "Stores",
+        icon: "cloud",
+        group: "Games"
     },
     {
-        id: "runners",
-        name: "Runners",
-        icon: "play"
+        id: "install",
+        name: "Downloads",
+        icon: "download",
+        group: "Games"
     },
     {
         id: "controller",
         name: "Controller",
-        icon: "gamepad"
+        icon: "gamepad",
+        group: "Games"
     },
     {
-        id: "sources",
-        name: "Sources",
-        icon: "cloud"
+        id: "launch",
+        name: "Game defaults",
+        icon: "sliders",
+        group: "Games"
     },
     {
-        id: "install",
-        name: "Install",
-        icon: "download"
+        id: "runners",
+        name: "Emulators & Proton",
+        icon: "play",
+        group: "Games"
     },
     {
         id: "modules",
-        name: "Modules",
-        icon: "grid"
+        name: "Features",
+        icon: "grid",
+        group: "Extras"
     },
     {
         id: "artwork",
         name: "Artwork",
-        icon: "image"
+        icon: "image",
+        group: "Extras"
     },
     {
         id: "themes",
-        name: "Themes",
-        icon: "sun"
+        name: "Appearance",
+        icon: "sun",
+        group: "Extras"
     },
     {
         id: "network",
         name: "Network",
-        icon: "wifi"
+        icon: "wifi",
+        group: "System"
     },
     {
         id: "bluetooth",
         name: "Bluetooth",
-        icon: "bluetooth"
+        icon: "bluetooth",
+        group: "System"
     },
     {
         id: "sound",
         name: "Sound",
-        icon: "volume-up"
+        icon: "volume-up",
+        group: "System"
     },
     {
         id: "system",
-        name: "System",
-        icon: "bolt"
+        name: "Performance",
+        icon: "bolt",
+        group: "System"
     },
     {
         id: "storage",
         name: "Storage",
-        icon: "folder"
+        icon: "folder",
+        group: "System"
     },
     {
         id: "doctor",
-        name: "Doctor",
-        icon: "pulse"
+        name: "System check",
+        icon: "pulse",
+        group: "Universe"
     },
     {
         id: "about",
         name: "About",
-        icon: "info"
+        icon: "info",
+        group: "Universe"
     }
 ];
 
@@ -87,8 +102,8 @@ var aliases = {
     power: "about"
 };
 
-// The sections `api.system` leaves: under Steam's Game Mode sound is Steam's, System needs a control to show, Network and
-// Bluetooth the machine's NetworkManager and adapter.
+// The sections `api.system` leaves: under Steam's Game Mode sound is Steam's, Performance needs a control to show, Network
+// and Bluetooth the machine's NetworkManager and adapter.
 function shown(system) {
     return list.filter(function (s) {
         return !(s.id === "sound" && system.steam) && !(s.id === "system" && system.controls.length === 0) && !(s.id === "network" && !system.network) && !(s.id === "bluetooth" && !system.bluetooth);

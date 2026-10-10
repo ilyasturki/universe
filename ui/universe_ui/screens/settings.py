@@ -639,7 +639,7 @@ def _setup(entry):
 
 class ModuleApi:
     source = False
-    kind = "Modules"
+    kind = "Features"
     form = "module"
     _client: "CoreClient"
 
@@ -652,7 +652,7 @@ class ModuleApi:
 
 class SourceApi:
     source = True
-    kind = "Sources"
+    kind = "Stores"
     form = "source"
     _client: "CoreClient"
 
@@ -664,7 +664,7 @@ class SourceApi:
 
 
 class ListForm(RowsForm):
-    section = "Modules"
+    section = "Features"
     source: bool
     _entries: Callable[[], list]
 
@@ -774,7 +774,7 @@ class ModulesForm(ModuleApi, ListForm):
 
 
 class SourcesForm(SourceApi, ListForm):
-    section = "Sources"
+    section = "Stores"
 
     def __init__(self, client, parent=None, addons=None):
         super().__init__(client, parent, addons)

@@ -109,7 +109,7 @@ fn attach_components(out: &mut [Check], config: &Config, packagekit: bool) {
         if !id.is_empty() && (installable(&id) || crate::components::system_tool(&id).is_some()) {
             if !c.ok {
                 let notice = catalogue.components.get(&id).map(|e| e.notice.as_str()).filter(|n| !n.is_empty()).map(|n| format!(". {n}")).unwrap_or_default();
-                c.fix = format!("universe component install {id} (Settings › Runners), or {}{notice}", c.fix);
+                c.fix = format!("universe component install {id} (Settings › Emulators & Proton), or {}{notice}", c.fix);
             }
             c.component = id;
         }
@@ -533,7 +533,7 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
                 &label,
                 false,
                 format!("not chosen yet: the {} module does nothing until it is", m.manifest.name),
-                format!("choose it in Settings › Modules, or run universe module set {} {key}=…", m.id()),
+                format!("choose it in Settings › Features, or run universe module set {} {key}=…", m.id()),
                 m.id(),
             );
         }

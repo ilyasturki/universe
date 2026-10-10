@@ -2567,7 +2567,7 @@ async fn extension(core: Core, action: ExtensionCmd, json: bool) -> anyhow::Resu
                 json,
                 placed.map(|v| {
                     let (kind, id) = (s(&v, "kind"), s(&v, "id"));
-                    let on = if kind == "theme" { "Settings › Themes picks it".into() } else { format!("universe {kind} enable {id} turns it on") };
+                    let on = if kind == "theme" { "Settings › Appearance picks it".into() } else { format!("universe {kind} enable {id} turns it on") };
                     format!("{kind} {id} {} installed: {on}", s(&v, "version"))
                 }),
             );

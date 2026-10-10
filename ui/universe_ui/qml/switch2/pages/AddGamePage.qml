@@ -68,7 +68,7 @@ FocusScope {
         if (choices.length === 0) {
             form.cancel();
             Sound.play("edge");
-            shell.showToast("No runner set up: add one under System Settings › Runners");
+            shell.showToast("No runner set up: add one under System Settings › Emulators & Proton");
             return;
         }
         shell.pick({

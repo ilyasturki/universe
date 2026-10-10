@@ -1074,7 +1074,7 @@ FocusScope {
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
                 visible: !page.sources.busy && (!page.linked || !page.loggedIn)
-                text: "Link your stores in Settings › Sources; their games show up here to install."
+                text: "Link your stores in Settings › Stores; their games show up here to install."
                 color: Theme.textSecondary
                 wrapMode: Text.WordWrap
                 font.pixelSize: Theme.dp(Theme.fontSmall)

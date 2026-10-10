@@ -128,7 +128,7 @@ def test_the_tab_bar_search_finds_the_settings_under_the_games(look, api):
     overlay = look.find("searchOverlay")
     search = api.screens.search
     until(lambda: search.ready)
-    assert [s["id"] for s in search.sections][:3] == ["launch", "runners", "controller"], "indexed with Reprise's sections before Settings ever opened"
+    assert {"install", "controller"} <= {s["id"] for s in search.sections}, "indexed with Reprise's sections before Settings ever opened"
     overlay.setProperty("query", "techno")
     until(lambda: overlay.property("hasGames") is True and overlay.property("hasSettings") is False, "a title alone: the cover, not the game's every setting")
     overlay.setProperty("query", "quit")

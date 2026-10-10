@@ -7,7 +7,7 @@ FocusScope {
     id: list
     objectName: "rootList"
 
-    // [{ id, label, icon, detail }]
+    // [{ id, label, icon, detail, group }]: a `group` heads the run of sections that share it.
     property var sections: []
     property int index: 0
     readonly property bool cursorShown: activeFocus
@@ -16,7 +16,21 @@ FocusScope {
     signal chosen(int index)
 
     readonly property real rowHeight: Theme.dp(98)
+    readonly property real headerHeight: Theme.dp(64)
     readonly property real fade: Theme.dp(90)
+
+    function heads(i) {
+        return i >= 0 && i < sections.length && !!sections[i].group && (i === 0 || sections[i - 1].group !== sections[i].group);
+    }
+
+    // The top of row `i`'s own line, below the headers before it and its own.
+    function topOf(i) {
+        var y = i * rowHeight;
+        for (var k = 0; k <= i; k++)
+            if (heads(k))
+                y += headerHeight;
+        return y;
+    }
 
     function step(d) {
         var next = Sound.stepped(index, d, sections.length);
@@ -35,7 +49,7 @@ FocusScope {
         forceActiveFocus();
     }
 
-    onIndexChanged: Theme.reveal(view, index * rowHeight - fade, (index + 1) * rowHeight + Theme.dp(40), view.height)
+    onIndexChanged: Theme.reveal(view, topOf(index) - (heads(index) ? headerHeight : 0) - fade, topOf(index) + rowHeight + Theme.dp(40), view.height)
 
     Keys.onUpPressed: step(-1)
     Keys.onDownPressed: step(1)
@@ -87,15 +101,27 @@ FocusScope {
             id: line
 
             readonly property bool focused: list.cursorShown && index === list.index
+            readonly property real head: list.heads(index) ? list.headerHeight : 0
             // Rows passing under the title fade out as the console's do.
-            readonly property real shown: Math.max(0, Math.min(1, (y - view.contentY) / list.fade))
+            readonly property real shown: Math.max(0, Math.min(1, (y + head - view.contentY) / list.fade))
 
             width: view.width
-            height: list.rowHeight
+            height: list.rowHeight + head
             opacity: 0.15 + 0.85 * shown
 
+            Label {
+                x: Theme.dp(28)
+                y: line.head - height - Theme.dp(12)
+                visible: line.head > 0
+                text: modelData.group || ""
+                color: Theme.textMuted
+                font.pixelSize: Theme.dp(Theme.fontSmall)
+            }
+
             Rectangle {
-                anchors.fill: parent
+                y: line.head
+                width: parent.width
+                height: list.rowHeight
                 radius: Theme.dp(Theme.radiusRow)
                 color: line.focused ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
                 border.width: line.focused ? Theme.dp(Theme.ringLine) : 0
@@ -110,7 +136,7 @@ FocusScope {
 
             Glyph {
                 x: Theme.dp(28)
-                anchors.verticalCenter: parent.verticalCenter
+                y: line.head + (list.rowHeight - height) / 2
                 width: Theme.dp(40)
                 height: width
                 kind: modelData.icon || ""
@@ -118,7 +144,7 @@ FocusScope {
 
             Column {
                 x: Theme.dp(96)
-                anchors.verticalCenter: parent.verticalCenter
+                y: line.head + (list.rowHeight - height) / 2
                 width: parent.width - x - Theme.dp(30)
                 spacing: Theme.dp(2)
 
@@ -145,7 +171,7 @@ FocusScope {
                 width: parent.width - x - Theme.dp(20)
                 height: 1
                 color: Theme.hairline
-                visible: !line.focused && index !== list.index - 1 && index < list.sections.length - 1
+                visible: !line.focused && index !== list.index - 1 && index < list.sections.length - 1 && !list.heads(index + 1)
             }
 
             Touch {

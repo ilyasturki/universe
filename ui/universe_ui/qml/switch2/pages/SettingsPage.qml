@@ -35,94 +35,94 @@ FocusScope {
             detail: "Every setting, by name, purpose or value"
         },
         {
-            id: "launch",
-            label: "Launch",
-            group: 1,
-            groupLabel: "Play"
-        },
-        {
-            id: "runners",
-            label: "Runners",
-            detail: components.pending > 0 ? components.pending + " to look at" : "",
-            group: 1,
-            groupLabel: "Play"
-        },
-        {
-            id: "controllers",
-            label: "Controllers",
-            group: 1,
-            groupLabel: "Play"
-        },
-        {
             id: "sources",
-            label: "Sources",
-            group: 2,
-            groupLabel: "Store"
+            label: "Stores",
+            group: 1,
+            groupLabel: "Games"
         },
         {
             id: "updates",
             label: "Updates",
             detail: sources.updates.length > 0 ? sources.updates.length + " pending" : "",
-            group: 2,
-            groupLabel: "Store"
+            group: 1,
+            groupLabel: "Games"
+        },
+        {
+            id: "controllers",
+            label: "Controllers",
+            group: 1,
+            groupLabel: "Games"
+        },
+        {
+            id: "launch",
+            label: "Game defaults",
+            group: 1,
+            groupLabel: "Games"
+        },
+        {
+            id: "runners",
+            label: "Emulators & Proton",
+            detail: components.pending > 0 ? components.pending + " to look at" : "",
+            group: 1,
+            groupLabel: "Games"
         },
         {
             id: "modules",
-            label: "Modules",
-            group: 3,
+            label: "Features",
+            group: 2,
             groupLabel: "Extras"
         },
         {
             id: "themes",
-            label: "Themes",
-            group: 3,
+            label: "Appearance",
+            group: 2,
             groupLabel: "Extras"
         },
         {
             id: "network",
             label: "Internet",
-            group: 4,
+            group: 3,
             groupLabel: "System",
             detail: api.screens.network.link === "wired" ? "Wired" : api.screens.network.ssid
         },
         {
-            id: "sound",
-            label: "Sound",
-            group: 4,
-            groupLabel: "System"
-        },
-        {
             id: "bluetooth",
             label: "Bluetooth",
-            group: 4,
+            group: 3,
             groupLabel: "System",
             detail: "Headphones, speakers and keyboards"
         },
         {
+            id: "sound",
+            label: "Sound",
+            group: 3,
+            groupLabel: "System"
+        },
+        {
             id: "performance",
             label: "Performance",
-            group: 4,
+            group: 3,
             groupLabel: "System",
             detail: "Brightness, refresh, power limit, GPU clock and fan"
         },
         {
             id: "data",
             label: "Data Management",
-            group: 4,
+            group: 3,
             groupLabel: "System",
             detail: "Saves, prefixes and every folder Universe writes to"
         },
         {
             id: "doctor",
-            label: "Doctor",
+            label: "System check",
             group: 4,
-            groupLabel: "System"
+            groupLabel: "Universe"
         },
         {
             id: "about",
             label: "About",
             group: 4,
-            groupLabel: "System"
+            groupLabel: "Universe"
         }
     ].filter(function (s) {
         // Steam's Game Mode keeps the sound; Performance needs a control this machine has; Internet and Bluetooth, what the machine has.

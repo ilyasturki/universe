@@ -2144,7 +2144,7 @@ class FakeCore:
         checks = [{"module": "", "component": "", **c} for c in copy.deepcopy(self._data.get("doctor", []))]
         for c in self.components()["components"]:
             if c["proposal"] == "install" and c["kind"] in ("emulator", "wine"):
-                fix = f"universe component install {c['id']} (Settings › Runners), or install it, or set runners.{c['id']}.exe"
+                fix = f"universe component install {c['id']} (Settings › Emulators & Proton), or install it, or set runners.{c['id']}.exe"
                 if c.get("notice"):
                     fix = f"{fix}. {c['notice']}"
                 checks.append(

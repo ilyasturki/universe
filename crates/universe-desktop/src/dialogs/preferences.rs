@@ -111,33 +111,33 @@ pub fn present(win: &Window, page: &str) {
         "doctor" => return crate::dialogs::system_check::present(win),
         _ => {}
     }
-    let dialog = adw::PreferencesDialog::builder().search_enabled(true).content_width(800).content_height(720).build();
+    let dialog = adw::PreferencesDialog::builder().search_enabled(true).content_width(1100).content_height(720).build();
     let connector = win.connector();
-
-    let launch = FormView::new(Form::Launch, &dialog, connector.clone());
-    launch.page.set_name(Some("launch"));
-    launch.page.set_title(&gettext("Launch"));
-    launch.page.set_icon_name(Some("media-playback-start-symbolic"));
-    dialog.add(&launch.page);
-    launch.load();
-
-    let runners = ListPage::new("runners", &gettext("Runners"), "system-run-symbolic");
-    dialog.add(&runners.page);
-    load_runners(&dialog, &runners, win, &connector, false);
 
     let stores = ListPage::new("stores", &gettext("Stores"), "system-software-install-symbolic");
     dialog.add(&stores.page);
     load_list(&dialog, &stores, &connector, Listed::Stores);
 
-    let modules = ListPage::new("modules", &gettext("Modules"), "package-x-generic-symbolic");
-    dialog.add(&modules.page);
-    load_list(&dialog, &modules, &connector, Listed::Modules);
-
     let controller = crate::dialogs::controller::page(&dialog);
     dialog.add(&controller.page);
 
+    let launch = FormView::new(Form::Launch, &dialog, connector.clone());
+    launch.page.set_name(Some("launch"));
+    launch.page.set_title(&gettext("Game Defaults"));
+    launch.page.set_icon_name(Some("media-playback-start-symbolic"));
+    dialog.add(&launch.page);
+    launch.load();
+
+    let runners = ListPage::new("runners", &gettext("Emulators & Proton"), "system-run-symbolic");
+    dialog.add(&runners.page);
+    load_runners(&dialog, &runners, win, &connector, false);
+
+    let modules = ListPage::new("modules", &gettext("Features"), "package-x-generic-symbolic");
+    dialog.add(&modules.page);
+    load_list(&dialog, &modules, &connector, Listed::Modules);
+
     let system = universe::deck::model().is_some().then(|| {
-        let page = ListPage::new("system", &gettext("System"), "computer-symbolic");
+        let page = ListPage::new("system", &gettext("Performance"), "computer-symbolic");
         dialog.add(&page.page);
         load_system(&dialog, &page);
         page
@@ -457,7 +457,7 @@ fn load_list(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, connector: &s
         }
         let (kind, subtitle) = match listed {
             Listed::Stores => ("source", gettext("Add-ons: stores others made")),
-            Listed::Modules => ("module", gettext("Add-ons: modules others made")),
+            Listed::Modules => ("module", gettext("Add-ons: features others made")),
         };
         let more = list_row(&gettext("Get more…"), &subtitle, true, false);
         page.keep("more", &more);

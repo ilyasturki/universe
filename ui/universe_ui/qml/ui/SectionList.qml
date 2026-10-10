@@ -5,7 +5,8 @@ import "../sound"
 FocusScope {
     id: list
 
-    // [{ name, icon, changed }]: `changed` marks an entry holding a value set on this page.
+    // [{ name, icon, changed, group }]: `changed` marks an entry holding a value set on this page; a `group` heads the run
+    // of entries that share it.
     property var sections: []
     property var badges: []
     property int current: 0
@@ -16,9 +17,10 @@ FocusScope {
     signal escapedUp
     signal cancelled
 
-    // Settings' eleven entries fit the page under the tabs, with room left.
+    // Settings' sixteen entries and four headers fit the page under the tabs at 1280×800.
     readonly property real entryHeight: Theme.dp(46)
     readonly property real entrySpacing: Theme.dp(3)
+    readonly property real headerHeight: Theme.dp(30)
 
     implicitHeight: column.height
 
@@ -78,91 +80,106 @@ FocusScope {
         Repeater {
             model: list.sections
 
-            Item {
+            Column {
+                readonly property string header: modelData.group && (index === 0 || list.sections[index - 1].group !== modelData.group) ? modelData.group : ""
                 readonly property bool active: index === list.current
                 readonly property bool focused: active && list.activeFocus
                 readonly property string badge: index < list.badges.length ? String(list.badges[index] || "") : ""
                 readonly property color ink: focused ? Theme.onLight : Theme.text
 
                 width: parent.width
-                height: list.entryHeight
 
-                Rectangle {
-                    anchors.fill: parent
-                    radius: Theme.dp(14)
-                    color: focused ? Theme.text : active ? Qt.rgba(1, 1, 1, 0.09) : "transparent"
+                CapsLabel {
+                    visible: parent.header !== ""
+                    x: Theme.dp(18)
+                    height: visible ? list.headerHeight : 0
+                    verticalAlignment: Text.AlignBottom
+                    bottomPadding: Theme.dp(6)
+                    text: parent.header.toUpperCase()
+                    size: Theme.dp(16)
+                }
 
-                    Behavior on color {
-                        ColorEase {}
-                    }
+                Item {
+                    width: parent.width
+                    height: list.entryHeight
 
-                    Pointer {
-                        current: focused
+                    Rectangle {
+                        anchors.fill: parent
                         radius: Theme.dp(14)
-                        onPicked: {
-                            list.forceActiveFocus();
-                            if (!active)
-                                list.requested(index);
+                        color: focused ? Theme.text : active ? Qt.rgba(1, 1, 1, 0.09) : "transparent"
+
+                        Behavior on color {
+                            ColorEase {}
+                        }
+
+                        Pointer {
+                            current: focused
+                            radius: Theme.dp(14)
+                            onPicked: {
+                                list.forceActiveFocus();
+                                if (!active)
+                                    list.requested(index);
+                            }
                         }
                     }
-                }
 
-                MenuGlyph {
-                    id: icon
-                    anchors.left: parent.left
-                    anchors.leftMargin: Theme.dp(18)
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: Theme.dp(22)
-                    height: width
-                    kind: modelData.icon
-                    tint: focused ? Theme.onLight : active ? Theme.text : Theme.textSecondary
-                }
-
-                Text {
-                    anchors.left: icon.right
-                    anchors.leftMargin: Theme.dp(16)
-                    anchors.right: badgePill.visible ? badgePill.left : changedDot.visible ? changedDot.left : parent.right
-                    anchors.rightMargin: Theme.dp(16)
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: modelData.name
-                    color: ink
-                    font.family: Theme.sans
-                    font.weight: active ? Font.DemiBold : Font.Medium
-                    font.pixelSize: Theme.dp(21)
-                    elide: Text.ElideRight
-                }
-
-                Rectangle {
-                    id: changedDot
-                    visible: modelData.changed === true && badge === ""
-                    anchors.right: parent.right
-                    anchors.rightMargin: Theme.dp(20)
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: Theme.dp(10)
-                    height: width
-                    radius: width / 2
-                    color: focused ? Theme.accentOnLight : Theme.accent
-                }
-
-                Rectangle {
-                    id: badgePill
-                    visible: badge !== ""
-                    anchors.right: parent.right
-                    anchors.rightMargin: Theme.dp(14)
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: Math.max(height, badgeText.width + Theme.dp(16))
-                    height: Theme.dp(26)
-                    radius: height / 2
-                    color: focused ? Theme.onLight : Qt.rgba(1, 1, 1, 0.14)
+                    MenuGlyph {
+                        id: icon
+                        anchors.left: parent.left
+                        anchors.leftMargin: Theme.dp(18)
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Theme.dp(22)
+                        height: width
+                        kind: modelData.icon
+                        tint: focused ? Theme.onLight : active ? Theme.text : Theme.textSecondary
+                    }
 
                     Text {
-                        id: badgeText
-                        anchors.centerIn: parent
-                        text: badge
-                        color: Theme.text
+                        anchors.left: icon.right
+                        anchors.leftMargin: Theme.dp(16)
+                        anchors.right: badgePill.visible ? badgePill.left : changedDot.visible ? changedDot.left : parent.right
+                        anchors.rightMargin: Theme.dp(16)
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: modelData.name
+                        color: ink
                         font.family: Theme.sans
-                        font.weight: Font.DemiBold
-                        font.pixelSize: Theme.dp(17)
+                        font.weight: active ? Font.DemiBold : Font.Medium
+                        font.pixelSize: Theme.dp(21)
+                        elide: Text.ElideRight
+                    }
+
+                    Rectangle {
+                        id: changedDot
+                        visible: modelData.changed === true && badge === ""
+                        anchors.right: parent.right
+                        anchors.rightMargin: Theme.dp(20)
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Theme.dp(10)
+                        height: width
+                        radius: width / 2
+                        color: focused ? Theme.accentOnLight : Theme.accent
+                    }
+
+                    Rectangle {
+                        id: badgePill
+                        visible: badge !== ""
+                        anchors.right: parent.right
+                        anchors.rightMargin: Theme.dp(14)
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Math.max(height, badgeText.width + Theme.dp(16))
+                        height: Theme.dp(26)
+                        radius: height / 2
+                        color: focused ? Theme.onLight : Qt.rgba(1, 1, 1, 0.14)
+
+                        Text {
+                            id: badgeText
+                            anchors.centerIn: parent
+                            text: badge
+                            color: Theme.text
+                            font.family: Theme.sans
+                            font.weight: Font.DemiBold
+                            font.pixelSize: Theme.dp(17)
+                        }
                     }
                 }
             }

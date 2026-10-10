@@ -86,16 +86,18 @@ SYNONYMS = {
 # The sidebar sections, by id.
 SECTION_SYNONYMS = {
     "launch": ["display", "resolution", "overlay", "general", "global"],
-    "runners": ["proton", "wine", "emulators", "dolphin", "ryujinx", "rpcs3", "pcsx2", "components", "builds", "versions", "tools", "umu"],
+    "runners": ["runner", "proton", "wine", "emulators", "dolphin", "ryujinx", "rpcs3", "pcsx2", "components", "builds", "versions", "tools", "umu"],
     "controller": ["gamepad", "pad", "macros", "buttons", "paddles", "dualsense", "xbox"],
     "controllers": ["gamepad", "pad", "macros", "buttons", "paddles", "dualsense", "xbox"],
-    "sources": ["gog", "store", "shop", "login", "sign in"],
+    "sources": ["source", "gog", "store", "shop", "login", "sign in"],
     "install": ["download", "store", "shop", "library", "owned", "updates", "upgrade", "patch", "pending"],
     "updates": ["upgrade", "patch", "pending"],
-    "modules": ["capture", "recording", "journal", "hooks", "extensions"],
+    "modules": ["module", "capture", "recording", "journal", "hooks", "extensions"],
     "artwork": ["art", "covers", "boxart", "logo", "banner", "steamgriddb"],
-    "themes": ["look", "skin", "appearance", "reprise", "switch"],
+    "themes": ["theme", "look", "skin", "reprise", "switch"],
     "sound": ["audio", "output", "speakers", "headphones", "headset", "hdmi", "bluetooth", "tv"],
+    "system": ["brightness", "refresh", "power limit", "tdp", "gpu clock", "fan", "deck"],
+    "performance": ["brightness", "refresh", "power limit", "tdp", "gpu clock", "fan", "deck"],
     "doctor": ["health", "checks", "prerequisites", "missing", "diagnose"],
     "about": [
         "version",
@@ -117,6 +119,17 @@ SECTION_SYNONYMS = {
     ],
     "quit": ["exit", "close", "leave"],
     "search": [],
+}
+# What a section was called before the sidebar was renamed: found as its name, not as a word about it.
+FORMER_NAMES = {
+    "launch": "Launch",
+    "runners": "Runners",
+    "sources": "Sources",
+    "install": "Install",
+    "modules": "Modules",
+    "themes": "Themes",
+    "system": "System",
+    "doctor": "Doctor",
 }
 
 SKIPPED_KEYS = {"", ADVANCED_KEY, "game", "add_file", "link", "code", "logged_in", "test", "device"}
@@ -317,20 +330,20 @@ class SettingsSearch(QObject):
             ident = str(section.get("id") or "")
             if ident in ("search", ""):
                 continue
-            entries.append(
-                Entry(
-                    section.get("label") or ident,
-                    ["Settings"],
-                    {"page": "section", "id": ident, "key": "", "module": ""},
-                    kind="section",
-                    icon=str(section.get("icon") or ""),
-                    synonyms=SECTION_SYNONYMS.get(ident, []),
-                )
+            entry = Entry(
+                section.get("label") or ident,
+                ["Settings"],
+                {"page": "section", "id": ident, "key": "", "module": ""},
+                kind="section",
+                icon=str(section.get("icon") or ""),
+                synonyms=SECTION_SYNONYMS.get(ident, []),
             )
+            entry.words += normal(FORMER_NAMES.get(ident, "")).split()
+            entries.append(entry)
 
     def _index_launch(self, entries):
         rows, groups, _ = build_launch(self._client, self._screen_mode)
-        self._index_rows(entries, rows, groups, ["Launch"], {"page": "launch", "id": "", "module": ""})
+        self._index_rows(entries, rows, groups, ["Game defaults"], {"page": "launch", "id": "", "module": ""})
 
     def _index_runners(self, entries):
         for runner in self._client.runners():
@@ -340,7 +353,7 @@ class SettingsSearch(QObject):
             entries.append(
                 Entry(
                     info["name"],
-                    ["Runners"],
+                    ["Emulators & Proton"],
                     {"page": "runner", "id": runner["id"], "key": "", "module": ""},
                     detail=info.get("meta", ""),
                     display="" if not info.get("warning") else info["warning"],
@@ -348,7 +361,7 @@ class SettingsSearch(QObject):
                     synonyms=["runner", "emulator"] if runner.get("kind") == "emulator" else ["runner"],
                 )
             )
-            self._index_rows(entries, rows, groups, ["Runners", info["name"]], {"page": "runner", "id": runner["id"], "module": ""})
+            self._index_rows(entries, rows, groups, ["Emulators & Proton", info["name"]], {"page": "runner", "id": runner["id"], "module": ""})
 
     def _index_pages(self, entries):
         for api in (_ModuleIndex(self._client), _SourceIndex(self._client)):
@@ -396,7 +409,7 @@ class SettingsSearch(QObject):
         entries.append(
             Entry(
                 "Theme",
-                ["Themes"],
+                ["Appearance"],
                 {"page": "themes", "id": "", "key": "theme", "module": ""},
                 display=current,
                 key="theme",
@@ -406,7 +419,7 @@ class SettingsSearch(QObject):
         entries.append(
             Entry(
                 "Startup animation",
-                ["Themes"],
+                ["Appearance"],
                 {"page": "themes", "id": "", "key": "boot_intro", "module": ""},
                 key="boot_intro",
                 detail="The Universe mark when the launcher starts full screen.",
@@ -416,7 +429,7 @@ class SettingsSearch(QObject):
             entries.append(
                 Entry(
                     theme["name"],
-                    ["Themes"],
+                    ["Appearance"],
                     {"page": "themes", "id": theme["id"], "key": "theme", "module": ""},
                     detail=theme.get("detail", ""),
                     display="Current" if theme.get("current") else "",

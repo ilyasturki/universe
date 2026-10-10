@@ -266,7 +266,7 @@ FocusScope {
     readonly property bool canRefresh: refreshable || sectionId === "runners" || sectionId === "doctor" || sectionId === "controller" || sectionId === "sound" || sectionId === "system" || sectionId === "storage"
 
     readonly property real sideMargin: Theme.dp(80)
-    readonly property real sideWidth: Theme.dp(300)
+    readonly property real sideWidth: Theme.dp(324)
     readonly property real mainRoom: width - sideMargin * 2 - sideWidth - Theme.dp(56)
     readonly property real mainWidth: Math.min(mainRoom, Theme.dp(1280))
     readonly property real mainTop: Theme.dp(34)

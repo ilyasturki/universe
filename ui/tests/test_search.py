@@ -1,3 +1,4 @@
+from looks import invoke
 from uitest import until
 
 from universe_ui.screens.search import word_score
@@ -109,3 +110,19 @@ def test_the_index_follows_the_config(api, fake):
     fake.setSetting("capture", "", "codec", "h264")
     search.load()
     until(lambda: codec not in targets(search), "a reload reads the values again and keeps the query")
+
+
+def test_a_section_answers_to_the_name_it_had(look, api):
+    search = api.screens.search
+    if look.stacked:
+        look.settings("about")
+    else:
+        invoke(look.root, "openSearch")
+    until(lambda: search.sections, "the look lists its sections to the search")
+    ids = [s["id"] for s in search.sections]
+    search.load()
+    until(lambda: search.ready)
+    for old in ("launch", "runners", "sources", "install", "modules", "themes", "doctor"):
+        if old in ids:
+            search.query = old
+            assert targets(search)[0] == target("section", old), f"{look.name}: {old}"
