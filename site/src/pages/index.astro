@@ -1,0 +1,561 @@
+---
+import { Code } from 'astro:components';
+import Clip from '../components/Clip.astro';
+import Shot from '../components/Shot.astro';
+import lockupLight from '../../../brand/universe-lockup.svg';
+import lockupDark from '../../../brand/universe-lockup-dark.svg';
+import Landing from '../layouts/Landing.astro';
+
+const version = __UNIVERSE_VERSION__;
+const repo = __UNIVERSE_REPO__;
+const installer = 'curl -fsSL https://github.com/ilyasturki/universe/releases/latest/download/install.sh | sh';
+const nix = `# flake.nix
+inputs.universe.url = "github:ilyasturki/universe";
+
+# NixOS configuration
+imports = [ inputs.universe.nixosModules.default ];
+programs.universe.enable = true;
+programs.universe.session.enable = true; # optional: the Universe login session
+
+# Home Manager configuration
+imports = [ inputs.universe.homeModules.default ];
+programs.universe.enable = true;`;
+
+const looks = [
+    { id: 'universe', name: 'Universe', about: 'The default look, a port of my Pegasus theme Reprise: the game’s art behind everything.' },
+    { id: 'switch2', name: 'Switch 2', about: 'A Switch 2 style HOME menu: a row of games over a bar of round buttons.' },
+    { id: 'ps5', name: 'PS5', about: 'A PS5 style home: the game’s world behind a row of tiles, and a hub for each game.' },
+];
+
+const also = [
+    { title: 'Recordings and screenshots', text: 'Opt-in session recording. Recordings and screenshots land in the Media tab.' },
+    { title: 'Achievements', text: 'Achievements on the game’s page, with an unlock banner over the game.' },
+    { title: 'Saves', text: 'A backup after every session, GOG and Epic cloud saves synced, restored or exported from the game’s page.' },
+    { title: 'Runners', text: 'Proton, Wine and 21 emulators. The builds Universe can fetch install, update and roll back from the settings.' },
+    { title: 'Add-ons', text: 'Modules, stores and themes others made, installed from the settings or with universe extension.' },
+    { title: 'Any desktop', text: 'GNOME, KDE, Cinnamon, Sway, Hyprland, Niri or X11, or no desktop at all in the Universe session.' },
+    { title: 'Universe Desktop', text: 'A GTK app for mouse and keyboard on the same library, with a GNOME search provider for your games.' },
+    { title: 'A CLI', text: 'universe does everything the app does, from a terminal or a script, with --json on every command.' },
+];
+
+const installs = [
+    {
+        id: 'arch',
+        name: 'Arch Linux',
+        lead: 'From the AUR: universe builds the latest release, universe-bin installs its prebuilt build, universe-git builds main. Each has a universe-desktop sibling for Universe Desktop.',
+        code: 'paru -S universe',
+        lang: 'sh',
+    },
+    {
+        id: 'fedora',
+        name: 'Fedora',
+        lead: 'Fedora 44 and newer, from COPR, built from each release against Fedora’s own PySide6, GTK and libadwaita.',
+        code: 'sudo dnf copr enable ilyasturki/universe\nsudo dnf install universe universe-desktop',
+        lang: 'sh',
+    },
+    {
+        id: 'other',
+        name: 'SteamOS and others',
+        lead: 'SteamOS, Bazzite and any other distribution: the latest release, installed for your user under ~/.local. It asks for your password once, for the controller rules and the login session.',
+        code: installer,
+        lang: 'sh',
+    },
+    { id: 'nix', name: 'Nix', lead: 'The flake has a NixOS module for the system side and a Home Manager module for the apps.', code: nix, lang: 'nix' },
+];
+---
+
+<Landing
+    title="Universe: a game launcher for Linux you drive with a controller"
+    description="Your GOG, Steam, Epic, itch.io, Lutris and emulated games in one library, launched with a controller from the couch or on a Steam Deck."
+>
+    <header class="bar wrap">
+        <a class="brand" href="/" aria-label="Universe">
+            <img class="lockup light" src={lockupLight.src} alt="Universe" width={lockupLight.width} height={lockupLight.height}>
+            <img class="lockup dark" src={lockupDark.src} alt="" width={lockupDark.width} height={lockupDark.height}>
+        </a>
+        <nav>
+            <a href="/docs/">Docs</a>
+            <a href="/docs/changelog/">Changelog</a>
+            <a href={repo}>GitHub</a>
+        </nav>
+    </header>
+
+    <main>
+        <section class="hero wrap">
+            <h1>A game launcher for Linux you drive with a controller.</h1>
+            <p class="lead">
+                Your GOG, Steam, Epic, itch.io, Lutris and emulated games in one library, from the couch or on a Steam Deck. Each one launches in gamescope with
+                the runner it needs.
+            </p>
+            <div class="actions">
+                <a class="button primary" href="#install">Install</a>
+                <a class="button" href="/docs/">Docs</a>
+                <a class="button" href={repo}>GitHub</a>
+            </div>
+            <p class="note">Version {version}. Early days: I use it every day, but expect rough edges.</p>
+            <div class="stage">
+                <Clip name="home" />
+            </div>
+        </section>
+
+        <section class="feature wrap">
+            <div class="copy">
+                <h2>Your whole library</h2>
+                <p>
+                    GOG, Steam, Epic and itch.io games installed and updated from Universe, your Lutris games with their play time, and the ROM folders your
+                    emulators already know.
+                </p>
+                <p>The first run finds what your other launchers installed. Adding them moves nothing.</p>
+                <a class="more" href="/docs/library/gog/">The stores and imports</a>
+            </div>
+            <div class="media"><Shot name="library" sizes="(min-width: 60rem) 40rem, 100vw" /></div>
+        </section>
+
+        <section class="feature flip wrap">
+            <div class="copy">
+                <h2>A page for every game</h2>
+                <p>Art, screenshots, play time, achievements, saves and what it takes on disk.</p>
+                <p>
+                    Its settings sit one button away: the runner, the Proton build, the resolution, the frame rate cap. Each one starts from a default you set
+                    once for every game.
+                </p>
+                <a class="more" href="/docs/using/game-page/">A game's page</a>
+            </div>
+            <div class="media"><Shot name="game-page" sizes="(min-width: 60rem) 40rem, 100vw" /></div>
+        </section>
+
+        <section class="looks wrap">
+            <h2>Three looks</h2>
+            <p class="center">Switch live from the settings, or install a theme as an add-on.</p>
+            <div class="tabs" data-tabs>
+                <div class="tablist" role="tablist" aria-label="Looks">
+                    {looks.map((look, i) => (
+                            <button type="button" role="tab" id={`look-tab-${look.id}`} aria-controls={`look-${look.id}`} aria-selected={i === 0 ? 'true' : 'false'} tabindex={i === 0 ? 0 : -1}>
+                                {look.name}
+                            </button>
+                        ))}
+                </div>
+                <div class="panel" role="tabpanel" id="look-universe" aria-labelledby="look-tab-universe">
+                    <Shot name="look-universe" sizes="(min-width: 72rem) 72rem, 100vw" />
+                    <p class="center">{looks[0].about}</p>
+                </div>
+                <div class="panel" role="tabpanel" id="look-switch2" aria-labelledby="look-tab-switch2" hidden>
+                    <Shot name="look-switch2" sizes="(min-width: 72rem) 72rem, 100vw" />
+                    <p class="center">{looks[1].about}</p>
+                </div>
+                <div class="panel" role="tabpanel" id="look-ps5" aria-labelledby="look-tab-ps5" hidden>
+                    <Shot name="look-ps5" sizes="(min-width: 72rem) 72rem, 100vw" />
+                    <p class="center">{looks[2].about}</p>
+                </div>
+            </div>
+            <p class="fine">
+                Not affiliated with Nintendo or Sony. Nintendo Switch is a trademark of Nintendo; PlayStation and PS5 are trademarks of Sony Interactive
+                Entertainment.
+            </p>
+        </section>
+
+        <section class="feature wrap">
+            <div class="copy">
+                <h2>HOME over a running game</h2>
+                <p>
+                    HOME opens over the game and pauses it. From there, take a screenshot, show MangoHud, cap the frame rate, change the volume, reconnect a
+                    controller or quit.
+                </p>
+                <a class="more" href="/docs/using/playing/">Playing, and HOME over a game</a>
+            </div>
+            <div class="media"><Clip name="home-over-game" /></div>
+        </section>
+
+        <section class="strip wrap">
+            <article>
+                <h3>Controllers</h3>
+                <p>
+                    DualSense, DualShock 4, Xbox, Switch Pro and 8BitDo Pro 3, each with its own button glyphs. With Emulator controls on, every emulator gets
+                    the pads you hold, one per player.
+                </p>
+                <a class="more" href="/docs/controllers/supported/">Controllers</a>
+            </article>
+            <article>
+                <h3>Steam Deck</h3>
+                <p>Sized for its screen, with its back buttons free for macros and its refresh rate, power limit and fan curve in the settings.</p>
+                <a class="more" href="/docs/getting-started/steam-deck/">Steam Deck</a>
+            </article>
+            <article>
+                <h3>Steam's Game Mode</h3>
+                <p>Add it to Steam as a non-Steam game and it runs inside Game Mode, leaving the overlay, the volume and the power menu to Steam.</p>
+                <a class="more" href="/docs/getting-started/steam-deck/#steams-game-mode">Game Mode</a>
+            </article>
+            <article>
+                <h3>The Universe session</h3>
+                <p>A login session with the launcher on the whole screen and no desktop behind it, like a console. Wi-Fi and Bluetooth are in its settings.</p>
+                <a class="more" href="/docs/getting-started/universe-session/">The session</a>
+            </article>
+        </section>
+
+        <section class="also wrap">
+            <h2>Also</h2>
+            <div class="grid">
+                {also.map((item) => (
+                        <article>
+                            <h3>{item.title}</h3>
+                            <p>{item.text}</p>
+                        </article>
+                    ))}
+            </div>
+        </section>
+
+        <section class="install wrap" id="install">
+            <h2>Install</h2>
+            <p class="center">x86_64 Linux with a systemd user session. gamescope is optional, but on by default.</p>
+            <div class="tabs" data-tabs>
+                <div class="tablist" role="tablist" aria-label="Install">
+                    {installs.map((way, i) => (
+                            <button type="button" role="tab" id={`install-tab-${way.id}`} aria-controls={`install-${way.id}`} aria-selected={i === 0 ? 'true' : 'false'} tabindex={i === 0 ? 0 : -1}>
+                                {way.name}
+                            </button>
+                        ))}
+                </div>
+                {installs.map((way, i) => (
+                        <div class="panel" role="tabpanel" id={`install-${way.id}`} aria-labelledby={`install-tab-${way.id}`} hidden={i !== 0}>
+                            <p>{way.lead}</p>
+                            <div class="code">
+                                <Code code={way.code} lang={way.lang} themes={{ light: 'github-light', dark: 'github-dark' }} defaultColor={false} />
+                                <button type="button" class="copy-button" data-copy={way.code}>
+                                    Copy
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+            </div>
+            <p class="center">
+                Then open Universe Big Screen from your app menu: a short setup finds your games.
+                <a href="/docs/getting-started/install/">Every way to install</a>
+            </p>
+        </section>
+    </main>
+
+    <footer class="wrap">
+        <p>
+            Universe {version} · <a href="/docs/changelog/">Changelog</a> · <a href="/docs/">Docs</a> · <a href={repo}>GitHub</a> ·
+            <a href={`${repo}/blob/main/LICENSE`}>MIT license</a>
+        </p>
+        <p class="fine">Made by <a href="https://ilyasturki.com">Ilyas Turki</a>.</p>
+    </footer>
+</Landing>
+
+<script>
+for (const tabs of document.querySelectorAll<HTMLElement>('[data-tabs]')) {
+    const buttons = [...tabs.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+    const show = (button: HTMLButtonElement) => {
+        for (const other of buttons) {
+            const selected = other === button;
+            other.setAttribute('aria-selected', String(selected));
+            other.tabIndex = selected ? 0 : -1;
+            const panel = document.getElementById(other.getAttribute('aria-controls') ?? '');
+            if (panel) panel.hidden = !selected;
+        }
+    };
+    for (const button of buttons) {
+        button.addEventListener('click', () => show(button));
+        button.addEventListener('keydown', (event) => {
+            const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+            if (!step) return;
+            const next = buttons[(buttons.indexOf(button) + step + buttons.length) % buttons.length];
+            show(next);
+            next.focus();
+        });
+    }
+}
+for (const button of document.querySelectorAll<HTMLButtonElement>('[data-copy]')) {
+    button.addEventListener('click', async () => {
+        await navigator.clipboard.writeText(button.dataset.copy ?? '');
+        button.textContent = 'Copied';
+        setTimeout(() => {
+            button.textContent = 'Copy';
+        }, 1500);
+    });
+}
+</script>
+
+<style>
+.bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-block: 1.25rem;
+}
+.brand {
+    display: flex;
+}
+.lockup {
+    height: 1.5rem;
+    width: auto;
+}
+:global([data-theme="dark"]) .lockup.light,
+:global([data-theme="light"]) .lockup.dark {
+    display: none;
+}
+nav {
+    display: flex;
+    gap: 1.25rem;
+    font-size: 0.95rem;
+}
+nav a {
+    color: var(--muted);
+    text-decoration: none;
+}
+nav a:hover {
+    color: var(--text);
+}
+
+.hero {
+    padding-block: 4rem 2rem;
+    text-align: center;
+}
+h1 {
+    max-width: 22ch;
+    margin: 0 auto;
+    font-size: clamp(2.2rem, 6vw, 4.2rem);
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+    font-weight: 700;
+}
+.lead {
+    max-width: 40rem;
+    margin: 1.25rem auto 0;
+    font-size: clamp(1.05rem, 2.2vw, 1.25rem);
+    color: var(--muted);
+}
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.75rem;
+    margin-top: 2rem;
+}
+.button {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.7rem 1.4rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--bg-raised);
+    font-weight: 600;
+    text-decoration: none;
+}
+.button:hover {
+    border-color: var(--faint);
+}
+.button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--on-accent);
+}
+.note {
+    margin-top: 1rem;
+    font-size: 0.9rem;
+    color: var(--faint);
+}
+.stage {
+    margin-top: 3rem;
+    border-radius: 1rem;
+    box-shadow: 0 2rem 6rem var(--glow);
+}
+
+h2 {
+    margin: 0;
+    font-size: clamp(1.7rem, 3.5vw, 2.4rem);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+}
+h3 {
+    margin: 0;
+    font-size: 1.1rem;
+}
+p {
+    margin: 0.85rem 0 0;
+}
+.strip p,
+.grid p {
+    color: var(--muted);
+    font-size: 0.95rem;
+}
+.center {
+    max-width: 40rem;
+    margin-inline: auto;
+    text-align: center;
+    color: var(--muted);
+}
+.fine {
+    margin-top: 1.5rem;
+    font-size: 0.8rem;
+    color: var(--faint);
+    text-align: center;
+}
+.more {
+    display: inline-block;
+    margin-top: 1rem;
+    color: var(--accent);
+    font-weight: 600;
+    text-decoration: none;
+}
+.more::after {
+    content: " \2192";
+}
+
+.feature {
+    display: grid;
+    gap: 2rem;
+    align-items: center;
+    padding-block: 4rem;
+}
+.feature .copy p {
+    color: var(--muted);
+}
+@media (min-width: 60rem) {
+    .feature {
+        grid-template-columns: 2fr 3fr;
+        gap: 4rem;
+    }
+    .feature.flip {
+        grid-template-columns: 3fr 2fr;
+    }
+    .feature.flip .copy {
+        order: 2;
+    }
+}
+
+.looks,
+.also,
+.install {
+    padding-block: 4rem;
+}
+.looks h2,
+.also h2,
+.install h2 {
+    text-align: center;
+}
+.tabs {
+    margin-top: 2rem;
+}
+.tablist {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+[role="tab"] {
+    padding: 0.5rem 1.1rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+[role="tab"][aria-selected="true"] {
+    background: var(--text);
+    border-color: var(--text);
+    color: var(--bg);
+}
+
+.strip {
+    display: grid;
+    gap: 1rem;
+    padding-block: 2rem 4rem;
+}
+@media (min-width: 40rem) {
+    .strip {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+@media (min-width: 64rem) {
+    .strip {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+.strip article,
+.grid article {
+    padding: 1.4rem;
+    border: 1px solid var(--line);
+    border-radius: 1rem;
+    background: var(--bg-raised);
+}
+
+.grid {
+    display: grid;
+    gap: 1rem;
+    margin-top: 2rem;
+}
+@media (min-width: 40rem) {
+    .grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+@media (min-width: 64rem) {
+    .grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+.install .panel {
+    max-width: 48rem;
+    margin-inline: auto;
+}
+.install .panel > p {
+    color: var(--muted);
+}
+.code {
+    position: relative;
+    margin-top: 1rem;
+}
+.code :global(pre) {
+    margin: 0;
+    padding: 1rem 5rem 1rem 1.2rem;
+    border: 1px solid var(--line);
+    border-radius: 0.75rem;
+    background: var(--bg-code);
+    overflow-x: auto;
+    font-size: 0.9rem;
+    line-height: 1.6;
+}
+:global([data-theme="light"]) .code :global(.astro-code span) {
+    color: var(--shiki-light);
+}
+:global([data-theme="dark"]) .code :global(.astro-code span) {
+    color: var(--shiki-dark);
+}
+.copy-button {
+    position: absolute;
+    top: 0.6rem;
+    right: 0.6rem;
+    padding: 0.3rem 0.8rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--bg-raised);
+    color: var(--muted);
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+.install > .center:last-child {
+    margin-top: 2rem;
+}
+.install a:not(.button) {
+    color: var(--accent);
+}
+
+footer {
+    padding-block: 3rem;
+    border-top: 1px solid var(--line);
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+footer a {
+    color: var(--text);
+}
+</style>
