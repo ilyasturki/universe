@@ -12,30 +12,64 @@ def at(ms):
     return int(RATE * ms / 1000)
 
 
-# attack and release in ms, the tone held flat between them.
-def pad(freq, ms, gain, attack, release, harm=((1, 1.0),)):
-    n = at(ms)
-    a, r = max(1, at(attack)), max(1, at(release))
+# WebAudio's linearRamp then setTargetAtTime: a linear rise over attack, held, then a fall whose time constant is a third of release.
+def envelope(ms, gain, attack, release, length):
+    a, hold, tau = max(1, at(attack)), max(at(attack), at(ms - release)), max(1.0, at(release) / 3)
+    return [gain * (i / a if i < a else 1.0 if i < hold else math.exp(-(i - hold) / tau)) for i in range(length)]
+
+
+# A partial that rises in 4 ms, then rings down from 8 ms with its own time constant (in seconds).
+def ring(freq, gain, tau, length):
+    return [
+        gain * min(1.0, i / at(4)) * (math.exp(-(i - at(8)) / (tau * RATE)) if i > at(8) else 1.0) * math.sin(2 * math.pi * freq * i / RATE)
+        for i in range(length)
+    ]
+
+
+# A held tone of a few harmonics, peak-normalised as WebAudio's PeriodicWave is.
+def pad(freq, ms, gain, attack, release, harm=(1.0,)):
+    n = at(ms + 2 * release)
+    wave_of = [sum(h * math.sin((k + 1) * 2 * math.pi * j / 512) for k, h in enumerate(harm)) for j in range(512)]
+    peak = max(abs(v) for v in wave_of)
+    env = envelope(ms, gain, attack, release, n)
+    return [env[i] * sum(h * math.sin((k + 1) * 2 * math.pi * freq * i / RATE) for k, h in enumerate(harm)) / peak for i in range(n)]
+
+
+# White noise through WebAudio's band-pass biquad (Q = centre / bandwidth), its centre swept exponentially to sweep over ms.
+def air(ms, gain, attack, release, low, high, sweep=None, seed=1):
+    rnd = random.Random(seed)
+    n = at(ms + 2 * release)
+    centre, q = math.sqrt(low * high), math.sqrt(low * high) / (high - low)
+    env = envelope(ms, gain, attack, release, n)
+    out = []
+    x1 = x2 = y1 = y2 = 0.0
+    for i in range(n):
+        f = centre * (sweep / centre) ** min(1.0, i / at(ms)) if sweep else centre
+        w = 2 * math.pi * f / RATE
+        alpha = math.sin(w) / (2 * q)
+        x = rnd.uniform(-1, 1)
+        y = (alpha * x - alpha * x2 + 2 * math.cos(w) * y1 - (1 - alpha) * y2) / (1 + alpha)
+        x2, x1, y2, y1 = x1, x, y1, y
+        out.append(env[i] * y)
+    return out
+
+
+# A sine that drops from 2.2 times its pitch in 90 ms, up in 6 ms and gone over about ms.
+def thump(freq, ms, gain):
     out = []
     phase = 0.0
-    for i in range(n):
-        phase += 2 * math.pi * freq / RATE
-        env = min(1.0, i / a) * min(1.0, (n - i) / r) ** 2
-        out.append(gain * env * sum(h * math.sin(k * phase) for k, h in harm))
+    for i in range(at(2 * ms)):
+        f = freq * 2.2 * (1 / 2.2) ** min(1.0, i / at(90))
+        phase += 2 * math.pi * f / RATE
+        level = min(1.0, i / at(6)) * (math.exp(-(i - at(20)) / (ms / 4000 * RATE)) if i > at(20) else 1.0)
+        out.append(gain * level * math.sin(phase))
     return out
 
 
-def air(ms, gain, attack, release, seed=1):
-    rnd = random.Random(seed)
-    n = at(ms)
-    a, r = max(1, at(attack)), max(1, at(release))
-    out = []
-    lp = hp = 0.0
-    for i in range(n):
-        lp += 0.12 * (rnd.uniform(-1, 1) - lp)
-        hp += 0.02 * (lp - hp)
-        out.append(gain * min(1.0, i / a) * min(1.0, (n - i) / r) ** 2 * (lp - hp) * 4)
-    return out
+def bell(freq, ms, gain):
+    n = at(2 * ms)
+    partials = ((1, 1.0), (2.01, 0.42), (3.0, 0.2), (4.2, 0.09), (5.43, 0.05))
+    return mix(*((0, ring(freq * k, gain * a, ms / 1000 / (3 + i * 1.5), n)) for i, (k, a) in enumerate(partials)))
 
 
 def mix(*parts):
@@ -48,6 +82,14 @@ def mix(*parts):
     return buf
 
 
+# Scaled by gain, cut where the rest stays 60 dB under the peak, with a 40 ms fade.
+def trim(samples, gain):
+    floor = max(abs(s) for s in samples) / 1000
+    end = max(i for i, s in enumerate(samples) if abs(s) > floor) + 1
+    fade = at(40)
+    return [gain * s * min(1.0, (end - i) / fade) for i, s in enumerate(samples[:end])]
+
+
 def write(name, samples):
     peak = max(1e-06, *(abs(s) for s in samples))
     k = 0.85 / peak if peak > 0.85 else 1.0
@@ -58,14 +100,19 @@ def write(name, samples):
         w.writeframes(b"".join(struct.pack("<h", int(max(-1, min(1, s * k)) * 32767)) for s in samples))
 
 
-# Only boot.wav is made here: the other sounds came with the Reprise port.
+# Only boot.wav is made here: the other sounds came with the Reprise port. Its beats are Boot.qml's: the brake at 900 ms, the opening at 1350 ms;
+# 0.6 brings it to the loudness of the chime it replaced.
 SOUNDS = {
-    "boot": mix(
-        (0, pad(98, 1700, 0.10, 500, 900, harm=((1, 1.0), (2, 0.35), (3, 0.1)))),
-        (60, pad(147, 1640, 0.07, 520, 900, harm=((1, 1.0), (2, 0.25)))),
-        (0, air(1500, 0.05, 600, 800, seed=3)),
-        (420, pad(587, 1200, 0.035, 300, 900)),
-        (620, pad(880, 1000, 0.025, 260, 800)),
+    "boot": trim(
+        mix(
+            (0, air(930, 0.06, 820, 40, 200, 1400, sweep=6000, seed=3)),
+            (905, thump(46, 800, 0.4)),
+            (915, bell(987.77, 2000, 0.045)),
+            (925, bell(1479.98, 1700, 0.025)),
+            (905, pad(246.94, 1300, 0.04, 15, 900, harm=(1.0, 0.3))),
+            (1350, air(520, 0.025, 80, 380, 800, 4200, sweep=1600, seed=5)),
+        ),
+        0.6,
     ),
 }
 
