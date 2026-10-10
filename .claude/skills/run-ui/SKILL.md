@@ -31,9 +31,9 @@ just ui-record <out.mp4> [keys…]
 
 The UI in a headless sway rendering on the boot GPU, recorded by wf-recorder: no window, no sound, the real scenegraph with every effect. Out is H.264 at 60 fps, supersampled 2x and scaled back, ready to post. Same keys and `UNIVERSE_UI_*` variables as `ui-shot`, 500 ms between keys; `tools/ui-record --help` has the rest. Check it with `ffmpeg -ss <t> -i <out> -frames:v 1 <png>` and Read the frame.
 
-A gamescope take, `UNIVERSE_RECORD_GAMESCOPE=1` with `UNIVERSE_UI_ARGS=--no-gamepad`, films what runs only inside gamescope: a real launch, HOME over the game, MangoHud, the volume level (`Volume:up`). The UI goes fullscreen in its own gamescope inside the headless sway, on a copy of the profile, the game's sound into a private sink, and the take stops the game it started. `Mark:NAME` keys land as cut points in `<out>.marks`; `tools/readme-video` is a worked take.
+A gamescope take, `UNIVERSE_RECORD_GAMESCOPE=1` with `UNIVERSE_UI_ARGS=--no-gamepad`, films what runs only inside gamescope: a real launch, HOME over the game, MangoHud, the volume level (`Volume:up`). The UI goes fullscreen in its own gamescope inside the headless sway, on a copy of the profile, the game's sound into a private sink, and the take stops the game it started. `Mark:NAME` keys land as cut points in `<out>.marks`; the gamescope-clip takes in site/media/takes.toml are worked ones.
 
-Anything shown outside the repo (README, posts) is recorded on `UNIVERSE_DEV=.dev-showcase`, which `just showcase` rebuilds from `.dev`: PC games with full artwork only, no emulated or hand-added games. The Media tab there still holds dev test sessions; leave it out of public footage.
+Anything shown outside the repo (README, posts) is recorded on `UNIVERSE_DEV=.dev-showcase`, which `just showcase` rebuilds from `.dev`: PC games with full artwork only, no emulated or hand-added games. The docs' screenshots and clips are takes in site/media/takes.toml, filmed by `UNIVERSE_DEV=.dev-showcase just docs-media record` (`tools/docs-media --help`). The Media tab there still holds dev test sessions; leave it out of public footage.
 
 ## Visible run
 

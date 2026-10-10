@@ -1,0 +1,665 @@
+#!/usr/bin/env python3
+"""tools/docs-media record|check|dry-run|publish|fetch: the docs' screenshots and clips, played from site/media/takes.toml.
+
+record [--version X.Y.Z] [NAME…]  every take, or the ones named, on .dev-showcase (through `just docs-media`): the stills
+                                  of one look and size in one tools/ui-record take, each clip in its own (a gamescope-clip
+                                  through its gamescope mode), the desktop stills in a headless weston. Stills are encoded
+                                  1920 wide to AVIF and WebP in site/src/assets/media, clips to AV1 and H.264 MP4 with a
+                                  WebP poster in site/public/media, both listed in site/src/assets/media/manifest.json;
+                                  target/docs-media/contact.png tiles them all. The version defaults to CHANGELOG.md's
+                                  newest heading, which /release writes before it records.
+check [--strict VERSION]          the takes are well formed and every <Shot name=…>/<Clip name=…> in site/src is one;
+                                  --strict: every take recorded from its current keys, at VERSION.
+dry-run                           every fake = true take offscreen on the fake core, failing on a missed Expect:,
+                                  an unknown key, a missing shot or mark. No window, no GPU.
+publish VERSION [--branch NAME]   the recorded media as the single commit of the orphan site-media branch (or NAME),
+                                  replaced in a worktree under target/docs-media. Pushing is left to the caller.
+fetch [REF]                       the media of REF (default: origin's site-media) into site/src/assets/media and
+                                  site/public/media.
+
+  UI_BIN             universe-ui for dry-run (default $VIRTUAL_ENV/bin/universe-ui)
+  DESKTOP_BIN        universe-desktop for the desktop stills (default target/debug/universe-desktop)
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import re
+import shlex
+import shutil
+import subprocess
+import sys
+import tarfile
+import tempfile
+import time
+import tomllib
+from dataclasses import dataclass
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+LOOKS = ("reprise", "switch2", "ps5", "desktop")
+SIZES = ("1920x1080", "1280x800")
+KINDS = ("still", "clip", "gamescope-clip")
+FIELDS = {"name", "look", "size", "kind", "keys", "segments", "alt", "fake"}
+NAME = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+SEGMENT = re.compile(r"(?P<start>[^.\s]+)\.\.(?:\+(?P<seconds>\d+(?:\.\d+)?)|(?P<end>[^.\s+][^.\s]*))")
+USE = re.compile(r'<(Shot|Clip)\s+name="([a-z0-9-]+)"')
+VERSION = re.compile(r"^## \[(\d+\.\d+\.\d+)\]", re.MULTILINE)
+# Wait:N counts gaps of this many ms; the takes are written against it.
+GAP_MS = 400
+SETTLE_WAITS = 3
+STILL_WIDTH = 1920
+CROSSFADE_S = 0.4
+EXPECT_FAILED = 3
+BRANCH = "site-media"
+# A game's own captures, the dev sessions': left out of the profile a take films.
+CAPTURES = ("screenshots", "journal")
+LINKED = {".png", ".jpg", ".jpeg", ".webp", ".avif", ".gif", ".svg", ".ico", ".mkv", ".mp4", ".webm"}
+
+
+def fail(message: str) -> int:
+    print(f"docs-media: {message}", file=sys.stderr)
+    return 1
+
+
+@dataclass(frozen=True)
+class Take:
+    name: str
+    look: str
+    size: str
+    kind: str
+    keys: tuple[str, ...]
+    alt: str
+    fake: bool
+    segments: tuple[str, ...]
+
+    @property
+    def w(self) -> int:
+        return int(self.size.split("x")[0])
+
+    @property
+    def h(self) -> int:
+        return int(self.size.split("x")[1])
+
+    @property
+    def hash(self) -> str:
+        what = {"look": self.look, "size": self.size, "kind": self.kind, "keys": self.keys, "segments": self.segments, "alt": self.alt}
+        return hashlib.sha256(json.dumps(what, sort_keys=True).encode()).hexdigest()[:12]
+
+    @property
+    def files(self) -> dict[str, str]:
+        if self.kind == "still":
+            return {"avif": f"{self.name}.avif", "webp": f"{self.name}.webp"}
+        return {"av1": f"{self.name}.av1.mp4", "h264": f"{self.name}.h264.mp4", "poster": f"{self.name}.poster.webp"}
+
+    @property
+    def encoded(self) -> tuple[int, int]:
+        if self.kind == "still":
+            return STILL_WIDTH, round(STILL_WIDTH * self.h / self.w)
+        return self.w, self.h
+
+    def script(self, shot: Path | None = None) -> list[str]:
+        bare = "shot:" if self.look == "desktop" else "Shot:"
+        return [f"{bare}{shot}" if key == bare and shot else key for key in self.keys]
+
+
+class Site:
+    def __init__(self, root: Path):
+        self.root = root
+        self.takes = root / "site/media/takes.toml"
+        self.pages = root / "site/src"
+        self.stills = root / "site/src/assets/media"
+        self.clips = root / "site/public/media"
+        self.manifest = self.stills / "manifest.json"
+        self.work = root / "target/docs-media"
+
+    def dir_of(self, kind: str) -> Path:
+        return self.stills if kind == "still" else self.clips
+
+    def read_manifest(self) -> dict | None:
+        if not self.manifest.is_file():
+            return None
+        return json.loads(self.manifest.read_text())
+
+
+def problems_of(entry: dict, seen: set[str]) -> list[str]:
+    errors = []
+    name = entry.get("name")
+    if not isinstance(name, str) or not NAME.fullmatch(name):
+        return [f"take {name!r}: a name is [a-z0-9-]"]
+    if name in seen:
+        errors.append("named twice")
+    seen.add(name)
+    errors += [f"unknown field {f}" for f in sorted(set(entry) - FIELDS)]
+    look, size, kind = entry.get("look"), entry.get("size"), entry.get("kind")
+    if look not in LOOKS:
+        errors.append(f"look is one of {', '.join(LOOKS)}")
+    if size not in SIZES:
+        errors.append(f"size is one of {', '.join(SIZES)}")
+    if kind not in KINDS:
+        errors.append(f"kind is one of {', '.join(KINDS)}")
+    if not isinstance(entry.get("keys"), str) or not entry["keys"].split():
+        errors.append("keys is a string of key phases")
+        return [f"take {name}: {e}" for e in errors]
+    if not isinstance(entry.get("alt"), str) or not entry["alt"].strip():
+        errors.append("alt says what it shows")
+    if not isinstance(entry.get("fake", False), bool):
+        errors.append("fake is true or false")
+    keys = entry["keys"].split()
+    marks = {k.removeprefix("Mark:") for k in keys if k.startswith("Mark:")}
+    if look == "desktop":
+        if kind != "still":
+            errors.append("the desktop takes stills alone")
+        if entry.get("fake"):
+            errors.append("the desktop has no fake core")
+        shots = [i for i, k in enumerate(keys) if k.startswith("shot:")]
+        if [keys[i] for i in shots] != ["shot:"]:
+            errors.append("a desktop still has one bare shot:")
+        elif not (shots[0] and re.fullmatch(r"wait:\d+", keys[shots[0] - 1])):
+            errors.append("its shot: comes right after a wait:MS")
+    else:
+        shots = [i for i, k in enumerate(keys) if k.startswith("Shot:")]
+        if kind == "still":
+            if [keys[i] for i in shots] != ["Shot:"]:
+                errors.append("a still has one bare Shot:")
+            elif not (shots[0] and re.fullmatch(r"Wait:\d+", keys[shots[0] - 1]) and int(keys[shots[0] - 1][5:]) >= SETTLE_WAITS):
+                errors.append(f"its Shot: comes right after a Wait:{SETTLE_WAITS} or longer, once the screen settled")
+        elif shots:
+            errors.append("a clip takes no Shot:")
+        for i, key in enumerate(keys):
+            phase, _, bare = key.rpartition(":") if ":" in key else ("", "", key)
+            if bare in ("Return", "A") and phase in ("", "Hold", "Pad", "PadHold") and not (i and keys[i - 1].startswith("Expect:")):
+                errors.append(f"key {i + 1} ({key}) launches whatever is focused on the real core: put an Expect: right before it")
+        if kind == "gamescope-clip" and entry.get("fake"):
+            errors.append("a gamescope-clip launches a real game: never fake")
+        if look != "reprise" and any(k.startswith("Expect:") for k in keys):
+            errors.append("Expect: is answered on the Universe look (reprise) alone")
+    segments = entry.get("segments", [])
+    if segments and kind == "still":
+        errors.append("segments are a clip's")
+    if not isinstance(segments, list) or not all(isinstance(s, str) for s in segments):
+        errors.append("segments is a list of MARK..MARK or MARK..+SECONDS")
+    else:
+        for s in segments:
+            m = SEGMENT.fullmatch(s)
+            if not m:
+                errors.append(f"segment {s!r} is MARK..MARK or MARK..+SECONDS")
+                continue
+            errors += [f"segment {s!r}: no Mark:{mark} in its keys" for mark in (m["start"], m["end"]) if mark and mark not in marks]
+    return [f"take {name}: {e}" for e in errors]
+
+
+def load_takes(site: Site) -> tuple[list[Take], list[str]]:
+    try:
+        data = tomllib.loads(site.takes.read_text())
+    except (OSError, tomllib.TOMLDecodeError) as e:
+        return [], [f"{site.takes}: {e}"]
+    entries = data.get("take", [])
+    errors = [f"{site.takes}: [[take]] tables alone" for key in data if key != "take"]
+    takes, seen = [], set()
+    for entry in entries:
+        found = problems_of(entry, seen)
+        errors += found
+        if not found:
+            takes.append(
+                Take(
+                    entry["name"],
+                    entry["look"],
+                    entry["size"],
+                    entry["kind"],
+                    tuple(entry["keys"].split()),
+                    entry["alt"].strip(),
+                    entry.get("fake", False),
+                    tuple(entry.get("segments", [])),
+                )
+            )
+    return takes, errors
+
+
+def pages_of(site: Site) -> list[Path]:
+    if not site.pages.is_dir():
+        return []
+    return [p for p in sorted(site.pages.rglob("*")) if p.suffix in (".astro", ".md", ".mdx") and p.is_file()]
+
+
+def used_names(pages: list[Path], root: Path) -> dict[str, set[tuple[str, str]]]:
+    used: dict[str, set[tuple[str, str]]] = {}
+    for page in pages:
+        for component, name in USE.findall(page.read_text()):
+            used.setdefault(name, set()).add((component, str(page.relative_to(root))))
+    return used
+
+
+def check(site: Site, strict: str | None) -> int:
+    takes, errors = load_takes(site)
+    warnings = []
+    by_name = {t.name: t for t in takes}
+    pages = pages_of(site)
+    used = used_names(pages, site.root)
+    if not pages:
+        warnings.append(f"no page in {site.pages.relative_to(site.root)} names a take yet")
+    for name, uses in sorted(used.items()):
+        take = by_name.get(name)
+        for component, page in sorted(uses):
+            if take is None:
+                errors.append(f'{page}: <{component} name="{name}"> is no take in {site.takes.relative_to(site.root)}')
+            elif (component == "Shot") != (take.kind == "still"):
+                errors.append(f'{page}: <{component} name="{name}"> names a {take.kind}')
+    if pages:
+        warnings += [f"take {t.name}: no page shows it" for t in takes if t.name not in used]
+    manifest = site.read_manifest()
+    entries = (manifest or {}).get("takes", {})
+    if manifest is None:
+        (errors if strict else warnings).append(f"no {site.manifest.relative_to(site.root)}: nothing recorded yet (just docs-media fetch, or record)")
+    else:
+        if strict and manifest.get("version") != strict:
+            errors.append(f"the manifest is version {manifest.get('version')}, not {strict}")
+        for take in takes:
+            entry = entries.get(take.name)
+            stale = errors if strict else warnings
+            if entry is None:
+                stale.append(f"take {take.name}: not recorded")
+                continue
+            if entry.get("hash") != take.hash:
+                stale.append(f"take {take.name}: changed since it was recorded")
+            if strict and entry.get("version") != strict:
+                errors.append(f"take {take.name}: recorded at {entry.get('version')}, not {strict}")
+            for file in (entry.get("files") or {}).values():
+                if not (site.dir_of(entry.get("kind")) / file).is_file():
+                    errors.append(f"take {take.name}: no {site.dir_of(entry.get('kind')).relative_to(site.root)}/{file}")
+        warnings += [f"manifest entry {name}: no such take (record drops it)" for name in sorted(set(entries) - set(by_name))]
+        listed = {site.dir_of(e.get("kind")) / f for e in entries.values() for f in (e.get("files") or {}).values()}
+        for folder in (site.stills, site.clips):
+            if folder.is_dir():
+                warnings += [f"{p.relative_to(site.root)}: in no manifest entry" for p in sorted(folder.iterdir()) if p not in listed and p != site.manifest]
+    for line in warnings:
+        print(f"warning: {line}")
+    for line in errors:
+        print(f"error: {line}")
+    recorded = sum(1 for t in takes if t.name in entries)
+    print(f"docs-media check: {len(takes)} takes, {recorded} recorded, {len(used)} named in pages, {len(errors)} errors")
+    return 1 if errors else 0
+
+
+def batches(takes: list[Take]) -> list[list[Take]]:
+    groups: dict[tuple[str, str], list[Take]] = {}
+    for take in takes:
+        if take.kind == "still" and take.look != "desktop":
+            groups.setdefault((take.look, take.size), []).append(take)
+    return list(groups.values())
+
+
+def batch_script(batch: list[Take], shots: Path) -> list[str]:
+    script = ["Wait:5"]
+    for i, take in enumerate(batch):
+        script += (["Reset", "Wait:5"] if i else []) + take.script(shots / f"{take.name}.png")
+    return script
+
+
+def ui_args(look: str, fake: bool) -> list[str]:
+    return [*(["--fake"] if fake else []), "--no-gamepad", "--theme", look]
+
+
+def dry_run(site: Site) -> int:
+    takes, errors = load_takes(site)
+    if errors:
+        return check(site, None)
+    ui = os.environ.get("UI_BIN") or str(Path(os.environ.get("VIRTUAL_ENV", REPO / ".venv")) / "bin/universe-ui")
+    fake = [t for t in takes if t.fake]
+    runs = [(b, b[0].look, b[0].size) for b in batches(fake)] + [([t], t.look, t.size) for t in fake if t.kind == "clip"]
+    failed = 0
+    with tempfile.TemporaryDirectory(prefix="docs-media-") as tmp:
+        shots = Path(tmp)
+        for run, look, size in runs:
+            keys = batch_script(run, shots) if run[0].kind == "still" else list(run[0].keys)
+            script = ["Wait", *keys, "Wait:2"]
+            gaps = sum(int(k[5:]) if re.fullmatch(r"Wait:\d+", k) else 1 for k in script)
+            env = {**os.environ, "QT_QPA_PLATFORM": "offscreen", "PIPEWIRE_REMOTE": "/nonexistent"}
+            command = [ui, *ui_args(look, True), "--size", size, "--key-gap", str(GAP_MS), "--keys", " ".join(script)]
+            command += ["--quit-after", str(1200 + GAP_MS * (gaps + 8))]
+            started = time.monotonic()
+            done = subprocess.run(command, env=env, capture_output=True, text=True, timeout=300, check=False)
+            names = ", ".join(t.name for t in run)
+            why = []
+            if done.returncode == EXPECT_FAILED:
+                why.append("an Expect: missed: " + next((ln for ln in done.stderr.splitlines() if "expected Return" in ln), ""))
+            elif done.returncode:
+                why.append(f"the UI exited {done.returncode}")
+            why += [ln.strip() for ln in done.stderr.splitlines() if "unknown key" in ln]
+            for take in run:
+                if take.kind == "still" and not (shots / f"{take.name}.png").is_file():
+                    why.append(f"{take.name} saved no shot")
+                for segment in take.segments:
+                    m = SEGMENT.fullmatch(segment)
+                    for mark in (m["start"], m["end"]) if m else ():
+                        if mark and not re.search(rf"universe\.gamepad: mark {re.escape(mark)} ", done.stderr):
+                            why.append(f"{take.name} never reached Mark:{mark}")
+            if why:
+                failed += 1
+                print(f"FAIL {names} ({look} {size})", *why, sep="\n  ")
+                print(done.stderr[-4000:], file=sys.stderr)
+            else:
+                print(f"ok   {names} ({look} {size}, {time.monotonic() - started:.1f} s)")
+    print(f"docs-media dry-run: {len(fake)} takes in {len(runs)} runs, {failed} failed")
+    return 1 if failed else 0
+
+
+def changelog_version() -> str:
+    m = VERSION.search((REPO / "CHANGELOG.md").read_text())
+    if not m:
+        raise SystemExit(fail("CHANGELOG.md has no ## [X.Y.Z] heading: pass --version"))
+    return m[1]
+
+
+def stage_profile(src: Path, dest: Path) -> None:
+    if dest.exists():
+        shutil.rmtree(dest)
+    for path in sorted(src.rglob("*")):
+        rel = path.relative_to(src)
+        if path.is_dir() or rel.parts[0] in ("cache", "recordings", "journal"):
+            continue
+        if rel.parts[:2] == ("data", "games") and len(rel.parts) > 3 and rel.parts[3] in CAPTURES:
+            continue
+        target = dest / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if rel.name == "sessions.jsonl":
+            lines = [json.loads(ln) for ln in path.read_text().splitlines() if ln.strip()]
+            target.write_text("".join(json.dumps({**ln, "recording": None}) + "\n" for ln in lines))
+        elif path.suffix.lower() in LINKED:
+            os.link(path, target)
+        else:
+            shutil.copy2(path, target)
+    for sub in ("cache", "recordings", "journal"):
+        (dest / sub).mkdir(parents=True, exist_ok=True)
+    config = dest / "config/config.toml"
+    if config.is_file():
+        config.write_text(config.read_text().replace(f"{src}/", f"{dest}/"))
+
+
+def ffmpeg(*args: str | Path) -> None:
+    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *map(str, args)], check=True)
+
+
+def duration(video: Path) -> float:
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(video)], check=True, capture_output=True, text=True
+    )
+    return float(out.stdout)
+
+
+def encode_still(master: Path, site: Site, take: Take) -> None:
+    width = f"scale={STILL_WIDTH}:-2:flags=lanczos"
+    avif = "-c:v libaom-av1 -still-picture 1 -crf 24 -cpu-used 4 -row-mt 1 -colorspace bt709 -color_primaries bt709 -color_trc iec61966-2-1 -color_range pc"
+    ffmpeg("-i", master, "-vf", f"{width}:out_color_matrix=bt709:out_range=pc,format=yuv420p", *shlex.split(avif), site.stills / take.files["avif"])
+    ffmpeg("-i", master, "-vf", width, *shlex.split("-c:v libwebp -quality 88 -compression_level 6"), site.stills / take.files["webp"])
+
+
+def cut_clip(raw: Path, marks: dict[str, float], take: Take, out: Path) -> None:
+    spans = []
+    for segment in take.segments:
+        m = SEGMENT.fullmatch(segment)
+        assert m
+        start = marks[m["start"]]
+        spans.append((start, start + float(m["seconds"]) if m["seconds"] else marks[m["end"]]))
+    if not spans:
+        spans = [(0.0, duration(raw))]
+    parts = [f"[0:v]trim=start={a:.3f}:end={b:.3f},setpts=PTS-STARTPTS[s{i}]" for i, (a, b) in enumerate(spans)]
+    last, length = "s0", spans[0][1] - spans[0][0]
+    for i, (a, b) in enumerate(spans[1:], 1):
+        parts.append(f"[{last}][s{i}]xfade=transition=fade:duration={CROSSFADE_S}:offset={length - CROSSFADE_S:.3f}[x{i}]")
+        last, length = f"x{i}", length + (b - a) - CROSSFADE_S
+    parts.append(f"[{last}]fps=60,format=yuv420p[out]")
+    ffmpeg("-i", raw, "-filter_complex", ";".join(parts), "-map", "[out]", "-c:v", "libx264", "-preset", "medium", "-crf", "14", "-an", out)
+
+
+def encode_clip(cut: Path, site: Site, take: Take) -> None:
+    common = shlex.split("-pix_fmt yuv420p -colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv -movflags +faststart -an")
+    ffmpeg("-i", cut, *shlex.split("-c:v libsvtav1 -crf 34 -preset 6 -g 240"), *common, site.clips / take.files["av1"])
+    ffmpeg("-i", cut, *shlex.split("-c:v libx264 -preset slow -crf 22 -profile:v high"), *common, site.clips / take.files["h264"])
+    ffmpeg("-i", cut, *shlex.split("-frames:v 1 -c:v libwebp -quality 85"), site.clips / take.files["poster"])
+
+
+def read_marks(path: Path) -> dict[str, float]:
+    if not path.is_file():
+        return {}
+    return {name: float(at) for name, at in (line.split() for line in path.read_text().splitlines() if line.strip())}
+
+
+def desktop_still(take: Take, master: Path, env: dict[str, str]) -> None:
+    bin_ = os.environ.get("DESKTOP_BIN") or str(REPO / "target/debug/universe-desktop")
+    socket = f"universe-docs-media-{os.getpid()}"
+    runtime = Path(env.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}")
+    log = master.with_suffix(".weston.log").open("w")
+    weston = subprocess.Popen(
+        ["weston", "--backend=headless", "--no-config", "--idle-time=0", f"--socket={socket}", f"--width={take.w}", f"--height={take.h}"],
+        stderr=log,
+    )
+    try:
+        for _ in range(50):
+            if (runtime / socket).exists():
+                break
+            time.sleep(0.1)
+        steps = " ".join([f"size:{take.w}x{take.h}", *take.script(master)])
+        # A shot draws the window's render node, which an offloaded video (a subsurface) is not part of.
+        shown = {**env, "WAYLAND_DISPLAY": socket, "GDK_BACKEND": "wayland", "GDK_DISABLE": "offload,dmabuf", "UNIVERSE_DESKTOP_SCRIPT": steps}
+        subprocess.run([bin_], env=shown, timeout=180, check=False)
+    finally:
+        weston.terminate()
+        weston.wait()
+        log.close()
+
+
+def contact_sheet(site: Site, takes: list[Take], manifest: dict, out: Path) -> None:
+    cells = []
+    with tempfile.TemporaryDirectory(prefix="docs-media-sheet-") as tmp:
+        for take in takes:
+            entry = manifest["takes"].get(take.name)
+            if entry is None:
+                continue
+            if take.kind == "still":
+                frames = [(site.stills / take.files["webp"], None, take.name)]
+            else:
+                video = site.clips / take.files["h264"]
+                length = duration(video)
+                frames = [(video, at, f"{take.name} {at:.1f}s") for at in (0.0, length / 2, max(length - 0.1, 0.0))]
+            for source, at, label in frames:
+                cell = Path(tmp) / f"{len(cells):03d}.png"
+                seek = ["-ss", f"{at:.2f}"] if at is not None else []
+                fit = "scale=480:300:force_original_aspect_ratio=decrease,pad=480:300:(ow-iw)/2:(oh-ih)/2:color=0x202020"
+                text = f"drawtext=text='{label}':x=8:y=h-th-8:fontsize=18:fontcolor=white:box=1:boxcolor=black@0.6:boxborderw=4"
+                ffmpeg(*seek, "-i", source, "-frames:v", "1", "-vf", f"{fit},{text},format=rgb24", cell)
+                cells.append(cell)
+        if not cells:
+            return
+        rows = (len(cells) + 3) // 4
+        ffmpeg("-framerate", "1", "-i", Path(tmp) / "%03d.png", "-vf", f"tile=4x{rows}:padding=4:color=black", "-frames:v", "1", out)
+
+
+def record(site: Site, names: list[str], version: str | None) -> int:
+    config_home = os.environ.get("UNIVERSE_CONFIG_HOME")
+    if not config_home:
+        return fail("record runs through just: UNIVERSE_DEV=.dev-showcase just docs-media record")
+    profile = Path(config_home).parent
+    if profile.name != ".dev-showcase":
+        return fail(f"footage comes from .dev-showcase (UNIVERSE_DEV=.dev-showcase), not {profile}")
+    takes, errors = load_takes(site)
+    if errors:
+        return check(site, None)
+    unknown = sorted(set(names) - {t.name for t in takes})
+    if unknown:
+        return fail(f"no such take: {', '.join(unknown)}")
+    chosen = [t for t in takes if not names or t.name in names]
+    version = version or changelog_version()
+    scratch = site.work / "profile" / ".dev-showcase"
+    masters = site.work / "masters"
+    for folder in (masters, site.stills, site.clips):
+        folder.mkdir(parents=True, exist_ok=True)
+    print(f"docs-media: {len(chosen)} takes from {profile} at {version}", file=sys.stderr)
+    stage_profile(profile, scratch)
+    env = {**os.environ, "UNIVERSE_UI_GAP": str(GAP_MS)}
+    for part in ("data", "config", "state", "cache"):
+        env[f"UNIVERSE_{part.upper()}_HOME"] = str(scratch / part)
+    ui_record = str(REPO / "tools/ui-record")
+    done: list[Take] = []
+    failed: list[str] = []
+
+    for batch in batches(chosen):
+        for take in batch:
+            (masters / f"{take.name}.png").unlink(missing_ok=True)
+        shown = {**env, "UNIVERSE_UI_ARGS": " ".join(ui_args(batch[0].look, False)), "UNIVERSE_UI_SIZE": batch[0].size}
+        raw = masters / f"stills-{batch[0].look}-{batch[0].size}.mp4"
+        subprocess.run([ui_record, raw, *batch_script(batch, masters)], env=shown, check=False)
+        raw.unlink(missing_ok=True)
+        for take in batch:
+            master = masters / f"{take.name}.png"
+            if master.is_file():
+                encode_still(master, site, take)
+                done.append(take)
+            else:
+                failed.append(f"{take.name}: saved no shot (an Expect: or unknown key above says why)")
+
+    for take in (t for t in chosen if t.look == "desktop"):
+        master = masters / f"{take.name}.png"
+        master.unlink(missing_ok=True)
+        desktop_still(take, master, env)
+        if master.is_file():
+            encode_still(master, site, take)
+            done.append(take)
+        else:
+            failed.append(f"{take.name}: the desktop saved no shot")
+
+    for take in sorted((t for t in chosen if t.kind != "still"), key=lambda t: t.kind == "gamescope-clip"):
+        raw = masters / f"{take.name}.raw.mp4"
+        shown = {**env, "UNIVERSE_UI_ARGS": " ".join(ui_args(take.look, False)), "UNIVERSE_UI_SIZE": take.size}
+        if take.kind == "gamescope-clip":
+            shown["UNIVERSE_RECORD_GAMESCOPE"] = "1"
+        raw.with_suffix(".marks").unlink(missing_ok=True)
+        subprocess.run([ui_record, raw, *take.keys], env=shown, check=False)
+        marks = read_marks(raw.with_suffix(".marks"))
+        wanted = [m for s in take.segments if (g := SEGMENT.fullmatch(s)) for m in (g["start"], g["end"]) if m]
+        missing = [m for m in wanted if m not in marks]
+        if not raw.is_file() or missing:
+            failed.append(f"{take.name}: the take stopped before Mark:{(missing or ['?'])[0]} (an Expect: above says why)")
+            continue
+        cut = masters / f"{take.name}.mp4"
+        cut_clip(raw, marks, take, cut)
+        encode_clip(cut, site, take)
+        done.append(take)
+
+    manifest = site.read_manifest() or {"version": version, "takes": {}}
+    names_now = {t.name for t in takes}
+    manifest["takes"] = {k: v for k, v in manifest.get("takes", {}).items() if k in names_now}
+    for take in done:
+        w, h = take.encoded
+        manifest["takes"][take.name] = {
+            "name": take.name,
+            "kind": take.kind,
+            "files": take.files,
+            "w": w,
+            "h": h,
+            "alt": take.alt,
+            "version": version,
+            "hash": take.hash,
+        }
+    manifest["version"] = version
+    manifest["takes"] = {t.name: manifest["takes"][t.name] for t in takes if t.name in manifest["takes"]}
+    site.manifest.write_text(json.dumps(manifest, indent=2) + "\n")
+    listed = {site.dir_of(e["kind"]) / f for e in manifest["takes"].values() for f in e["files"].values()}
+    for folder in (site.stills, site.clips):
+        for path in folder.iterdir():
+            if path.is_file() and path not in listed and path != site.manifest:
+                path.unlink()
+    sheet = site.work / "contact.png"
+    contact_sheet(site, takes, manifest, sheet)
+    print(f"docs-media: {len(done)} recorded, {len(failed)} failed; contact sheet {sheet}")
+    for line in failed:
+        print(f"  {line}", file=sys.stderr)
+    return 1 if failed else 0
+
+
+def git(*args: str | Path, cwd: Path, capture: bool = False) -> str:
+    out = subprocess.run(["git", *map(str, args)], cwd=cwd, check=True, text=True, capture_output=capture)
+    return out.stdout.strip() if capture else ""
+
+
+def publish(site: Site, version: str, branch: str) -> int:
+    if check(site, version):
+        return fail(f"publish takes media that pass `check --strict {version}`")
+    tree = site.work / "publish"
+    if tree.exists():
+        subprocess.run(["git", "worktree", "remove", "--force", str(tree)], cwd=site.root, check=False, capture_output=True)
+        shutil.rmtree(tree, ignore_errors=True)
+    git("worktree", "prune", cwd=site.root)
+    exists = subprocess.run(["git", "rev-parse", "-q", "--verify", f"refs/heads/{branch}"], cwd=site.root, capture_output=True, check=False).returncode == 0
+    if exists:
+        git("worktree", "add", "--quiet", tree, branch, cwd=site.root)
+    else:
+        git("worktree", "add", "--quiet", "--orphan", "-b", branch, tree, cwd=site.root)
+    try:
+        git("rm", "-r", "-q", "--ignore-unmatch", ".", cwd=tree)
+        shutil.copytree(site.stills, tree / "src/assets/media")
+        shutil.copytree(site.clips, tree / "public/media")
+        git("add", "-A", ".", cwd=tree)
+        commit = git("commit-tree", git("write-tree", cwd=tree, capture=True), "-m", f"media: v{version}", cwd=tree, capture=True)
+        git("update-ref", "HEAD", commit, cwd=tree)
+    finally:
+        subprocess.run(["git", "worktree", "remove", "--force", str(tree)], cwd=site.root, check=False)
+    print(f"docs-media: {branch} is one commit, {commit[:7]} (media: v{version}); git push --force-with-lease origin {branch}")
+    return 0
+
+
+def fetch(site: Site, ref: str | None) -> int:
+    if ref is None:
+        found = subprocess.run(["git", "ls-remote", "--exit-code", "origin", f"refs/heads/{BRANCH}"], cwd=site.root, capture_output=True, check=False)
+        if found.returncode == 2:
+            print(f"docs-media: origin has no {BRANCH} branch yet: nothing recorded")
+            return 0
+        git("fetch", "--quiet", "origin", BRANCH, cwd=site.root)
+        ref = "FETCH_HEAD"
+    archive = subprocess.run(["git", "archive", "--format=tar", ref], cwd=site.root, check=True, capture_output=True).stdout
+    for folder in (site.stills, site.clips):
+        shutil.rmtree(folder, ignore_errors=True)
+    with tempfile.TemporaryFile() as tar_file:
+        tar_file.write(archive)
+        tar_file.seek(0)
+        with tarfile.open(fileobj=tar_file) as tar:
+            members = [m for m in tar.getmembers() if m.name.startswith(("src/assets/media/", "public/media/"))]
+            tar.extractall(site.root / "site", members=members, filter="data")
+    manifest = site.read_manifest()
+    print(f"docs-media: {len((manifest or {}).get('takes', {}))} takes from {ref}, version {(manifest or {}).get('version')}")
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(prog="tools/docs-media", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--root", type=Path, default=REPO, help=argparse.SUPPRESS)
+    sub = parser.add_subparsers(dest="command", required=True)
+    rec = sub.add_parser("record")
+    rec.add_argument("--version")
+    rec.add_argument("names", nargs="*")
+    chk = sub.add_parser("check")
+    chk.add_argument("--strict", metavar="VERSION")
+    sub.add_parser("dry-run")
+    pub = sub.add_parser("publish")
+    pub.add_argument("version")
+    pub.add_argument("--branch", default=BRANCH)
+    fet = sub.add_parser("fetch")
+    fet.add_argument("ref", nargs="?")
+    args = parser.parse_args()
+    site = Site(args.root.resolve())
+    if args.command == "record":
+        return record(site, args.names, args.version)
+    if args.command == "check":
+        return check(site, args.strict)
+    if args.command == "dry-run":
+        return dry_run(site)
+    if args.command == "publish":
+        return publish(site, args.version, args.branch)
+    return fetch(site, args.ref)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

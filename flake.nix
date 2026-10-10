@@ -474,13 +474,15 @@
         };
       pytestUi = pytestOf {
         name = "universe-pytest-ui";
-        # the core contract test lists the modules and sources the real core reads; the theme tests install examples/theme; the journeys play tools/sample's game
+        # the core contract test lists the modules and sources the real core reads; the theme tests install examples/theme; the journeys play tools/sample's game; the docs-media tests check site/media/takes.toml
         dirs = [
           "ui"
           "modules"
           "sources"
           "examples"
           "tools/sample"
+          "tools/docs-media"
+          "site/media"
         ];
         tests = [ "ui" ];
         py =
@@ -495,6 +497,7 @@
           pkgs.systemd
           pkgs.ffmpeg
           pkgs.dbus
+          pkgs.gitMinimal
         ];
         # The first run's network test runs the real `universe network watch` against a mocked NetworkManager.
         env.UNIVERSE_BIN = lib.getExe core;

@@ -83,6 +83,10 @@ showcase *args: build env
 ui-record out *keys: build develop env
     @{{ nix }} tools/ui-record "{{ out }}" {{ keys }}
 
+# The docs' screenshots and clips, site/media/takes.toml's: UNIVERSE_DEV=.dev-showcase just docs-media record [name…] films them on the GPU (its gamescope clips launch Dead Cells), then check [--strict X.Y.Z], publish X.Y.Z onto the site-media branch, fetch [ref]; dry-run plays the fake takes offscreen (`tools/docs-media --help`)
+docs-media *args: build develop env
+    @{{ nix }} tools/docs-media {{ args }}
+
 # The README's clips: UNIVERSE_DEV=.dev-showcase just readme-video record TAKE.mp4 launches Dead Cells in a headless gamescope and films it, then just readme-video encode TAKE.mp4 writes docs/images/home.avif and home-over-game.avif
 readme-video *args: build develop env
     @{{ nix }} tools/readme-video {{ args }}
