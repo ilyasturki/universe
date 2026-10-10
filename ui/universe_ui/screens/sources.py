@@ -266,7 +266,7 @@ class SourcesBrowser(AsyncScreen):
             return self._begin(self._client.update(self._source, row["id"]), row, f"Updating {row['title']}")
         if row["installed"]:
             return ""
-        job_id = self._begin(self._client.install(self._source, row["id"]), row, f"Installing {row['title']}")
+        job_id = self._begin(self._client.install(self._source, row["id"]), row, f"Installing {row['title']}", f"Installed {row['title']}")
         if job_id:
             self._set_arriving(ArrivingGame(row["id"], row["title"], row["image"], self))
         return job_id
@@ -354,7 +354,8 @@ class SourcesBrowser(AsyncScreen):
 
         self._run(lambda: self._client.remove(game_id, False), done)
 
-    def _begin(self, job_id, row, label):
+    # `landed`: what a finished job says, where the core answers with an id.
+    def _begin(self, job_id, row, label, landed=""):
         if not job_id:
             return ""
         self._job = {
@@ -362,6 +363,7 @@ class SourcesBrowser(AsyncScreen):
             "game": row["id"],
             "title": row["title"],
             "label": label,
+            "landed": landed,
             "message": label,
             "done": 0,
             "total": 0,
@@ -407,6 +409,8 @@ class SourcesBrowser(AsyncScreen):
         if self._job["cancelled"] and not ok:
             kept = _size(self._job["done"]) + " kept, " if self._job["done"] else ""
             text = f"Stopped {self._job['label'].split(' ')[0].lower()} {self._job['title']} · {kept}resume any time"
+        elif ok and self._job["landed"]:
+            text = self._job["landed"]
         self._job.update({"ok": bool(ok), "message": text or self._job["message"]})
         self.jobChanged.emit()
         if ok and self._arriving is not None:

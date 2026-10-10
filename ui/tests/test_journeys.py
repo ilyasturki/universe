@@ -16,7 +16,7 @@ from dbusmock import BusType, PrivateDBus, SpawnedMock
 from looks import Look, current_row, read, settle
 from PySide6.QtCore import QObject, Qt
 from PySide6.QtTest import QTest
-from uitest import until
+from uitest import record, until
 
 universe_core = pytest.importorskip("universe_core")
 
@@ -341,9 +341,11 @@ def test_a_store_game_installed_from_settings_joins_the_library_installed(journe
     assert store_row(journey, MINI_METRO)["installed"] is False
     down_to(look, row, storeId=MINI_METRO)
     look.press(Qt.Key.Key_Return)
+    said = record(journey.api.screens.sources.message)
     pick(look, page.findChild(QObject, "settingsMenu"), "install")
     pick(look, page.findChild(QObject, "dialog"), "yes")
     until(lambda: store_row(journey, MINI_METRO).get("game_id") == "mini-metro", "the row is the library game's once installed", 10000)
+    assert any("Mini Metro" in m for (m,) in until(lambda: said)), f"the finished install names the game, not the core's id: {said}"
     assert store_row(journey, MINI_METRO)["installed"] is True
     folder = journey.root / "games" / "Mini Metro"
     assert (folder / f"goggame-{MINI_METRO}.info").is_file(), "gogdl downloaded into the source's games folder"

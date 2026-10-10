@@ -629,7 +629,8 @@ def test_an_install_arrives_on_home_first_and_lands_as_the_game(api, fake, monke
     assert browser.arriving is None and row.count == recent.count and heads == ["arriving:1207658930", None], "stopped: nothing arrives"
     said.clear()
     browser.install(index)
-    assert until(lambda: said)[0] == ("Installing 1207658930: done",)
+    until(lambda: said)
+    assert browser.job["ok"] is True
     settle(browser)
     landed = api.allGames.byId("the-witcher-3-wild-hunt")
     assert landed is not None and landed.addedAt is not None and not landed.installing

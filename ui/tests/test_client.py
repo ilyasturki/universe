@@ -118,7 +118,8 @@ def test_install_job_reports_progress(fake):
     assert fake.jobs()[0]["id"] == job and fake.jobs()[0]["finished"] is False
     args = until(lambda: finished)[0]
     assert args[0] == job and args[1] is True
-    assert steps and steps[-1][1:3] == (50000000000, 50000000000), "progress is in bytes of the install"
+    mine = [s for s in steps if s[0] == job]
+    assert mine and mine[-1][1:3] == (50000000000, 50000000000), "progress is in bytes of the install"
     assert next(g for g in fake.sourceLibrary("gog", False) if g["id"] == "1207658930")["installed"] is True
 
 

@@ -1756,7 +1756,7 @@ class FakeCore:
             game.pop("partial_dir", None)
             game.pop("partial_bytes", None)
             game["game_id"] = self._land(source, game)
-        return f"Installing {game_id}: done"
+        return (game or {}).get("game_id") or ""
 
     # The core's apply_source_game: the install creates the library game, or brings an archived one back; a scan stamps nothing.
     def _land(self, source, entry, stamp=True):
