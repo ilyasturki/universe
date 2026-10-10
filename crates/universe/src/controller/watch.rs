@@ -541,7 +541,7 @@ pub fn record_json(id: &str) -> Vec<serde_json::Value> {
 
 /// How long a step of the walk waits for its button before it is skipped.
 const WALK_STEP: Duration = Duration::from_secs(10);
-/// A stick or trigger past 60% of its throw from where it rested: the step's answer.
+/// A stick or trigger past 60% of the travel it has from where it rested: the step's answer.
 const WALK_THROW: f64 = 0.6;
 const WALK_AXES: [(&str, &str); 6] = [
     ("lx", "push the left stick right"),
@@ -562,10 +562,12 @@ pub async fn walk(path: &Path, ask: impl Fn(&str, &str)) -> crate::Result<(serde
         dev.get_absinfo().map(|it| it.map(|(c, i)| (c.0, (i.minimum(), i.maximum(), i.value()))).collect()).unwrap_or_default();
     let mut stream = dev.into_event_stream()?;
     let mut rest: BTreeMap<u16, i32> = ranges.iter().map(|(c, (_, _, v))| (*c, *v)).collect();
-    // How far an axis is from where it rested, as a share of its range, signed.
+    // How far an axis is from where it rested, as a share of the travel it has from there, signed: a centred stick and a trigger at
+    // rest both reach 1 at the end of their throw.
     let thrown = |code: u16, value: i32, rest: &BTreeMap<u16, i32>| {
         let (min, max, _) = ranges.get(&code).copied().unwrap_or((-1, 1, 0));
-        f64::from(value - rest.get(&code).copied().unwrap_or(0)) / f64::from((max - min).max(1))
+        let at = rest.get(&code).copied().unwrap_or((min + max) / 2);
+        f64::from(value - at) / f64::from((at - min).max(max - at).max(1))
     };
     let mut buttons = serde_json::Map::new();
     for slot in family.slots() {
@@ -622,12 +624,21 @@ pub async fn walk(path: &Path, ask: impl Fn(&str, &str)) -> crate::Result<(serde
     Ok((serde_json::Value::Object(buttons), serde_json::Value::Object(axes)))
 }
 
-/// Until nothing has moved for half a second (two at most): what the last step pressed is let go, and where each axis sits now is its rest.
+/// Until no key or axis has moved for half a second (two at most): what the last step pressed is let go, and where each axis sits
+/// now is its rest.
 async fn settle(stream: &mut evdev::EventStream, rest: &mut BTreeMap<u16, i32>) {
     let until = Instant::now() + Duration::from_secs(2);
-    while let Ok(Ok(event)) = tokio::time::timeout(Duration::from_millis(500).min(until.saturating_duration_since(Instant::now())), stream.next_event()).await {
-        if let EventSummary::AbsoluteAxis(_, a, v) = event.destructure() {
-            rest.insert(a.0, v);
+    let mut moved = Instant::now();
+    loop {
+        let wait = (moved + Duration::from_millis(500)).min(until).saturating_duration_since(Instant::now());
+        let Ok(Ok(event)) = tokio::time::timeout(wait, stream.next_event()).await else { return };
+        match event.destructure() {
+            EventSummary::AbsoluteAxis(_, a, v) => {
+                rest.insert(a.0, v);
+                moved = Instant::now();
+            }
+            EventSummary::Key(..) => moved = Instant::now(),
+            _ => {}
         }
     }
 }
