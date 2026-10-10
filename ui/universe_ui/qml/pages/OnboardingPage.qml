@@ -343,7 +343,7 @@ FocusScope {
 
                 PillButton {
                     ghost: true
-                    icon: ""
+                    glyph: "B"
                     label: page.backLabel
                     focused: nav.activeFocus && nav.index === 0
                     dimmed: nav.activeFocus && nav.index !== 0
@@ -351,7 +351,7 @@ FocusScope {
                 }
 
                 PillButton {
-                    icon: ""
+                    glyph: "X"
                     label: page.nextLabel
                     focused: nav.activeFocus && nav.index === 1
                     dimmed: nav.activeFocus && nav.index !== 1

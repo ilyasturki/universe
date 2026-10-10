@@ -8,6 +8,7 @@ Item {
     id: root
 
     property string glyph: "A"
+    property color ink: Theme.text
     readonly property bool chord: glyph.indexOf("+") >= 0
     readonly property var names: glyph.split(chord ? "+" : " ")
     readonly property string family: api.screens.controller.family
@@ -40,6 +41,7 @@ Item {
                     family: root.family
                     slot: Names.hintSlot(modelData, root.family)
                     unit: root.unit
+                    ink: root.ink
                 }
 
                 Rectangle {

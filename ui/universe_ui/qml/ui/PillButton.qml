@@ -6,6 +6,8 @@ Rectangle {
 
     property string label: "Play"
     property string icon: "play"
+    // A pad button that does it from anywhere, drawn in place of the icon.
+    property string glyph: ""
     property bool ghost: false
     property bool focused: false
     property bool dimmed: false
@@ -56,8 +58,15 @@ Rectangle {
         anchors.centerIn: parent
         spacing: Theme.dp(16)
 
+        ButtonGlyph {
+            visible: root.glyph !== ""
+            anchors.verticalCenter: parent.verticalCenter
+            glyph: root.glyph || "A"
+            ink: root.ink
+        }
+
         MenuGlyph {
-            visible: root.icon !== ""
+            visible: root.icon !== "" && root.glyph === ""
             width: Theme.dp(26)
             height: Theme.dp(26)
             anchors.verticalCenter: parent.verticalCenter
