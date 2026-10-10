@@ -87,8 +87,8 @@ ui-record out *keys: build develop env
 docs-media *args: build develop env
     @{{ nix }} tools/docs-media {{ args }}
 
-# The README's clips: UNIVERSE_DEV=.dev-showcase just readme-video record TAKE.mp4 launches Dead Cells in a headless gamescope and films it, then just readme-video encode TAKE.mp4 writes docs/images/home.avif and home-over-game.avif
-readme-video *args: build develop env
+# The README's clips: just readme-video [DIR] writes DIR/home.avif and home-over-game.avif (docs/images by default) from the home and home-over-game takes `just docs-media record` cut
+readme-video *args: develop
     @{{ nix }} tools/readme-video {{ args }}
 
 # The GTK desktop app on the core, against .dev/
