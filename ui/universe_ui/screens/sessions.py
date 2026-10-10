@@ -29,7 +29,7 @@ def _session_row(line):
         "dateText": _when(line.get("started_at")),
         "durationText": _duration(line.get("duration_s")),
         "end": end,
-        "endText": f"Crashed (exit {exit_code})" if end == "crashed" else END_TEXT.get(end, end),
+        "endText": f"Crashed (exit {exit_code})" if end == "crashed" and exit_code else END_TEXT.get(end, end),
         "bad": end in ("crashed", "killed"),
         "exit": exit_code,
         "source": str(line.get("source") or ""),

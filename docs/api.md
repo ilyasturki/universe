@@ -322,7 +322,7 @@ One `sessions.jsonl` line:
 {"session":"20260910-213045","game":"the-technomancer","started_at":"RFC3339",
  "ended_at":"RFC3339","duration_s":1234,"source":"universe",
  "unit":"universe-game-the-technomancer-20260910-213045.service","screen":"DP-1",
- "exit":0,"stopped":false,"command":"gamescope -f … -- universe splash -- umu-run …",
+ "exit":0,"stopped":false,"crashed":false,"command":"gamescope -f … -- universe splash -- umu-run …",
  "recording":"path or null","recording_duration_s":1230,
  "recording_started_at":"RFC3339 or empty","recording_pauses":[["RFC3339","RFC3339"]]}
 ```
@@ -348,12 +348,14 @@ listing joins onto it, in the line's place:
 `null` when the session has none; `command` stays on the line (the log's first line, see Logs).
 
 `source ∈ universe, import-recording, import-lutris`. `exit` is the main process's exit code, `-1`
-when it was killed by a signal; `stopped` says whether `stop` asked for that end. The row's `end`
-reads both: `quit` (0), `stopped` (asked), `crashed` (a code), `killed` (a signal nobody asked
-for: the launcher's scope went, the OOM killer), `ended` (a signal on a line older than `stopped`).
-The CLI tables and every look say so; the end-of-session toast names a crash or a kill. What
-`exit` sees is the unit's main process — gamescope or umu-run — so a game that dies inside a
-wrapper that exits 0 files as `quit`: the log tells.
+when it was killed by a signal; `stopped` says whether `stop` asked for that end; `crashed` that
+Proton's crash handler left a report for the session (see Logs; `false` on older lines). The row's
+`end` reads the three: `crashed` (a report, whatever the rest says, or a code), `quit` (0),
+`stopped` (asked), `killed` (a signal nobody asked for: the launcher's scope went, the OOM killer),
+`ended` (a signal on a line older than `stopped`). The CLI tables and every look say so; the
+end-of-session toast names a crash or a kill. What `exit` sees is the unit's main process —
+gamescope or umu-run — so a game that dies inside a wrapper that exits 0 files as `quit` unless
+Proton reported it: the log tells.
 
 ### Logs
 
@@ -378,6 +380,13 @@ own verbose logs for the session: `PROTON_LOG=1` with `PROTON_LOG_DIR` (Proton's
 `$XDG_STATE_HOME/universe/logs/<id>/<session>/` beside a `launch.txt` (the command line, then the
 unit's environment); the row's `debug_log` is that directory when it exists, and `remove --purge`
 trashes `logs/<id>/`. A key of `[launch.env]` with the same name wins over the switch.
+
+Every launch through Proton (a `proton` game, an emulator run through it) sets
+`PROTON_CRASH_REPORT_DIR` to that directory, made beforehand: when the game dies of an exception
+Wine does not handle, winedbg writes its report there as `<time>_appid-<n>_crash.log`, at no cost
+to a session that ends well. `session-end` files a session whose directory holds such a file as
+`crashed: true`, and removes the directory when it is empty, so `debug_log` names it only when
+something landed in it.
 
 ### Gamescope
 

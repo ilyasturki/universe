@@ -152,6 +152,20 @@ pub fn proton_toggles(e: &crate::library::Effective, rdna3: bool) -> BTreeMap<St
     env
 }
 
+/// Every Proton launch: winedbg writes `<time>_appid-<n>_crash.log` into `dir` when the game dies of an unhandled exception, which a game
+/// exiting 0 through umu-run would not show otherwise.
+pub fn crash_env(kind: crate::runners::Kind, dir: &Path) -> BTreeMap<String, String> {
+    match kind {
+        crate::runners::Kind::Proton => BTreeMap::from([("PROTON_CRASH_REPORT_DIR".to_string(), dir.to_string_lossy().into_owned())]),
+        _ => BTreeMap::new(),
+    }
+}
+
+/// A report `crash_env`'s winedbg left in `dir`.
+pub fn crash_report_in(dir: &Path) -> bool {
+    std::fs::read_dir(dir).into_iter().flatten().flatten().any(|e| e.file_name().to_string_lossy().ends_with("_crash.log"))
+}
+
 /// `launch.debug_log`: Proton's log (`steam-<GAMEID>.log`) and DXVK's (`<exe>_d3d11.log`…) into `dir`; Wine's and umu's own go to stderr, the journal. Nothing for a Linux program or an emulator.
 pub fn debug_env(kind: crate::runners::Kind, dir: &Path) -> BTreeMap<String, String> {
     use crate::runners::Kind;

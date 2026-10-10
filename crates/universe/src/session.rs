@@ -302,14 +302,19 @@ impl Core {
         for (path, text) in plan.mangohud_conf.iter().chain(&plan.mangoapp_conf) {
             std::fs::write(path, text)?;
         }
-        if r.effective.debug_log {
-            if let Some(spec) = crate::runners::spec(&r.effective.runner) {
-                let dir = paths::session_log_dir(id, &session_id);
+        if let Some(spec) = crate::runners::spec(&r.effective.runner) {
+            let dir = paths::session_log_dir(id, &session_id);
+            let kind = if spec.via_proton { crate::runners::Kind::Proton } else { spec.kind };
+            let mut logs = launcher::crash_env(kind, &dir);
+            if r.effective.debug_log {
+                logs.extend(launcher::debug_env(kind, &dir));
+            }
+            // winedbg makes the dir on the game's current drive, not under Z:, where it then writes.
+            if r.effective.debug_log || !logs.is_empty() {
                 std::fs::create_dir_all(&dir)?;
-                let kind = if spec.via_proton { crate::runners::Kind::Proton } else { spec.kind };
-                for (k, v) in launcher::debug_env(kind, &dir) {
-                    plan.env.entry(k).or_insert(v);
-                }
+            }
+            for (k, v) in logs {
+                plan.env.entry(k).or_insert(v);
             }
         }
 
@@ -382,7 +387,7 @@ impl Core {
         let mut env = passthrough_env();
         env.extend(plan.env.clone());
         let log_dir = paths::session_log_dir(&current.id, &current.session_id);
-        if log_dir.is_dir() {
+        if r.effective.debug_log && log_dir.is_dir() {
             let vars: String = env.iter().map(|(k, v)| format!("{k}={v}\n")).collect();
             std::fs::write(log_dir.join("launch.txt"), format!("{}\n\n{vars}", plan.command_line()))?;
         }
@@ -539,6 +544,10 @@ impl Core {
             .or_else(|| sessions::parse_session_id(session_id))
             .unwrap_or_else(chrono::Local::now);
         let ended = ended.or(log.ended).unwrap_or_else(chrono::Local::now);
+        let log_dir = paths::session_log_dir(&r.game.id, session_id);
+        let crashed = launcher::crash_report_in(&log_dir);
+        // Made for a crash report that never came: no debug_log on the row.
+        let _ = std::fs::remove_dir(&log_dir);
         let session = Session {
             session: session_id.into(),
             game: r.game.id.clone(),
@@ -550,6 +559,7 @@ impl Core {
             screen: marker.map(|m| m.current.screen.clone()).unwrap_or_default(),
             exit: exit.or(log.exit).unwrap_or(-1),
             stopped: Some(marker.is_some_and(|m| m.stopped)),
+            crashed,
             command: marker.map(|m| m.command.clone()).unwrap_or_default(),
             ..Default::default()
         };
@@ -930,6 +940,33 @@ pub(crate) mod tests {
         memory.finish(&format!("universe-game-sample-{sid}.service"), 11);
         core.session_end("sample", &sid, Some(11), None).await.unwrap();
         assert_eq!(sessions::end_of(&core.sessions("sample").await.unwrap()[0].session), "crashed");
+    }
+
+    #[tokio::test]
+    async fn a_proton_crash_report_files_a_crash_whatever_the_exit() {
+        let _sb = sandbox();
+        let mut g = Game::load(&Game::new("Sample").toml_path()).unwrap();
+        g.launch.runner = "proton".into();
+        g.launch.runner_exe.clear();
+        g.save().unwrap();
+        // Two games: two launches within a second share a session id.
+        Game { id: "crashy".into(), ..g }.save().unwrap();
+        let (core, memory) = open().await;
+        for (id, crash) in [("sample", false), ("crashy", true)] {
+            let sid = core.launch(id, "", "").await.unwrap();
+            let unit = format!("universe-game-{id}-{sid}.service");
+            let dir = paths::session_log_dir(id, &sid);
+            assert_eq!(memory.spec(&unit).unwrap().env["PROTON_CRASH_REPORT_DIR"], dir.to_string_lossy());
+            assert!(dir.is_dir() && !dir.join("launch.txt").exists(), "made for winedbg; the launch file is debug_log's");
+            if crash {
+                std::fs::write(dir.join("2026-10-10_02:04:06_appid-578330_crash.log"), "Unhandled exception: page fault").unwrap();
+            }
+            memory.finish(&unit, 0);
+            core.session_end(id, &sid, Some(0), None).await.unwrap();
+            let row = core.sessions(id).await.unwrap().remove(0);
+            assert_eq!((row.session.crashed, sessions::end_of(&row.session)), (crash, if crash { "crashed" } else { "quit" }), "umu-run exits 0 either way");
+            assert_eq!(row.debug_log, crash.then(|| dir.to_string_lossy().into_owned()), "an empty dir goes, a report stays readable");
+        }
     }
 
     #[tokio::test]

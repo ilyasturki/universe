@@ -17,6 +17,8 @@ pub struct Session {
     /// `stop` asked for the end: a signal exit is a quit, not a crash. Absent on a line written before the key existed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stopped: Option<bool>,
+    /// Proton's crash handler left a report in the session's log dir: the game died, whatever `exit` says.
+    pub crashed: bool,
     /// The launched command line, for the log's first line.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub command: String,
@@ -56,9 +58,12 @@ pub struct SessionRow {
     pub debug_log: Option<String>,
 }
 
-/// How a session ended, from the line's `exit` and `stopped`: `quit` (0), `stopped` (asked), `crashed` (a code), `killed` (a signal nobody asked
-/// for), `ended` (a signal on a line too old to say).
+/// How a session ended, from the line's `crashed`, `exit` and `stopped`: `crashed` (a crash report, or a code), `quit` (0), `stopped` (asked),
+/// `killed` (a signal nobody asked for), `ended` (a signal on a line too old to say).
 pub fn end_of(session: &Session) -> &'static str {
+    if session.crashed {
+        return "crashed";
+    }
     match (session.exit, session.stopped) {
         (0, _) => "quit",
         (_, Some(true)) => "stopped",
@@ -201,6 +206,7 @@ mod tests {
         assert_eq!(end_of(&Session { exit: -1, stopped: Some(false), ..Default::default() }), "killed");
         assert_eq!(end_of(&Session { exit: -1, ..Default::default() }), "ended");
         assert_eq!(end_of(&Session { exit: 6, ..Default::default() }), "crashed");
+        assert_eq!(end_of(&Session { exit: 0, stopped: Some(true), crashed: true, ..Default::default() }), "crashed", "a crash report outranks the rest");
         let line = serde_json::to_value(&s).unwrap();
         assert!(line.get("stopped").is_none() && line.get("command").is_none(), "{line}");
         let old: Session = serde_json::from_str(r#"{"session":"20260910-213045","game":"g","exit":-1}"#).unwrap();

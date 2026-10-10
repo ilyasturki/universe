@@ -292,6 +292,8 @@ def _drm_preferred_mode(screen):
 
 def _end_of(line):
     exit_code, stopped = int(line.get("exit") or 0), line.get("stopped")
+    if line.get("crashed"):
+        return "crashed"
     if exit_code == 0:
         return "quit"
     if stopped:
@@ -1588,6 +1590,7 @@ class FakeCore:
         for key in ("recording_duration_s", "command", "stopped"):
             row.pop(key, None)
         row["title"] = self._game(ident)["title"]
+        row["crashed"] = bool(line.get("crashed"))
         row["end"] = _end_of(line)
         row["debug_log"] = None
         row["recording"] = None
