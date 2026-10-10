@@ -10,6 +10,7 @@ import pytest
 
 from universe_ui.errors import UniverseError
 from universe_ui.fake_core import EXTENSIONS, FIXTURE, LAUNCH_KEYS, FakeCore
+from universe_ui.models import Game
 from universe_ui.themes import THEMES
 
 universe_core = pytest.importorskip("universe_core")
@@ -22,7 +23,9 @@ SESSION = "20260913-120000"
 # The real profile: games the fixture has too, so one call reads both cores.
 SEED = {
     "config/config.toml": 'schema = 1\n[modules]\nenabled = ["capture", "journal", "screenshot", "controls"]\n[sources]\nenabled = ["gog"]\n',
-    "data/games/the-technomancer/game.toml": 'schema = 1\nid = "the-technomancer"\ntitle = "The Technomancer"\nfavorite = true\ntags = ["rpg"]\n'
+    "data/games/the-technomancer/game.toml": 'schema = 1\nid = "the-technomancer"\ntitle = "The Technomancer"\nsort_title = "Technomancer"\nfavorite = true\n'
+    'tags = ["rpg"]\nrelease_year = 2016\n[metadata]\ndevelopers = ["Spiders"]\npublishers = ["Focus"]\ngenres = ["RPG"]\nsummary = "Mars."\n'
+    'description = "On Mars."\nmetacritic = 61\nplayers = 2\n'
     '[source]\nkind = "gog"\n[launch]\nexe = "/mnt/games/PC/The Technomancer/TheTechnomancer.exe"\n[modules.capture]\ncursor = false\n',
     "data/games/the-technomancer/sessions.jsonl": f'{{"session": "{SESSION}", "game": "the-technomancer", "started_at": "2026-09-13T12:00:00+02:00",'
     ' "ended_at": "2026-09-13T13:00:00+02:00", "duration_s": 3600, "exit": 0, "recording": "/nowhere/20260913-120000.mkv"}\n',
@@ -222,3 +225,31 @@ def test_the_launch_keys_fixture_is_the_cores_table(cores):
     )
     assert fake.launch_keys("game", SCREEN) == core.launch_keys("game", SCREEN), "the fake sizes the choices as the core does"
     assert fake.launch_keys("global", {}) == core.launch_keys("global", {})
+
+
+def test_the_ui_reads_every_field_the_core_sends_of_a_game(cores):
+    core, _ = cores
+    games = [core.get(g["id"]) for g in core.list()]
+    assert {g["id"] for g in games} == {"the-technomancer", "dead-cells"}
+    for raw in games:
+        game, meta, stats = Game(raw, None), raw["metadata"], raw["stats"]
+        assert (game.id, game.title, game.favorite, game.hidden, game.tags) == (raw["id"], raw["title"], raw["favorite"], raw["hidden"], raw["tags"])
+        assert game.sortTitle == (raw["sort_title"] or game.sortTitle)
+        assert (game.playTime, game.playCount, game.lastPlayed is not None and game.lastPlayed.isValid()) == (
+            round(stats["hours"] * 3600),
+            stats["play_count"],
+            bool(stats["last_played"]),
+        )
+        assert (game.releaseYear, game.developerList, game.publisherList, game.genreList) == (
+            raw["release_year"],
+            meta["developers"],
+            meta["publishers"],
+            meta["genres"],
+        )
+        assert (game.summary, game.description, game.players) == (meta["summary"], meta["description"], meta["players"] or 1)
+        assert game.extra == ({"metacritic": [meta["metacritic"]]} if meta["metacritic"] else {})
+        assert (game.source, game.platform, game.runner) == (raw["source"]["kind"], raw["platform"], raw["effective"]["runner"])
+        assert (game.achievementsTotal, game.achievementsUnlocked) == (raw["achievements"]["total"], raw["achievements"]["unlocked"])
+        assert game.assets.boxFront.toLocalFile() == (raw["media"]["box_front"] or ""), raw["id"]
+    played = next(g for g in games if g["id"] == "the-technomancer")
+    assert played["metadata"]["developers"] and played["stats"]["play_count"] and played["release_year"], "the seed fills what the UI reads"

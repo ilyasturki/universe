@@ -1,4 +1,3 @@
-from PySide6.QtCore import QDateTime, QUrl
 from uitest import until
 
 from universe_ui.models import (
@@ -26,49 +25,6 @@ def test_sort_title_drops_leading_article(app):
     assert sort_title("The") == "The"
     assert Game({"title": "The Witcher 3"}, None).sortTitle == "Witcher 3"
     assert Game({"title": "The Witcher 3", "sort_title": "Witcher"}, None).sortTitle == "Witcher"
-
-
-def test_a_game_decodes_every_shape_the_core_sends(app):
-    game = Game(
-        {
-            "id": "x",
-            "title": "X",
-            "favorite": True,
-            "stats": {"hours": 1.5, "play_count": "3", "last_played": "2026-09-09T22:41:00+02:00"},
-            "metadata": {"developer": "A, B", "genres": ["Action"], "release_year": "2016", "metacritic": 61},
-            "media": {"box_front": "/tmp/box.png", "square": "/tmp/sq.png", "screenshots": ["/tmp/a.png", "http://x/b.png"]},
-            "tags": "rpg, sci-fi",
-        },
-        None,
-    )
-    assert game.playTime == 5400
-    assert game.playCount == 3
-    assert isinstance(game.lastPlayed, QDateTime) and game.lastPlayed.isValid()
-    assert game.developerList == ["A", "B"]
-    assert game.genreList == ["Action"]
-    assert game.releaseYear == 2016
-    assert game.extra == {"metacritic": [61]}
-    assert game.tags == ["rpg", "sci-fi"]
-    assert game.assets.boxFront.isLocalFile() and game.assets.square.isLocalFile()
-    assert [u.toString(QUrl.FormattingOptions(QUrl.UrlFormattingOption.RemoveQuery)) for u in game.assets.screenshotList] == [
-        "file:///tmp/a.png",
-        "http://x/b.png",
-    ]
-    game = Game(
-        {
-            "id": "y",
-            "title": "Y",
-            "release_year": 2017,
-            "source": {"kind": "lutris", "lutris_slug": "y", "gog_id": ""},
-            "metadata": {"developers": ["N"], "metacritic": 97, "players": 0, "gamesdb_id": 0, "sgdb_id": 12},
-        },
-        None,
-    )
-    assert game.source == "lutris"
-    assert game.releaseYear == 2017
-    assert game.developerList == ["N"]
-    assert game.players == 1
-    assert game.extra == {"metacritic": [97]}
 
 
 def test_library_excludes_hidden_and_groups_by_source(api):
