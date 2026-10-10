@@ -38,8 +38,12 @@ def test_selector_defaults_and_persists(app, tmp_path):
     memory.set("theme", "gone")
     assert ThemeSelector(memory).current == "reprise"
     assert selector.fontPath == ""
-    selector.fontPath = "/fonts/udsg.ttf"
-    assert memory.get("switch2Font") == "/fonts/udsg.ttf" and selector.fontPath == "/fonts/udsg.ttf"
+    font = tmp_path / "udsg.ttf"
+    font.write_bytes(b"")
+    selector.fontPath = str(font)
+    assert memory.get("switch2Font") == str(font) and selector.fontPath == str(font)
+    selector.fontPath = str(tmp_path)
+    assert selector.fontPath == "", "a folder is no font: the bundled one stays"
     selector.fontPath = ""
     assert memory.has("switch2Font") is False
 
@@ -59,18 +63,21 @@ def test_the_startup_animation_is_on_until_turned_off_for_every_look(app, fake, 
 
 
 def test_each_look_keeps_its_own_font(app, tmp_path):
+    udsg, sst = tmp_path / "udsg.ttf", tmp_path / "sst.ttf"
+    udsg.write_bytes(b"")
+    sst.write_bytes(b"")
     memory = Memory(str(tmp_path / "memory.json"))
     selector = ThemeSelector(memory, "switch2")
-    selector.fontPath = "/fonts/udsg.ttf"
+    selector.fontPath = str(udsg)
     fonts = []
     selector.fontChanged.connect(lambda: fonts.append(selector.fontPath))
     assert selector.set("ps5") is True
     assert selector.entry == "ps5/theme.qml" and selector.frame is False
     assert fonts == [""] and selector.fontPath == ""
-    selector.fontPath = "/fonts/sst.ttf"
-    assert memory.get("ps5Font") == "/fonts/sst.ttf" and memory.get("switch2Font") == "/fonts/udsg.ttf"
+    selector.fontPath = str(sst)
+    assert memory.get("ps5Font") == str(sst) and memory.get("switch2Font") == str(udsg)
     selector.set("switch2")
-    assert selector.fontPath == "/fonts/udsg.ttf"
+    assert selector.fontPath == str(udsg)
 
 
 @pytest.mark.parametrize("name", LOOKS)

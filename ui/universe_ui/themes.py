@@ -188,7 +188,9 @@ class ThemeSelector(QObject):
         signal.emit()
 
     def _font(self):
-        return self._own("Font")
+        path = self._own("Font")
+        # A folder picked, or a font file since gone: the bundled face, rather than a FontLoader warning on every page.
+        return path if os.path.isfile(path) else ""
 
     def _set_font(self, path):
         self._set_own("Font", path, self.fontChanged)
