@@ -321,7 +321,7 @@ FocusScope {
             Text {
                 id: noteText
 
-                readonly property real room: panel.room - Math.min(scroller.contentHeight, panel.room / 2) - scroller.anchors.topMargin - scroller.anchors.bottomMargin - head.anchors.topMargin - heading.height - head.spacing - bottomPadding
+                readonly property real room: panel.room - Math.min(scroller.contentHeight, panel.room / 2) - scroller.anchors.topMargin - scroller.bottomMargin - head.anchors.topMargin - heading.height - head.spacing - bottomPadding
 
                 width: parent.width
                 visible: menu.note !== ""
