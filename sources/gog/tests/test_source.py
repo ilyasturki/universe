@@ -707,6 +707,14 @@ def test_umu_id_is_asked_once_and_a_failed_lookup_again(src, env, monkeypatch):
     assert src.umu_id("20920") == "umu-20920"
     assert src.umu_id("20920") == "umu-20920" and len(seen) == 1, "kept"
     assert src.umu_id("404") is None and src.umu_id("404") is None and len(seen) == 3, "no answer is not kept: asked again"
-    fake_fetch(monkeypatch, src, {"https://umu.openwinecomponents.org": []})
-    assert src.umu_id("1") is None
-    assert json.loads((env["data"] / "umu.json").read_text()) == {"1434554947": "umu-287980", "20920": "umu-20920", "1": ""}, "an empty answer is kept"
+    seen = fake_fetch(monkeypatch, src, {"https://umu.openwinecomponents.org": []})
+    assert src.umu_id("1") is None and src.umu_id("1") is None and len(seen) == 1, "an empty answer is kept"
+    week = src.UMU_MISS_TTL_S
+    ids = json.loads((env["data"] / "umu.json").read_text())
+    ids.update({"1": {"missed_at": time.time() - week - 60}, "2": "", "3": {"missed_at": time.time() - week + 60}})
+    (env["data"] / "umu.json").write_text(json.dumps(ids))
+    seen = fake_fetch(monkeypatch, src, {"https://umu.openwinecomponents.org/umu_api.php?store=gog&codename=1": [{"umu_id": "umu-578330"}], "https://umu": []})
+    assert (src.umu_id("1"), src.umu_id("2"), src.umu_id("3")) == ("umu-578330", None, None)
+    assert [url for url, _ in seen] == [src.UMU_URL.format(id="1"), src.UMU_URL.format(id="2")], (
+        "an expired miss and an old empty one are asked again, a fresh one is not"
+    )

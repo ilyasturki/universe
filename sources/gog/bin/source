@@ -28,6 +28,7 @@ CATALOG_URL = "https://catalog.gog.com/v1/catalog"
 BUILDS_URL = "https://content-system.gog.com/products/{id}/os/{platform}/builds?generation=2"
 ACHIEVEMENTS_URL = "https://gameplay.gog.com/clients/{client}/users/{user}/achievements"
 UMU_URL = "https://umu.openwinecomponents.org/umu_api.php?store=gog&codename={id}"
+UMU_MISS_TTL_S = 7 * 24 * 3600  # umu-database grows: a game it lacked is asked again a week later
 REMOTE_CONFIG_URL = "https://remote-config.gog.com/components/galaxy_client/clients/{client}?component_version=2.0.45"
 CLOUD_HOST = "cloudstorage.gog.com"
 GALAXY_CLIENT_ID = "46899977096215655"
@@ -458,19 +459,24 @@ def umu_ids_path():
     return data_dir() / "umu.json"
 
 
-# An answer, found or not, is kept; a failed lookup is asked again next time.
+# An empty answer is kept as {"missed_at": epoch}; a bare "" from older caches counts as expired; a failed lookup is not kept.
 def umu_id(game_id):
     ids = load_json(umu_ids_path())
     ids = ids if isinstance(ids, dict) else {}
-    if game_id not in ids:
-        try:
-            found = fetch(UMU_URL.format(id=urllib.parse.quote(game_id)))
-        except SourceError as exc:
-            log(str(exc))
-            return None
-        ids[game_id] = (found[0].get("umu_id") if isinstance(found, list) and found and isinstance(found[0], dict) else None) or ""
-        save_json(umu_ids_path(), ids)
-    return ids[game_id] or None
+    kept = ids.get(game_id)
+    if isinstance(kept, str) and kept:
+        return kept
+    if isinstance(kept, dict) and time.time() - float(kept.get("missed_at") or 0) < UMU_MISS_TTL_S:
+        return None
+    try:
+        found = fetch(UMU_URL.format(id=urllib.parse.quote(game_id)))
+    except SourceError as exc:
+        log(str(exc))
+        return None
+    umu = (found[0].get("umu_id") if isinstance(found, list) and found and isinstance(found[0], dict) else None) or ""
+    ids[game_id] = umu or {"missed_at": int(time.time())}
+    save_json(umu_ids_path(), ids)
+    return umu or None
 
 
 def game_event(game_id, title, owned, install=None, product=None, partials=None):

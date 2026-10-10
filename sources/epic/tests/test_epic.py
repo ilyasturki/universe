@@ -2,6 +2,7 @@ import io
 import json
 import shlex
 import tarfile
+import time
 
 import pytest
 
@@ -320,3 +321,15 @@ def test_pre_launch_points_proton_at_the_anticheat_runtime(src, env, capsys, mon
     assert "PROTON_BATTLEYE_RUNTIME" not in env_lines(env_file)
     src.main(["pre-launch"])
     assert fetched == [src.RUNTIMES_URL], "fetched once, kept"
+
+
+def test_an_empty_umu_answer_is_asked_again_once_a_week_old(src, env, monkeypatch):
+    asked = []
+    monkeypatch.setattr(src, "fetch", lambda url: asked.append(url) or [])
+    week = src.UMU_MISS_TTL_S
+    (env["data"] / "umu.json").write_text(
+        json.dumps({"Min": "umu-1145360", "Old": {"missed_at": time.time() - week - 60}, "Bare": "", "New": {"missed_at": time.time() - week + 60}})
+    )
+    assert [src.umu_id(app) for app in ("Min", "Old", "Bare", "New")] == ["umu-1145360", None, None, None]
+    assert asked == [src.UMU_URL.format(id="Old"), src.UMU_URL.format(id="Bare")], "an expired miss and an old empty answer are asked again"
+    assert src.umu_id("Old") is None and len(asked) == 2, "the new miss is kept"

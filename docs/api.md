@@ -832,7 +832,8 @@ afterwards. `update` lists the installed games whose version is behind (`list-in
 `uninstall` runs `legendary -y uninstall`: the files and legendary's record go together. `scan` lists legendary's installs whose folder is still there and first adopts those of another
 legendary (`adopt_from`, Heroic's by default) with `legendary import`, which needs the sign-in: a
 refused import waits an hour before the next try. The game's `store` is `egs` and its `umu_id` the
-umu database's for the app name, looked up once and kept in `umu.json`.
+umu database's for the app name, kept in `umu.json`; an empty answer is asked again once a week old,
+as the gog source does for its game ids.
 
 A game needs Epic's launch arguments, one of them a single-use exchange code, so the source's
 `pre-launch` asks `legendary launch <app> --json --skip-version-check --no-wine` (online first,

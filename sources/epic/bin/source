@@ -27,6 +27,7 @@ LOGIN_URL = (
     "https%3A%2F%2Fwww.epicgames.com%2Fid%2Fapi%2Fredirect%3FclientId%3D34a02cf8f4414e29b15921876da36f9a%26responseType%3Dcode"
 )
 UMU_URL = "https://umu.openwinecomponents.org/umu_api.php?store=egs&codename={id}"
+UMU_MISS_TTL_S = 7 * 24 * 3600  # umu-database grows: a game it lacked is asked again a week later
 RUNTIMES_URL = "https://lutris.net/api/runtimes"
 USER_AGENT = "universe-epic/0.1"
 HTTP_TIMEOUT_S = 30
@@ -304,19 +305,24 @@ def umu_ids_path():
     return data_dir() / "umu.json"
 
 
-# An answer, found or not, is kept; a failed lookup is asked again next time.
+# An empty answer is kept as {"missed_at": epoch}; a bare "" from older caches counts as expired; a failed lookup is not kept.
 def umu_id(app):
     ids = load_json(umu_ids_path())
     ids = ids if isinstance(ids, dict) else {}
-    if app not in ids:
-        try:
-            found = fetch(UMU_URL.format(id=urllib.parse.quote(app)))
-        except SourceError as exc:
-            log(str(exc))
-            return None
-        ids[app] = (found[0].get("umu_id") if isinstance(found, list) and found and isinstance(found[0], dict) else None) or ""
-        save_json(umu_ids_path(), ids)
-    return ids[app] or None
+    kept = ids.get(app)
+    if isinstance(kept, str) and kept:
+        return kept
+    if isinstance(kept, dict) and time.time() - float(kept.get("missed_at") or 0) < UMU_MISS_TTL_S:
+        return None
+    try:
+        found = fetch(UMU_URL.format(id=urllib.parse.quote(app)))
+    except SourceError as exc:
+        log(str(exc))
+        return None
+    umu = (found[0].get("umu_id") if isinstance(found, list) and found and isinstance(found[0], dict) else None) or ""
+    ids[app] = umu or {"missed_at": int(time.time())}
+    save_json(umu_ids_path(), ids)
+    return umu or None
 
 
 def partials_path():
