@@ -80,20 +80,9 @@ def calls(env):
     return [json.loads(line) for line in env["log"].read_text().splitlines()]
 
 
-def fake_fetch(monkeypatch, src, responses):
-    seen = []
-
-    def fetch(url, token=None, headers=None):
-        seen.append((url, token))
-        for prefix, payload in responses.items():
-            if url.startswith(prefix):
-                if isinstance(payload, Exception):
-                    raise payload
-                return payload
-        raise src.SourceError(f"unexpected {url}")
-
-    monkeypatch.setattr(src, "fetch", fetch)
-    return seen
+def fake_fetch(web, responses):
+    web.answers.update(responses)
+    return web.seen
 
 
 def seed_cache(env, products=None):
@@ -116,8 +105,8 @@ def test_check_reports_the_login_and_comet(src, env, run, settings, monkeypatch,
     assert [(c["check"], c["ok"]) for c in lines] == [("gog-auth", True)], "signed in, and no comet asked for without achievements"
 
 
-def test_login_takes_the_code_out_of_the_address_it_lands_on(src, env, run, monkeypatch):
-    seen = fake_fetch(monkeypatch, src, {src.USER_URL: {"username": "Yasso"}})
+def test_login_takes_the_code_out_of_the_address_it_lands_on(web, src, env, run, monkeypatch):
+    seen = fake_fetch(web, {src.USER_URL: {"username": "Yasso"}})
     code, events, _ = run("login", " https://embed.gog.com/on_login_success?origin=client&code=good ")
     assert code == 0 and events == [{"event": "logged_in", "user": "Yasso"}, {"event": "done"}]
     assert seen == [(src.USER_URL, "tok")]
@@ -127,14 +116,14 @@ def test_login_takes_the_code_out_of_the_address_it_lands_on(src, env, run, monk
     assert (env["tmp"] / "auth" / "auth.json").read_text() == "{}"
 
 
-def test_a_rejected_code_signs_nobody_in(src, env, run, monkeypatch):
-    fake_fetch(monkeypatch, src, {})
+def test_a_rejected_code_signs_nobody_in(web, src, env, run, monkeypatch):
+    fake_fetch(web, {})
     code, events, _ = run("login", "bad")
     assert code == 1 and events == []
 
 
-def test_status_names_the_user_only_while_gogdl_holds_a_session(src, env, run, monkeypatch):
-    fake_fetch(monkeypatch, src, {src.USER_URL: {"username": "Yasso"}})
+def test_status_names_the_user_only_while_gogdl_holds_a_session(web, src, env, run, monkeypatch):
+    fake_fetch(web, {src.USER_URL: {"username": "Yasso"}})
     code, events, _ = run("status")
     assert code == 0 and events == [{"event": "logged_in", "user": "Yasso"}, {"event": "done"}]
     monkeypatch.setenv("SHIM_MODE", "noauth")
@@ -142,8 +131,8 @@ def test_status_names_the_user_only_while_gogdl_holds_a_session(src, env, run, m
     assert code == 0 and events == [{"event": "done"}]
 
 
-def test_library_lists_the_owned_games_with_the_installs_found_on_disk(src, env, run, monkeypatch):
-    seen = fake_fetch(monkeypatch, src, {"https://embed.gog.com/account/getFilteredProducts": LIBRARY_PAGE})
+def test_library_lists_the_owned_games_with_the_installs_found_on_disk(web, src, env, run, monkeypatch):
+    seen = fake_fetch(web, {"https://embed.gog.com/account/getFilteredProducts": LIBRARY_PAGE})
     code, events, _ = run("library")
     assert code == 0
     assert seen == [("https://embed.gog.com/account/getFilteredProducts?mediaType=1&page=1", "tok")]
@@ -171,22 +160,22 @@ def test_library_lists_the_owned_games_with_the_installs_found_on_disk(src, env,
     assert not (env["data"] / "library.json").exists(), "the core owns the library cache"
 
 
-def test_library_follows_every_page(src, env, run, monkeypatch):
+def test_library_follows_every_page(web, src, env, run, monkeypatch):
     pages = {1: {"totalPages": 2, "products": [{"id": 1, "title": "A"}]}, 2: {"totalPages": 2, "products": [{"id": 2, "title": "B"}]}}
-    monkeypatch.setattr(src, "fetch", lambda url, token=None: pages[int(url[-1])])
+    web.answers["https://embed.gog.com/account/getFilteredProducts"] = lambda url: pages[int(url[-1])]
     code, events, _ = run("library")
     assert code == 0 and [e["id"] for e in events[:-1]] == ["1", "2"]
 
 
-def test_library_offline_fails_even_with_cache(src, env, run, monkeypatch):
+def test_library_offline_fails_even_with_cache(web, src, env, run, monkeypatch):
     seed_cache(env)
-    fake_fetch(monkeypatch, src, {"https://embed.gog.com/account/getFilteredProducts": src.SourceError("offline")})
+    fake_fetch(web, {"https://embed.gog.com/account/getFilteredProducts": OSError("offline")})
     code, events, err = run("library")
     assert code == 1 and events == [] and "offline" in err, "the core keeps its cache; a silent fallback would hide new purchases"
 
 
-def test_library_marks_partial_downloads(src, env, run, monkeypatch):
-    fake_fetch(monkeypatch, src, {"https://embed.gog.com/account/getFilteredProducts": LIBRARY_PAGE})
+def test_library_marks_partial_downloads(web, src, env, run, monkeypatch):
+    fake_fetch(web, {"https://embed.gog.com/account/getFilteredProducts": LIBRARY_PAGE})
     folder = env["games"] / "Absolute Drift"
     folder.mkdir(parents=True)
     (folder / "part.bin").write_bytes(b"x" * 300)
@@ -201,8 +190,8 @@ def test_library_marks_partial_downloads(src, env, run, monkeypatch):
     assert drift["download_size"] == 800 and drift["disk_size"] == 1000
 
 
-def test_a_stopped_update_stays_an_install(src, env, run, monkeypatch):
-    fake_fetch(monkeypatch, src, {"https://embed.gog.com/account/getFilteredProducts": LIBRARY_PAGE})
+def test_a_stopped_update_stays_an_install(web, src, env, run, monkeypatch):
+    fake_fetch(web, {"https://embed.gog.com/account/getFilteredProducts": LIBRARY_PAGE})
     (env["scan"] / "Mini Metro" / ".gogdl-resume").write_text("h:game:part.bin\n")
     code, events, _ = run("library")
     assert code == 0
@@ -210,9 +199,9 @@ def test_a_stopped_update_stays_an_install(src, env, run, monkeypatch):
     assert mini["installed"] is True and mini["build"] == "B1" and "partial_dir" not in mini, "the old build is still there; update resumes"
 
 
-def test_search_asks_the_catalogue_and_marks_what_the_library_owns(src, env, run, monkeypatch):
+def test_search_asks_the_catalogue_and_marks_what_the_library_owns(web, src, env, run, monkeypatch):
     seed_cache(env)
-    seen = fake_fetch(monkeypatch, src, {src.CATALOG_URL: CATALOG_PAGE})
+    seen = fake_fetch(web, {src.CATALOG_URL: CATALOG_PAGE})
     code, events, _ = run("search", "mini", "metro")
     assert code == 0
     assert seen == [(f"{src.CATALOG_URL}?query=like%3Amini%20metro&productType=in%3Agame&limit=20", None)]
@@ -222,8 +211,8 @@ def test_search_asks_the_catalogue_and_marks_what_the_library_owns(src, env, run
     assert events[1]["owned"] is False and events[1]["installed"] is False
 
 
-def test_search_without_a_listed_library_leaves_ownership_unknown(src, env, run, monkeypatch):
-    fake_fetch(monkeypatch, src, {src.CATALOG_URL: CATALOG_PAGE})
+def test_search_without_a_listed_library_leaves_ownership_unknown(web, src, env, run, monkeypatch):
+    fake_fetch(web, {src.CATALOG_URL: CATALOG_PAGE})
     code, events, _ = run("search", "metro")
     assert code == 0 and events[0]["owned"] is None
 
@@ -312,12 +301,12 @@ def test_an_install_gogdl_fails_lands_no_game(env, run, monkeypatch):
     assert code == 1 and [e["event"] for e in events] == ["progress", "progress"]
 
 
-def test_updates_list_the_owned_installs_behind_the_published_build(src, env, run, monkeypatch):
+def test_updates_list_the_owned_installs_behind_the_published_build(web, src, env, run, monkeypatch):
     write_info(env["scan"] / "Current", "2", "2", "Current", build="B2")
     write_info(env["scan"] / "Unowned", "3", "3", "Unowned", build="B0")
     write_info(env["scan"] / "Unknown", "4", "4", "Unknown", build=None)
     seed_cache(env, LIBRARY_PAGE["products"] + [{"id": 2, "title": "Current"}, {"id": 4, "title": "Unknown"}])
-    fake_fetch(monkeypatch, src, {"https://content-system.gog.com/products/": BUILDS})
+    fake_fetch(web, {"https://content-system.gog.com/products/": BUILDS})
     code, events, _ = run("update")
     assert code == 0
     assert events == [
@@ -328,23 +317,23 @@ def test_updates_list_the_owned_installs_behind_the_published_build(src, env, ru
     assert calls(env) == []
 
 
-def test_updates_without_an_answer_list_nothing(src, env, run, monkeypatch):
-    fake_fetch(monkeypatch, src, {"https://content-system.gog.com/products/": src.SourceError("boom")})
+def test_updates_without_an_answer_list_nothing(web, src, env, run, monkeypatch):
+    fake_fetch(web, {"https://content-system.gog.com/products/": OSError("boom")})
     code, events, _ = run("update")
     assert code == 0 and events == [{"event": "done"}]
 
 
-def test_update_of_a_current_install_leaves_gogdl_alone(src, env, run, monkeypatch):
+def test_update_of_a_current_install_leaves_gogdl_alone(web, src, env, run, monkeypatch):
     write_info(env["scan"] / "Mini Metro", "1434554947", "1434554947", "Mini Metro", build="B2")
-    fake_fetch(monkeypatch, src, {"https://content-system.gog.com/products/": BUILDS})
+    fake_fetch(web, {"https://content-system.gog.com/products/": BUILDS})
     code, events, _ = run("update", "1434554947")
     assert code == 0 and events == [{"event": "done"}]
     assert calls(env) == []
 
 
-def test_update_brings_the_install_to_the_published_build(src, env, run, monkeypatch):
+def test_update_brings_the_install_to_the_published_build(web, src, env, run, monkeypatch):
     seed_cache(env)
-    seen = fake_fetch(monkeypatch, src, {"https://content-system.gog.com/products/": BUILDS})
+    seen = fake_fetch(web, {"https://content-system.gog.com/products/": BUILDS})
     code, events, _ = run("update", "1434554947")
     assert code == 0
     assert seen == [("https://content-system.gog.com/products/1434554947/os/windows/builds?generation=2", None)]
@@ -352,15 +341,15 @@ def test_update_brings_the_install_to_the_published_build(src, env, run, monkeyp
     assert calls(env)[0]["args"][2:] == ["update", "1434554947", "--platform", "windows", "--with-dlcs", "--path", str(env["scan"] / "Mini Metro")]
 
 
-def test_an_update_that_lands_another_build_fails(src, env, run, monkeypatch):
+def test_an_update_that_lands_another_build_fails(web, src, env, run, monkeypatch):
     monkeypatch.setenv("SHIM_BUILD", "B1")
-    fake_fetch(monkeypatch, src, {"https://content-system.gog.com/products/": BUILDS})
+    fake_fetch(web, {"https://content-system.gog.com/products/": BUILDS})
     code, events, _ = run("update", "1434554947")
     assert code == 1 and [e["event"] for e in events] == ["progress", "progress"]
 
 
-def test_update_refuses_a_game_not_installed_or_not_owned(src, env, run, monkeypatch):
-    fake_fetch(monkeypatch, src, {})
+def test_update_refuses_a_game_not_installed_or_not_owned(web, src, env, run, monkeypatch):
+    fake_fetch(web, {})
     code, events, _ = run("update", "42")
     assert code == 1 and events == []
     seed_cache(env, [{"id": 5, "title": "Other"}])
@@ -428,16 +417,15 @@ def achievement(key, unlocked=None, visible=True):
     }
 
 
-def fake_manifest(monkeypatch, src, manifest=MANIFEST):
-    monkeypatch.setattr(src, "fetch_bytes", lambda url: zlib.compress(json.dumps(manifest).encode()))
+def fake_manifest(web, manifest=MANIFEST):
+    web.answers["https://cdn/manifest"] = zlib.compress(json.dumps(manifest).encode())
 
 
-def test_achievements_page_through_the_games_client(src, env, run, monkeypatch):
-    fake_manifest(monkeypatch, src)
+def test_achievements_page_through_the_games_client(web, src, env, run, monkeypatch):
+    fake_manifest(web)
     base = src.ACHIEVEMENTS_URL.format(client="5010", user="4242")
     seen = fake_fetch(
-        monkeypatch,
-        src,
+        web,
         {
             f"{base}?page_token=p2": {"total_count": 3, "page_token": "", "items": [achievement("hidden", visible=False)]},
             base: {"total_count": 3, "page_token": "p2", "items": [achievement("first", "2024-05-01T20:11:04+0000"), achievement("second")]},
@@ -468,9 +456,9 @@ def test_achievements_page_through_the_games_client(src, env, run, monkeypatch):
     assert not any(u.startswith("https://content-system") for u, _ in seen), "the client id is kept"
 
 
-def test_achievements_of_a_game_without_a_client(src, env, run, monkeypatch):
-    fake_manifest(monkeypatch, src, {"baseProductId": "1"})
-    fake_fetch(monkeypatch, src, {"https://content-system.gog.com/": {"items": [{"link": "https://cdn/manifest"}]}})
+def test_achievements_of_a_game_without_a_client(web, src, env, run, monkeypatch):
+    fake_manifest(web, {"baseProductId": "1"})
+    fake_fetch(web, {"https://content-system.gog.com/": {"items": [{"link": "https://cdn/manifest"}]}})
     code, events, _ = run("achievements", "1")
     assert code == 1 and events == []
 
@@ -704,19 +692,23 @@ def test_post_process_refreshes_the_cache(src, hooks, capsys):
     assert hooks["ran"] == [["/nix/bin/universe", "achievements", "mini-metro", "--refresh", "--json"]]
 
 
-def test_umu_id_is_asked_once_and_a_failed_lookup_again(src, env, monkeypatch):
-    seen = fake_fetch(monkeypatch, src, {"https://umu.openwinecomponents.org/umu_api.php?store=gog&codename=20920": [{"title": "W2", "umu_id": "umu-20920"}]})
+def test_umu_id_is_asked_once_and_a_failed_lookup_again(web, src, env, monkeypatch):
+    seen = fake_fetch(web, {"https://umu.openwinecomponents.org/umu_api.php?store=gog&codename=20920": [{"title": "W2", "umu_id": "umu-20920"}]})
     assert src.umu_id("20920") == "umu-20920"
     assert src.umu_id("20920") == "umu-20920" and len(seen) == 1, "kept"
     assert src.umu_id("404") is None and src.umu_id("404") is None and len(seen) == 3, "no answer is not kept: asked again"
-    seen = fake_fetch(monkeypatch, src, {"https://umu.openwinecomponents.org": []})
-    assert src.umu_id("1") is None and src.umu_id("1") is None and len(seen) == 1, "an empty answer is kept"
+    web.answers.clear()
+    web.seen.clear()
+    fake_fetch(web, {"https://umu.openwinecomponents.org": []})
+    assert src.umu_id("1") is None and src.umu_id("1") is None and len(web.seen) == 1, "an empty answer is kept"
     week = src.UMU_MISS_TTL_S
     ids = json.loads((env["data"] / "umu.json").read_text())
     ids.update({"1": {"missed_at": time.time() - week - 60}, "2": "", "3": {"missed_at": time.time() - week + 60}})
     (env["data"] / "umu.json").write_text(json.dumps(ids))
-    seen = fake_fetch(monkeypatch, src, {"https://umu.openwinecomponents.org/umu_api.php?store=gog&codename=1": [{"umu_id": "umu-578330"}], "https://umu": []})
+    web.answers.clear()
+    web.seen.clear()
+    fake_fetch(web, {"https://umu.openwinecomponents.org/umu_api.php?store=gog&codename=1": [{"umu_id": "umu-578330"}], "https://umu": []})
     assert (src.umu_id("1"), src.umu_id("2"), src.umu_id("3")) == ("umu-578330", None, None)
-    assert [url for url, _ in seen] == [src.UMU_URL.format(id="1"), src.UMU_URL.format(id="2")], (
+    assert [url for url, _ in web.seen] == [src.UMU_URL.format(id="1"), src.UMU_URL.format(id="2")], (
         "an expired miss and an old empty one are asked again, a fresh one is not"
     )

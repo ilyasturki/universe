@@ -297,7 +297,7 @@ def test_pre_launch_falls_back_to_offline(src, env, capsys, monkeypatch):
     assert calls(env)[-1][-1] == "--offline"
 
 
-def test_pre_launch_points_proton_at_the_anticheat_runtime(src, env, capsys, monkeypatch):
+def test_pre_launch_points_proton_at_the_anticheat_runtime(web, src, env, capsys, monkeypatch):
     game_dir = env["tmp"] / "game"
     (game_dir / "EasyAntiCheat").mkdir(parents=True)
     tarball = io.BytesIO()
@@ -305,14 +305,8 @@ def test_pre_launch_points_proton_at_the_anticheat_runtime(src, env, capsys, mon
         info = tarfile.TarInfo("eac_runtime/v2/lib64/easyanticheat_x64.so")
         info.size = 2
         tar.addfile(info, io.BytesIO(b"so"))
-    fetched = []
-
-    def fetch(url):
-        fetched.append(url)
-        return [{"name": "eac_runtime", "url": "https://x/eac.tar.xz"}, {"name": "battleye_runtime", "url": "https://x/be.tar.xz"}]
-
-    monkeypatch.setattr(src, "fetch", fetch)
-    monkeypatch.setattr(src, "fetch_bytes", lambda url: tarball.getvalue())
+    web.answers[src.RUNTIMES_URL] = [{"name": "eac_runtime", "url": "https://x/eac.tar.xz"}, {"name": "battleye_runtime", "url": "https://x/be.tar.xz"}]
+    web.answers["https://x/eac.tar.xz"] = tarball.getvalue()
     env_file = hook_env(env, monkeypatch, game_dir=game_dir)
     assert src.main(["pre-launch"]) == 0
     runtime = env["data"] / "runtimes" / "eac_runtime" / "eac_runtime"
@@ -320,16 +314,16 @@ def test_pre_launch_points_proton_at_the_anticheat_runtime(src, env, capsys, mon
     assert (runtime / "v2" / "lib64" / "easyanticheat_x64.so").read_bytes() == b"so"
     assert "PROTON_BATTLEYE_RUNTIME" not in env_lines(env_file)
     src.main(["pre-launch"])
-    assert fetched == [src.RUNTIMES_URL], "fetched once, kept"
+    assert [url for url, _ in web.seen] == [src.RUNTIMES_URL, "https://x/eac.tar.xz"], "fetched once, kept"
 
 
-def test_an_empty_umu_answer_is_asked_again_once_a_week_old(src, env, monkeypatch):
-    asked = []
-    monkeypatch.setattr(src, "fetch", lambda url: asked.append(url) or [])
+def test_an_empty_umu_answer_is_asked_again_once_a_week_old(web, src, env):
+    web.answers["https://umu.openwinecomponents.org"] = []
     week = src.UMU_MISS_TTL_S
     (env["data"] / "umu.json").write_text(
         json.dumps({"Min": "umu-1145360", "Old": {"missed_at": time.time() - week - 60}, "Bare": "", "New": {"missed_at": time.time() - week + 60}})
     )
     assert [src.umu_id(app) for app in ("Min", "Old", "Bare", "New")] == ["umu-1145360", None, None, None]
+    asked = [url for url, _ in web.seen]
     assert asked == [src.UMU_URL.format(id="Old"), src.UMU_URL.format(id="Bare")], "an expired miss and an old empty answer are asked again"
-    assert src.umu_id("Old") is None and len(asked) == 2, "the new miss is kept"
+    assert src.umu_id("Old") is None and len(web.seen) == 2, "the new miss is kept"

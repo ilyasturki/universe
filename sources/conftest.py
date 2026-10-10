@@ -1,5 +1,6 @@
 import importlib.machinery
 import importlib.util
+import io
 import json
 import os
 import signal
@@ -10,12 +11,30 @@ import urllib.request
 import pytest
 
 
-@pytest.fixture(autouse=True)
-def offline(monkeypatch):
-    def refuse(*args, **kwargs):
-        raise OSError("no network in tests")
+class Web:
+    """The stores' side of urlopen: `answers` maps a URL prefix to a JSON value, bytes, an exception to raise or a function of
+    the URL giving one of those; any other URL is refused. `seen` keeps each request's URL and bearer token."""
 
-    monkeypatch.setattr(urllib.request, "urlopen", refuse)
+    def __init__(self):
+        self.answers, self.seen = {}, []
+
+    def __call__(self, request, timeout=None):
+        url = request.full_url
+        auth = request.get_header("Authorization") or ""
+        self.seen.append((url, auth.removeprefix("Bearer ") or None))
+        answer = next((a for prefix, a in self.answers.items() if url.startswith(prefix)), OSError(f"no network in tests: {url}"))
+        if callable(answer) and not isinstance(answer, BaseException):
+            answer = answer(url)
+        if isinstance(answer, BaseException):
+            raise answer
+        return io.BytesIO(answer if isinstance(answer, bytes) else json.dumps(answer).encode())
+
+
+@pytest.fixture(autouse=True)
+def web(monkeypatch):
+    web = Web()
+    monkeypatch.setattr(urllib.request, "urlopen", web)
+    return web
 
 
 @pytest.fixture

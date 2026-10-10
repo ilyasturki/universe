@@ -1,4 +1,5 @@
 import contextlib
+import email.message
 import json
 import os
 import shlex
@@ -9,6 +10,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.error
 from pathlib import Path
 
 import pytest
@@ -228,14 +230,13 @@ def save_key(env, steamid=STEAMID):
     (env["data"] / "key.json").write_text(json.dumps({"key": "A" * 32, "steamid": steamid}))
 
 
-def test_login_takes_a_key_for_the_account_steam_remembers(src, env, run, monkeypatch):
+def test_login_takes_a_key_for_the_account_steam_remembers(web, src, env, run, monkeypatch):
     code, events, _ = run("login", "not-a-key")
     assert code == 1 and events == []
-    asked = []
-    monkeypatch.setattr(src, "fetch", lambda url: asked.append(url) or {"response": {"game_count": 1, "games": [{"appid": 480, "name": "Spacewar"}]}})
+    web.answers["https://"] = {"response": {"game_count": 1, "games": [{"appid": 480, "name": "Spacewar"}]}}
     code, events, _ = run("login", " 0123456789abcdef0123456789ABCDEF ")
     assert code == 0 and events == [{"event": "logged_in", "user": "Yasso"}, {"event": "done"}]
-    assert f"steamid={STEAMID}" in asked[0], "the most recent sign-in, not the oldest"
+    assert f"steamid={STEAMID}" in web.seen[0][0], "the most recent sign-in, not the oldest"
     key = env["data"] / "key.json"
     assert json.loads(key.read_text()) == {"key": "0123456789abcdef0123456789ABCDEF", "steamid": STEAMID}
     assert stat.S_IMODE(key.stat().st_mode) == 0o600
@@ -243,11 +244,8 @@ def test_login_takes_a_key_for_the_account_steam_remembers(src, env, run, monkey
     assert events == [{"event": "logged_in", "user": "Yasso"}, {"event": "done"}]
 
 
-def test_a_refused_key_is_not_kept_and_another_accounts_key_is_not_used(src, env, run, monkeypatch):
-    def refuse(url):
-        raise src.HttpError("GET https://api.steampowered.com/...: HTTP 403", 403)
-
-    monkeypatch.setattr(src, "fetch", refuse)
+def test_a_refused_key_is_not_kept_and_another_accounts_key_is_not_used(web, src, env, run, monkeypatch):
+    web.answers["https://"] = lambda url: urllib.error.HTTPError(url, 403, "Forbidden", email.message.Message(), None)
     code, _, err = run("login", "A" * 32)
     assert code == 1 and "A" * 32 not in err, "no key in a log"
     assert not (env["data"] / "key.json").exists()
@@ -311,34 +309,31 @@ def test_a_windows_depot_picks_the_windows_program_and_steams_prefix(src, env, r
     assert {"prefix", "proton"}.isdisjoint(games(events)["48700"]), "off, the game gets a prefix of Universe's own"
 
 
-def test_library_lists_the_owned_games_with_the_installed_ones(src, env, run, monkeypatch):
+def test_library_lists_the_owned_games_with_the_installed_ones(web, src, env, run, monkeypatch):
     code, events, _ = run("library")
     assert code == 1 and events == [], "no key yet"
     save_key(env)
     owned = [{"appid": 620, "name": "Portal 2"}, {"appid": 480, "name": "Spacewar"}]
-    monkeypatch.setattr(src, "fetch", lambda url: {"response": {"game_count": 2, "games": owned}})
+    web.answers["https://"] = {"response": {"game_count": 2, "games": owned}}
     code, events, _ = run("library")
     assert code == 0 and [e["id"] for e in events[:-1]] == ["620", "480"]
     portal, spacewar = events[0], events[1]
     assert (portal["installed"], portal["owned"], portal["image"], portal["steam_appid"]) == (False, True, src.IMAGE_URL.format(id=620), 620)
     assert (spacewar["installed"], spacewar["exe"]) == (True, "SteamworksExample.exe")
-    monkeypatch.setattr(src, "fetch", lambda url: {"response": {}})
+    web.answers["https://"] = {"response": {}}
     code, events, _ = run("library")
     assert code == 0 and events == [{"event": "done"}], "a private profile lists nothing"
 
 
-def test_search_asks_the_store_and_falls_back_on_the_listed_library(src, env, run, monkeypatch):
+def test_search_asks_the_store_and_falls_back_on_the_listed_library(web, src, env, run, monkeypatch):
     (env["data"]).mkdir(exist_ok=True)
     (env["data"] / "library.json").write_text(json.dumps([{"id": "620", "title": "Portal 2"}, {"id": "400", "title": "Portal"}]))
     items = [{"type": "app", "id": 620, "name": "Portal 2"}, {"type": "app", "id": 1, "name": "Portal Knights"}, {"type": "sub", "id": 9, "name": "Bundle"}]
-    monkeypatch.setattr(src, "fetch", lambda url: {"total": 3, "items": items})
+    web.answers["https://"] = {"total": 3, "items": items}
     code, events, _ = run("search", "portal")
     assert code == 0 and [(e["id"], e["owned"]) for e in events[:-1]] == [("620", True), ("1", False)]
 
-    def down(url):
-        raise src.SourceError("GET https://store.steampowered.com/api/storesearch/: timed out")
-
-    monkeypatch.setattr(src, "fetch", down)
+    web.answers["https://"] = TimeoutError("timed out")
     code, events, _ = run("search", "portal")
     assert code == 0 and [e["id"] for e in events[:-1]] == ["620", "400"]
 
@@ -413,7 +408,7 @@ def test_updates_are_listed_and_one_is_waited_for(src, env, run, client):
     assert calls(env, "systemd-run") == [], "no URL asks for an update"
 
 
-def test_achievements_come_from_steams_stats_cache(src, env, run, monkeypatch):
+def test_achievements_come_from_steams_stats_cache(web, src, env, run, monkeypatch):
     stats = env["root"] / "appcache" / "stats"
     code, events, _ = run("achievements", "480")
     assert code == 0 and events == [{"event": "done"}], "no schema yet: nothing to list"
@@ -440,9 +435,7 @@ def test_achievements_come_from_steams_stats_cache(src, env, run, monkeypatch):
     (env["home"] / ".steam" / "registry.vdf").write_text(
         '"Registry"\n{\n"HKCU"\n{\n"Software"\n{\n"Valve"\n{\n"Steam"\n{\n"language"\t"french"\n}\n}\n}\n}\n}\n'
     )
-    monkeypatch.setattr(
-        src, "fetch", lambda url: {"achievementpercentages": {"achievements": [{"name": "WIN", "percent": "51.5"}, {"name": "LAST", "percent": 2}]}}
-    )
+    web.answers["https://"] = {"achievementpercentages": {"achievements": [{"name": "WIN", "percent": "51.5"}, {"name": "LAST", "percent": 2}]}}
     code, events, _ = run("achievements", "480")
     assert code == 0
     win, secret, last = events[:3]
