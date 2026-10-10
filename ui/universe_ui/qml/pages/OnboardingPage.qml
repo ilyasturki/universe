@@ -195,6 +195,13 @@ FocusScope {
         function onStepChanged() {
             Qt.callLater(page.settle);
         }
+        // Nothing left to do on the step, the last row taken by an import: Continue takes the focus.
+        function onIdleChanged() {
+            if (page.form.idle && cards.activeFocus) {
+                nav.index = 1;
+                nav.forceActiveFocus();
+            }
+        }
     }
 
     Connections {
