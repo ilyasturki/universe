@@ -158,6 +158,8 @@ Modal {
             return;
         if (api.keys.isAccept(event))
             panel.press();
+        else if (api.keys.isCancel(event) && text === "")
+            cancel();
         else if (api.keys.isCancel(event)) {
             Sound.play("type");
             backspace();

@@ -59,7 +59,8 @@ agent's question waiting on the user (`id`, `kind` — `confirm`, `authorize`, `
 `answer(yes)` or `answerText(value)`, and null again once answered or withdrawn. Each look's theme
 puts it up over whatever page shows; a question that comes while a game holds the screen is refused
 with a notice instead. The text sheets take `secret` (the Universe look's `prompt(…, "secret")`, the consoles'
-`{secret: true}`): the password shows as dots until Start (the Universe look) or R shows it. `--fake` plays
+`{secret: true}`): the password shows as dots until Start (the Universe look) or R shows it. On the consoles' sheets
+B takes a letter back and, on an empty field, closes the sheet as X does. `--fake` plays
 both from `fake_radios.py`: `UNIVERSE_FAKE_NETWORK=offline` starts off every network (the first-run
 setup then opens on "Connect to the internet"), `none` has no NetworkManager,
 `UNIVERSE_FAKE_BLUETOOTH=none` no adapter; every fixture network takes `hunter22`.

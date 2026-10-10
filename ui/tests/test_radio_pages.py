@@ -68,6 +68,12 @@ def test_a_refused_password_asks_for_it_again(look, api, fake):
     look.press(Qt.Key.Key_Return)
     sheet = sheet_open(look, True)
     assert read(sheet, "text") == "", "Try Again starts on an empty field"
+    if look.stacked:
+        sheet.setProperty("text", "x")
+        look.press(Qt.Key.Key_Escape)
+        assert read(sheet, "text") == "" and sheet.property("open") is True, "B takes a letter back"
+        look.press(Qt.Key.Key_Escape)
+        until(lambda: sheet.property("open") is False, "B on an empty field closes the keyboard")
 
 
 def test_a_saved_network_joins_as_saved_and_the_joined_one_forgets_after_asking(look, api, fake):
