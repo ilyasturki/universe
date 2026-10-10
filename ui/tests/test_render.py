@@ -567,12 +567,12 @@ def test_the_reprise_bar_holds_the_library_and_power(look, api):
     bar = look.find("tabBar")
     look.home()
     look.press(Qt.Key.Key_E)
-    page = look.page("libraryPage")
+    look.page("libraryPage")
     assert root.property("tabIndex") == root.property("libraryTab") and bar.property("currentIndex") == root.property("libraryTab"), "a tab of its own, lit"
     look.press(Qt.Key.Key_Up)
     until(lambda: bar.property("activeFocus") is True)
-    while not bar.property("onPower"):
-        look.press(Qt.Key.Key_Right)
+    look.press(Qt.Key.Key_Right, bar.property("powerIndex") - bar.property("index"))
+    assert bar.property("onPower") is True
     look.press(Qt.Key.Key_Return)
     until(lambda: confirm.property("open") is True and read(confirm, "items")[0]["action"] == "quit", "the bar's power button asks Power")
     look.press(Qt.Key.Key_Escape)
