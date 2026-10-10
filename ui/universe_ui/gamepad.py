@@ -270,6 +270,8 @@ class GamepadThread(QThread):
         sdl2.SDL_SetHint(sdl2.SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, b"1")
         # The pads are read through evdev, as the watcher reads them: its mapping then names the same buttons.
         sdl2.SDL_SetHint(sdl2.SDL_HINT_JOYSTICK_HIDAPI, b"0")
+        # The watcher's mapping already puts A on the button printed A; sdl2-compat would swap a Nintendo pad's A and B again.
+        sdl2.SDL_SetHint(b"SDL_GAMECONTROLLER_USE_BUTTON_LABELS", b"0")
         if sdl2.SDL_Init(sdl2.SDL_INIT_GAMECONTROLLER | sdl2.SDL_INIT_JOYSTICK) != 0:
             log.warning("no gamepad support: %s", sdl2.SDL_GetError())
             return
