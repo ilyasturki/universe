@@ -72,6 +72,8 @@ const START_WAIT: Duration = Duration::from_secs(30);
 const STOP_WAIT: Duration = Duration::from_secs(10);
 /// The slowest clean quit seen on a real machine took 3.5 s (Eden saving its caches); a game still there after this is hung, or showing a "quit?" prompt.
 pub const QUIT_GRACE: Duration = Duration::from_secs(5);
+/// Eden SIGTERMed 12 ms after a thaw segfaulted in a GPU thread still catching up on the freeze, 3 quits of 3: a thawed game runs this long first.
+const SETTLE: Duration = Duration::from_millis(300);
 const TERM_AGAIN: Duration = Duration::from_secs(3);
 const STOP_POLL: Duration = Duration::from_millis(100);
 
@@ -264,9 +266,14 @@ impl Units {
     pub async fn stop(&self, unit: &str, term_twice: bool, grace: Duration) -> Result<()> {
         match self {
             Units::Systemd(sd) => {
+                let cg = self.cgroup(unit).await;
+                let frozen = cg.as_deref().is_some_and(|cg| std::fs::read_to_string(cgroup_dir(cg).join("cgroup.freeze")).is_ok_and(|s| s.trim() == "1"));
                 // systemd 260 drops the stop job of a frozen unit ("Cannot stop frozen unit") and reports success.
                 let _ = sd.manager().await?.call::<_, _, ()>("ThawUnit", &(qualified(unit).as_str(),)).await;
-                if let Some(cg) = self.cgroup(unit).await {
+                if frozen {
+                    tokio::time::sleep(SETTLE).await;
+                }
+                if let Some(cg) = cg {
                     let first = tokio::time::Instant::now();
                     let mut termed: Option<tokio::time::Instant> = None;
                     loop {
@@ -379,7 +386,7 @@ impl Units {
             Units::Systemd(_) => {
                 let Some(cg) = self.cgroup(unit).await else { return false };
                 let name = &program.as_bytes()[..program.len().min(15)];
-                let procs = std::fs::read_to_string(PathBuf::from("/sys/fs/cgroup").join(cg.trim_start_matches('/')).join("cgroup.procs")).unwrap_or_default();
+                let procs = std::fs::read_to_string(cgroup_dir(&cg).join("cgroup.procs")).unwrap_or_default();
                 procs.lines().any(|pid| std::fs::read(format!("/proc/{}/comm", pid.trim())).is_ok_and(|c| c.strip_suffix(b"\n").unwrap_or(&c) == name))
             }
             #[cfg(test)]
@@ -444,9 +451,12 @@ struct Proc {
     argv: Vec<String>,
 }
 
+fn cgroup_dir(cgroup: &str) -> PathBuf {
+    PathBuf::from("/sys/fs/cgroup").join(cgroup.trim_start_matches('/'))
+}
+
 fn cgroup_procs(cgroup: &str) -> Vec<Proc> {
-    let path = PathBuf::from("/sys/fs/cgroup").join(cgroup.trim_start_matches('/')).join("cgroup.procs");
-    let pids = std::fs::read_to_string(path).unwrap_or_default();
+    let pids = std::fs::read_to_string(cgroup_dir(cgroup).join("cgroup.procs")).unwrap_or_default();
     pids.lines()
         .filter_map(|l| l.trim().parse::<u32>().ok())
         .filter_map(|pid| {
@@ -877,6 +887,33 @@ while True:
     time.sleep(1)
 "#;
 
+    /// A worker thread that finds itself late catches up on the time it missed, and SIGTERM's shutdown tears down what it writes to: exit 70 when the two meet.
+    const CATCHES_UP: &str = r#"
+import os, signal, threading, time
+torn = False
+def worker():
+    last = time.monotonic()
+    while True:
+        time.sleep(0.005)
+        if time.monotonic() - last > 0.15:
+            end = time.monotonic() + 0.05
+            while time.monotonic() < end:
+                if torn:
+                    os._exit(70)
+                time.sleep(0.002)
+        last = time.monotonic()
+def term(*_):
+    global torn
+    torn = True
+    time.sleep(0.15)
+    os._exit(0)
+signal.signal(signal.SIGTERM, term)
+threading.Thread(target=worker, daemon=True).start()
+print("ready", flush=True)
+while True:
+    time.sleep(1)
+"#;
+
     /// The stand-in started in `cgroup` and ready; its exit status once a task reaps it, as the manager would.
     async fn game(cgroup: &Cgroup, script: &str) -> (tokio::task::JoinHandle<std::process::ExitStatus>, Lines<BufReader<ChildStdout>>) {
         let mut cmd = tokio::process::Command::new("python3");
@@ -902,5 +939,28 @@ while True:
         assert_eq!(exit.await.unwrap().signal(), Some(rustix::process::Signal::KILL.as_raw()));
         assert!(took >= grace && took < grace + Duration::from_secs(1), "{took:?}");
         assert!(!cgroup.populated());
+    }
+
+    #[tokio::test]
+    async fn a_frozen_game_runs_a_moment_before_its_sigterm() {
+        let freeze = Duration::from_millis(300);
+        let hazard = Cgroup::new();
+        let (exit, _) = game(&hazard, CATCHES_UP).await;
+        let pid = rustix::process::Pid::from_raw(hazard.pids()[0] as i32).unwrap();
+        hazard.freeze(true).await;
+        tokio::time::sleep(freeze).await;
+        hazard.freeze(false).await;
+        rustix::process::kill_process(pid, rustix::process::Signal::TERM).unwrap();
+        assert_eq!(exit.await.unwrap().code(), Some(70), "a SIGTERM right behind the thaw meets the catch-up");
+
+        let bus = Bus::start();
+        let cgroup = Arc::new(Cgroup::new());
+        let _manager = Manager::serve(&bus, UNIT, cgroup.clone()).await;
+        let (exit, _) = game(&cgroup, CATCHES_UP).await;
+        let units = Units::Systemd(Systemd::on(bus.connect().await));
+        units.freeze(UNIT, true).await.unwrap();
+        tokio::time::sleep(freeze).await;
+        units.stop(UNIT, false, QUIT_GRACE).await.unwrap();
+        assert_eq!(exit.await.unwrap().code(), Some(0));
     }
 }
