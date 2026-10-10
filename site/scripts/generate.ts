@@ -62,25 +62,24 @@ function missing(logger: AstroIntegrationLogger, what: string, how: string): str
 
 /** Outside code, `<id>` would render as an unknown HTML tag and disappear. */
 function escapeTags(markdown: string): string {
+    const blocks: { code: boolean; lines: string[] }[] = [];
     let fence = '';
-    return markdown
-        .split('\n')
-        .map((line) => {
-            const opener = /^\s*(`{3,}|~{3,})/.exec(line)?.[1];
-            if (fence) {
-                if (opener?.startsWith(fence)) fence = '';
-                return line;
-            }
-            if (opener) {
-                fence = opener;
-                return line;
-            }
-            return line
-                .split(/(`+[^`]*`+)/)
-                .map((part, i) => (i % 2 ? part : part.replace(/<(?!!--|https?:|mailto:)(?=[A-Za-z/])/g, '&lt;')))
-                .join('');
-        })
-        .join('\n');
+    for (const line of markdown.split('\n')) {
+        const opener = /^\s*(`{3,}|~{3,})/.exec(line)?.[1];
+        const code = Boolean(fence || opener);
+        if (fence && opener?.startsWith(fence)) fence = '';
+        else if (!fence && opener) fence = opener;
+        const last = blocks.at(-1);
+        if (last && last.code === code && (code || line.trim())) last.lines.push(line);
+        else blocks.push({ code, lines: [line] });
+    }
+    // A code span can wrap across the lines of its paragraph, so spans are matched paragraph by paragraph.
+    const escape = (text: string) =>
+        text
+            .split(/((`+)[\s\S]*?\2)/)
+            .map((part, i) => (i % 3 === 0 ? part.replace(/<(?!!--|https?:|mailto:)(?=[A-Za-z/])/g, '&lt;') : i % 3 === 1 ? part : ''))
+            .join('');
+    return blocks.map((b) => (b.code ? b.lines.join('\n') : escape(b.lines.join('\n')))).join('\n');
 }
 
 function rewriteLinks(markdown: string, from: string): string {
