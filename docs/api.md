@@ -1518,7 +1518,7 @@ only on the games `applies.runner_kinds` names by their runner's kind (`emulator
 whose `platforms` holds its platform; an empty list takes every game. A source's game-scope setting
 follows its own `runners` and `platforms` the same way. A setting hidden by its `runners` or
 `platforms` keeps its value and still reaches the hooks. `applies` also decides which games the
-module serves at all: its hooks (pre-launch to post-process, freeze, thaw, screenshot) run
+module serves at all: its hooks (pre-launch to post-process, freeze, thaw, reconnect, screenshot) run
 only for a game of a kind it names, and only those games list it in `effective.modules` (`universe
 info`, `UNIVERSE_GAME_JSON`).
 `label` names the setting in a few words; `description`, empty when the manifest gives none, says what it
@@ -1641,7 +1641,7 @@ written as `<key>.<name>` (`entry_key`), `""` removing it.
 
 | Rust | Python | CLI | Role |
 |---|---|---|---|
-| `controller_state()` | `controller_state()` | `universe controller ls` | `{enabled, hold_ms, volume_step (a percent, number), home_summons, families: [{id, name, slots: [{id, label, codes, extra}]}], macros: [Macro], presets: [{id, label, hold_only}]}`; the CLI adds `devices`, the pads readable now with every slot's code or `bound: false` |
+| `controller_state()` | `controller_state()` | `universe controller ls` | `{enabled, hold_ms, volume_step (a percent, number), home_summons, layout: {family: positional or xbox}, families: [{id, name, slots: [{id, label, codes, extra}]}], macros: [Macro], presets: [{id, label, hold_only}]}` (`layout` is `[controller.layout]`); the CLI adds `devices`, the pads readable now with every slot's code or `bound: false` |
 | `controller_pads()` | `controller_pads()` | — | the `devices` list alone, in the shape `watch` announces; for a frontend whose watcher waits on the lock |
 | `controller_reconnect(id)` | `controller_reconnect(id)` | `universe controller reconnect [id\|all]` | `[{id, name, bus, outcome}]` for the pad `id` (every pad for `all` or empty; an id no pad has is `NotFound`): a Bluetooth pad (its device `address`) is disconnected through BlueZ, then connected again for up to 5 s — `back`, or `asleep` when it switched itself off and waits for its PS or HOME button; a pad on a cable is `cable` (re-plugging one in software needs root: pull it out and back); `failed` when BlueZ cannot be asked. Then the running game's modules' `reconnect` hooks run, as `freeze` does |
 | `set_controller_macro(macro)` | same | `universe controller bind <family> <button> <press\|hold> <action> [--keys K] [--command C]` | validates, replaces the macro with the same family, button and trigger |
