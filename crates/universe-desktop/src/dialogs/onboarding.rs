@@ -764,7 +764,11 @@ fn data_page(this: &Rc<Onboarding>) -> adw::NavigationPage {
     let home = universe::paths::home().to_string_lossy().to_string();
     let folders = adw::PreferencesGroup::builder().title(gettext("Folders")).build();
     for (key, title, why) in [
-        ("prefixes_root", gettext("Wine Prefixes"), gettext("Prefixes already elsewhere stay put; each game's page can move one here")),
+        (
+            "prefixes_root",
+            gettext("Windows Game Folders"),
+            gettext("Each Windows game runs in a folder of its own. Folders already elsewhere stay put; each game's page can move one here"),
+        ),
         ("saves_root", gettext("Save Backups"), gettext("ludusavi keeps the last backups of each game here")),
     ] {
         let dir = config["paths"][key].as_str().unwrap_or_default().to_string();
@@ -817,7 +821,7 @@ fn data_page(this: &Rc<Onboarding>) -> adw::NavigationPage {
         &gettext("Game Data"),
         None,
         &gettext("Where Game Data Goes"),
-        &gettext("New Windows games get their prefix here, and every game's saves are backed up here."),
+        &gettext("New Windows games get their own folder here, and every game's saves are backed up here."),
         content.upcast_ref(),
         &gettext("_Continue"),
         move || {

@@ -31,7 +31,7 @@ SUBTITLES = {
     "found": "Games other launchers installed here. Adding them moves nothing.",
     "stores": "Sign in to see and install the games you own.",
     "install": "New installs go here. Games already installed stay where they are.",
-    "data": "New Windows games get their prefix here, and every game's saves are backed up here.",
+    "data": "New Windows games get their own folder here, and every game's saves are backed up here.",
     "preferences": "Both can be changed later in Settings.",
     "done": "Everything here can be changed later in Settings.",
 }
@@ -41,7 +41,11 @@ DONE_HOME_MANAGER = "Settings come from home-manager on this machine."
 DONE_READ_ONLY = "config.toml is read-only here, so settings stay as they are."
 HDR_DETAIL = "Games that support HDR send it to an HDR screen."
 DATA_ROWS = (
-    ("paths.prefixes_root", "Wine prefixes", "Prefixes already elsewhere stay put; each game's Data page can move one here."),
+    (
+        "paths.prefixes_root",
+        "Windows game folders",
+        "Each Windows game runs in a folder of its own. Folders already elsewhere stay put; a game's Data and saves page can move one here.",
+    ),
     ("paths.saves_root", "Save backups", "ludusavi keeps the last backups of each game here."),
 )
 AUTO_DETAIL = "A backup of the game's saves each time a session ends."
