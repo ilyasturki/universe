@@ -285,8 +285,12 @@ FocusScope {
         go(best);
     }
 
+    // Set while the page hands over another section's rows and groups, two bindings that land one after the other: the
+    // cursor waits for both instead of landing on a layout of one with the other.
+    property bool swapping: false
+
     onLayoutChanged: {
-        if (!stopOf(index))
+        if (!swapping && !stopOf(index))
             reset();
         view.scrollToCurrent();
     }

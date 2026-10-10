@@ -776,6 +776,19 @@ def test_the_folder_sheet_follows_the_chip_past_the_screen_edge(look, tmp_path, 
 
 
 @reprise
+def test_a_section_switch_lights_no_row_where_the_cursor_was(look, api):
+    page = look.settings("sources")
+    cards = page.findChild(QObject, "settingsCards")
+    until(lambda: len(content_rows(page)) > 3)
+    cards.setProperty("index", 3)
+    page.setProperty("section", call(page, "sectionIndex", "install"))
+    rows = content_rows(page)
+    first = call(cards, "firstStop")["row"]
+    assert cards.property("index") in (-1, first), "the new section's rows never show the cursor where the old one had it"
+    until(lambda: cards.property("index") == first and len(rows) > first, "then it lands on the first row")
+
+
+@reprise
 def test_reprise_about_shows_the_build(look, fake):
     page = look.settings("quit")
     until(lambda: page.property("sectionId") == "about", "Quit lives in About now")

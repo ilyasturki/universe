@@ -1586,11 +1586,15 @@ FocusScope {
     onSectionChanged: {
         pickedId = sections[section].id;
         var mainHad = !side.activeFocus;
+        // No row lit until the new rows and groups are both in.
+        cards.swapping = true;
+        cards.index = -1;
         launch.showAdvanced = false;
         controller.showAdvanced = false;
         // `sectionId` still names the section left.
         refresh(sections[section].id);
         Qt.callLater(function () {
+            cards.swapping = false;
             cards.reset();
             if (mainHad)
                 page.focusMain();
