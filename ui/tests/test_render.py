@@ -103,11 +103,11 @@ def test_the_intro_plays_then_leaves_home_the_focus_and_no_press(fake, tmp_path,
 @reprise
 def test_the_media_tab_and_the_screenshots_page(look, api):
     root = look.root
-    root.goToTab(1)
+    root.goToTab(root.property("mediaTab"))
     page = look.page("mediaPage")
     until(lambda: not api.screens.media.loading and read(page, "rows"))
     rows = read(page, "rows")
-    assert root.property("tabIndex") == 1 and read(page, "current")["kind"] in ("shot", "recording", "journal")
+    assert root.property("tabIndex") == root.property("mediaTab") and read(page, "current")["kind"] in ("shot", "recording", "journal")
     assert {r["kind"] for r in rows} == {"shot", "recording", "journal"}, "one grid, every kind, no filter"
     for i, r in enumerate(rows):
         page.setProperty("index", i)
@@ -558,6 +558,25 @@ def test_the_reprise_game_page_holds_the_games_tools_and_the_hero_its_page_and_m
     page.setProperty("actionIndex", read(page, "pills").index("achievements"))
     look.press(Qt.Key.Key_Return)
     look.page("achievementsPage")
+
+
+@reprise
+def test_the_reprise_bar_holds_the_library_and_power(look, api):
+    root = look.root
+    confirm = look.find("confirm")
+    bar = look.find("tabBar")
+    look.home()
+    look.press(Qt.Key.Key_E)
+    page = look.page("libraryPage")
+    assert root.property("tabIndex") == root.property("libraryTab") and bar.property("currentIndex") == root.property("libraryTab"), "a tab of its own, lit"
+    look.press(Qt.Key.Key_Up)
+    until(lambda: bar.property("activeFocus") is True)
+    while not bar.property("onPower"):
+        look.press(Qt.Key.Key_Right)
+    look.press(Qt.Key.Key_Return)
+    until(lambda: confirm.property("open") is True and read(confirm, "items")[0]["action"] == "quit", "the bar's power button asks Power")
+    look.press(Qt.Key.Key_Escape)
+    until(lambda: confirm.property("open") is False and bar.property("activeFocus") is True, "Stay leaves the focus on the bar")
 
 
 def library(look):

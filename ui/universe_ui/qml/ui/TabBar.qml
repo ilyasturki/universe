@@ -7,12 +7,14 @@ FocusScope {
 
     property var tabs: []
     property int currentIndex: 0
-    // Runs one past the tabs: the last slot is the search glass.
+    // Runs past the tabs: the search glass, the power button, then the running game's badge.
     property int index: 0
 
     readonly property int searchIndex: tabs.length
     readonly property bool onSearch: index === searchIndex
-    readonly property int badgeIndex: searchIndex + 1
+    readonly property int powerIndex: searchIndex + 1
+    readonly property bool onPower: index === powerIndex
+    readonly property int badgeIndex: powerIndex + 1
     readonly property bool onBadge: badge.active && index === badgeIndex
     readonly property int slots: badgeIndex + (badge.active ? 1 : 0)
     readonly property var currentGame: onBadge ? api.allGames.byId(badge.session.id) : null
@@ -20,6 +22,7 @@ FocusScope {
 
     signal tabRequested(int index)
     signal searchRequested
+    signal powerRequested
     signal resumeRequested
     signal menuRequested(var game, Item anchor)
     signal entered
@@ -53,7 +56,7 @@ FocusScope {
     ] : [
         {
             glyph: "A",
-            label: onSearch ? "Search" : "Open"
+            label: onSearch ? "Search" : onPower ? "Power" : "Open"
         },
         {
             glyph: "B",
@@ -114,9 +117,11 @@ FocusScope {
                 root.resumeRequested();
             else if (root.onSearch)
                 root.searchRequested();
+            else if (root.onPower)
+                root.powerRequested();
             else {
                 Sound.panel();
-                // The lit tab may stand for a page past the bar (the Library): A lands on the tab itself.
+                // A tab the mouse pointed to is not open yet.
                 root.tabRequested(root.index);
                 root.entered();
             }
@@ -134,17 +139,64 @@ FocusScope {
         }
     }
 
+    // A glyph that says what it is while the frame is on it.
+    component GlyphSlot: Item {
+        id: slot
+
+        property string kind: ""
+        property string label: ""
+        property bool lit: false
+
+        signal picked
+
+        anchors.verticalCenter: parent.verticalCenter
+        width: content.width
+        height: content.height
+        onWidthChanged: frame.retarget()
+
+        Row {
+            id: content
+
+            spacing: slot.lit ? Theme.dp(12) : 0
+
+            MenuGlyph {
+                anchors.verticalCenter: parent.verticalCenter
+                width: Theme.dp(26)
+                height: Theme.dp(26)
+                kind: slot.kind
+                tint: slot.lit ? Theme.text : Theme.textTab
+            }
+
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: slot.lit
+                text: slot.label
+                color: Theme.text
+                font.family: Theme.sans
+                font.weight: Font.DemiBold
+                font.pixelSize: Theme.dp(22)
+            }
+        }
+
+        Pointer {
+            anchors.margins: -Theme.dp(12)
+            direct: true
+            radius: height / 2
+            onPicked: slot.picked()
+        }
+    }
+
     Item {
         id: frame
 
         // itemAt() is not a binding source, so the slot is picked by hand.
         property Item target: null
         readonly property Item pane: root.index < root.searchIndex ? labels : rightSide
-        readonly property real padX: root.onBadge ? 0 : root.onSearch ? padY : Theme.dp(20)
+        readonly property real padX: root.onBadge ? 0 : root.index >= root.searchIndex ? padY : Theme.dp(20)
         readonly property real padY: root.onBadge ? 0 : Theme.dp(10)
 
         function retarget() {
-            target = root.index < root.searchIndex ? tabRepeater.itemAt(root.index) : root.onBadge ? badge : glass;
+            target = root.index < root.searchIndex ? tabRepeater.itemAt(root.index) : root.onBadge ? badge : root.onPower ? power : search;
         }
 
         x: target ? pane.x + target.x - padX : 0
@@ -304,23 +356,21 @@ FocusScope {
         anchors.verticalCenter: parent.verticalCenter
         spacing: Theme.dp(34)
 
-        MenuGlyph {
-            id: glass
-
-            onWidthChanged: frame.retarget()
-
-            anchors.verticalCenter: parent.verticalCenter
-            width: Theme.dp(26)
-            height: Theme.dp(26)
+        GlyphSlot {
+            id: search
             kind: "search"
-            tint: root.activeFocus && root.onSearch ? Theme.text : Theme.textTab
+            label: "Search"
+            lit: root.activeFocus && root.onSearch
+            onPicked: root.pointTo(root.searchIndex)
+        }
 
-            Pointer {
-                anchors.margins: -Theme.dp(12)
-                direct: true
-                radius: height / 2
-                onPicked: root.pointTo(root.searchIndex)
-            }
+        GlyphSlot {
+            id: power
+            objectName: "powerButton"
+            kind: "power"
+            label: "Power"
+            lit: root.activeFocus && root.onPower
+            onPicked: root.pointTo(root.powerIndex)
         }
 
         SessionBadge {

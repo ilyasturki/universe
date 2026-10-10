@@ -87,11 +87,14 @@ FocusScope {
         }
     }
 
-    // The bar shows the first barCount; the Library sits past them, opened from Home and lit as Home.
     readonly property var tabs: [
         {
             name: "Home",
             source: "pages/HomePage.qml"
+        },
+        {
+            name: "Library",
+            source: "pages/LibraryPage.qml"
         },
         {
             name: "Media",
@@ -100,15 +103,11 @@ FocusScope {
         {
             name: "Settings",
             source: "pages/SettingsPage.qml"
-        },
-        {
-            name: "Library",
-            source: "pages/LibraryPage.qml"
         }
     ]
-    readonly property int barCount: 3
-    readonly property int settingsTab: 2
-    readonly property int libraryTab: 3
+    readonly property int libraryTab: 1
+    readonly property int mediaTab: 2
+    readonly property int settingsTab: 3
     property int tabIndex: 0
     property bool detailOpen: false
     property var detailGame: null
@@ -158,8 +157,7 @@ FocusScope {
     }
 
     function stepTab(step) {
-        var from = tabIndex < barCount ? tabIndex : 0;
-        goToTab((from + step + barCount) % barCount);
+        goToTab((tabIndex + step + tabs.length) % tabs.length);
     }
 
     function openLibrary() {
@@ -890,13 +888,14 @@ FocusScope {
 
         TabBar {
             id: tabBar
+            objectName: "tabBar"
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
-            tabs: root.tabs.slice(0, root.barCount).map(function (t) {
+            tabs: root.tabs.map(function (t) {
                 return t.name;
             })
-            currentIndex: root.tabIndex < root.barCount ? root.tabIndex : 0
+            currentIndex: root.tabIndex
             focus: root.focusOwner === "chrome"
             opacity: root.chromeReveal
 
@@ -904,6 +903,7 @@ FocusScope {
                 root.goToTab(index);
             }
             onSearchRequested: root.openSearch()
+            onPowerRequested: root.askPower()
             onResumeRequested: root.resumeSession()
             onMenuRequested: function (game, anchor) {
                 root.openMenu(game, anchor);
