@@ -452,9 +452,16 @@ impl Core {
                 self.run_verb(&m, "uninstall", std::slice::from_ref(&r.game.source.id), None).await?;
             }
             None => {
-                let dir = paths::expand(&r.game.source.dir);
+                let mut dir = paths::expand(&r.game.source.dir);
                 if r.game.source.dir.is_empty() || !dir.is_dir() {
                     return Err(Error::Invalid(format!("{id} has no install folder")));
+                }
+                // A Lutris import from before the manifest was looked for above the exe holds the exe's folder, not the install's.
+                if r.game.extra.contains_key("lutris") {
+                    let stops: Vec<PathBuf> = [&r.game.launch.prefix].into_iter().filter(|p| !p.is_empty()).map(|p| paths::expand(p)).collect();
+                    if let Some((root, _)) = crate::lutris::find_gog_manifest(&dir, &stops) {
+                        dir = root;
+                    }
                 }
                 let roots = self.install_roots().await;
                 if let Some(why) = trash_refusal(&dir, &self.games.read().await, &roots, &[id]) {
@@ -3086,11 +3093,23 @@ uninstall) echo '{{"event":"window","class":"steam","title":""}}'; echo "$2" >> 
         let g = core.get("one").await.unwrap().game;
         assert_eq!((g.source.dir.as_str(), g.launch.exe.as_str()), ("", ""), "not installed any more");
         std::fs::write(&manifest, "api = 2\nid = \"fake\"\nname = \"Fake\"\nexe = \"run\"\n").unwrap();
+        let three = dir.path().join("g/Three");
+        let bin = three.join("Binaries/Win32");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::write(three.join("goggame-3.info"), r#"{"gameId":"3","rootGameId":"3","name":"Three"}"#).unwrap();
+        let mut imported = Game::new("Three");
+        imported.source.kind = "lutris".into();
+        imported.source.dir = bin.to_string_lossy().into();
+        imported.launch.exe = bin.join("three.exe").to_string_lossy().into();
+        imported.extra.insert("lutris".into(), toml::Value::Table(toml::Table::from_iter([("slug".to_string(), toml::Value::from("three"))])));
+        imported.save().unwrap();
         let core = open().await;
         assert_eq!(core.uninstall_via("two").await.unwrap(), None);
         core.uninstall("two").await.unwrap();
         assert!(!two.exists(), "without the capability the folder goes to the trash");
         assert_eq!(std::fs::read_to_string(&asked).unwrap(), "1\n");
+        core.uninstall("three").await.unwrap();
+        assert!(!three.exists(), "an old Lutris import's install is its GOG folder, not its exe's");
     }
 
     #[tokio::test]
