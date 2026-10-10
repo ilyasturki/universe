@@ -440,6 +440,9 @@ impl Core {
             c.source_adopt(&source, &game_id, p.as_deref_mut()).await
         })
     }
+    fn trash(&self, py: Python<'_>, source: String, game_id: String) -> PyResult<String> {
+        self.run(py, |c| async move { c.source_trash(&source, &game_id).await })
+    }
     fn cancel(&self, source: String, game_id: String) -> bool {
         self.core.source_cancel(&source, &game_id)
     }

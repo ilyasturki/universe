@@ -762,7 +762,8 @@ a stopped download (the same call: the source continues over its folder) or upda
 row the library lacks (`game_id` empty, `status` "Not in the library", `action` "Add to library")
 takes `adopt(index)`: an `adopt` job (`source_adopt`), which brings that one game in and no other,
 then a toast once the reload shows the row linked. The first run's adoption and Universe Desktop's
-Find Installed Games stay the store's whole `scan`.
+Find Installed Games stay the store's whole `scan`. `trash(index)` sends such a row's folder to the
+trash (`source_trash`), off the network; the core's refusal is the toast.
 While an install or update runs
 `job` is `{id, game, title, label, message, done, total, ok, cancelled}`, `done`/`total` in bytes and
 `message` the live line ("Installing X · 42% · 3.4 GB of 8.2 GB"); the rows are rebuilt at its start
@@ -1489,8 +1490,9 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
 - **Stores**: the Store page's switcher lists the signed-in stores, each with its label and icon in
   the library; it hides with one, and the search names the store it asks ("Search GOG"). Each row
   shows its verb — Play for a game installed and in the library, Resume, Install, Update — with a
-  menu beside it (an installed game the library lacks: Add to Library, an add job; one it holds:
-  Uninstall…), and Refresh is the header's button. The first run adopts what `discover()` finds through the store a launcher's `via`
+  menu beside it (an installed game the library lacks: Add to Library, an add job, and Delete
+  Files…, which names the folder and asks first; one it holds: Uninstall…), and Refresh is the
+  header's button. The first run adopts what `discover()` finds through the store a launcher's `via`
   names, turning it on when it is off; one that found nothing while signed out is listed on the
   stores step, and adopted again once its sign-in succeeds.
 - **Search provider**: `org.gnome.Shell.SearchProvider2` at

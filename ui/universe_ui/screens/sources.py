@@ -322,6 +322,22 @@ class SourcesBrowser(AsyncScreen):
 
         self._run(lambda: self._client.uninstall(game_id), done)
 
+    @Slot(int)
+    def trash(self, index):
+        """An install the library lacks: its folder to the trash, unless the core finds a game living in it."""
+        if not (0 <= index < len(self._rows)):
+            return
+        row = self._rows[index]
+        if not row["installed"] or row["game_id"]:
+            return
+        source, game_id, title = self._source, row["id"], row["title"]
+
+        def done(path, error):
+            self.message.emit(error or f"{title}'s files are in the trash")
+            self._reload(False)
+
+        self._run(lambda: self._client.trash(source, game_id), done)
+
     @Slot(str)
     def remove(self, game_id):
         if not game_id:

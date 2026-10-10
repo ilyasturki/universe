@@ -606,6 +606,10 @@ class CoreClient(QObject):
     def adopt(self, source, game_id):
         return self._job("adopt", game_id, lambda progress: self._core.adopt(source, game_id, progress), source=source)
 
+    def trash(self, source, game_id):
+        """The folder trashed; raises the core's refusal, for the caller to say."""
+        return self._call(self._core.trash, source, game_id)
+
     @Slot(str, str, result=str)
     def update(self, source, game_id):
         return self._job("update", game_id, lambda progress: f"{self._core.update(source, game_id, progress)} updated", source=source)

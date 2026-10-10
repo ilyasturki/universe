@@ -72,6 +72,8 @@ struct Entry {
     image: String,
     owned: Option<bool>,
     installed: bool,
+    /// Where the store found it on disk.
+    dir: String,
     /// A stopped download waits on the disk.
     partial: bool,
     download: u64,
@@ -89,6 +91,7 @@ impl Entry {
             image: text(v, "image"),
             owned: v["owned"].as_bool(),
             installed,
+            dir: text(v, "dir"),
             partial: !installed && !text(v, "partial_dir").is_empty(),
             download: bytes(v, "download_size"),
             disk: bytes(v, "disk_size"),
@@ -300,6 +303,7 @@ impl StorePage {
         add("resume", true, |page, id| page.start_on(Kind::Install, id));
         add("update", true, |page, id| page.start_on(Kind::Update, id));
         add("adopt", true, |page, id| page.start_on(Kind::Adopt, id));
+        add("trash", true, |page, id| page.confirm_trash(id));
         add("uninstall", true, |page, id| page.confirm_uninstall(id));
         add("cancel", false, |page, _| {
             if let Some(job) = page.app().and_then(|app| app.job()) {
@@ -522,8 +526,11 @@ impl StorePage {
             menu.append_section(None, &game);
         }
         let end = gio::Menu::new();
-        let items =
-            if entry.game_id.is_empty() { vec![(gettext("Add to _Library"), "store.adopt")] } else { vec![(gettext("_Uninstall…"), "store.uninstall")] };
+        let items = if entry.game_id.is_empty() {
+            vec![(gettext("Add to _Library"), "store.adopt"), (gettext("_Delete Files…"), "store.trash")]
+        } else {
+            vec![(gettext("_Uninstall…"), "store.uninstall")]
+        };
         for (label, action) in items {
             let item = gio::MenuItem::new(Some(&label), None);
             item.set_action_and_target_value(Some(action), Some(&entry.id.to_variant()));
@@ -895,6 +902,35 @@ impl StorePage {
             page.upgrade().inspect(|page| page.uninstall(&entry));
         });
         dialog.present(Some(self));
+    }
+
+    fn confirm_trash(&self, id: &str) {
+        let Some(entry) = self.entry(id).filter(|e| e.installed && e.game_id.is_empty()) else { return };
+        let body = gettext("{} goes to the trash. No game in your library uses it.").replace("{}", &tilde(&entry.dir));
+        let dialog = adw::AlertDialog::new(Some(&gettext("Delete {}'s Files?").replace("{}", &entry.title)), Some(&body));
+        dialog.add_responses(&[("cancel", &gettext("_Cancel")), ("trash", &gettext("_Delete Files"))]);
+        dialog.set_response_appearance("trash", adw::ResponseAppearance::Destructive);
+        dialog.set_default_response(Some("cancel"));
+        dialog.set_close_response("cancel");
+        let page = self.downgrade();
+        dialog.connect_response(Some("trash"), move |_, _| {
+            page.upgrade().inspect(|page| page.trash(&entry));
+        });
+        dialog.present(Some(self));
+    }
+
+    fn trash(&self, entry: &Entry) {
+        let (page, source, id, title) = (self.downgrade(), self.imp().source.borrow().clone(), entry.id.clone(), entry.title.clone());
+        glib::spawn_future_local(async move {
+            let result = backend::pinned(move |core| async move { core.source_trash(&source, &id).await }).await;
+            let Some(page) = page.upgrade() else { return };
+            match result {
+                Ok(_) => page.say(&gettext("{}'s files are in the trash").replace("{}", &title)),
+                Err(e) => page.say(&e.to_string()),
+            }
+            page.imp().loaded_at.set(None);
+            page.load(false);
+        });
     }
 
     fn uninstall(&self, entry: &Entry) {

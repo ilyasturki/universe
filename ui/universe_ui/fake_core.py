@@ -1796,6 +1796,16 @@ class FakeCore:
             entry["game_id"] = self._land(source, entry)
         return entry["game_id"]
 
+    def trash(self, source, game_id):
+        entry = self._source_game(source, game_id)
+        if entry is None or not entry.get("installed") or not entry.get("dir"):
+            raise UniverseError("NotFound", f"{source} finds no install of {game_id}")
+        if entry.get("game_id"):
+            raise UniverseError("Invalid", f"{entry['dir']} is {entry['game_id']}'s: uninstall it from the library")
+        path = entry["dir"]
+        entry.update({"installed": False, "dir": None})
+        return path
+
     def media_refresh(self, ident, force, progress=None):
         games = [self._game(ident)] if ident else [g for g in self._data["games"] if not g.get("removed")]
         return self._refresh_media(games, progress, stoppable=not ident)

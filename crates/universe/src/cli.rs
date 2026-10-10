@@ -109,11 +109,14 @@ pub enum Cmd {
     },
     /// Uninstall a game: trashes its install folder, keeps it in the library
     Uninstall {
-        /// Game: exact id, then whole word, substring or path
+        /// Game: exact id, then whole word, substring or path; with --source, the store's id of an install no library game uses
         name: String,
         /// Do not ask for confirmation
         #[arg(long, short)]
         yes: bool,
+        /// Trash that store's install of <name>, which the library does not hold
+        #[arg(long)]
+        source: Option<String>,
     },
     /// Where a game's data lives, each part's size: install, prefix, saves, Universe's files, recordings, logs; or act on its prefix
     Data {
@@ -1287,7 +1290,13 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 println!("removed {id}");
             }
         }
-        Cmd::Uninstall { name, yes } => {
+        Cmd::Uninstall { name, yes, source: Some(source) } => {
+            if yes || confirm(&format!("trash {source}'s install of {name}?")) {
+                let trashed = core.source_trash(&source, &name).await?;
+                println!("trashed {trashed}");
+            }
+        }
+        Cmd::Uninstall { name, yes, source: None } => {
             let id = pick(&core, &name).await?;
             if yes || confirm(&format!("uninstall {id} and remove its files?")) {
                 core.uninstall(&id).await?;

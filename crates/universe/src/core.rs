@@ -90,6 +90,21 @@ fn store_twin<'a>(games: &'a [Resolved], source: &str, sid: &str, dir: Option<&P
     })
 }
 
+/// Why `dir` must not go to the trash: games are installed into it, or another game's exe, folder or prefix is in it, or it is
+/// inside another game's folder. Archived games count: removing one leaves its files.
+fn trash_refusal(dir: &Path, games: &[Resolved], roots: &[PathBuf], except: &[&str]) -> Option<String> {
+    if is_root(dir, roots) {
+        return Some(format!("refusing to trash {}", dir.display()));
+    }
+    let real_dir = real(dir);
+    let user = games.iter().map(|x| &x.game).filter(|g| !except.contains(&g.id.as_str())).find(|g| {
+        let at = |p: &String| (!p.is_empty()).then(|| real(&paths::expand(p)));
+        let inside = at(&g.source.dir).is_some_and(|d| real_dir.starts_with(d));
+        inside || [&g.launch.exe, &g.source.dir, &g.launch.prefix].into_iter().filter_map(at).any(|p| p.starts_with(&real_dir))
+    });
+    user.map(|g| format!("refusing to trash {}: {} uses it", dir.display(), g.id))
+}
+
 /// How a store's report comes in, for `added_at`: a scan finds what was there all along; an install lands the game as new, an
 /// add from the store's page unless the library held it already; either brings an archived one back.
 #[derive(Clone, Copy)]
@@ -432,16 +447,9 @@ impl Core {
                 if r.game.source.dir.is_empty() || !dir.is_dir() {
                     return Err(Error::Invalid(format!("{id} has no install folder")));
                 }
-                let config = self.config.read().await.clone();
-                let home = paths::home();
-                let shared = self
-                    .games
-                    .read()
-                    .await
-                    .iter()
-                    .any(|x| x.game.id != id && !x.game.source.dir.is_empty() && paths::expand(&x.game.source.dir).starts_with(&dir));
-                if dir.parent().is_none() || dir == home || dir == config.games_root() || home.starts_with(&dir) || shared {
-                    return Err(Error::Invalid(format!("refusing to trash {}", dir.display())));
+                let roots = self.install_roots().await;
+                if let Some(why) = trash_refusal(&dir, &self.games.read().await, &roots, &[id]) {
+                    return Err(Error::Invalid(why));
                 }
                 trash(&dir)?;
             }
@@ -2165,6 +2173,33 @@ impl Core {
         self.apply_source_game(source, &g, true, Arrival::Added).await?.ok_or_else(|| Error::Invalid(format!("{} does not list {title} as yours", m.name())))
     }
 
+    /// Trashes the install of `game_id` the source's `scan` finds when no library game stands for it: the folder trashed. One the
+    /// library holds goes through `uninstall`.
+    pub async fn source_trash(&self, source: &str, game_id: &str) -> Result<String> {
+        let m = self.source(source).await?;
+        let events = self.run_verb(&m, "scan", &[], None).await?;
+        let dir = Self::game_events(&events)
+            .into_iter()
+            .find(|g| g.get("id").and_then(|v| v.as_str()) == Some(game_id) && g.get("installed").and_then(|v| v.as_bool()) == Some(true))
+            .and_then(|g| g.get("dir")?.as_str().filter(|d| !d.is_empty()).map(paths::expand))
+            .filter(|d| d.is_dir())
+            .ok_or_else(|| Error::NotFound(format!("{source} finds no install of {game_id}")))?;
+        let roots = self.install_roots().await;
+        {
+            let games = self.games.read().await;
+            let twin = store_twin(&games, source, game_id, Some(&dir), &roots);
+            if let Some(x) = twin.filter(|x| x.game.removed_at.is_empty()) {
+                return Err(Error::Invalid(format!("{} is {}'s: uninstall it from the library", dir.display(), x.game.id)));
+            }
+            let except: Vec<&str> = twin.map(|x| x.game.id.as_str()).into_iter().collect();
+            if let Some(why) = trash_refusal(&dir, &games, &roots, &except) {
+                return Err(Error::Invalid(why));
+            }
+        }
+        trash(&dir)?;
+        Ok(dir.to_string_lossy().into())
+    }
+
     pub async fn source_updates(&self) -> Result<Vec<serde_json::Value>> {
         let mut out = Vec::new();
         let sources: Vec<Source> = self.sources.read().await.iter().filter(|m| m.active()).cloned().collect();
@@ -2872,6 +2907,58 @@ scan) for i in 1 2 3; do echo "{\"event\":\"game\",\"id\":\"$i\",\"title\":\"Gam
         assert_eq!(list.iter().map(|g| g["game_id"].as_str().unwrap_or("")).collect::<Vec<_>>(), ["", id.as_str(), ""]);
         assert_eq!(core.source_adopt("fake", "2", None).await.unwrap(), id, "added again, the same game");
         assert!(matches!(core.source_adopt("fake", "4", None).await, Err(Error::NotFound(_))));
+    }
+
+    #[tokio::test]
+    async fn deleting_an_install_nobody_uses_spares_every_folder_a_game_lives_in() {
+        let dir = fake_source("");
+        let (games, pc) = (dir.path().join("games"), dir.path().join("mnt/PC"));
+        let installs = [
+            ("home", paths::home()),
+            ("root", games.clone()),
+            ("scanned", pc.clone()),
+            ("held", pc.join("Held")),
+            ("linked", pc.join("Linked")),
+            ("orphan", pc.join("Orphan")),
+        ];
+        for (_, d) in &installs {
+            std::fs::create_dir_all(d.join("bin")).unwrap();
+        }
+        let echo: Vec<String> = installs
+            .iter()
+            .map(|(id, d)| format!(r#"echo '{{"event":"game","id":"{id}","title":"{id}","owned":true,"installed":true,"dir":"{}"}}'"#, d.display()))
+            .collect();
+        std::fs::write(
+            dir.path().join("sources/fake/run"),
+            format!("#!/bin/sh\ncase \"$1\" in\nscan) {} ;;\nesac\necho '{{\"event\":\"done\"}}'\n", echo.join("; ")),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("config/config.toml"),
+            format!(
+                "[paths]\ngames_root = \"{}\"\n[modules]\nenabled = []\n[sources]\nenabled = [\"fake\"]\n[sources.fake]\nscan_dirs = \"{}\"\n",
+                games.display(),
+                pc.display()
+            ),
+        )
+        .unwrap();
+        let mut steam = Game::new("Held");
+        steam.source.kind = "steam".into();
+        steam.launch.exe = pc.join("Held/bin/h.exe").to_string_lossy().into();
+        steam.save().unwrap();
+        let mut imported = Game::new("Linked");
+        imported.source.kind = "lutris".into();
+        imported.launch.exe = pc.join("Linked/bin/l.exe").to_string_lossy().into();
+        imported.save().unwrap();
+        let core = open().await;
+
+        for (id, d) in &installs[..5] {
+            assert!(matches!(core.source_trash("fake", id).await, Err(Error::Invalid(_))), "{id} is refused");
+            assert!(d.join("bin").is_dir(), "{id} stays");
+        }
+        assert_eq!(core.source_trash("fake", "orphan").await.unwrap(), pc.join("Orphan").to_string_lossy());
+        assert!(!pc.join("Orphan").exists() && paths::home().join(".local/share/Trash/files/Orphan").is_dir(), "to the trash");
+        assert!(matches!(core.source_trash("fake", "orphan").await, Err(Error::NotFound(_))), "gone from the disk");
     }
 
     #[tokio::test]
