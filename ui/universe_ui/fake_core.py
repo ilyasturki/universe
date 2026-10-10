@@ -1903,6 +1903,8 @@ class FakeCore:
 
     def media_set_slot(self, ident, slot, path):
         game = self._game(ident)
+        if not os.path.isfile(path):
+            raise UniverseError("NotFound", path)
         placed = _place(path, str(self._game_dir(ident) / "media" / "picked" / f"{slot}.png"))
         game.setdefault("overrides", {})[slot] = placed
         return placed
