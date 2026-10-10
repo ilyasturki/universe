@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# tools/bump [--dry-run] patch|minor|major|X.Y.Z: just bump's body; --dry-run stops after the checks.
+# BUMP_SKIP_MEDIA=1 releases without docs media recorded at this version (a hotfix): the site keeps the last release's.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+dry=
+[ "${1:-}" = --dry-run ] && { dry=1; shift; }
+level="${1:?usage: tools/bump [--dry-run] patch|minor|major|X.Y.Z}"
+
+cur="$(sed -n '/^\[workspace.package\]/,/^\[/{s/^version = "\(.*\)"$/\1/p}' Cargo.toml)"
+IFS=. read -r maj min pat <<< "$cur"
+case "$level" in
+    major) new="$((maj + 1)).0.0" ;;
+    minor) new="$maj.$((min + 1)).0" ;;
+    patch) new="$maj.$min.$((pat + 1))" ;;
+    *) new="$level" ;;
+esac
+[[ "$new" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "bump: '$level' is not patch|minor|major|X.Y.Z" >&2; exit 1; }
+[[ "$new" != "$cur" ]] || { echo "bump: already at $cur" >&2; exit 1; }
+notes=(CHANGELOG.md README.md site/src/content/docs site/media/takes.toml)
+git diff --quiet -- . "${notes[@]/#/:!}" && git diff --cached --quiet -- . "${notes[@]/#/:!}" || { echo "bump: working tree is not clean beyond ${notes[*]}" >&2; exit 1; }
+tools/changelog check "$new" || { echo "bump: CHANGELOG.md's '## [$new] - YYYY-MM-DD' section is the release notes (/release writes it)" >&2; exit 1; }
+! git rev-parse -q --verify "refs/tags/v$new" >/dev/null || { echo "bump: tag v$new exists" >&2; exit 1; }
+if [ -n "${BUMP_SKIP_MEDIA:-}" ]; then
+    echo "bump: BUMP_SKIP_MEDIA set: the docs keep the media of the last release" >&2
+else
+    tools/docs-media check --strict "$new" || { echo "bump: the docs' media are not recorded at $new: UNIVERSE_DEV=.dev-showcase just docs-media record (BUMP_SKIP_MEDIA=1 for a hotfix)" >&2; exit 1; }
+fi
+[ -z "$dry" ] || { echo "bump: $cur -> $new passes every check (dry run: nothing written)"; exit 0; }
+
+copies=(ui/pyproject.toml modules/*/module.toml sources/*/source.toml docs/api.md)
+pkgbuilds=(packaging/aur/universe/PKGBUILD packaging/aur/universe-bin/PKGBUILD)
+sed -i "/^\[workspace.package\]/,/^\[/s/^version = \"$cur\"$/version = \"$new\"/" Cargo.toml
+sed -i "s/^version = \"$cur\"$/version = \"$new\"/" "${copies[@]}"
+sed -i "s/^pkgver=$cur$/pkgver=$new/" "${pkgbuilds[@]}"
+spec=packaging/rpm/universe.spec
+sed -i "s/^\(Version: *\)$cur$/\1$new/" "$spec"
+metainfo=crates/universe-desktop/data/io.github.ilyasturki.UniverseDesktop.metainfo.xml
+tools/changelog metainfo "$new" "$metainfo"
+cargo update --workspace --offline --quiet
+git add Cargo.toml Cargo.lock "${pkgbuilds[@]}" "$spec" "$metainfo" "${copies[@]}" "${notes[@]}"
+git commit --quiet -m "chore(release): v$new"
+git tag -a "v$new" -m "v$new"
+echo "$cur -> $new: committed and tagged v$new (not pushed)"

@@ -142,3 +142,43 @@ def test_publish_leaves_the_media_branch_one_commit_that_fetch_lands_in_the_site
     assert manifest["version"] == "0.0.13", "fetch lands the last published media where the site reads them"
     assert (tmp_path / "site/src/assets/media/library.avif").is_file() and (tmp_path / "site/public/media/browse.av1.mp4").is_file()
     assert subprocess.run(["git", "-C", str(tmp_path), "rev-parse", "main"], capture_output=True, text=True, check=True).stdout == main
+
+
+def test_bump_holds_a_release_to_its_recorded_media_and_lets_its_pages_ride_along(tmp_path):
+    git = ["git", "-C", str(tmp_path), "-c", "user.name=t", "-c", "user.email=t@t"]
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    (tmp_path / "tools").mkdir()
+    for name in ("bump", "changelog", "docs-media"):
+        shutil.copy2(REPO / "tools" / name, tmp_path / "tools" / name)
+    (tmp_path / "Cargo.toml").write_text('[workspace.package]\nversion = "0.0.11"\n')
+    (tmp_path / "CHANGELOG.md").write_text(
+        "# Changelog\n\n## [0.0.12] - 2026-10-10\n\n### Fixed\n\n- A fix.\n\n[0.0.12]: https://github.com/ilyasturki/universe/compare/v0.0.11...v0.0.12\n"
+    )
+    page = tmp_path / "site/src/content/docs/docs/using/home.mdx"
+    page.parent.mkdir(parents=True)
+    page.write_text('<Shot name="library" />\n')
+    (tmp_path / ".gitignore").write_text("/site/src/assets/media/\n/site/public/media/\n")
+    site(tmp_path)
+    subprocess.run([*git, "add", "-A"], check=True)
+    subprocess.run([*git, "commit", "-q", "-m", "main"], check=True)
+
+    def bump(**env):
+        done = subprocess.run(
+            ["bash", str(tmp_path / "tools/bump"), "--dry-run", "0.0.12"], capture_output=True, text=True, check=False, env={**os.environ, **env}
+        )
+        return done.returncode, done.stdout + done.stderr
+
+    page.write_text('<Shot name="library" />\nA page the release fixed.\n')
+    (tmp_path / "site/media/takes.toml").write_text(TAKES.replace("E Wait:5", "E Wait:6"))
+    code, out = bump()
+    assert code == 1 and "not recorded at 0.0.12" in out, out
+    assert bump(BUMP_SKIP_MEDIA="1")[0] == 0, "a hotfix releases on the last release's media"
+    recorded(tmp_path, "0.0.11")
+    assert bump()[0] == 1, "media recorded for the last release"
+    recorded(tmp_path, "0.0.12")
+    code, out = bump()
+    assert code == 0 and "dry run" in out, "the docs page and takes.toml ride in chore(release)"
+    (tmp_path / "Cargo.toml").write_text('[workspace.package]\nversion = "0.0.11"\nedition = "2024"\n')
+    code, out = bump()
+    assert code == 1 and "not clean" in out
+    assert subprocess.run([*git, "tag"], capture_output=True, text=True, check=True).stdout == "", "a dry run tags nothing"

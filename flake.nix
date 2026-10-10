@@ -482,7 +482,7 @@
         };
       pytestUi = pytestOf {
         name = "universe-pytest-ui";
-        # the core contract test lists the modules and sources the real core reads; the theme tests install examples/theme; the journeys play tools/sample's game; the docs-media tests check site/media/takes.toml
+        # the core contract test lists the modules and sources the real core reads; the theme tests install examples/theme; the journeys play tools/sample's game; the docs-media tests check site/media/takes.toml and bump's hold on it
         dirs = [
           "ui"
           "modules"
@@ -490,6 +490,8 @@
           "examples"
           "tools/sample"
           "tools/docs-media"
+          "tools/bump"
+          "tools/changelog"
           "site/media"
           "tests/pads"
         ];
