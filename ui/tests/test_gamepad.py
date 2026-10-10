@@ -262,9 +262,9 @@ def test_expect_quits_on_a_look_that_does_not_say_what_return_launches(look, mon
 
 def test_reset_brings_a_look_back_to_its_first_screen(look):
     home = look.home()
-    first = home.property("currentGame").property("id")
+    first = until(lambda: (game := home.property("currentGame")) is not None and game.property("id"), "the home has no game under its cursor")
     look.press(Qt.Key.Key_Right)
-    until(lambda: home.property("currentGame").property("id") != first, "Right left the first tile alone")
+    until(lambda: (game := home.property("currentGame")) is not None and game.property("id") != first, "Right left the first tile alone")
     gamepad.KeyScript("Reset", 1, look.window)._step()
     look._root = None
     until(lambda: (game := look.home().property("currentGame")) is not None and game.property("id") == first, "the reloaded look is not on its first tile")
