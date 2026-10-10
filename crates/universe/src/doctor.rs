@@ -667,7 +667,9 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
 
 fn hidraw_fix(family: Family) -> String {
     match family {
-        Family::NixOs => "add pkgs.game-devices-udev-rules to services.udev.packages, then replug the pad".into(),
+        Family::NixOs => {
+            "programs.universe.controller.enable opens Sony and Nintendo pads; set hardware.steam-hardware.enable for the others, then replug the pad".into()
+        }
         Family::Arch => "install game-devices-udev (AUR), then replug the pad".into(),
         Family::Debian => "install steam-devices, then replug the pad".into(),
         Family::Fedora => "install steam-devices (RPM Fusion), then replug the pad".into(),
