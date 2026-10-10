@@ -44,6 +44,7 @@ pkgs.testers.runNixOSTest {
     machine.succeed("test -c /dev/uhid && ls /sys/class/udc | grep -q dummy_udc")
     print(machine.succeed(
         "python3 ${src}/tools/pad-check --via kernel --as alice --record"
+        " --walk dualsense-usb,xbox-usb,xbox-bt,8bitdo-pro-3-dinput-bt"
         " --universe ${universe}/bin/universe --ui ${ui}/bin/universe-ui"
         " --modules ${universe}/share/universe/modules 2>&1"
     ))

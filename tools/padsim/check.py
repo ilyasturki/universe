@@ -32,14 +32,15 @@ class Failed(Exception):
 class Lines:
     """A process's output lines, read as they come."""
 
-    def __init__(self, proc):
+    def __init__(self, proc, stream=None):
         self.proc = proc
+        self.stream = stream or proc.stdout
         self.queue = queue.Queue()
         self.seen = []
         threading.Thread(target=self.read, daemon=True).start()
 
     def read(self):
-        for line in self.proc.stdout:
+        for line in self.stream:
             self.queue.put(line.rstrip("\n"))
         self.queue.put(None)
 
@@ -140,12 +141,13 @@ def sysfs_device(event_id):
 
 
 class Check:
-    def __init__(self, pad, via, profile, ui, record):
+    def __init__(self, pad, via, profile, ui, record, walk=False):
         self.pad = pad
         self.via = via
         self.profile = profile
         self.ui = ui
         self.record = record
+        self.walking = walk
         self.name = None if via == "kernel" else f"{pad.evdev['name']} (pad check {os.getpid()})"[:79]
         self.failures = []
         self.recorded = {}
@@ -183,6 +185,8 @@ class Check:
                 self.step("sdl", self.sdl)
                 if self.record:
                     self.step("dump", self.dump)
+                if self.walking:
+                    self.step("walk", self.walk)
             self.step("watcher", self.watcher)
             if self.ui:
                 self.step("launcher", self.launcher)
@@ -233,6 +237,43 @@ class Check:
 
     def dump(self):
         self.recorded["evdev"] = self.profile.json("controller", "dump", self.listing["id"])["evdev"]
+
+    def walk(self):
+        """`controller dump --walk`, each of its questions answered on the pad: what it records is what tests/pads says."""
+        argv = [self.profile.universe, "--json", "controller", "dump", "--walk", self.listing["id"]]
+        proc = subprocess.Popen(argv, env=self.profile.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, **self.profile.ids)
+        printed = []
+        threading.Thread(target=lambda: printed.append(proc.stdout.read()), daemon=True).start()
+        asked = Lines(proc, proc.stderr)
+        try:
+            while True:
+                try:
+                    step = asked.wait(events(lambda e: "walk" in e), 15, "the walk's next question")["walk"]
+                except Failed:
+                    with contextlib.suppress(subprocess.TimeoutExpired):
+                        proc.wait(10)
+                    if proc.poll() is None:
+                        raise
+                    break
+                if step in self.pad.buttons:
+                    self.device.press(step)
+                    time.sleep(0.2)
+                    self.device.press(step, False)
+                elif self.pad.axis(step) is not None:
+                    self.device.move(step, 1.0)
+                    time.sleep(0.3)
+                    self.device.move(step, 0.0)
+            proc.wait(30)
+        finally:
+            stop(proc)
+        time.sleep(0.1)
+        recorded = json.loads(printed[0]) if printed and printed[0].strip() else {}
+        wrong = {s: (recorded.get("buttons") or {}).get(s) for s, code in self.pad.buttons.items()}
+        wrong = {s: got for s, got in wrong.items() if got != self.pad.buttons[s]}
+        if wrong:
+            raise Failed(f"the walk recorded these slots otherwise: {wrong}")
+        if recorded.get("axes") != self.pad.axes:
+            raise Failed(f"the walk recorded the sticks and triggers as {recorded.get('axes')}")
 
     def watcher(self):
         proc = self.profile.spawn([self.profile.universe, "--json", "controller", "watch"])
@@ -401,6 +442,7 @@ def main(argv=None):
     parser.add_argument("--modules", default=os.environ.get("UNIVERSE_MODULES_PATH") or str(REPO / "modules"))
     parser.add_argument("--record", action="store_true", help="print what the kernel and SDL3 show of each pad, as tests/pads keeps it")
     parser.add_argument("--as", dest="user", help="run Universe as this user, the devices being made as root (the VM check)")
+    parser.add_argument("--walk", default="", help="pads, comma-separated, whose `controller dump --walk` is answered and checked (kernel only)")
     args = parser.parse_args(argv)
     if args.via == "uinput" and desktop_watcher():
         print("a launcher or a game's watcher reads the pads on this desktop: a press here would reach it; close it first", file=sys.stderr)
@@ -419,7 +461,7 @@ def main(argv=None):
             continue
         profile = Profile(args.universe, args.modules, args.user)
         try:
-            check = Check(pad, args.via, profile, args.ui, args.record)
+            check = Check(pad, args.via, profile, args.ui, args.record, walk=name in args.walk.split(","))
             spent = check.run()
         finally:
             profile.close()
