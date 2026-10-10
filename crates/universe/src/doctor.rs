@@ -155,7 +155,7 @@ fn eden_quits_on_stop() -> (bool, String, String) {
     } else {
         (
             false,
-            "Eden asks before closing: a stop from Universe shows its question, then kills it 10 s later".into(),
+            "Eden asks before closing: a stop from Universe shows its question, then kills it 5 s later".into(),
             format!("in Eden, set Configure › General › Confirm before stopping emulation to Never Ask ([UI] confirmStop=2 in {file})"),
         )
     }

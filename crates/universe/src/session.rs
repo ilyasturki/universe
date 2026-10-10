@@ -606,7 +606,7 @@ impl Core {
             Err(_) => true,
         };
         update_marker(&c.session_id, |m| m.stopped = true)?;
-        self.host.units.stop(&c.unit, term_twice).await
+        self.host.units.stop(&c.unit, term_twice, crate::host::QUIT_GRACE).await
     }
 
     pub async fn freeze(&self, on: bool) -> Result<()> {

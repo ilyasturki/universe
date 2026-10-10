@@ -70,6 +70,10 @@ const UNIT_EXISTS: &str = "org.freedesktop.systemd1.UnitExists";
 /// A start job ends once the main process is forked; a stop job only after `ExecStopPost`, which the launcher's Stop must not wait through.
 const START_WAIT: Duration = Duration::from_secs(30);
 const STOP_WAIT: Duration = Duration::from_secs(10);
+/// The slowest clean quit seen on a real machine took 3.5 s (Eden saving its caches); a game still there after this is hung, or showing a "quit?" prompt.
+pub const QUIT_GRACE: Duration = Duration::from_secs(5);
+const TERM_AGAIN: Duration = Duration::from_secs(3);
+const STOP_POLL: Duration = Duration::from_millis(100);
 
 /// The user manager over the session bus, one connection subscribed to its job signals.
 #[derive(Default)]
@@ -113,6 +117,11 @@ impl Systemd {
             Ok(fut) => fut.await.map(Some).map_err(|e| Error::Io(format!("{unit}: {e}"))),
             Err(e) => Err(Error::Io(format!("{unit}: {e}"))),
         }
+    }
+
+    #[cfg(test)]
+    fn on(conn: zbus::Connection) -> Systemd {
+        Systemd { conn: tokio::sync::OnceCell::new_with(Some(conn)) }
     }
 
     async fn active_state(&self, unit: &str) -> Option<String> {
@@ -250,26 +259,31 @@ impl Units {
     }
 
     /// The game first, then the unit: a stop job SIGTERMs the whole cgroup at once, and gamescope dies before the game, which loses its X server and can save nothing.
-    /// `term_twice`: SIGTERM again every ~3 s (Dolphin takes the first as a "quit?" prompt); off, the first is the only one until the stop job.
-    pub async fn stop(&self, unit: &str, term_twice: bool) -> Result<()> {
+    /// `term_twice`: SIGTERM again every 3 s (Dolphin takes the first as a "quit?" prompt); off, the first is the only one. What is left of the game `grace`
+    /// after the first is SIGKILLed.
+    pub async fn stop(&self, unit: &str, term_twice: bool, grace: Duration) -> Result<()> {
         match self {
             Units::Systemd(sd) => {
                 // systemd 260 drops the stop job of a frozen unit ("Cannot stop frozen unit") and reports success.
                 let _ = sd.manager().await?.call::<_, _, ()>("ThawUnit", &(qualified(unit).as_str(),)).await;
                 if let Some(cg) = self.cgroup(unit).await {
-                    let mut game = game_pids(&cgroup_procs(&cg));
-                    for round in 0..20 {
+                    let first = tokio::time::Instant::now();
+                    let mut termed: Option<tokio::time::Instant> = None;
+                    loop {
+                        let game = game_pids(&cgroup_procs(&cg));
                         // Deactivating: the cgroup holds ExecStopPost now, not the game.
                         if game.is_empty() || !self.is_running(unit).await {
                             break;
                         }
-                        if round == 0 || (term_twice && round % 6 == 0) {
-                            for pid in game.iter().filter_map(|p| rustix::process::Pid::from_raw(*p as i32)) {
-                                let _ = rustix::process::kill_process(pid, rustix::process::Signal::TERM);
-                            }
+                        if first.elapsed() >= grace {
+                            signal(&game, rustix::process::Signal::KILL);
+                            break;
                         }
-                        tokio::time::sleep(Duration::from_millis(500)).await;
-                        game = game_pids(&cgroup_procs(&cg));
+                        if termed.is_none_or(|t| term_twice && t.elapsed() >= TERM_AGAIN) {
+                            signal(&game, rustix::process::Signal::TERM);
+                            termed = Some(tokio::time::Instant::now());
+                        }
+                        tokio::time::sleep(STOP_POLL).await;
                     }
                 }
                 self.stop_unit(unit).await
@@ -472,6 +486,15 @@ fn game_pids(procs: &[Proc]) -> Vec<u32> {
         matches!(p.argv.first().and_then(|a| a.rsplit('/').next()), Some("bash" | "sh" | "bwrap")) && p.argv.iter().any(|a| a.contains("universe-fhs"))
     };
     procs.iter().filter(|p| !splashes.contains(&p.pid) && !fhs_wrapper(p) && under_splash(p.pid)).map(|p| p.pid).collect()
+}
+
+/// A core limit of 0 first: a crash in a game's own shutdown leaves no core to write, which held Eden's quit 20 s.
+fn signal(pids: &[u32], sig: rustix::process::Signal) {
+    use rustix::process::{prlimit, Resource, Rlimit};
+    for pid in pids.iter().filter_map(|p| rustix::process::Pid::from_raw(*p as i32)) {
+        let _ = prlimit(Some(pid), Resource::Core, Rlimit { current: Some(0), maximum: Some(0) });
+        let _ = rustix::process::kill_process(pid, sig);
+    }
 }
 
 /// One journal entry: `source` is the writing process's identifier (`gamescope`, `umu-run`, `systemd`), `priority` syslog's (3 error, 4 warning, 6 info).
@@ -812,7 +835,7 @@ mod live {
         assert_eq!(freezer_state(&units, &format!("{name}.service")).await, "running");
         // A frozen unit stops all the same
         units.freeze(&name, true).await.unwrap();
-        units.stop(&name, true).await.unwrap();
+        units.stop(&name, true, QUIT_GRACE).await.unwrap();
         assert!(!units.is_active(&name).await);
         assert!(units.cgroup(&name).await.is_none(), "collected once inactive");
         assert!(units.stop_unit(&name).await.is_ok(), "stopping an unloaded unit is fine");
@@ -831,5 +854,53 @@ mod live {
         let name = units().adopt_scope(std::process::id()).await.unwrap();
         assert!(in_cgroup_of(&name));
         assert_eq!(units().adopt_scope(std::process::id()).await.unwrap(), name, "idempotent");
+    }
+}
+
+/// A real cgroup behind a fake manager on the test bus: the flake's sandbox has none and skips these.
+#[cfg(test)]
+mod cgroup {
+    use super::*;
+    use crate::testbus::systemd::{Cgroup, Systemd as Manager};
+    use crate::testbus::Bus;
+    use std::os::unix::process::ExitStatusExt;
+    use tokio::io::{AsyncBufReadExt, BufReader, Lines};
+    use tokio::process::ChildStdout;
+
+    const UNIT: &str = "universe-game-stand-in-1.service";
+
+    const IGNORES_TERM: &str = r#"
+import resource, signal, time
+signal.signal(signal.SIGTERM, lambda *_: print("term core=%d" % resource.getrlimit(resource.RLIMIT_CORE)[0], flush=True))
+print("ready", flush=True)
+while True:
+    time.sleep(1)
+"#;
+
+    /// The stand-in started in `cgroup` and ready; its exit status once a task reaps it, as the manager would.
+    async fn game(cgroup: &Cgroup, script: &str) -> (tokio::task::JoinHandle<std::process::ExitStatus>, Lines<BufReader<ChildStdout>>) {
+        let mut cmd = tokio::process::Command::new("python3");
+        cmd.args(["-I", "-c", script]).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::piped());
+        let mut child = cgroup.spawn(&mut cmd);
+        let mut lines = BufReader::new(child.stdout.take().unwrap()).lines();
+        assert_eq!(lines.next_line().await.unwrap().as_deref(), Some("ready"));
+        (tokio::spawn(async move { child.wait().await.unwrap() }), lines)
+    }
+
+    #[tokio::test]
+    async fn a_game_ignoring_sigterm_is_killed_after_its_grace_with_no_core_to_dump() {
+        let bus = Bus::start();
+        let cgroup = Arc::new(Cgroup::new());
+        let _manager = Manager::serve(&bus, UNIT, cgroup.clone()).await;
+        let (exit, mut lines) = game(&cgroup, IGNORES_TERM).await;
+        let units = Units::Systemd(Systemd::on(bus.connect().await));
+        let grace = Duration::from_millis(300);
+        let started = tokio::time::Instant::now();
+        units.stop(UNIT, true, grace).await.unwrap();
+        let took = started.elapsed();
+        assert_eq!(lines.next_line().await.unwrap().as_deref(), Some("term core=0"), "one SIGTERM first, behind a core limit of 0");
+        assert_eq!(exit.await.unwrap().signal(), Some(rustix::process::Signal::KILL.as_raw()));
+        assert!(took >= grace && took < grace + Duration::from_secs(1), "{took:?}");
+        assert!(!cgroup.populated());
     }
 }

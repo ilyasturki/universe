@@ -1,5 +1,6 @@
 pub mod bluez;
 pub mod nm;
+pub mod systemd;
 
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};
