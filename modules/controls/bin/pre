@@ -110,10 +110,11 @@ def main():
         log("no pad held: controls left as they are")
         return 0
     pads = _gamepads.lead_first(pads, _mapping.active_device())
+    layout = settings.get("layout") if settings.get("layout") in LAYOUTS else "pad"
     ctx = Context(
         pads=pads,
-        layout=settings.get("layout") if settings.get("layout") in LAYOUTS else "pad",
-        models=models(pads, _mapping.devices()),
+        layout=layout,
+        models=models(pads, _mapping.devices()) if layout == "pad" else {},
         wiimote=settings.get("wiimote") if settings.get("wiimote") in WIIMOTE else "nunchuk",
         shoulders=settings.get("shoulders") if settings.get("shoulders") in SHOULDERS else "standard",
         guide=bool(settings.get("guide")),
