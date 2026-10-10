@@ -47,6 +47,11 @@ impl Out {
     }
 }
 
+/// Where the pads' event nodes are: `/dev/input`, or `UNIVERSE_INPUT_DIR` for a test handing the watcher nodes of its own.
+fn input_dir() -> PathBuf {
+    std::env::var_os("UNIVERSE_INPUT_DIR").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/dev/input"))
+}
+
 pub fn lock_path() -> PathBuf {
     paths::runtime_dir().join("controller.lock")
 }
@@ -595,8 +600,10 @@ impl Watcher {
         self.started.elapsed().as_millis() as u64
     }
 
-    fn scan(&mut self) {
-        let Ok(rd) = std::fs::read_dir("/dev/input") else { return };
+    /// The event nodes passed over in this scan go into `ignored`, named in the return: a node that would not open or is no pad.
+    fn scan(&mut self) -> Vec<String> {
+        let mut skipped = vec![];
+        let Ok(rd) = std::fs::read_dir(input_dir()) else { return skipped };
         let present: BTreeSet<PathBuf> =
             rd.flatten().map(|e| e.path()).filter(|p| p.file_name().map(|f| f.to_string_lossy().starts_with("event")).unwrap_or(false)).collect();
         self.ignored.retain(|p| present.contains(p));
@@ -618,11 +625,13 @@ impl Watcher {
                 Ok(d) => d,
                 Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => continue,
                 Err(_) => {
+                    skipped.push(path.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default());
                     self.ignored.insert(path);
                     continue;
                 }
             };
             if !is_pad(&dev) {
+                skipped.push(path.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default());
                 self.ignored.insert(path);
                 continue;
             }
@@ -655,6 +664,26 @@ impl Watcher {
             self.out.emit(pad.json());
             self.pads.insert(id, pad);
         }
+        skipped
+    }
+
+    /// Every pad (or the one named) closed and opened again, and every node once passed over tried again: a pad left unread
+    /// until it is unplugged comes back. Answered with `rescanned`: the pads held now, the nodes passed over again.
+    fn rescan(&mut self, id: &str) -> bool {
+        if id.is_empty() {
+            for held in self.pads.keys().cloned().collect::<Vec<_>>() {
+                self.drop_pad(&held);
+            }
+            self.ignored.clear();
+            self.copies.clear();
+        } else {
+            let path = self.pads.get(id).map(|p| p.path.clone()).unwrap_or_else(|| input_dir().join(id));
+            self.drop_pad(id);
+            self.ignored.remove(&path);
+            self.copies.remove(&path);
+        }
+        let skipped = self.scan();
+        self.out.emit(serde_json::json!({"event": "rescanned", "devices": self.pads.len(), "skipped": skipped}))
     }
 
     fn note_active(&mut self, id: &str) {
@@ -926,6 +955,7 @@ impl Watcher {
                 }
             }
             "reload" => self.reload().await,
+            "rescan" => return self.rescan(v["id"].as_str().unwrap_or("")),
             "learn" => {
                 let id = v["id"].as_str().unwrap_or("").to_string();
                 let slot = v["slot"].as_str().unwrap_or("").to_string();

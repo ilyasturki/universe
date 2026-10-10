@@ -99,6 +99,49 @@ fn an_older_config_gives_up_its_all_games_xbox_layout_and_a_game_keeps_its_own()
     assert!(std::fs::read_to_string(&config).unwrap().starts_with("schema = 2\n"));
 }
 
+// A node that would not open is passed over, then left alone until something asks: Find controllers is that ask.
+#[test]
+fn a_rescan_tries_again_the_nodes_the_watcher_passed_over() {
+    use std::io::{BufRead, Write};
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("input");
+    std::fs::create_dir_all(&input).unwrap();
+    std::fs::write(input.join("event5"), "not a device").unwrap();
+    std::fs::write(input.join("mouse0"), "").unwrap();
+    std::fs::create_dir_all(dir.path().join("run")).unwrap();
+    let run = dir.path().join("run");
+    let input_dir = input.to_string_lossy().into_owned();
+    let mut child =
+        command(&dir, &["controller", "watch", "--json"], &[("UNIVERSE_INPUT_DIR", &input_dir), ("XDG_RUNTIME_DIR", &run.to_string_lossy()), NO_BUS])
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    let (tx, lines) = std::sync::mpsc::channel::<serde_json::Value>();
+    let stdout = child.stdout.take().unwrap();
+    std::thread::spawn(move || {
+        for line in std::io::BufReader::new(stdout).lines().map_while(Result::ok) {
+            let _ = tx.send(serde_json::from_str(&line).unwrap_or_default());
+        }
+    });
+    let until = |event: &str| loop {
+        let line = lines.recv_timeout(std::time::Duration::from_secs(5)).unwrap_or_else(|_| panic!("no {event}"));
+        if line["event"] == event {
+            return line;
+        }
+    };
+    until("ready");
+    for (command, skipped) in [(serde_json::json!({"cmd": "rescan"}), ["event5"]), (serde_json::json!({"cmd": "rescan", "id": "event5"}), ["event5"])] {
+        writeln!(stdin, "{command}").unwrap();
+        let rescanned = until("rescanned");
+        assert_eq!((rescanned["devices"].as_u64(), rescanned["skipped"].clone()), (Some(0), serde_json::json!(skipped)), "{command}");
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
 #[test]
 fn a_write_out_of_range_or_to_a_read_only_config_is_refused() {
     let dir = tempfile::tempdir().unwrap();
