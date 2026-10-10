@@ -109,7 +109,11 @@ def test_the_media_tab_and_the_screenshots_page(look, api):
     rows = read(page, "rows")
     assert root.property("tabIndex") == 1 and read(page, "current")["kind"] in ("shot", "recording", "journal")
     assert {r["kind"] for r in rows} == {"shot", "recording", "journal"}, "one grid, every kind, no filter"
-    assert [h["glyph"] for h in read(page, "hints")] == ["A", "Start", "B"]
+    for i, r in enumerate(rows):
+        page.setProperty("index", i)
+        journal = ["Y"] if r.get("hasJournal") and r["kind"] != "journal" else []
+        assert [h["glyph"] for h in read(page, "hints")] == ["A", "X", *journal, "Start", "B"], "Y reads the item's journal entry when it has one"
+    assert any(r.get("hasJournal") and r["kind"] != "journal" for r in rows) and not all(r.get("hasJournal") for r in rows)
     page.setProperty("index", next(i for i, r in enumerate(rows) if r["kind"] == "shot" and r["gameId"] == "the-technomancer"))
     page.open()
     until(lambda: page.property("lightbox") is True and page.property("modal") is True)
@@ -468,7 +472,7 @@ def test_the_reprise_library_runs_in_homes_order_and_y_hearts_the_game_under_the
     until(lambda: title() == "The Technomancer", "the last played first, as on Home")
     look.press(Qt.Key.Key_Right, 2)
     until(lambda: title() == "Mini Metro", "a game just added sits among the played by its arrival")
-    assert [h["glyph"] for h in read(page, "hints")] == ["A", "Start", "B"]
+    assert [h["glyph"] for h in read(page, "hints")] == ["A", "X", "Y", "Start", "B"]
     look.press(Qt.Key.Key_F)
     until(lambda: api.allGames.byId("mini-metro").favorite is True)
     look.press(Qt.Key.Key_Right)

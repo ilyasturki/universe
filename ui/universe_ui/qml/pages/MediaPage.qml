@@ -48,6 +48,17 @@ FocusScope {
             dim: current === null
         },
         {
+            glyph: "X",
+            label: "Game page",
+            dim: currentGame === null
+        }
+    ].concat(current && current.hasJournal && current.kind !== "journal" ? [
+        {
+            glyph: "Y",
+            label: "Journal"
+        }
+    ] : []).concat([
+        {
             glyph: "Start",
             label: "More",
             dim: current === null
@@ -56,7 +67,7 @@ FocusScope {
             glyph: "B",
             label: "Back"
         }
-    ]
+    ])
     readonly property string openLabel: current ? (current.kind === "shot" ? "View" : current.kind === "recording" ? "Play" : "Read") : "Open"
 
     readonly property int columns: 4

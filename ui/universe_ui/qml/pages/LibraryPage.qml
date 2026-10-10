@@ -43,6 +43,14 @@ FocusScope {
             label: Format.playLabel(currentGame, playingId)
         },
         {
+            glyph: "X",
+            label: "Game page"
+        },
+        {
+            glyph: "Y",
+            label: currentGame && currentGame.favorite ? "Unfavourite" : "Favourite"
+        },
+        {
             glyph: "Start",
             label: "More"
         },
