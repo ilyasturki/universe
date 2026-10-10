@@ -84,6 +84,7 @@ def test_the_bar_opens_a_panel_over_its_icon_and_b_steps_back_out(api, fake, ps5
     key(overlay, Qt.Key.Key_Return)
     until(lambda: cc.property("zone") == "panel")
     assert [r["id"] for r in read(cc, "panelRows")] == ["pad:event30", "find"], "each pad the watcher reads, then Find Controllers"
+    shot(overlay, "cc-controllers")
     key(overlay, Qt.Key.Key_Return)
     until(lambda: fake.core.reconnects == ["event30"], "✕ on a pad reconnects it")
     key(overlay, Qt.Key.Key_Escape)

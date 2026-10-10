@@ -565,6 +565,9 @@ def test_the_dock_renders_over_a_running_game(api, fake, reprise, tmp_path):
     dock.setProperty("index", buttons.index("controllers"))
     key(overlay, Qt.Key.Key_Return)
     assert ids(read(dock, "current")["children"]) == ["pad:event30", "find"], "each pad the watcher reads, then Find controllers"
+    if os.environ.get("UNIVERSE_TEST_SHOTS"):
+        settle(overlay)
+        overlay.grabWindow().save(str(tmp_path / "dock-controllers.png"))
     key(overlay, Qt.Key.Key_Return)
     until(lambda: fake.core.reconnects == ["event30"], "A on a pad reconnects it")
     dock.setProperty("index", buttons.index("perf"))
