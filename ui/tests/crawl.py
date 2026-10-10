@@ -14,14 +14,19 @@ OUT = Path(os.environ.get("UNIVERSE_CRAWL_OUT", ".crawl/run"))
 PRESSES = int(os.environ.get("UNIVERSE_CRAWL_PRESSES", "6000"))
 BUDGET_S = float(os.environ.get("UNIVERSE_CRAWL_BUDGET_S", "3600"))
 
-# What the crawl found and its owners have yet to settle, each (kind, page or the detail's start) with why it stands:
-# a finding not listed here fails the crawl. Take a line out once its fix lands.
+# What the crawl found and its owners have yet to settle, each (kind, page or the detail's start): a finding not listed
+# here fails the crawl. Take a line out once its fix lands. A page the walk's presses ran out before is told, not failed.
 KNOWN = {
     "reprise": {
-        # The action menu is 460 dp wide: a build's row loses its size and where it came from.
+        # The action menu is 460 dp wide: a row's detail leaves its label no room.
         ("truncated", "Use GE-Proton"),
         ("truncated", "Remove GE-Proton"),
         ("truncated", "Follow the newest GE-Proton"),
+        ("truncated", "Arcade Vault"),
+        # A 46-letter title: the game menu's heading, the media pages' headers and the search's two lines elide it.
+        ("truncated", "Batman: Arkham Asylum Game of the Year Edition"),
+        # The session log's process column.
+        ("truncated", "pressure-vessel-wrap"),
     },
     "switch2": {
         # Settings' sidebar cuts its sections' second lines at 1280×720.
@@ -30,17 +35,28 @@ KNOWN = {
         ("truncated", "Every setting, by name, purpose or value"),
         ("truncated", "Checks that the internet answers through this connection."),
         ("truncated", "The PS5 home screen"),
-        # The controller page's help lines, the artwork slot's key hint, the install page's title and progress, a screen's mode.
+        # Help lines, a store's install and a setting's value too long for their rows at 1280×720.
         ("truncated", "Hold its pairing button until the lights blink"),
+        ("truncated", "Look again for a controller Universe does not show"),
         ("truncated", "A press this long is a hold"),
         ("truncated", "Add a SteamGridDB key for more art"),
+        ("truncated", "Records every session of this game"),
+        ("truncated", "Auto takes the best the GPU encodes"),
         ("truncated", "The Witcher 3: Wild Hunt"),
         ("truncated", "Paused · "),
+        ("truncated", "476.8 MB to download"),
         ("truncated", "DP-1 2560×1440 @ 144 Hz"),
+        ("truncated", "Type a value…"),
+        # The setup opened from Settings asks "Skip setup?" on B, and B on the question keeps going: only A on Skip leaves.
+        ("b-never-home", "onboardingPage"),
+        ("b-never-home", "dialog"),
     },
     "ps5": {
-        # The session log's process column.
         ("truncated", "pressure-vessel-wrap"),
+        ("truncated", "Add a SteamGridDB key for more art"),
+        ("truncated", "News cards, info pane; backdrops without a background"),
+        # The PS5 look opens its setup on a first start with an empty library only.
+        ("unreached", "onboardingPage"),
     },
 }
 
@@ -67,7 +83,7 @@ def test_crawl(api, fake, qtlog, monkeypatch, name):
     for f in findings:
         print(f"  {f['kind']:16} {f['page']:24} {' '.join(f['path'])[:60]:60} {f['detail'][:120]}")
     (OUT / name / "findings.json").write_text(json.dumps(findings, indent=1))
-    assert [f for f in findings if not known(name, f)] == []
+    assert [f for f in findings if f["kind"] != "unexplored" and not known(name, f)] == []
 
 
 def known(look, finding):

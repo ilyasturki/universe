@@ -40,6 +40,8 @@ CONFIRMED = 15
 SATURATED = 6
 # Longer text is an excerpt, cut on purpose.
 EXCERPT = 60
+# Long enough for any sheet to show once it has the focus.
+SHOWN_MS = 800
 # A property that names data rather than where the cursor stands.
 NOT_CURSOR = {"shown", "guestId", "lastSession", "launchedSession", "openSound", "title", "alt", "addonsShown", "subSource", "lastShown", "settingsLanding"}
 # Text typed on a keyboard: whether there is some, not what, or every letter is a new state.
@@ -293,12 +295,17 @@ class Explorer:
         elif not state.chain:
             found.append(("no-focus", "no page or overlay holds the focus: it sits on the look itself"))
         else:
-            rect = focus.mapRectToScene(QRectF(0, 0, focus.width(), focus.height()))
             screen = QRectF(0, 0, window.width(), window.height())
-            if not focus.isVisible():
-                found.append(("focus-hidden", f"the focused {state.chain[-1] if state.chain else 'item'} is not visible"))
-            elif focus.width() > 0 and focus.height() > 0 and not rect.intersects(screen):
-                found.append(("focus-off-screen", f"the focused {state.chain[-1] if state.chain else 'item'} is off screen at {rect.x():.0f},{rect.y():.0f}"))
+
+            def unseen():
+                rect = focus.mapRectToScene(QRectF(0, 0, focus.width(), focus.height()))
+                return not focus.isVisible() or (focus.width() > 0 and focus.height() > 0 and not rect.intersects(screen))
+
+            # A sheet takes the focus a moment before it shows: only one still unseen after that is lost.
+            if unseen():
+                pump(SHOWN_MS)
+            if window.activeFocusItem() is focus and unseen():
+                found.append(("focus-unseen", f"the focused {state.chain[-1]} is hidden or off screen"))
         found.extend(("truncated", text) for text in self.truncated())
         return found
 
@@ -542,9 +549,11 @@ class Explorer:
                 self.findings.append(
                     {"kind": "b-never-home", "state": s.key, "page": s.page, "path": s.path, "detail": f"B {HOME_WITHIN} times from here never reaches home"}
                 )
+        # No key reaches a page only once the walk ran out of keys to try; a walk out of presses only did not get there.
         reached = {s.page for s in states.values()}
+        kind, why = ("unreached", "no key path reaches") if self.complete else ("unexplored", f"{self.steps} presses did not reach")
         for page in sorted(page_names(self.name) - reached):
-            self.findings.append({"kind": "unreached", "state": "", "page": page, "path": [], "detail": f"no key path reached {page}"})
+            self.findings.append({"kind": kind, "state": "", "page": page, "path": [], "detail": f"{why} {page}"})
 
     def write(self):
         graph = {
