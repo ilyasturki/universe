@@ -11,6 +11,11 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QT_FORCE_STDERR_LOGGING", "1")
 os.environ["PIPEWIRE_REMOTE"] = "/nonexistent"
 os.environ["PULSE_SERVER"] = "unix:/nonexistent"
+# Text and shots the same on every machine: the dev shell's and the flake's fonts, one device pixel per pixel.
+if fonts := os.environ.get("UNIVERSE_TEST_FONTCONFIG"):
+    os.environ["FONTCONFIG_FILE"] = fonts
+os.environ["QT_SCALE_FACTOR"] = "1"
+os.environ["QT_FONT_DPI"] = "96"
 time.tzset()
 
 

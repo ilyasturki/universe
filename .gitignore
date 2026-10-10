@@ -7,6 +7,7 @@ __pycache__/
 /.venv
 /.dev
 /.dev-*
+/.crawl
 /.claude/settings.local.json
 /sources/gog/GalaxyCommunication.exe
 /site/src/assets/media/

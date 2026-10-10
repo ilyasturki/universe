@@ -305,6 +305,8 @@
         QML2_IMPORT_PATH = qmlImportPath;
         QT_PLUGIN_PATH = qtPluginPath;
         TZDIR = "${pkgs.tzdata}/share/zoneinfo";
+        # conftest.py makes it the tests' FONTCONFIG_FILE: the looks bundle their faces, this is every fallback.
+        UNIVERSE_TEST_FONTCONFIG = pkgs.makeFontsConf { fontDirectories = [ pkgs.dejavu_fonts ]; };
       };
       uiPy = ps: [
         ps.pyside6
@@ -663,6 +665,8 @@
             SDL2
             sway
             wf-recorder
+            # `just crawl` stops the wall clock its shots show
+            libfaketime
             dbus
             pipewire
             wireplumber

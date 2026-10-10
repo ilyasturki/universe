@@ -131,6 +131,33 @@ site *args="build": build
     bun install --frozen-lockfile --silent
     exec bun --bun run {{ args }}
 
+# Every screen of each look walked by its keys on the fake core, offscreen under a frozen clock; fails on a finding (lost focus, a dead end, B that never gets home, a page no key reaches, cut-off text, a warning). Graph, findings and a shot per screen under DIR (default .crawl/<commit>). Not part of verify
+crawl dir="": develop
+    #!/usr/bin/env -S nix develop --quiet --command bash
+    set -euo pipefail
+    cd "{{ justfile_directory() }}"
+    out="{{ dir }}"
+    [ -n "$out" ] || out=".crawl/$(git rev-parse --short HEAD)$(git diff --quiet HEAD -- ui || echo -dirty)"
+    tools/crawl "$out"
+
+# The screens before and after this checkout: a crawl of main (kept per main commit under .crawl/) and one of this checkout, then .crawl/<commit>/report.html, the screens that changed first. A report: it never fails on a change
+crawl-report: develop
+    #!/usr/bin/env -S nix develop --quiet --command bash
+    set -euo pipefail
+    cd "{{ justfile_directory() }}"
+    base="$(git rev-parse --short main)"
+    before=".crawl/main-$base"
+    if [ ! -e "$before/done" ]; then
+        tree="$(mktemp -d)"
+        trap 'rm -rf "$tree"' EXIT
+        git archive main | tar -x -C "$tree"
+        tools/crawl "$before" "$tree" || true
+        touch "$before/done"
+    fi
+    after=".crawl/$(git rev-parse --short HEAD)$(git diff --quiet HEAD -- ui || echo -dirty)"
+    tools/crawl "$after" || true
+    tools/crawl-report "$before" "$after"
+
 # Every suite, or the ones named: rust, python, or one of python's ui, modules, sources, bindings; desktop runs the GTK app in a headless weston; vm (never by default, KVM) boots a NixOS VM whose kernel drivers read every recorded pad of tests/pads
 test *suites: build develop env
     #!/usr/bin/env -S nix develop --quiet --command bash

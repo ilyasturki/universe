@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# tools/crawl OUT [TREE]: every look of TREE (default: this checkout) walked by its keys on the fake core, the
+# explorer's graph, findings and a shot per screen under OUT/<look>. The explorer is this checkout's, copied into TREE.
+set -euo pipefail
+here="$(cd "$(dirname "$0")/.." && pwd)"
+[ $# -ge 1 ] || { sed -n '2,3s/^# //p' "$0" >&2; exit 2; }
+out="$(realpath -m "$1")"
+tree="$(realpath "${2:-$here}")"
+if [ "$tree" != "$here" ]; then
+    cp "$here/ui/tests/explorer.py" "$here/ui/tests/crawl.py" "$tree/ui/tests/"
+fi
+mkdir -p "$out"
+faketime="$(dirname "$(command -v faketime)")/../lib/libfaketimeMT.so.1"
+cd "$tree"
+# Shots show a clock and dates: the wall clock stands still, the monotonic one that drives timers and animations runs.
+LD_PRELOAD="$faketime" FAKETIME="2026-10-01 12:00:00" FAKETIME_DONT_FAKE_MONOTONIC=1 UNIVERSE_CRAWL_OUT="$out" \
+    "$here/tools/reap" "$here/.venv/bin/python" -m pytest -q -n 3 -p no:cacheprovider -o faulthandler_timeout=3600 ui/tests/crawl.py

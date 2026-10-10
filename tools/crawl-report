@@ -1,0 +1,191 @@
+#!/usr/bin/env python3
+"""tools/crawl-report BEFORE AFTER: AFTER/report.html, each screen of two `just crawl` runs side by side, those that changed first."""
+
+import html
+import json
+import shutil
+import sys
+from pathlib import Path
+
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QGuiApplication, QImage, QPainter
+
+LOOKS = ["reprise", "switch2", "ps5"]
+NAMES = {"reprise": "Universe", "switch2": "Switch 2", "ps5": "PS5"}
+# Compared at this size, smoothed: a shift of a pixel or a glyph's antialiasing is not a change.
+COMPARED = (320, 180)
+# A pixel changed past this luma difference, out of 255.
+PIXEL = 18
+# A screen changed once this share of its pixels did.
+SHARE = 0.002
+
+
+def small(path: Path) -> QImage:
+    image = QImage(str(path)).convertToFormat(QImage.Format.Format_RGB32)
+    return image.scaled(*COMPARED, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+
+
+def changed(before: QImage, after: QImage) -> list[int]:
+    """The indexes of the pixels whose luma moved past PIXEL."""
+    a, b = bytes(before.constBits()), bytes(after.constBits())
+    if a == b:
+        return []
+    out = []
+    for i in range(0, len(a), 4):
+        # Format_RGB32 is B, G, R, X in memory.
+        if abs(a[i] - b[i]) * 0.114 + abs(a[i + 1] - b[i + 1]) * 0.587 + abs(a[i + 2] - b[i + 2]) * 0.299 > PIXEL:
+            out.append(i // 4)
+    return out
+
+
+def diff_image(after: Path, pixels: list[int], dest: Path) -> None:
+    """The after shot dimmed, its changed pixels in red."""
+    mask = QImage(*COMPARED, QImage.Format.Format_ARGB32)
+    mask.fill(QColor(0, 0, 0, 0))
+    for p in pixels:
+        mask.setPixelColor(p % COMPARED[0], p // COMPARED[0], QColor(255, 40, 60, 230))
+    image = QImage(str(after)).convertToFormat(QImage.Format.Format_RGB32)
+    painter = QPainter(image)
+    painter.fillRect(image.rect(), QColor(0, 0, 0, 150))
+    painter.drawImage(image.rect(), mask)
+    painter.end()
+    image.save(str(dest))
+
+
+def states(run: Path, look: str) -> dict:
+    graph = run / look / "graph.json"
+    if not graph.exists():
+        return {}
+    return {s["key"]: s for s in json.loads(graph.read_text())["states"] if s.get("shot")}
+
+
+def findings(run: Path, look: str) -> list:
+    graph = run / look / "graph.json"
+    return json.loads(graph.read_text())["findings"] if graph.exists() else []
+
+
+def path_words(path: list) -> str:
+    return " › ".join(path) if path else "start"
+
+
+def figure(src: str, caption: str) -> str:
+    return f'<figure><a href="{src}"><img src="{src}" loading="lazy" alt=""></a><figcaption>{html.escape(caption)}</figcaption></figure>'
+
+
+def card(state: dict, shots: list[tuple[str, str]], note: str = "") -> str:
+    head = f"<header><b>{html.escape(state['page'] or '(no page)')}</b><span>{html.escape(path_words(state['path']))}</span>{note}</header>"
+    return f'<article class="card">{head}<div class="shots">{"".join(figure(src, cap) for src, cap in shots)}</div></article>'
+
+
+def section(title: str, body: list[str], open_: bool) -> str:
+    if not body:
+        return ""
+    return f"<details{' open' if open_ else ''}><summary>{html.escape(title)} <small>{len(body)}</small></summary>{''.join(body)}</details>"
+
+
+def report(before: Path, after: Path) -> Path:
+    out = after / "report"
+    shutil.rmtree(out, ignore_errors=True)
+    blocks, totals = [], []
+    for look in LOOKS:
+        was, now = states(before, look), states(after, look)
+        if not now:
+            continue
+        (out / look).mkdir(parents=True)
+        moved, new, gone, same = [], [], [], 0
+        for key, s in now.items():
+            shot = after / look / "shots" / s["shot"]
+            if key not in was:
+                new.append(card(s, [(f"../{look}/shots/{s['shot']}", "after")]))
+                continue
+            old = before / look / "shots" / was[key]["shot"]
+            pixels = changed(small(old), small(shot))
+            if len(pixels) <= SHARE * COMPARED[0] * COMPARED[1]:
+                same += 1
+                continue
+            kept = out / look / f"before-{s['shot']}"
+            shutil.copy(old, kept)
+            diff_image(shot, pixels, out / look / f"diff-{s['shot']}")
+            share = 100 * len(pixels) / (COMPARED[0] * COMPARED[1])
+            moved.append(
+                (
+                    share,
+                    card(
+                        s,
+                        [(f"{look}/{kept.name}", "before"), (f"../{look}/shots/{s['shot']}", "after"), (f"{look}/diff-{s['shot']}", "what changed")],
+                        f"<em>{share:.1f}% of the screen</em>",
+                    ),
+                )
+            )
+        for key, s in was.items():
+            if key not in now:
+                kept = out / look / f"before-{s['shot']}"
+                shutil.copy(before / look / "shots" / s["shot"], kept)
+                gone.append(card(s, [(f"{look}/{kept.name}", "before")]))
+        moved.sort(key=lambda m: -m[0])
+        found = findings(after, look)
+        problems = "".join(
+            f"<li><b>{html.escape(f['kind'])}</b> {html.escape(f['page'])} <span>{html.escape(path_words(f['path']))}</span> {html.escape(f['detail'])}</li>"
+            for f in found
+        )
+        totals.append(f"<li><b>{NAMES[look]}</b>: {len(moved)} changed, {len(new)} new, {len(gone)} gone, {same} the same, {len(found)} findings</li>")
+        blocks.append(
+            f"<h2>{NAMES[look]}</h2>"
+            + (f"<details><summary>What the explorer found <small>{len(found)}</small></summary><ul class=found>{problems}</ul></details>" if found else "")
+            + section("Changed", [c for _, c in moved], True)
+            + section("New screens", new, False)
+            + section("Screens no longer reached", gone, False)
+        )
+    page = out.parent / "report.html"
+    page.write_text(
+        PAGE.format(before=html.escape(str(before.resolve())), after=html.escape(str(after.resolve())), totals="".join(totals), body="".join(blocks))
+    )
+    return page
+
+
+PAGE = """<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Screens before and after</title>
+<style>
+:root {{ --ground: #111317; --card: #1b1e24; --line: #2c313a; --text: #e8eaed; --soft: #9aa0a8; --accent: #ff4a5f; }}
+body {{ margin: 0; padding: 24px 16px 64px; background: var(--ground); color: var(--text); font: 15px/1.5 system-ui, sans-serif; }}
+main {{ max-width: 1400px; margin: 0 auto; }}
+h1 {{ font-size: 22px; margin: 0 0 4px; }}
+h2 {{ font-size: 19px; margin: 40px 0 8px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }}
+.runs, small, figcaption, header span {{ color: var(--soft); }}
+.runs {{ font-size: 13px; overflow-wrap: anywhere; }}
+summary {{ cursor: pointer; font-weight: 600; margin: 14px 0 8px; }}
+.card {{ background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin: 0 0 14px; }}
+.card header {{ display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; margin-bottom: 8px; }}
+.card em {{ color: var(--accent); font-style: normal; margin-left: auto; }}
+.shots {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }}
+figure {{ margin: 0; }}
+img {{ width: 100%; height: auto; display: block; border-radius: 6px; border: 1px solid var(--line); }}
+figcaption {{ font-size: 12px; margin-top: 4px; }}
+.found {{ font-size: 13px; padding-left: 18px; }}
+</style>
+<main>
+<h1>Screens before and after</h1>
+<p class="runs">Before: {before}<br>After: {after}</p>
+<ul>{totals}</ul>
+{body}
+</main>
+</html>
+"""
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) != 2 or argv[0] in ("-h", "--help"):
+        print(__doc__, file=sys.stderr)
+        return 2
+    app = QGuiApplication.instance() or QGuiApplication(["crawl-report", "-platform", "offscreen"])
+    page = report(Path(argv[0]), Path(argv[1]))
+    print(page)
+    del app
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
