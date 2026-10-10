@@ -799,8 +799,8 @@
         "slots": [
           {"id": "south", "label": "A", "codes": ["BTN_SOUTH"], "extra": false},
           {"id": "east", "label": "B", "codes": ["BTN_EAST"], "extra": false},
-          {"id": "north", "label": "Y", "codes": ["BTN_NORTH"], "extra": false},
-          {"id": "west", "label": "X", "codes": ["BTN_WEST"], "extra": false},
+          {"id": "north", "label": "Y", "codes": ["BTN_WEST"], "extra": false},
+          {"id": "west", "label": "X", "codes": ["BTN_NORTH"], "extra": false},
           {"id": "lb", "label": "L1", "codes": ["BTN_TL"], "extra": false},
           {"id": "rb", "label": "R1", "codes": ["BTN_TR"], "extra": false},
           {"id": "lt", "label": "L2", "codes": ["BTN_TL2"], "extra": false},
@@ -903,8 +903,8 @@
         "slots": [
           {"id": "south", "label": "A", "codes": ["BTN_SOUTH"], "extra": false},
           {"id": "east", "label": "B", "codes": ["BTN_EAST"], "extra": false},
-          {"id": "north", "label": "Y", "codes": ["BTN_NORTH"], "extra": false},
-          {"id": "west", "label": "X", "codes": ["BTN_WEST"], "extra": false},
+          {"id": "north", "label": "Y", "codes": ["BTN_WEST"], "extra": false},
+          {"id": "west", "label": "X", "codes": ["BTN_NORTH"], "extra": false},
           {"id": "lb", "label": "LB", "codes": ["BTN_TL"], "extra": false},
           {"id": "rb", "label": "RB", "codes": ["BTN_TR"], "extra": false},
           {"id": "lt", "label": "LT", "codes": ["BTN_TL2"], "extra": false},
@@ -930,8 +930,8 @@
         "slots": [
           {"id": "south", "label": "A", "codes": ["BTN_SOUTH"], "extra": false},
           {"id": "east", "label": "B", "codes": ["BTN_EAST"], "extra": false},
-          {"id": "north", "label": "Y", "codes": ["BTN_NORTH"], "extra": false},
-          {"id": "west", "label": "X", "codes": ["BTN_WEST"], "extra": false},
+          {"id": "north", "label": "Y", "codes": ["BTN_WEST"], "extra": false},
+          {"id": "west", "label": "X", "codes": ["BTN_NORTH"], "extra": false},
           {"id": "lb", "label": "LB", "codes": ["BTN_TL"], "extra": false},
           {"id": "rb", "label": "RB", "codes": ["BTN_TR"], "extra": false},
           {"id": "lt", "label": "LT", "codes": ["BTN_TL2"], "extra": false},

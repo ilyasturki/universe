@@ -186,14 +186,14 @@ const fn extra(id: &'static str, label: &'static str, codes: &'static [&'static 
 // An Android-style pad (a D-input 8BitDo) has BRAKE and GAS for triggers and Z/RZ for its right stick, so BRAKE/GAS come before Z/RZ.
 macro_rules! standard {
     ($south:literal, $east:literal, $north:literal, $west:literal, $lb:literal, $rb:literal, $lt:literal, $rt:literal, $select:literal, $start:literal, $guide:literal, $ls:literal, $rs:literal) => {
-        standard!($south, $east, $north, $west, $lb, $rb, $lt, $rt, $select, $start, $guide, $ls, $rs; &["BTN_SOUTH"], &["BTN_EAST"])
+        standard!($south, $east, $north, $west, $lb, $rb, $lt, $rt, $select, $start, $guide, $ls, $rs; &["BTN_SOUTH"], &["BTN_EAST"], &["BTN_NORTH"], &["BTN_WEST"])
     };
-    ($south:literal, $east:literal, $north:literal, $west:literal, $lb:literal, $rb:literal, $lt:literal, $rt:literal, $select:literal, $start:literal, $guide:literal, $ls:literal, $rs:literal; $south_codes:expr, $east_codes:expr) => {
+    ($south:literal, $east:literal, $north:literal, $west:literal, $lb:literal, $rb:literal, $lt:literal, $rt:literal, $select:literal, $start:literal, $guide:literal, $ls:literal, $rs:literal; $south_codes:expr, $east_codes:expr, $north_codes:expr, $west_codes:expr) => {
         [
             slot("south", $south, $south_codes),
             slot("east", $east, $east_codes),
-            slot("north", $north, &["BTN_NORTH"]),
-            slot("west", $west, &["BTN_WEST"]),
+            slot("north", $north, $north_codes),
+            slot("west", $west, $west_codes),
             slot("lb", $lb, &["BTN_TL"]),
             slot("rb", $rb, &["BTN_TR"]),
             slot("lt", $lt, &["BTN_TL2", "ABS_BRAKE+", "ABS_Z+"]),
@@ -214,11 +214,15 @@ macro_rules! standard {
 pub const STANDARD: [Slot; 17] = standard!("A", "B", "Y", "X", "LB", "RB", "LT", "RT", "Select", "Start", "Guide", "LS", "RS");
 const SONY: [Slot; 17] = standard!("Cross", "Circle", "Triangle", "Square", "L1", "R1", "L2", "R2", "Create", "Options", "PS", "L3", "R3");
 const SONY_DS4: [Slot; 17] = standard!("Cross", "Circle", "Triangle", "Square", "L1", "R1", "L2", "R2", "Share", "Options", "PS", "L3", "R3");
-const XBOX: [Slot; 17] = standard!("A", "B", "Y", "X", "LB", "RB", "LT", "RT", "View", "Menu", "Xbox", "LS", "RS");
-const DECK: [Slot; 17] = standard!("A", "B", "Y", "X", "L1", "R1", "L2", "R2", "View", "Menu", "Steam", "L3", "R3");
+// xpad, hid-microsoft, hid-steam and Steam Input's pad report X and Y by letter: X on the left is BTN_X (BTN_NORTH), Y on top BTN_Y (BTN_WEST).
+const XBOX: [Slot; 17] =
+    standard!("A", "B", "Y", "X", "LB", "RB", "LT", "RT", "View", "Menu", "Xbox", "LS", "RS"; &["BTN_SOUTH"], &["BTN_EAST"], &["BTN_WEST"], &["BTN_NORTH"]);
+const DECK: [Slot; 17] =
+    standard!("A", "B", "Y", "X", "L1", "R1", "L2", "R2", "View", "Menu", "Steam", "L3", "R3"; &["BTN_SOUTH"], &["BTN_EAST"], &["BTN_WEST"], &["BTN_NORTH"]);
 const SWITCH: [Slot; 17] = standard!("B", "A", "X", "Y", "L", "R", "ZL", "ZR", "Minus", "Plus", "Home", "LS", "RS");
 // In D-input mode the Pro 3 reports its lettered buttons by their letters, Xbox-fashion: the A on the right is BTN_SOUTH, the B at the bottom BTN_EAST.
-const EIGHTBITDO: [Slot; 17] = standard!("B", "A", "X", "Y", "L1", "R1", "L2", "R2", "Select", "Start", "Home", "L3", "R3"; &["BTN_EAST"], &["BTN_SOUTH"]);
+const EIGHTBITDO: [Slot; 17] =
+    standard!("B", "A", "X", "Y", "L1", "R1", "L2", "R2", "Select", "Start", "Home", "L3", "R3"; &["BTN_EAST"], &["BTN_SOUTH"], &["BTN_NORTH"], &["BTN_WEST"]);
 
 pub struct Family {
     pub id: &'static str,
@@ -692,6 +696,23 @@ mod tests {
         assert_eq!(s["paddle_p1"].unwrap().to_string(), "BTN_TRIGGER_HAPPY5");
         assert_eq!(s["paddle_p4"].unwrap().to_string(), "BTN_TRIGGER_HAPPY8");
         assert_eq!(s["lt"].unwrap().to_string(), "ABS_Z+");
+    }
+
+    // xpad's Xbox 360 pad over USB: BTN_A..BTN_THUMBR, sticks on X/Y and RX/RY, triggers on Z/RZ, the D-pad on a hat.
+    #[test]
+    fn an_xbox_pads_x_and_y_land_where_they_sit() {
+        let cfg = ControllerConfig::default();
+        let keys: Vec<u16> = (0x130..=0x13e).collect();
+        let axes = vec![0, 1, 2, 3, 4, 5, 16, 17];
+        for id in ["xbox", "xbox-elite", "steam-deck"] {
+            let s = resolve_slots(&cfg, family_by_id(id).unwrap(), &keys, &axes);
+            assert_eq!((s["west"].unwrap().to_string(), s["north"].unwrap().to_string()), ("BTN_NORTH".into(), "BTN_WEST".into()), "{id}");
+            assert_eq!(s["south"].unwrap().to_string(), "BTN_SOUTH", "{id}");
+        }
+        let mut walked = ControllerConfig::default();
+        walked.buttons.entry("xbox".into()).or_default().insert("north".into(), vec!["BTN_NORTH".into()]);
+        let north = resolve_slots(&walked, family_by_id("xbox").unwrap(), &keys, &axes)["north"].unwrap().to_string();
+        assert_eq!(north, "BTN_NORTH", "a walk's learned codes stay");
     }
 
     #[test]

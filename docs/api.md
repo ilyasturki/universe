@@ -1661,6 +1661,9 @@ analog triggers on `ABS_HAT2Y` and `ABS_HAT2X`), `dualsense-edge` (fn_left, fn_r
 `dualshock4`, `xbox-elite` (paddle_p1…p4), `xbox` (share), `switch-pro` (capture), `8bitdo-pro-3`
 (paddle_l4, paddle_r4, paddle_pl, paddle_pr, star), `generic`; every family has the standard slots
 `south east north west lb rb lt rt select start guide ls rs dpad_up dpad_down dpad_left dpad_right`.
+The Xbox families and the Deck seed `north` with `BTN_WEST` and `west` with `BTN_NORTH`: xpad,
+hid-microsoft, hid-steam and Steam Input report X and Y by their letter (`BTN_X` is `BTN_NORTH`),
+not by where they sit; codes learned by a button walk stay as learned.
 A slot's codes are candidates: on every connect the first one the pad advertises in its capabilities
 wins, so the Edge's paddles (`BTN_TRIGGER_HAPPY1…4`, kernel ≥ 7.2) and the Elite's (`BTN_GRIP*` over
 xpadneo or xone, `BTN_TRIGGER_HAPPY5…8` on older drivers) resolve without a hardcoded number, and a
