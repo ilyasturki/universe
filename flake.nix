@@ -641,7 +641,13 @@
             actionlint
             shellcheck
             maturin
-            bun
+            # sharp's prebuilt addon, which optimizes the site's images, needs a libstdc++ NixOS keeps off the loader's path
+            (writeShellScriptBin "bun" ''
+              export LD_LIBRARY_PATH=${
+                lib.makeLibraryPath [ stdenv.cc.cc.lib ]
+              }''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+              exec ${bun}/bin/bun "$@"
+            '')
             (pyEnv (
               ps:
               uiPy ps
