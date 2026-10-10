@@ -708,8 +708,15 @@ that `install` resumes.
 
 A game a source reports installed and owned enters the library with `source.kind`, the source's
 id, and `source.id`, the store's id of the game (a `game.toml` written before this carried it as
-`gog_id`, which still reads). The next report finds it again by that pair, else by its title's
-slug among the games no store has claimed (`kind` `manual` or `lutris`), which the source takes over.
+`gog_id`, which still reads). The next report finds it again by that pair; else, for an install it
+found on disk, among the games no store has claimed (`kind` `manual` or `lutris`): one with that
+`source.id` or the id a Lutris import parked (`[lutris] gog_manifest` for `gog`), then one whose
+`launch.exe` or `source.dir` lies in the install's `dir` (never when `dir` is home, a Universe folder,
+`paths.games_root`, `paths.prefixes_root` or a source's `games_dir`/`scan_dirs`, nor one holding
+them); else by its title's slug among those games. A report of it owned and installed takes such a
+game over: it becomes the source's. `source_library` links its rows the same way and writes
+nothing: a row's `game_id` is that library game (an archived one is left out), `installed` whether
+its exe is there.
 A game another store holds keeps its entry: the same title from a second store is a second game,
 `<slug>-<source>`. The report's `umu_id`, `store` and `runner` fill `launch.umu_id`, `launch.store` and
 `launch.runner` while they are empty (see Proton and Wine). A game entering the library takes the
