@@ -261,8 +261,8 @@ impl Units {
     }
 
     /// The game first, then the unit: a stop job SIGTERMs the whole cgroup at once, and gamescope dies before the game, which loses its X server and can save nothing.
-    /// `term_twice`: SIGTERM again every 3 s (Dolphin takes the first as a "quit?" prompt); off, the first is the only one. What is left of the game `grace`
-    /// after the first is SIGKILLed.
+    /// `term_twice`: a second SIGTERM 3 s after the first (Dolphin takes the first as a "quit?" prompt). What is left of the game `grace` after the last
+    /// SIGTERM is SIGKILLed.
     pub async fn stop(&self, unit: &str, term_twice: bool, grace: Duration) -> Result<()> {
         match self {
             Units::Systemd(sd) => {
@@ -274,21 +274,22 @@ impl Units {
                     tokio::time::sleep(SETTLE).await;
                 }
                 if let Some(cg) = cg {
-                    let first = tokio::time::Instant::now();
-                    let mut termed: Option<tokio::time::Instant> = None;
+                    let mut terms = 0;
+                    let mut last = tokio::time::Instant::now();
                     loop {
                         let game = game_pids(&cgroup_procs(&cg));
                         // Deactivating: the cgroup holds ExecStopPost now, not the game.
                         if game.is_empty() || !self.is_running(unit).await {
                             break;
                         }
-                        if first.elapsed() >= grace {
+                        if terms > 0 && last.elapsed() >= grace {
                             signal(&game, rustix::process::Signal::KILL);
                             break;
                         }
-                        if termed.is_none_or(|t| term_twice && t.elapsed() >= TERM_AGAIN) {
+                        if terms == 0 || (term_twice && terms == 1 && last.elapsed() >= TERM_AGAIN) {
                             signal(&game, rustix::process::Signal::TERM);
-                            termed = Some(tokio::time::Instant::now());
+                            terms += 1;
+                            last = tokio::time::Instant::now();
                         }
                         tokio::time::sleep(STOP_POLL).await;
                     }
@@ -502,7 +503,9 @@ fn game_pids(procs: &[Proc]) -> Vec<u32> {
 fn signal(pids: &[u32], sig: rustix::process::Signal) {
     use rustix::process::{prlimit, Resource, Rlimit};
     for pid in pids.iter().filter_map(|p| rustix::process::Pid::from_raw(*p as i32)) {
-        let _ = prlimit(Some(pid), Resource::Core, Rlimit { current: Some(0), maximum: Some(0) });
+        if sig != rustix::process::Signal::KILL {
+            let _ = prlimit(Some(pid), Resource::Core, Rlimit { current: Some(0), maximum: Some(0) });
+        }
         let _ = rustix::process::kill_process(pid, sig);
     }
 }
