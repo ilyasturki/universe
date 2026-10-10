@@ -1,13 +1,7 @@
 #!/usr/bin/env python3
-import contextlib
 import json
 import os
-import shutil
-import signal
-import subprocess
 import sys
-import tempfile
-import threading
 import time
 
 TAKE_TIMEOUT_S = 15
@@ -18,39 +12,48 @@ def log(msg):
     print(f"[screenshot] {msg}", file=sys.stderr, flush=True)
 
 
-def take_with_universe(path, *args):
-    """Its `grabbed` passed on the moment it comes, for the launcher's shutter; its stderr is ours."""
-    cmd = [os.environ.get("UNIVERSE_BIN") or "universe", *args]
+def take_in_gamescope(path, window):
+    """gamescope's own shot, whatever the desktop: nest-shot takes this process's place, its `grabbed` and path go straight to the core."""
+    exe = os.environ.get("UNIVERSE_BIN") or "universe"
+    try:
+        os.execvp(exe, [exe, "nest-shot", path, *([] if window else ["--overlays"])])
+    except OSError as e:
+        log(f"universe nest-shot: {e}")
+    return 1
+
+
+def take_on_desktop(path, screen, window, cursor):
+    """The desktop's own grab, as desktop.profile picks it (the GNOME extension, spectacle, grim, the X server); its `grabbed` passed on as it comes."""
+    import subprocess
+    import threading
+
+    exe = os.environ.get("UNIVERSE_BIN") or "universe"
+    cmd = [exe, "desktop-shot", path, "--screen", screen, *(["--window"] if window else []), *(["--cursor"] if cursor else [])]
     try:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, text=True)
     except OSError as e:
-        log(f"universe {args[0]}: {e}")
+        log(f"universe desktop-shot: {e}")
         return False
     watchdog = threading.Timer(TAKE_TIMEOUT_S, proc.kill)
     watchdog.daemon = True
     watchdog.start()
     with proc:
-        for line in proc.stdout:
+        for line in proc.stdout or ():
             if line.strip() == GRABBED:
                 print(GRABBED, flush=True)
     watchdog.cancel()
     if proc.returncode == 0 and os.path.exists(path) and os.path.getsize(path) > 0:
         return True
-    log(f"universe {args[0]} {path} failed (exit {proc.returncode})")
+    log(f"universe desktop-shot {path} failed (exit {proc.returncode})")
     return False
 
 
-def take_in_gamescope(path, window):
-    """gamescope's own shot of its screen, whatever the desktop around it: the game alone, else with the HUD over it."""
-    return take_with_universe(path, "nest-shot", path, *([] if window else ["--overlays"]))
-
-
-def take_on_desktop(path, screen, window, cursor):
-    """The desktop's own grab, as desktop.profile picks it: the GNOME extension, spectacle, grim, the X server."""
-    return take_with_universe(path, "desktop-shot", path, "--screen", screen, *(["--window"] if window else []), *(["--cursor"] if cursor else []))
-
-
 def take_with_gsr(screen, path):
+    import contextlib
+    import signal
+    import subprocess
+    import tempfile
+
     # gsr leaves gsr-kms-server running (reparented): a stderr pipe would block on it, and killpg reaps it.
     with tempfile.TemporaryFile(mode="w+") as errf:
         proc = subprocess.Popen(["gpu-screen-recorder", "-w", screen, "-o", path], stdout=subprocess.DEVNULL, stderr=errf, start_new_session=True)
@@ -76,13 +79,14 @@ def main():
     screen = os.environ.get("SESSION_SCREEN") or ""
 
     window = bool(settings.get("window", True))
+    # No fallback once gamescope has the request: a capture after its `grabbed` would be another moment than the shutter's.
     if os.environ.get("GAMESCOPE_WAYLAND_DISPLAY"):
-        taken = take_in_gamescope(path, window)
-    else:
-        taken = take_on_desktop(path, screen, window, bool(settings.get("cursor")))
-    if taken:
+        return take_in_gamescope(path, window)
+    if take_on_desktop(path, screen, window, bool(settings.get("cursor"))):
         print(path)
         return 0
+    import shutil
+
     if not shutil.which("gpu-screen-recorder"):
         log("the desktop took no shot and there is no gpu-screen-recorder to fall back on")
         return 1

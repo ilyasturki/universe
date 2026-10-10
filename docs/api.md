@@ -1245,23 +1245,24 @@ basename, which resolves to `screenshots/`.
 
 The **screenshot** module takes them, apart from recording: its own `enabled` switch, per game, is
 whether a game takes screenshots at all, and capture's settings have no say. Inside the launcher's
-gamescope (`GAMESCOPE_WAYLAND_DISPLAY` set) its hook asks gamescope itself, whatever the desktop:
-`universe nest-shot <path> [--overlays]` sets `GAMESCOPECTRL_REQUEST_SCREENSHOT` on its root,
+gamescope (`GAMESCOPE_WAYLAND_DISPLAY` set) its hook asks gamescope itself, whatever the desktop,
+and execs into `universe nest-shot <path> [--overlays]`, which sets `GAMESCOPECTRL_REQUEST_SCREENSHOT` on its root,
 prints `grabbed` one frame later at the panel's refresh (`GAMESCOPE_DISPLAY_REFRESH_RATE_FEEDBACK`,
 60 Hz when unset; gamescope composites a request at its next vblank), two with `--overlays` so a cue
 drawn after it stays out of the overlay layers, then copies the `/tmp/gamescope.png` it writes and
 prints the path — the game alone at its render size with `window = true`,
-the overlay layers (mangoapp's HUD) too with `false`. gamescope takes one shot at a time, so a
-screenshot pressed while HOME's frame of the game is being taken is dropped, and the hook falls back
-to gpu-screen-recorder as below.
+the overlay layers (mangoapp's HUD) too with `false`. gamescope takes one shot at a time: a
+screenshot pressed while HOME's frame of the game is being encoded is dropped, and the frame that
+lands is copied in its place. A shot gamescope never writes fails, with no capture of a later moment
+in its place: the shutter has already played for the grab.
 Elsewhere it asks the desktop, `universe desktop-shot` (see Desktop): the focused window with
 `window = true` (the default), the session's screen with `false`, the cursor per `cursor` (both per
 game). On GNOME the extension grabs it (`org.universe.Windows.Screenshot(path, window, cursor)`):
 Mutter reads the framebuffer synchronously, so the grab returns at the press, before the PNG is
 encoded, and `desktop-shot` prints `grabbed` then; spectacle, grim and the X server print it once
 the file is written. When the desktop takes none it is a gpu-screen-recorder `-o` capture of `SESSION_SCREEN`
-when gpu-screen-recorder is installed, else the hook fails. The hook passes `grabbed` on as either
-command prints it; a hook that never prints it is taken as grabbed with its path.
+when gpu-screen-recorder is installed, else the hook fails. The hook passes `desktop-shot`'s
+`grabbed` on as it comes; a hook that never prints it is taken as grabbed with its path.
 
 `thumb` is the shot's thumbnail, a 960 px wide JPEG under `$XDG_CACHE_HOME/universe/thumbs/` (one flat
 directory, `<game>--<stem>-<mtime>.jpg`, so a file replaced in place gets a fresh one), and

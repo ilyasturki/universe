@@ -106,10 +106,10 @@ def test_inside_gamescope_its_own_shot_is_taken_and_the_desktop_left_alone(tmp_p
     assert universe_calls(fakebin).endswith(f"nest-shot\n{path_of(result)}\n--overlays\n"), "every layer: the HUD too"
 
 
-def test_a_failed_gamescope_shot_falls_back_to_gsr(tmp_path, fakebin):
+def test_a_failed_gamescope_shot_fails_with_no_later_capture_in_its_place(tmp_path, fakebin):
     result = run(env_for(tmp_path, fakebin, {}, GAMESCOPE_WAYLAND_DISPLAY="gamescope-0", FAKE_NEST_OK="false"))
-    assert result.returncode == 0, result.stderr
-    assert "gamescope wrote no screenshot" in result.stderr and gsr_flag(fakebin, "-o") == [path_of(result)]
+    assert result.returncode == 1 and result.stdout == ""
+    assert "gamescope wrote no screenshot" in result.stderr and not (fakebin["logs"] / "gsr.args").exists()
 
 
 def test_no_desktop_shot_and_no_gsr_fails_saying_so(tmp_path, fakebin):
