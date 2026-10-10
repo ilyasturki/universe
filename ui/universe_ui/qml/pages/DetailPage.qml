@@ -11,13 +11,26 @@ FocusScope {
     focus: true
 
     property var game: null
+    // The game's screenshots, recordings and journal entries as the game menu lists them; set by the theme.
+    property var media: []
+    // A menu or a question over the page: its hints take the bar.
+    property var overlayHints: null
 
     signal launchRequested(var game)
     signal closeRequested
     signal menuRequested(var game, Item anchor)
+    signal settingsRequested(var game)
+    signal mediaRequested(var game, Item anchor)
+    signal achievementsRequested(var game)
 
-    readonly property var pills: ["play", "favourite"]
+    readonly property var pills: ["play", "favourite", "settings"].concat(media.length > 0 ? ["media"] : []).concat(game && game.achievementsTotal > 0 ? ["achievements"] : []).concat(["more"])
     readonly property string action: pills[Math.max(0, Math.min(actionIndex, pills.length - 1))]
+    readonly property var actionLabels: ({
+            settings: "Game settings",
+            media: "Media",
+            achievements: "Achievements",
+            more: "More"
+        })
     readonly property var session: api.universe.currentSession
     readonly property string playLabel: Format.playLabel(game, session && session.id !== undefined ? session.id : "")
 
@@ -39,6 +52,7 @@ FocusScope {
     readonly property bool hasAbout: description !== ""
     readonly property bool hasShots: screenshots.length > 0
 
+    readonly property bool onHeart: section === 0 && action === "favourite"
     readonly property var hints: lightbox ? [
         {
             glyph: "dpad",
@@ -51,8 +65,14 @@ FocusScope {
     ] : [
         {
             glyph: "A",
-            label: section === 2 ? "View" : section === 0 && action === "favourite" ? (game && game.favorite ? "Remove from favourites" : "Add to favourites") : playLabel
-        },
+            label: section === 2 ? "View" : section === 1 ? playLabel : onHeart ? (game && game.favorite ? "Remove from favourites" : "Add to favourites") : actionLabels[action] || playLabel
+        }
+    ].concat(onHeart ? [] : [
+        {
+            glyph: "Y",
+            label: game && game.favorite ? "Unfavourite" : "Favourite"
+        }
+    ]).concat([
         {
             glyph: "Start",
             label: "More"
@@ -61,7 +81,7 @@ FocusScope {
             glyph: "B",
             label: "Back"
         }
-    ]
+    ])
 
     onGameChanged: reset()
 
@@ -214,53 +234,49 @@ FocusScope {
                         onPicked: page.pointToAction("play")
                     }
 
-                    Rectangle {
-                        id: heart
+                    RoundButton {
+                        icon: page.game && page.game.favorite ? "heart" : "heart-outline"
+                        focused: actions.active && page.action === "favourite"
+                        dimmed: actions.active && page.action !== "favourite"
+                        onPicked: page.pointToAction("favourite")
+                    }
 
-                        readonly property bool focused: actions.active && page.action === "favourite"
+                    PillButton {
+                        ghost: true
+                        icon: "sliders"
+                        label: page.actionLabels.settings
+                        focused: actions.active && page.action === "settings"
+                        dimmed: actions.active && page.action !== "settings"
+                        onPicked: page.pointToAction("settings")
+                    }
 
-                        width: Theme.dp(78)
-                        height: Theme.dp(78)
-                        radius: width / 2
-                        color: Theme.surface
-                        border.width: Math.max(1, Theme.dp(2))
-                        border.color: Theme.surfaceBorder
-                        opacity: actions.active && !focused ? 0.5 : 1.0
-                        scale: focused ? 1.04 : 1.0
+                    PillButton {
+                        id: mediaButton
+                        visible: page.pills.indexOf("media") >= 0
+                        ghost: true
+                        icon: "photos"
+                        label: page.actionLabels.media
+                        focused: actions.active && page.action === "media"
+                        dimmed: actions.active && page.action !== "media"
+                        onPicked: page.pointToAction("media")
+                    }
 
-                        Behavior on opacity {
-                            Ease {
-                                duration: Theme.durQuick
-                            }
-                        }
-                        Behavior on scale {
-                            Ease {
-                                easing.type: Easing.OutQuint
-                            }
-                        }
+                    PillButton {
+                        visible: page.pills.indexOf("achievements") >= 0
+                        ghost: true
+                        icon: "trophy"
+                        label: page.actionLabels.achievements
+                        focused: actions.active && page.action === "achievements"
+                        dimmed: actions.active && page.action !== "achievements"
+                        onPicked: page.pointToAction("achievements")
+                    }
 
-                        Loader {
-                            anchors.fill: parent
-                            active: heart.focused
-                            sourceComponent: FocusRing {
-                                cornerRadius: heart.radius
-                                gapWidth: Theme.dp(Theme.ringGap)
-                            }
-                        }
-
-                        MenuGlyph {
-                            anchors.centerIn: parent
-                            width: Theme.dp(28)
-                            height: Theme.dp(28)
-                            kind: page.game && page.game.favorite ? "heart" : "heart-outline"
-                            tint: "#f2f3f5"
-                        }
-
-                        Pointer {
-                            direct: true
-                            radius: heart.radius
-                            onPicked: page.pointToAction("favourite")
-                        }
+                    RoundButton {
+                        id: moreButton
+                        icon: "more"
+                        focused: actions.active && page.action === "more"
+                        dimmed: actions.active && page.action !== "more"
+                        onPicked: page.pointToAction("more")
                     }
                 }
             }
@@ -362,12 +378,13 @@ FocusScope {
 
     HintBar {
         id: hintBar
+        objectName: "hintBar"
 
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.right: parent.right
         sideMargin: page.sideMargin
-        hints: page.hints
+        hints: page.overlayHints || page.hints
     }
 
     Lightbox {
@@ -396,10 +413,18 @@ FocusScope {
             if (page.section === 2) {
                 Sound.enter();
                 page.lightbox = true;
-            } else if (page.section === 0 && page.action === "favourite") {
-                page.toggleFavourite();
-            } else {
+            } else if (page.section !== 0 || page.action === "play") {
                 page.launchRequested(page.game);
+            } else if (page.action === "favourite") {
+                page.toggleFavourite();
+            } else if (page.action === "settings") {
+                page.settingsRequested(page.game);
+            } else if (page.action === "media") {
+                page.mediaRequested(page.game, mediaButton);
+            } else if (page.action === "achievements") {
+                page.achievementsRequested(page.game);
+            } else {
+                page.menuRequested(page.game, moreButton);
             }
         } else if (api.keys.isFilters(event)) {
             if (page.game)
@@ -421,12 +446,12 @@ FocusScope {
         } else if (api.keys.isMenu(event)) {
             if (!page.game)
                 return;
-            // The menu sits beside the logo: a scrolled page snaps back under it.
+            // The menu sits beside the More button: a scrolled page snaps back under it.
             if (pageScroll.heading() > 0) {
                 page.section = 0;
                 pageScroll.place(0);
             }
-            page.menuRequested(page.game, heroLogo);
+            page.menuRequested(page.game, moreButton);
         }
     }
 }

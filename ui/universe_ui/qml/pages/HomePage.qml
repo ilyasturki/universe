@@ -15,6 +15,8 @@ FocusScope {
     signal chromeRequested
     signal addRequested
     signal setupRequested
+    signal detailRequested(var game)
+    signal menuRequested(var game, Item anchor)
 
     readonly property int railFloor: 5
     readonly property bool standingIn: (recent ? recent.count : 0) < railFloor
@@ -27,12 +29,15 @@ FocusScope {
     readonly property real scrimTop: 0
     readonly property real scrimMid: 0
     readonly property real scrimBottom: 0
-    readonly property Item menuAnchor: tileSelected || !rail.currentItem ? null : rail.currentItem.artItem
+    // On the hero the menu opens beside its More button, as that button's A does.
+    readonly property Item menuAnchor: tileSelected ? null : heroActions.activeFocus ? moreButton : rail.currentItem ? rail.currentItem.artItem : null
     property bool menuOpen: false
 
     property bool tileSelected: false
     readonly property int focusIndex: tileSelected ? railCount : rail.currentIndex
     readonly property bool onSetup: tileSelected && empty && heroActions.activeFocus && heroActions.index === 1
+    // The hero keeps its lit button while the menu it opened is up.
+    readonly property bool onHero: !tileSelected && (heroActions.activeFocus || (menuOpen && heroActions.focus))
 
     readonly property var hints: {
         var out = [];
@@ -44,7 +49,16 @@ FocusScope {
         else
             out.push({
                 glyph: "A",
-                label: playLabel
+                label: onHero && heroActions.index === 1 ? "Game page" : onHero && heroActions.index === 2 ? "More" : playLabel,
+                dim: arriving && onHero && heroActions.index !== 0
+            }, {
+                glyph: "X",
+                label: "Game page",
+                dim: arriving
+            }, {
+                glyph: "Y",
+                label: currentGame && currentGame.favorite ? "Unfavourite" : "Favourite",
+                dim: arriving
             }, {
                 glyph: "Start",
                 label: "More",
@@ -151,6 +165,9 @@ FocusScope {
         } else if (page.tileSelected && api.keys.isDetails(event)) {
             event.accepted = true;
             Sound.edge();
+        } else if (page.onHero && heroActions.index > 0 && api.keys.isAccept(event)) {
+            event.accepted = true;
+            heroActions.index === 1 ? page.detailRequested(page.currentGame) : page.menuRequested(page.currentGame, moreButton);
         }
     }
 
@@ -290,7 +307,7 @@ FocusScope {
                 height: buttons.height
 
                 property int index: 0
-                readonly property int last: page.tileSelected && page.empty ? 1 : 0
+                readonly property int last: page.tileSelected ? (page.empty ? 1 : 0) : 2
 
                 function step(d) {
                     index = Sound.stepped(index, d, last + 1);
@@ -308,8 +325,26 @@ FocusScope {
 
                     PillButton {
                         label: page.playLabel
-                        focused: heroActions.activeFocus
+                        focused: page.onHero && heroActions.index === 0
+                        dimmed: page.onHero && heroActions.index !== 0
                         onPicked: page.pointToAction(0)
+                    }
+
+                    PillButton {
+                        ghost: true
+                        icon: "info"
+                        label: "Game page"
+                        focused: page.onHero && heroActions.index === 1
+                        dimmed: page.onHero && heroActions.index !== 1
+                        onPicked: page.pointToAction(1)
+                    }
+
+                    RoundButton {
+                        id: moreButton
+                        icon: "more"
+                        focused: page.onHero && heroActions.index === 2
+                        dimmed: page.onHero && heroActions.index !== 2
+                        onPicked: page.pointToAction(2)
                     }
                 }
 
@@ -475,6 +510,7 @@ FocusScope {
             }
             Keys.onUpPressed: function (event) {
                 Sound.panel();
+                heroActions.index = 0;
                 heroActions.forceActiveFocus();
             }
             Keys.onDownPressed: Sound.edge()

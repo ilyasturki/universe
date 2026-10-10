@@ -503,6 +503,59 @@ def test_the_reprise_detail_page_shows_the_play_time_once_a_game_is_played(look,
     until(lambda: stats() == {}, "never played: no row")
 
 
+@reprise
+def test_the_reprise_game_page_holds_the_games_tools_and_the_hero_its_page_and_menu(look, api):
+    def glyphs(hints):
+        return [h["glyph"] for h in hints]
+
+    root = look.root
+    menu = look.find("gameMenu")
+    home = look.home()
+    until(lambda: game_id(home) == "the-technomancer")
+    assert glyphs(read(home, "hints")) == ["A", "X", "Y", "Start"], "the rail names every button that acts on the game"
+    look.press(Qt.Key.Key_Up)
+    until(lambda: home.property("onHero") is True)
+    look.press(Qt.Key.Key_Right)
+    look.press(Qt.Key.Key_Return)
+    until(lambda: root.property("detailOpen") is True, "the hero's Game page")
+    page = until(lambda: root.findChild(QObject, "detailPage"))
+    bar = until(lambda: descendant(page, "hintBar"))
+    until(lambda: read(page, "pills") == ["play", "favourite", "settings", "media", "more"], "the game's tools, Media as it has some")
+    assert glyphs(read(bar, "hints")) == ["A", "Y", "Start", "B"]
+    look.press(Qt.Key.Key_Right)
+    assert page.property("action") == "favourite" and glyphs(read(bar, "hints")) == ["A", "Start", "B"], "on the heart A favourites: no Y"
+    look.press(Qt.Key.Key_Right)
+    look.press(Qt.Key.Key_Return)
+    look.page("gameSettingsPage")
+    look.press(Qt.Key.Key_Escape)
+    until(lambda: root.property("subOpen") is False and page.property("activeFocus") is True)
+    look.press(Qt.Key.Key_Right)
+    look.press(Qt.Key.Key_Return)
+    until(lambda: menu.property("open") is True)
+    assert [i["action"] for i in read(menu, "items")] == ["screenshots", "recordings", "journal"]
+    assert read(bar, "hints") == read(menu, "hints"), "the menu over the page has the bar"
+    look.press(Qt.Key.Key_Return)
+    look.page("screenshotsPage")
+    look.press(Qt.Key.Key_Escape)
+    until(lambda: root.property("subOpen") is False and page.property("activeFocus") is True)
+    look.press(Qt.Key.Key_Right)
+    look.press(Qt.Key.Key_Return)
+    until(lambda: menu.property("open") is True and read(menu, "items")[0]["action"] == "play", "··· is the game menu")
+    look.press(Qt.Key.Key_Escape)
+    look.press(Qt.Key.Key_Escape)
+    until(lambda: root.property("detailOpen") is False)
+    until(lambda: home.property("onHero") is True)
+    look.press(Qt.Key.Key_Right, 2)
+    look.press(Qt.Key.Key_Return)
+    until(lambda: menu.property("open") is True and read(menu, "items")[1]["action"] == "details", "the hero's More is the game menu")
+    look.press(Qt.Key.Key_Escape)
+    invoke(root, "openDetail", api.allGames.byId("batman-arkham-origins"))
+    until(lambda: "achievements" in read(page, "pills"))
+    page.setProperty("actionIndex", read(page, "pills").index("achievements"))
+    look.press(Qt.Key.Key_Return)
+    look.page("achievementsPage")
+
+
 def library(look):
     if look.stacked:
         return look.open({"switch2": "pages/AllSoftwarePage.qml", "ps5": "pages/LibraryPage.qml"}[look.name])

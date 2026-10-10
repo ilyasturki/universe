@@ -126,6 +126,8 @@ FocusScope {
     readonly property var focusTarget: searchOpen && searchLoader.item ? searchLoader.item : activePage
     readonly property var focusedGame: subOpen ? (subArgs.game || null) : detailOpen ? detailGame : (activePage ? activePage.currentGame : null)
     readonly property bool menuOpen: gameMenu.open
+    // What the bar shows over any page while the sheet, a question or the game menu is up.
+    readonly property var overlayHints: prompts.open ? prompts.hints : confirm.open ? confirm.hints : menuOpen ? gameMenu.hints : null
     // Read by a key script's Expect: the id Return launches, "" for none, null while a dialog, menu or page over the row takes the key.
     readonly property var returnLaunches: launching || launchOverlay.running || confirm.open || detailOpen || subOpen || menuOpen ? null : focusOwner !== "chrome" && focusTarget && focusTarget.currentGame ? String(focusTarget.currentGame.id) : ""
     readonly property var session: api.universe.currentSession
@@ -587,21 +589,8 @@ FocusScope {
                 gap: true
             }
         ];
-        var pages = {
-            settings: "GameSettingsPage",
-            artwork: "ArtworkPage",
-            screenshots: "ScreenshotsPage",
-            recordings: "RecordingsPage",
-            journal: "JournalPage",
-            sessions: "SessionsPage",
-            data: "DataPage",
-            achievements: "AchievementsPage"
-        };
         var openPage = function (action) {
-            root.restoreFocus();
-            root.openSub("pages/" + pages[action] + ".qml", {
-                game: game
-            });
+            root.openGamePage(game, action);
         };
         var askRemove = function () {
             Sound.panel();
@@ -647,6 +636,38 @@ FocusScope {
                 root.resumeSession();
             else if (action === "achievements")
                 openPage(action);
+        });
+    }
+
+    readonly property var gamePages: ({
+            settings: "GameSettingsPage",
+            artwork: "ArtworkPage",
+            screenshots: "ScreenshotsPage",
+            recordings: "RecordingsPage",
+            journal: "JournalPage",
+            sessions: "SessionsPage",
+            data: "DataPage",
+            achievements: "AchievementsPage"
+        })
+
+    // One of a game's pages by its menu action.
+    function openGamePage(game, action) {
+        restoreFocus();
+        openSub("pages/" + gamePages[action] + ".qml", {
+            game: game
+        });
+    }
+
+    // The game page's Media button: the menu's Media list beside it, or the one kind the game has.
+    function openMediaMenu(game, anchor) {
+        var media = mediaItems(game);
+        if (media.length === 1) {
+            openGamePage(game, media[0].action);
+            return;
+        }
+        Sound.panel();
+        gameMenu.show(media, anchor, Qt.rect(0, 0, anchor.width, anchor.height), "Media", function (picked) {
+            root.openGamePage(game, picked);
         });
     }
 
@@ -1016,6 +1037,9 @@ FocusScope {
                         function onLibraryRequested() {
                             root.openLibrary();
                         }
+                        function onMenuRequested(game, anchor) {
+                            root.openMenu(game, anchor);
+                        }
                         function onChromeRequested() {
                             root.focusChrome();
                         }
@@ -1037,7 +1061,7 @@ FocusScope {
             anchors.right: parent.right
             opacity: root.subOpen && root.subArgs.setup ? 0.0 : root.chromeReveal
             visible: opacity > 0.01
-            hints: prompts.open ? prompts.hints : confirm.open ? confirm.hints : root.menuOpen ? gameMenu.hints : root.focusOwner === "chrome" ? tabBar.hints : root.focusOwner === "search" ? (searchLoader.item ? searchLoader.item.hints : []) : !root.activePage ? [] : root.activePage.modal ? root.activePage.hints : root.activePage.hints.concat([
+            hints: root.overlayHints ? root.overlayHints : root.focusOwner === "chrome" ? tabBar.hints : root.focusOwner === "search" ? (searchLoader.item ? searchLoader.item.hints : []) : !root.activePage ? [] : root.activePage.modal ? root.activePage.hints : root.activePage.hints.concat([
                 {
                     glyph: "LB RB",
                     label: "Tabs"
@@ -1106,6 +1130,12 @@ FocusScope {
             item.game = Qt.binding(function () {
                 return root.detailGame;
             });
+            item.media = Qt.binding(function () {
+                return root.detailGame ? root.mediaItems(root.detailGame) : [];
+            });
+            item.overlayHints = Qt.binding(function () {
+                return root.overlayHints;
+            });
             item.forceActiveFocus();
         }
 
@@ -1120,6 +1150,15 @@ FocusScope {
             }
             function onMenuRequested(game, anchor) {
                 root.openMenu(game, anchor);
+            }
+            function onSettingsRequested(game) {
+                root.openGamePage(game, "settings");
+            }
+            function onMediaRequested(game, anchor) {
+                root.openMediaMenu(game, anchor);
+            }
+            function onAchievementsRequested(game) {
+                root.openGamePage(game, "achievements");
             }
         }
 
