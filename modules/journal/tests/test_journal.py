@@ -152,9 +152,9 @@ exit 0''',
     return bindir
 
 
-def fake_codex(fakebin, stderr, resets_at=None, account_error=None):
-    """`exec` fails with `stderr`; `app-server` answers the rate-limit read with `resets_at` (Unix seconds) at 100 %, with
-    `account_error`, or nothing."""
+def fake_codex(fakebin, stderr, resets_at=None, account_error=None, stdout=""):
+    """`exec` prints `stdout` (its JSON events) and fails with `stderr`; `app-server` answers the rate-limit read with `resets_at`
+    (Unix seconds) at 100 %, with `account_error`, or nothing."""
     app_server = "exit 1"
     if account_error is not None:
         reply = json.dumps({"id": 2, "error": {"code": -32600, "message": account_error}})
@@ -164,7 +164,10 @@ def fake_codex(fakebin, stderr, resets_at=None, account_error=None):
             'read -r _init; echo \'{"id":1,"result":{}}\'; read -r _initialized; read -r _req\n'
             f'echo \'{{"id":2,"result":{{"rateLimits":{{"primary":{{"usedPercent":100,"windowDurationMins":10080,"resetsAt":{resets_at}}},"secondary":null}}}}}}\'\nexit 0'
         )
-    write_shim(fakebin / "codex", f'echo "$1" >> "{fakebin}/codex.calls"\nif [ "$1" = app-server ]; then\n{app_server}\nfi\necho "{stderr}" >&2\nexit 1')
+    events = f"cat <<'EVENTS'\n{stdout}EVENTS\n" if stdout else ""
+    write_shim(
+        fakebin / "codex", f'echo "$1" >> "{fakebin}/codex.calls"\nif [ "$1" = app-server ]; then\n{app_server}\nfi\n{events}echo "{stderr}" >&2\nexit 1'
+    )
 
 
 def run_process(tmp_path, fakebin, settings, extra_env=None, recording=None):
@@ -454,38 +457,34 @@ def test_codex_exec_arguments(tmp_path, monkeypatch):
     assert json.loads(Path(schema).read_text()) == pr.OUTPUT_SCHEMA
 
 
-def test_codex_quota_wall_and_retry(tmp_path, monkeypatch):
-    attempts = []
+def test_codex_quota_wall_and_retry(tmp_path, fakebin, monkeypatch):
+    monkeypatch.setenv("PATH", f"{fakebin}:{os.environ['PATH']}")
 
-    def walled(args, **kw):
-        attempts.append(1)
-        return subprocess.CompletedProcess(args, 1, "", "You've hit your usage limit. Try again at Sep 7th, 2026 12:07 PM.")
-
-    monkeypatch.setattr(providers.subprocess, "run", walled)
-    monkeypatch.setattr(providers, "read_limit_reset", lambda: None)
-    with pytest.raises(providers.QuotaExceeded) as info:
+    def run():
+        (fakebin / "codex.calls").unlink(missing_ok=True)
         providers.run_codex(providers.Options(model="m"), "system", "brief", [], str(tmp_path))
-    assert info.value.until == datetime(2026, 9, 7, 12, 7) and len(attempts) == 1
+
+    def execs():
+        return (fakebin / "codex.calls").read_text().splitlines().count("exec")
+
+    fake_codex(fakebin, "You've hit your usage limit. Try again at Sep 7th, 2026 12:07 PM.")
+    with pytest.raises(providers.QuotaExceeded) as info:
+        run()
+    assert info.value.until == datetime(2026, 9, 7, 12, 7) and execs() == 1, "codex cannot say when: the prose does"
 
     # The typed event decides, not everything codex printed; codex's own instant wins over the prose
-    def walled_json(args, **kw):
-        stdout = '{"type":"item.completed","item":{"type":"agent_message","text":"you hit your usage limit? no"}}\n{"type":"turn.failed","error":{"message":"You have hit your usage limit. Try again at 3:40 PM."}}\n'
-        return subprocess.CompletedProcess(args, 1, stdout, "")
-
-    monkeypatch.setattr(providers.subprocess, "run", walled_json)
-    monkeypatch.setattr(providers, "read_limit_reset", lambda: datetime(2026, 9, 27, 15, 40))
+    chatter = '{"type":"item.completed","item":{"type":"agent_message","text":"you hit your usage limit? no"}}\n'
+    walled = '{"type":"turn.failed","error":{"message":"You have hit your usage limit. Try again at 3:40 PM."}}\n'
+    fake_codex(fakebin, "", resets_at=int(datetime(2026, 9, 27, 15, 40).timestamp()), stdout=chatter + walled)
     with pytest.raises(providers.QuotaExceeded) as info:
-        providers.run_codex(providers.Options(model="m"), "system", "brief", [], str(tmp_path))
+        run()
     assert info.value.until == datetime(2026, 9, 27, 15, 40)
 
     # A limit or a 401 mentioned outside the failure event is neither the wall nor a sign-out
-    for chatter in ("the tool output said: you hit your usage limit", "tool output: HTTP 401"):
-        failed = '{"type":"turn.failed","error":{"message":"stream disconnected"}}\n'
-        monkeypatch.setattr(
-            providers.subprocess, "run", lambda args, chatter=chatter, failed=failed, **kw: subprocess.CompletedProcess(args, 1, failed, chatter)
-        )
+    for said in ("the tool output said: you hit your usage limit", "tool output: HTTP 401"):
+        fake_codex(fakebin, said, stdout='{"type":"turn.failed","error":{"message":"stream disconnected"}}\n')
         with pytest.raises(providers.Transient):
-            providers.run_codex(providers.Options(model="m"), "system", "brief", [], str(tmp_path))
+            run()
 
     assert providers.limit_reset_from(
         {"rateLimits": {"primary": {"usedPercent": 100, "resetsAt": 1700000000}, "secondary": {"usedPercent": 100, "resetsAt": 1700003600}}}
@@ -496,15 +495,10 @@ def test_codex_quota_wall_and_retry(tmp_path, monkeypatch):
     assert providers.limit_reset_from({"rateLimits": {"primary": {"usedPercent": 12, "resetsAt": 1700003600}}}) is None
     assert providers.limit_reset_from(None) is None
 
-    def flaky(args, **kw):
-        attempts.append(2)
-        return subprocess.CompletedProcess(args, 1, "", "Reconnecting... 5/5")
-
-    attempts.clear()
-    monkeypatch.setattr(providers.subprocess, "run", flaky)
+    fake_codex(fakebin, "Reconnecting... 5/5")
     with pytest.raises(providers.Transient):
-        providers.run_codex(providers.Options(model="m"), "system", "brief", [], str(tmp_path))
-    assert len(attempts) == providers.ATTEMPTS
+        run()
+    assert execs() == providers.ATTEMPTS
 
 
 def test_acceptance_of_model_fields():
