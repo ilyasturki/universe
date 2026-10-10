@@ -489,14 +489,16 @@ def hooks(src, env, monkeypatch, tmp_path):
     game = tmp_path / "game"
     game.mkdir()
     (game / "Galaxy64.dll").write_bytes(b"")
-    ran = []
+    ran, failing = [], set()
     real_run = src.subprocess.run
 
     def fake_run(cmd, **kwargs):
         if cmd[0] == "gogdl":
             return real_run(cmd, **kwargs)
         ran.append(cmd)
-        return src.subprocess.CompletedProcess(cmd, 0, "", "")
+        if cmd[0] in failing and kwargs.get("check"):
+            raise src.subprocess.CalledProcessError(1, cmd)
+        return src.subprocess.CompletedProcess(cmd, 1 if cmd[0] in failing else 0, "", "")
 
     monkeypatch.setattr(src.subprocess, "run", fake_run)
     monkeypatch.setattr(src.shutil, "which", lambda name: "/nix/bin/comet" if name == "comet" else None)
@@ -511,7 +513,7 @@ def hooks(src, env, monkeypatch, tmp_path):
     auth = tmp_path / "auth" / "auth.json"
     auth.parent.mkdir(parents=True, exist_ok=True)
     auth.write_text(json.dumps({src.GALAXY_CLIENT_ID: {"access_token": "tok", "refresh_token": "r", "user_id": "4242"}}))
-    return {"ran": ran, "game": game, "auth": auth, **env}
+    return {"ran": ran, "failing": failing, "game": game, "auth": auth, **env}
 
 
 def test_pre_launch_starts_one_comet_on_gogdls_tokens(src, hooks, capsys):
@@ -544,12 +546,10 @@ def test_pre_launch_leaves_comet_alone(src, hooks, settings, monkeypatch, capsys
     assert not (hooks["data"] / "comet-session.json").exists()
 
 
-def test_pre_launch_goes_on_when_comet_fails(src, hooks, monkeypatch, capsys):
-    def boom(*args):
-        raise src.subprocess.CalledProcessError(1, ["systemd-run"])
-
-    monkeypatch.setattr(src, "start_comet", boom)
+def test_pre_launch_goes_on_when_comet_fails(src, hooks):
+    hooks["failing"].add("systemd-run")
     assert src.main(["pre-launch"]) == 0
+    assert any(cmd[0] == "systemd-run" and "/nix/bin/comet" in cmd for cmd in hooks["ran"]), "comet was asked for"
     assert not (hooks["data"] / "comet-session.json").exists()
 
 
