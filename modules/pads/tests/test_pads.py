@@ -196,6 +196,20 @@ class FakeSdl:
     def SDL_SetEventEnabled(self, kind, on):
         pass
 
+    def SDL_OpenGamepad(self, instance_id):
+        return instance_id
+
+
+class FakeGamepad:
+    """A physical pad SDL opened: instance ids 1, 3 are an 8BitDo, 2, 4 a DualSense, each listed again after a re-init."""
+
+    def __init__(self, _sdl, _handle, instance_id):
+        self.id, self.gyro = instance_id, False
+        self.vendor, self.product, self.name = ((0x2DC8, 0x6009, "8BitDo Pro 3"), (0x054C, 0x0CE6, "DualSense"))[(instance_id + 1) % 2]
+
+    def close(self):
+        pass
+
 
 def uhid_events(data):
     """The (type, name, uniq, product) of each event written to /dev/uhid, in order."""
@@ -219,10 +233,13 @@ def test_a_hangup_makes_every_virtual_pad_again_under_its_own_name_and_uniq(tmp_
     monkeypatch.setattr(_pads, "UHID", str(uhid))
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
     forward = _script("forward")
+    monkeypatch.setattr(forward._sdl, "Gamepad", FakeGamepad)
     sdl = FakeSdl()
     fw = forward.Forwarder(sdl, "s1", False)
     fw.add_slot()
     fw.add_slot()
+    fw.on_added(1)
+    fw.on_added(2)
     created = uhid_events(os.read(reader, 65536))
     previous = signal.signal(signal.SIGHUP, fw.on_signal)
     try:
@@ -235,5 +252,8 @@ def test_a_hangup_makes_every_virtual_pad_again_under_its_own_name_and_uniq(tmp_
     assert [e[0] for e in again] == ["destroy", "destroy", "create", "create"]
     assert again[2:] == created, "each player's pad back under the same name, uniq and product"
     assert sdl.calls == [("quit", forward._sdl.INIT_GAMEPAD), ("init", forward._sdl.INIT_GAMEPAD)], "the physical pads are listed afresh"
+    fw.on_added(4)
+    fw.on_added(3)
+    assert {p: g.name for p, g in fw.held.items()} == {0: "8BitDo Pro 3", 1: "DualSense"}, "each pad back on its own player, whatever order SDL lists them in"
     fw.close()
     os.close(reader)

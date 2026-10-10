@@ -42,6 +42,8 @@ class Forwarder:
         self.frozen = False
         self.stopping = False
         self.reconnecting = False
+        # player → (vendor, product, name) of the pad it held before a recreate, kept for that pad's return.
+        self.returning: dict[int, tuple] = {}
         self.epoch = time.monotonic_ns()
 
     def on_signal(self, signum, _frame):
@@ -58,6 +60,7 @@ class Forwarder:
         """Every player's virtual pad destroyed and made again, same name, product and uniq: the emulator sees it unplugged and
         back under the same GUID. The physical pads are let go and taken up afresh as SDL lists them again."""
         self.reconnecting = False
+        self.returning = {player: (pad.vendor, pad.product, pad.name) for player, pad in self.held.items()}
         for pad in self.held.values():
             pad.close()
         self.held.clear()
@@ -93,13 +96,17 @@ class Forwarder:
         if pad.vendor == VENDOR and FIRST_PRODUCT <= pad.product < FIRST_PRODUCT + MAX_PLAYERS:
             pad.close()
             return
-        player = next((s.player for s in self.slots if s.player not in self.held), None)
+        free = [s.player for s in self.slots if s.player not in self.held]
+        ident = (pad.vendor, pad.product, pad.name)
+        player = next((p for p in free if self.returning.get(p) == ident), None)
+        player = player if player is not None else next((p for p in free if p not in self.returning), next(iter(free), None))
         if player is None:
             if len(self.slots) >= MAX_PLAYERS:
                 log(f"{pad.name}: every one of the {MAX_PLAYERS} players has a pad, left out")
                 pad.close()
                 return
             player = self.add_slot().player
+        self.returning.pop(player, None)
         self.held[player] = pad
         log(f"player {player + 1}: {pad.name} ({pad.vendor:04x}:{pad.product:04x}, gyro {'yes' if pad.gyro else 'no'})")
         self.publish()
