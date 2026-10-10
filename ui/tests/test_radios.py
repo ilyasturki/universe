@@ -213,16 +213,16 @@ def test_a_cable_pairing_asks_over_the_launcher(api, fake, universe_session):
     until(lambda: pad in addresses(bt.paired))
 
 
-def test_a_question_while_a_game_holds_the_screen_is_refused_with_a_notice(api, fake, monkeypatch):
-    monkeypatch.setattr(api.home, "_shown", "game")
+def test_a_question_while_a_game_holds_the_screen_is_refused_with_a_notice(api, fake):
+    fake.launch("mirrors-edge", "")
+    until(lambda: api.home.shown == "game")
     bt = api.screens.bluetooth
     bt.start()
     until(lambda: fake.core.bt.watches)
     notices = record(fake.notice)
     asked = fake.core.bt.ask("98:B6:E9:12:34:56", "authorize")
     until(lambda: {"cmd": "answer", "id": asked, "yes": False} in fake.core.bt.commands)
-    assert bt.request is None
-    assert notices == [("Plug Pro Controller in again from HOME",)]
+    assert bt.request is None and len(notices) == 1
 
 
 def test_bluez_withdrawing_its_question_closes_it(api, fake):

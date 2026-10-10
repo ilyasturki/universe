@@ -101,9 +101,9 @@ def test_an_offered_store_turns_on_and_adopts_its_launchers_games_once_signed_in
     until(lambda: rows_by_key(form)["heroic-epic"]["state"] == "waiting", "nothing found while signed out: it waits for the sign-in")
     form.next()
     assert form.stepId == "stores" and [r["key"] for r in form.rows if r["module"] == "epic"] == ["logged_in", "link", "code"], "on, it asks for a sign-in"
-    empty.core._source("epic")["logged_in"] = True
-    empty_api.screens.login._source = "epic"
-    form._on_login(True, "Signed in.")
+    login = empty_api.screens.login
+    login.begin("epic")
+    login.submit("abc")
     until(lambda: len(finished) == 2)
     form.back()
     until(lambda: rows_by_key(form)["heroic-epic"]["state"] == "imported", "signed in, the scan runs again")

@@ -1,6 +1,6 @@
 import pytest
 from looks import invoke
-from PySide6.QtCore import Property, QCoreApplication, QEvent, QObject, QUrl, Signal
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, QUrl
 from PySide6.QtQuick import QQuickView
 from uitest import pump, until
 
@@ -57,36 +57,13 @@ Item {
 """
 
 
-class Pad(QObject):
-    changed = Signal()
-
-    def __init__(self):
-        super().__init__()
-        self._right_x = 0.0
-
-    def set_right_x(self, value):
-        self._right_x = value
-        self.changed.emit()
-
-    rightX = Property(float, lambda self: self._right_x, notify=changed)
-
-
-class Api(QObject):
-    def __init__(self):
-        super().__init__()
-        self._pad = Pad()
-
-    pad = Property(QObject, lambda self: self._pad, constant=True)
-
-
 @pytest.fixture
-def load(app, tmp_path):
+def load(api, tmp_path):
     views = []
 
     def load(scene):
         path = tmp_path / f"scene{len(views)}.qml"
         path.write_text(scene.replace("UI_DIR", (host.QML_DIR / "ui").as_uri()))
-        api = Api()
         view = QQuickView()
         view.rootContext().setContextProperty("api", api)
         view.setSource(QUrl.fromLocalFile(str(path)))
@@ -154,10 +131,10 @@ def test_a_held_d_pad_scrubs_further_the_longer_it_is_held(load):
 
 def test_the_stick_held_at_full_tilt_scrubs_faster_and_faster(load):
     root, api = load(SCRUB)
-    api.pad.set_right_x(1.0)
+    api.pad.set("rightX", 1.0)
     pump(300)
     first = root.property("pos")
     pump(300)
     second = root.property("pos") - first
-    api.pad.set_right_x(0.0)
+    api.pad.set("rightX", 0.0)
     assert second > first * 1.1, f"{first:.0f} ms in the first 300 ms, {second:.0f} in the next: no faster"

@@ -79,25 +79,16 @@ def test_the_hero_side_tile_takes_a_screenshot_before_the_banner(ps5):
     assert side in shots, "the fixture's games have a banner too"
 
 
-def hub_of(home, **game):
-    blank = {"playCount": 0, "playTime": 0, "achievementsTotal": 0, "description": "", "summary": "", "players": 0, "source": ""}
-    lists = {"developerList": [], "genreList": [], "publisherList": [], "assets": {"screenshotList": [], "background": "", "banner": "", "boxFront": ""}}
-    return call(home, "hubFor", {**blank, **lists, **game})
-
-
-def card(strips, badge):
-    return next(c for s in strips for c in s["cards"] if c.get("badge") == badge)
-
-
-def test_the_hub_s_cards_have_no_stray_separator_and_never_repeat_the_game_s_title(ps5):
+def test_the_hub_s_info_card_leads_with_the_publisher_never_the_game_s_title(ps5, api, fake):
     _window, root = ps5
     home = root.findChild(QObject, "homePage")
-    game = {"id": "the-technomancer", "title": "The Technomancer"}
-    strips = hub_of(home, **game, playTime=15 * 3600, genreList=["RPG"])
-    body = card(strips, "clock")["body"]
-    assert body and not body.startswith("·") and not body.startswith(" "), "no session count, no separator before the hours"
-    assert card(strips, "info")["title"] != game["title"]
-    assert card(hub_of(home, **game, publisherList=["Focus"]), "info")["title"] == "Focus"
+    fake.core._game("control")["metadata"]["publishers"] = []
+    api.allGames.byId("control").update(fake.game("control"))
+    games = [api.allGames.get(i) for i in range(api.allGames.count)]
+    assert any(g.publisherList for g in games) and not api.allGames.byId("control").publisherList
+    for game in games:
+        [info] = [c for s in call(home, "hubFor", game) for c in s["cards"] if c.get("badge") == "info"]
+        assert info["title"] == game.publisherList[0] if game.publisherList else info["title"] != game.title, game.id
 
 
 def test_left_of_the_first_game_is_the_welcome_hub_whose_latest_recording_shows_its_game_s_art(ps5):

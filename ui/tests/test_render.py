@@ -775,14 +775,6 @@ def test_the_folder_sheet_follows_the_chip_past_the_screen_edge(look, tmp_path, 
     until(lambda: chip.property("x") + chip.property("width") <= chips.property("contentX") + chips.property("width"), "the last chip is in view")
 
 
-def test_the_power_menu_lists_what_logind_would_do(fake):
-    from universe_ui.api import System
-
-    fake.core.power_list = ["reboot"]
-    system = System(fake)
-    assert until(lambda: system.actions) == ["reboot"]
-
-
 @reprise
 def test_reprise_about_shows_the_build(look, fake):
     page = look.settings("quit")
@@ -1093,13 +1085,18 @@ def test_the_sound_section_plays_through_the_output_picked(look, fake):
     until(lambda: current() == "Headphones", "the output picked plays")
 
 
+@pytest.fixture
+def logind_reboots_only(fake):
+    fake.core.power_list = ["reboot"]
+
+
 @pytest.mark.parametrize("name", LOOKS)
-def test_in_the_universe_session_the_way_out_logs_out(universe_session, api, name):
+def test_the_power_menu_holds_one_way_out_and_only_what_logind_would_do(universe_session, logind_reboots_only, api, name):
     until(lambda: api.system.actions)
     look = Look(api, name)
     keys = [i.get("action", i.get("act")) for i in call(look.root, "powerItems")]
     way_out = "logout" if universe_session else "quit"
-    assert way_out in keys and "power_off" in keys, keys
+    assert way_out in keys and "reboot" in keys and not {"suspend", "power_off"} & set(keys), keys
     assert ("quit" if universe_session else "logout") not in keys, "one way out of the launcher"
     look.close()
 

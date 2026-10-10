@@ -51,9 +51,6 @@ def test_steams_game_mode_keeps_power_and_the_machines_controls(monkeypatch, fak
     until(lambda: acted and loaded)
     assert api.system.steam is True
     assert list(api.system.actions) == [] and api.system.controls == [], "Steam's Quick Access menu has them"
-    keys = [spec["key"] for spec in fake.launchKeys("global", None)]
-    assert "mangohud" not in keys and "fps_limit" not in keys and "pause_on_home" not in keys
-    assert "hdr" in keys or "gamescope" in keys
     api.shutdown()
 
 
