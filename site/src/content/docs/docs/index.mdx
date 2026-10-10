@@ -1,0 +1,23 @@
+---
+title: Universe docs
+description: Install Universe, find your way around it, and set up your stores, games and controllers.
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+Universe is a game launcher for Linux you drive with a controller. These pages describe Universe {__UNIVERSE_VERSION__}, the latest release, the way the app shows it: the section names and the button labels are the ones on your screen.
+
+New to it? Start with [Install](/docs/getting-started/install/), then [First run](/docs/getting-started/first-run/) and [Getting around](/docs/using/getting-around/).
+
+<CardGrid>
+    <LinkCard title="Getting started" href="/docs/getting-started/install/" description="Install it, the first run, the Universe session, the Steam Deck and Steam's Game Mode." />
+    <LinkCard title="Using Universe" href="/docs/using/getting-around/" description="The buttons, the home row and the library, a game's page, HOME over a running game, the looks." />
+    <LinkCard title="Your library" href="/docs/library/gog/" description="The stores, Lutris and Heroic, emulated games, artwork, saves and disk space." />
+    <LinkCard title="Running games" href="/docs/running/runners/" description="Runners, launch settings, gamescope, HDR and frame rates, logs, and fixing a game that won't run." />
+    <LinkCard title="Controllers" href="/docs/controllers/supported/" description="The pads Universe knows, button setup, macros on paddles, controls in emulators, Bluetooth." />
+    <LinkCard title="Settings" href="/docs/settings/" description="Every section of Settings, row by row." />
+    <LinkCard title="Add-ons and modules" href="/docs/add-ons/" description="Recording, screenshots, the play journal, virtual pads, and add-ons others made." />
+    <LinkCard title="Reference" href="/docs/reference/cli/" description="Every command, launch setting, runner and config key, generated from the app itself." />
+</CardGrid>
+
+Writing a module, a store or a theme, or another frontend? The [developer docs](/docs/developers/api/) cover the core, its protocols and the UI. What changed in each release is in the [changelog](/docs/changelog/).
