@@ -59,6 +59,10 @@
               "packaging"
               "packaging/system"
               "packaging/system/io.github.ilyasturki.universe.policy"
+              # the config migration's cli test reads the controls module's settings
+              "modules"
+              "modules/controls"
+              "modules/controls/module.toml"
             ]
           );
       };

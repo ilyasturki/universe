@@ -130,8 +130,13 @@ mod version_tests {
     #[test]
     fn copies_match_cargo_version() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let (Ok(modules), Ok(sources)) = (std::fs::read_dir(root.join("modules")), std::fs::read_dir(root.join("sources"))) else { return };
         let mut files = vec![root.join("ui/pyproject.toml"), root.join("docs/api.md")];
+        // The flake's core build carries only part of the tree.
+        let (Ok(modules), Ok(sources), true) =
+            (std::fs::read_dir(root.join("modules")), std::fs::read_dir(root.join("sources")), files.iter().all(|f| f.exists()))
+        else {
+            return;
+        };
         files.extend(modules.flatten().map(|d| d.path().join("module.toml")).filter(|p| p.exists()));
         files.extend(sources.flatten().map(|d| d.path().join("source.toml")).filter(|p| p.exists()));
         let version = format!("version = \"{}\"", super::VERSION);
