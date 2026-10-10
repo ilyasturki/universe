@@ -890,26 +890,22 @@ while True:
     time.sleep(1)
 "#;
 
-    /// A worker thread that finds itself late catches up on the time it missed, and SIGTERM's shutdown tears down what it writes to: exit 70 when the two meet.
+    /// A worker thread back from a freeze spends 150 ms catching up on the time it missed: a SIGTERM before it is back, or while it catches up, is a
+    /// shutdown racing it (exit 70). Judged from timestamps, so a busy machine delaying either thread does not change the verdict.
     const CATCHES_UP: &str = r#"
 import os, signal, threading, time
-torn = False
+last = woke = time.monotonic()
 def worker():
-    last = time.monotonic()
+    global last, woke
     while True:
         time.sleep(0.005)
-        if time.monotonic() - last > 0.15:
-            end = time.monotonic() + 0.05
-            while time.monotonic() < end:
-                if torn:
-                    os._exit(70)
-                time.sleep(0.002)
-        last = time.monotonic()
+        now = time.monotonic()
+        if now - last > 0.3:
+            woke = now
+        last = now
 def term(*_):
-    global torn
-    torn = True
-    time.sleep(0.15)
-    os._exit(0)
+    now = time.monotonic()
+    os._exit(70 if now - last > 0.3 or now - woke < 0.15 else 0)
 signal.signal(signal.SIGTERM, term)
 threading.Thread(target=worker, daemon=True).start()
 print("ready", flush=True)
@@ -946,7 +942,7 @@ while True:
 
     #[tokio::test]
     async fn a_frozen_game_runs_a_moment_before_its_sigterm() {
-        let freeze = Duration::from_millis(300);
+        let freeze = Duration::from_millis(600);
         let hazard = Cgroup::new();
         let (exit, _) = game(&hazard, CATCHES_UP).await;
         let pid = rustix::process::Pid::from_raw(hazard.pids()[0] as i32).unwrap();
