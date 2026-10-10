@@ -659,7 +659,10 @@ when `~/.local/share/lutris/runners/wine/<version>/bin/wine` exists with no `pro
 `dll_overrides`) and the rest `launch.wrapper`; a `PROTON_*` entry in `system.env` that has a switch
 becomes the switch. Lutris's `fps_limit` is `launch.fps_limit`; its `fsr`, `battleye`, `eac`,
 DXVK/VKD3D versions and registry options have no counterpart (Proton bundles its own DXVK, and reads
-none of those variables).
+none of those variables). A wine game's `goggame-<id>.info` is looked for in the exe's folder, then
+up to three folders above it, never above the Lutris game's own folder, its prefix, a `drive_c` or
+home; the folder it is in becomes `source.dir`. Lutris's `service` `gog` makes it a `gog` game with
+that `source.id`; otherwise it stays `lutris` with the id parked as `[lutris] gog_manifest`.
 
 ### Fetched tools
 

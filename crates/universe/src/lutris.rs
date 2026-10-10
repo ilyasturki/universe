@@ -187,6 +187,27 @@ pub fn read_gog_manifest(dir: &Path) -> Option<GogManifest> {
     None
 }
 
+/// Arkham Origins keeps its exe three folders under its manifest, in SinglePlayer/Binaries/Win32.
+const MANIFEST_ABOVE: usize = 3;
+
+/// The base game's manifest in the exe's folder or the nearest one above it, with the folder it is in: never above one of
+/// `stops` (the Lutris game's own folder, its prefix), a `drive_c` or home.
+pub fn find_gog_manifest(exe_dir: &Path, stops: &[PathBuf]) -> Option<(PathBuf, GogManifest)> {
+    let home = paths::home();
+    for dir in exe_dir.ancestors().take(MANIFEST_ABOVE + 1) {
+        if dir.parent().is_none() || dir == home {
+            return None;
+        }
+        if let Some(m) = read_gog_manifest(dir) {
+            return Some((dir.to_path_buf(), m));
+        }
+        if stops.iter().any(|s| s == dir) || dir.file_name().is_some_and(|n| n == "drive_c") {
+            return None;
+        }
+    }
+    None
+}
+
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct EnvDiff {
     pub id: String,
@@ -332,7 +353,9 @@ pub fn convert(p: &PgaGame, lutris_dir: &Path, runners_dir: &Path, global_env: &
         let exe_dir = g.exe_path().parent().map(|p| p.to_path_buf()).unwrap_or_default();
         g.source.kind = "lutris".into();
         g.source.dir = exe_dir.to_string_lossy().into();
-        if let Some(m) = read_gog_manifest(&exe_dir) {
+        let stops: Vec<PathBuf> = [&p.directory, &g.launch.prefix].into_iter().filter(|d| !d.is_empty()).map(|d| paths::expand(d)).collect();
+        if let Some((root, m)) = find_gog_manifest(&exe_dir, &stops) {
+            g.source.dir = root.to_string_lossy().into();
             if p.service == "gog" && (p.service_id.is_empty() || p.service_id == m.game_id) {
                 g.source.kind = "gog".into();
                 g.source.id = m.game_id.clone();
@@ -540,6 +563,48 @@ mod tests {
         );
         assert_eq!(d.added, vec!["NEW"]);
         assert_eq!(d.removed, vec!["PROTON_ENABLE_WAYLAND"]);
+    }
+
+    #[test]
+    fn the_gog_manifest_above_the_exe_is_found_within_the_games_own_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        let lutris = dir.path().join("lutris");
+        std::fs::create_dir_all(lutris.join("games")).unwrap();
+        let game = |name: &str, root: &Path, exe: &str, manifest: Option<&Path>, service: &str, directory: &Path| {
+            let exe = root.join(exe);
+            std::fs::create_dir_all(exe.parent().unwrap()).unwrap();
+            if let Some(at) = manifest {
+                std::fs::write(at.join("goggame-1701063787.info"), r#"{"buildId":"5","gameId":"1701063787","rootGameId":"1701063787","name":"Dishonored"}"#)
+                    .unwrap();
+            }
+            std::fs::write(lutris.join(format!("games/{name}.yml")), format!("game:\n  exe: {}\n", exe.display())).unwrap();
+            let p = PgaGame {
+                name: name.into(),
+                runner: "wine".into(),
+                configpath: name.into(),
+                service: service.into(),
+                directory: directory.to_string_lossy().into(),
+                ..Default::default()
+            };
+            convert(&p, &lutris, &lutris.join("runners/wine"), &BTreeMap::new()).game
+        };
+        let dishonored = dir.path().join("GOG Games/Dishonored");
+        let g = game("dishonored", &dishonored, "Binaries/Win32/Dishonored.exe", Some(&dishonored), "gog", dir.path());
+        assert_eq!(
+            (g.source.kind.as_str(), g.source.id.as_str(), g.source.build_id.as_str(), g.source.dir.as_str()),
+            ("gog", "1701063787", "5", &*dishonored.to_string_lossy()),
+            "two folders up, and the install's own folder is the game's"
+        );
+        let g = game("origins", &dishonored, "SinglePlayer/Binaries/Win32/Origins.exe", None, "", dir.path());
+        assert_eq!((g.source.kind.as_str(), g.source.id.as_str()), ("lutris", ""), "added by hand in Lutris: the id is parked");
+        assert_eq!(g.extra["lutris"]["gog_manifest"].as_str(), Some("1701063787"));
+        let outer = dir.path().join("Outer");
+        let g = game("inner", &outer, "Game/Bin/x.exe", Some(&outer), "gog", &outer.join("Game"));
+        assert_eq!(
+            (g.source.kind.as_str(), g.source.dir.as_str()),
+            ("lutris", &*outer.join("Game/Bin").to_string_lossy()),
+            "never above the Lutris game's folder"
+        );
     }
 
     #[test]
