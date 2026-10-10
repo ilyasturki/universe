@@ -42,6 +42,7 @@ class Home(QObject):
     bannersWaitingChanged = Signal()
     stopping = Signal(str)
     escapeHeld = Signal()
+    nextFrameChanged = Signal()
 
     def __init__(self, client, controller, screen_mode: Callable[[], dict] = dict, parent=None, frames=lambda: True, focus=None, boot=None):
         super().__init__(parent)
@@ -77,6 +78,7 @@ class Home(QObject):
         self._taken = 0
         self._capturing = False
         self._captured = None
+        self._next_frame = ""
         self._captured_at = 0.0
         self._captured_still = False
         self._volume = {}
@@ -164,6 +166,7 @@ class Home(QObject):
             self._frame = ""
             self._landing = ""
             self._captured = None
+            self._set_next_frame("")
         self.changed.emit()
 
     def _on_started(self, session_id, ident):
@@ -331,7 +334,7 @@ class Home(QObject):
         if self._open:
             self.closeDock()
         self._client.focusSession()
-        self._flipped = False
+        self._flipped = self._flipping = False
         self._landing = ""
         self._captured = None
         if self._paused:
@@ -351,11 +354,23 @@ class Home(QObject):
         self._capturing = False
         if not self._session():
             return
-        self._captured = path
+        url = ""
+        if path:
+            # The same file every time: the query keeps the image cache from showing the previous frame.
+            self._taken += 1
+            url = QUrl.fromLocalFile(path).toString() + "?" + str(self._taken)
         self._captured_at = time.monotonic()
         self._captured_still = self._paused
+        self._captured = url
+        self._set_next_frame(url)
         if self._flipping:
-            self._flip(path)
+            self._flip(url)
+
+    # Held past the flip: a decoded 4K frame nothing references leaves Qt's image cache at once.
+    def _set_next_frame(self, url):
+        if url != self._next_frame:
+            self._next_frame = url
+            self.nextFrameChanged.emit()
 
     # A frozen game has painted nothing since: its frame stands however old.
     def _fresh(self):
@@ -368,8 +383,6 @@ class Home(QObject):
         if not self._session_or_pending() or self._flipping:
             return
         self._landing = str(landing or "")
-        if self._open:
-            self.closeDock()
         # A loading game has painted nothing to bridge with.
         if not self._client.nested or not self._frames() or self._loading:
             self._flip("")
@@ -381,23 +394,18 @@ class Home(QObject):
         else:
             self._capture()
 
-    def _flip(self, path):
+    def _flip(self, url):
         self._flipping = False
         self._captured = None
         if not self._session_or_pending():
             return
-        if path:
-            # The same file every time: the query keeps the image cache from showing the previous frame.
-            self._taken += 1
-            self._frame = QUrl.fromLocalFile(path).toString() + "?" + str(self._taken)
-        else:
-            self._frame = ""
+        self._frame = url
         self._set_shown("launcher")
         self._flipped = True
         self._thaw_on_release = False
         # Armed before `changed`: the theme answers `covered()` once the frame is painted.
         self._poll.stop()
-        if path:
+        if url:
             self._swap.start(COVER_MS)
         else:
             self._show_launcher()
@@ -416,8 +424,11 @@ class Home(QObject):
             self._swap.stop()
             self._show_launcher()
 
+    # An open dock stays over the game until now, so the launcher comes up under it and nothing stands still in between.
     def _show_launcher(self):
         self._client.focusLauncher()
+        if self._open:
+            self.closeDock()
         session = self._session()
         if not session:
             return
@@ -646,6 +657,8 @@ class Home(QObject):
     pauseOnHome = Property(bool, lambda self: self._pause_on_home, notify=changed)
     flipped = Property(bool, lambda self: self._flipped, notify=changed)
     frame = Property(str, lambda self: self._frame, notify=changed)
+    # The frame the last Guide press took, for the theme to decode before a flip asks for it.
+    nextFrame = Property(str, lambda self: self._next_frame, notify=nextFrameChanged)
     volumePercent = Property(int, lambda self: int(self._volume.get("percent") or 0), notify=volumeChanged)
     muted = Property(bool, lambda self: bool(self._volume.get("muted")), notify=volumeChanged)
     volumeOutput = Property(str, lambda self: str(self._volume.get("output") or ""), notify=volumeChanged)

@@ -106,6 +106,16 @@ Item {
         }
     }
 
+    // The press's frame, decoded while the dock is up: the flip to it then paints at once from the cache.
+    Image {
+        objectName: "nextFrame"
+        visible: false
+        source: api.home.nextFrame
+        fillMode: frame.fillMode
+        sourceSize: frame.sourceSize
+        asynchronous: true
+    }
+
     // One frame past the decode: what gamescope shows at the swap is this, not the launcher beneath.
     Timer {
         id: painted

@@ -923,6 +923,8 @@ def test_a_quit_lands_on_the_tiles_cover_and_the_games_exit_swaps_nothing(api, f
     home.guide(True)
     home.guide(False)
     until(lambda: home.open and not home._capturing, "the dock is up over the game")
+    ahead = flip.findChild(QObject, "nextFrame")
+    until(lambda: ahead.property("progress") == 1.0, "the press's frame is decoded while the dock is up")
     asked = []
     real_stop = fake.core.stop
     monkeypatch.setattr(fake.core, "stop", asked.append)
@@ -936,12 +938,15 @@ def test_a_quit_lands_on_the_tiles_cover_and_the_games_exit_swaps_nothing(api, f
             "whole": whole(art),
             "art": crossfade.property("source").toString(),
             "covered": flip.property("covering"),
+            "painting": flip.property("pending"),
+            "open": home.open,
             "mark": mark.property("opacity"),
             "label": tile.property("markText"),
         }
 
     samples = sampled(probe)
     home.stop()
+    assert flip.findChild(QObject, "frame").property("progress") == 1.0 and home.open, "the frame is up at once, the dock still over it"
     until(lambda: asked and not flip.property("covering") and not flip.property("running"), "the frame shrank into the tile")
     landing = flip.findChild(QObject, "landing")
     assert landing.property("source").toString() == cover and landing.property("opacity") == 1.0, "the box ended on the tile's cover"
@@ -954,6 +959,7 @@ def test_a_quit_lands_on_the_tiles_cover_and_the_games_exit_swaps_nothing(api, f
     assert all(s["whole"] for s in seen), "from Quit to the game's end the tile never showed its empty card"
     assert {s["art"] for s in seen if s["quitting"]} == {cover} and seen[-1]["art"] == cover, "the tile asks for its cover from Quit on"
     quit = next(i for i, s in enumerate(seen) if s["quitting"])
+    assert all(s["open"] for s in seen[quit:] if s["painting"]) and not home.open, "the dock goes once the launcher is up under it"
     landed = next(i for i, s in enumerate(seen) if i > quit and not s["covered"])
     assert seen[landed]["mark"] < 1.0 and any(0.0 < s["mark"] < 1.0 for s in seen[landed:] if s["quitting"]), "the mark comes in after the box"
     assert any(0.0 < s["mark"] < 1.0 for s in seen if not s["quitting"]), "the mark fades out"
