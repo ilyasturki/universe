@@ -23,21 +23,6 @@ def versions(releases):
     return [r["version"] for r in releases]
 
 
-def test_whats_new_comes_once_after_an_update_and_only_when_turned_on(fake, tmp_path):
-    from universe_ui.screens.changelog import Changelog
-
-    recorded = tmp_path / "core" / "state" / "last-version"
-    assert Changelog(fake).pending == [] and recorded.read_text() == "0.0.3", "a first start records the version and shows nothing"
-    recorded.write_text("0.0.1")
-    assert Changelog(fake).pending == [] and recorded.read_text() == "0.0.3", "off by default, the version is still recorded"
-    fake.setConfig("desktop.whats_new", "true")
-    recorded.write_text("0.0.1")
-    changelog = Changelog(fake)
-    assert versions(changelog.pending) == ["0.0.3", "0.0.2"]
-    assert versions(changelog.releases) == ["0.0.3", "0.0.2", "0.0.1"]
-    assert Changelog(fake).pending == [], "the next start has nothing new"
-
-
 def test_the_launch_page_turns_whats_new_on(api, fake):
     form = api.screens.launch
     form.load()

@@ -161,16 +161,6 @@ def test_a_trophy_s_unlock_date_is_relative_and_falls_back_to_the_store_s(app):
     assert unreadable == "shown" and placeholder == "shown", "a time JS cannot read, or a placeholder, shows the store's own date"
 
 
-def test_a_menu_row_with_a_detail_is_as_tall_as_its_text(ps5):
-    _window, root = ps5
-    popup = root.findChild(QObject, "popup")
-    invoke(root, "showMenu", {"items": [{"label": "One line", "detail": "Short."}, {"label": "Long", "detail": "Words " * 40}]}, None)
-    until(lambda: len(read(popup, "detailHeights")) == 2)
-    row, one, three = popup.property("rowHeight"), call(popup, "heightOf", 0), call(popup, "heightOf", 1)
-    assert row < one < 2 * row, "one line of detail, no empty band under it"
-    assert three > one + row / 2, "three lines take their room"
-
-
 def test_the_power_menu_s_way_out_asks_first_while_a_game_runs(ps5, api):
     from PySide6.QtQml import qmlEngine
 

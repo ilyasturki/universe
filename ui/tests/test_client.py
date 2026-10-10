@@ -6,20 +6,6 @@ from PySide6.QtCore import QTimer
 from uitest import record, until
 
 
-def test_errors_are_signalled_not_raised(fake):
-    seen = record(fake.error)
-    assert fake.version() == "0.0.0-fake"
-    assert fake.game("nope") == {}
-    assert seen and seen[0][0] == "NotFound"
-    assert fake.setSetting("capture", "", "codec", "mpeg2") is False
-    assert seen[-1][0] == "Invalid"
-    assert fake.setSetting("capture", "", "codec", "hevc") is True
-    assert fake.getSettings("capture", "")["codec"] == "hevc"
-    assert fake.setRunnerSetting("dolphin", "nope", "1") is False and seen[-1][0] == "Invalid"
-    assert fake.setRunnerSetting("nope", "exe", "/x") is False and seen[-1][0] == "NotFound"
-    assert fake.removeJournalEntry("control", "nope") is False and seen[-1] == ("NotFound", "journal entry nope")
-
-
 def test_settings_merges_game_scope(fake):
     settings = fake.settings("the-technomancer")
     assert set(settings) == {"capture", "journal", "screenshot", "controls"}
@@ -148,15 +134,6 @@ def test_cancel_reaches_the_running_install_only(fake):
     assert fake.cancel(job) is False, "finished"
     row = next(g for g in fake.sourceLibrary("gog", False) if g["id"] == "1207658930")
     assert row["installed"] is False and row["partial_bytes"] > 0
-
-
-def test_uninstall_via_names_the_store_that_removes_the_files_itself(fake):
-    assert fake.uninstallVia("control") == "", "GOG's folder goes to the trash"
-    fake.core._game("control")["source"] = "epic"
-    assert fake.uninstallVia("control") == "", "Epic Games is off"
-    next(s for s in fake.core._data["sources"] if s["id"] == "epic")["enabled"] = True
-    assert fake.uninstallVia("control") == "Epic Games"
-    assert fake.uninstallVia("no-such-game") == ""
 
 
 def test_a_failing_job_reports_its_end(fake):

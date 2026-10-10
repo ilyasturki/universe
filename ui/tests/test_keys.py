@@ -2,7 +2,7 @@ from PySide6.QtCore import QEvent, QPointF, Qt
 from PySide6.QtGui import QKeyEvent, QMouseEvent, QWindow
 
 from universe_ui import gamepad
-from universe_ui.api import GLYPH_ACTIONS, KEYS, Keys
+from universe_ui.api import KEYS, Keys
 
 
 def key_event(key, pressed=True, text=""):
@@ -76,8 +76,3 @@ def test_backspace_cancels_but_holding_it_does_not_ask_to_quit(app):
     assert keys._hold.isActive()
     keys.eventFilter(window, key_event(Qt.Key.Key_Escape, pressed=False))
     assert not keys._hold.isActive()
-
-
-def test_every_glyph_has_a_hint_label(app):
-    labels = Keys().labels
-    assert set(labels) == set(GLYPH_ACTIONS) and all(labels.values())

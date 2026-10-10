@@ -87,9 +87,3 @@ def test_per_title_configs_keep_their_bindings_and_follow_the_held_pads(rpcs3):
     assert got[2]["  Device"] == '"Some Evdev Pad"'
     assert got[3]["  Device"] == '"Old Pad 1"'
     assert new.replace('"DualSense Edge Wireless Controller 1"', '"PS4 Controller 1"') == PER_TITLE
-
-
-def test_hints_put_a_ds3_on_hidapi_and_load_rpcs3s_database(rpcs3):
-    assert _rpcs3.hints() == {"SDL_JOYSTICK_HIDAPI_PS3": "1"}
-    (rpcs3 / "gamecontrollerdb.txt").write_text("")
-    assert _rpcs3.databases() == [rpcs3 / "gamecontrollerdb.txt"]

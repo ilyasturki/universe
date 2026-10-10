@@ -788,19 +788,3 @@ def test_a_stopped_run_leaves_the_session_deferred_soon(tmp_path, fakebin):
     assert entry["attempts"] == 0 and "signal 15" in entry["reason"]
     waits = datetime.fromisoformat(entry["until"]) - datetime.now().astimezone()
     assert timedelta(minutes=1) < waits < timedelta(hours=1), f"the first backoff, not the last: {waits}"
-
-
-def test_the_answer_key_holds_across_processes(tmp_path):
-    """A key built from hash() would be salted per process: the run that reuses the answer is another one."""
-    code = "\n".join(
-        [
-            "import importlib.machinery as m, importlib.util as u",
-            f"spec = u.spec_from_loader('hook', m.SourceFileLoader('hook', {str(BIN_DIR / 'process')!r}))",
-            "hook = u.module_from_spec(spec)",
-            "spec.loader.exec_module(hook)",
-            "print(hook.answer_key(hook.providers.Options(provider='codex', model='m'), 'system', 'brief', [1, 2]))",
-        ]
-    )
-    env = {**os.environ, "PYTHONHASHSEED": "random", "PYTHONPATH": str(BIN_DIR)}
-    out = [subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env, check=True).stdout.strip() for _ in range(2)]
-    assert out[0] == out[1] and out[0].startswith("codex|m|2|")

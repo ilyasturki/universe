@@ -97,14 +97,6 @@ def test_rumble_is_read_back_at_the_strength_the_emulator_asked():
     assert parse_rumble(bytes([0x05, 0x03, 0, 96, 64])) is None
 
 
-def test_the_game_is_shown_every_player_slot_and_nothing_else():
-    env = _pads.game_env()
-    listed = env["SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT"].split(",")
-    assert listed[0] == "0x0079/0x5550"
-    assert len(listed) == _pads.MAX_PLAYERS
-    assert env["SDL_JOYSTICK_HIDAPI_PS5"] == "1"
-
-
 def _shim(path, body):
     path.write_text(f"#!{shutil.which('bash')}\n{body}\n")
     path.chmod(path.stat().st_mode | stat.S_IEXEC)

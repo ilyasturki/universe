@@ -27,4 +27,3 @@ def test_wifi_reads_its_arcs_a_cable_wins_and_no_link_up_is_offline(tmp_path):
     for name in ("wlan0", "eth0"):
         (root / name / "operstate").write_text("down\n")
     assert read_link(str(root), str(tmp_path / "missing")) == {"kind": "", "bars": 0}
-

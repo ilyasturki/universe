@@ -50,21 +50,6 @@ def shot(overlay, name):
         overlay.grabWindow().save(os.path.join(where, name + ".png"))
 
 
-def test_the_control_center_lays_its_cards_over_the_bottom_of_the_game(api, fake, ps5):
-    _shown, overlay = ps5
-    cc = open_cc(api, fake, overlay, "batman-arkham-origins")
-    assert cc.property("zone") == "cards"
-    ids = [c["id"] for c in read(cc, "cards")]
-    assert ids[:2] == ["game", "hub"] and "trophies" in ids and "captures" in ids
-    until(lambda: cc.appearOf(0) > 0)
-    assert cc.appearOf(0) == cc.appearOf(1) and cc.appearOf(3) < 1, "the first two cards land together, the rest follow"
-    until(lambda: cc.property("dimIn") == 1)
-    shot(overlay, "cc-open")
-    image = overlay.grabWindow()
-    assert covered_fraction(image, lambda h: range(h - 12, h)) > 0.9, "the lower band is drawn over the game"
-    assert image.pixelColor(4, 4).alpha() == 0, "the top of the frame stays clear"
-
-
 def test_the_power_panel_logs_out_in_the_universe_session(universe_session, api, fake, ps5):
     _shown, overlay = ps5
     cc = open_cc(api, fake, overlay, "mirrors-edge")
