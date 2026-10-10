@@ -1,0 +1,46 @@
+:root {
+    --sl-font: "Archivo Variable", sans-serif;
+    --sl-color-white: hsl(220, 14%, 96%);
+    --sl-color-gray-1: hsl(225, 12%, 90%);
+    --sl-color-gray-2: hsl(225, 8%, 76%);
+    --sl-color-gray-3: hsl(225, 6%, 57%);
+    --sl-color-gray-4: hsl(228, 7%, 37%);
+    --sl-color-gray-5: hsl(228, 10%, 22%);
+    --sl-color-gray-6: hsl(228, 13%, 12%);
+    --sl-color-black: hsl(228, 15%, 6.5%);
+    --sl-color-accent-low: hsl(215, 50%, 18%);
+    --sl-color-accent: hsl(215, 100%, 68%);
+    --sl-color-accent-high: hsl(215, 100%, 86%);
+}
+
+:root[data-theme="light"] {
+    --sl-color-white: hsl(228, 15%, 6.5%);
+    --sl-color-gray-1: hsl(228, 13%, 14%);
+    --sl-color-gray-2: hsl(228, 10%, 24%);
+    --sl-color-gray-3: hsl(228, 7%, 38%);
+    --sl-color-gray-4: hsl(225, 6%, 56%);
+    --sl-color-gray-5: hsl(225, 8%, 80%);
+    --sl-color-gray-6: hsl(225, 18%, 94%);
+    --sl-color-gray-7: hsl(225, 20%, 97%);
+    --sl-color-black: hsl(0, 0%, 100%);
+    --sl-color-accent-low: hsl(215, 90%, 92%);
+    --sl-color-accent: hsl(216, 72%, 43%);
+    --sl-color-accent-high: hsl(216, 72%, 31%);
+}
+
+.sl-markdown-content h1,
+.sl-markdown-content h2,
+.sl-markdown-content h3 {
+    letter-spacing: -0.01em;
+}
+
+kbd {
+    font-family: var(--__sl-font);
+    font-size: 0.85em;
+    padding: 0.05em 0.45em;
+    border: 1px solid var(--sl-color-gray-5);
+    border-bottom-width: 2px;
+    border-radius: 0.35rem;
+    background: var(--sl-color-gray-6);
+    white-space: nowrap;
+}

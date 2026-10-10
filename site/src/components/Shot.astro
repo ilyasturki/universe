@@ -1,0 +1,64 @@
+---
+import { Image } from 'astro:assets';
+import { still } from '../lib/media';
+
+interface Props {
+    name: string;
+    caption?: string;
+    sizes?: string;
+    eager?: boolean;
+}
+
+const { name, caption, sizes = '(min-width: 72rem) 45rem, 100vw', eager = false } = Astro.props;
+const shot = still(name);
+const { image } = shot;
+const alt = shot.recorded?.alt ?? shot.take.alt;
+const widths = image ? [640, 960, 1440, 1920].filter((w) => w <= image.width) : [];
+---
+
+<figure class="media" style={`--aspect: ${shot.aspect}`}>
+    {image ? (
+            <Image
+                src={image}
+                format="webp"
+                widths={widths}
+                sizes={sizes}
+                alt={alt}
+                loading={eager ? 'eager' : 'lazy'}
+            />
+        ) : (
+            <div class="placeholder" role="img" aria-label={alt}>
+                <span>{alt}</span>
+            </div>
+        )}
+    {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<style>
+.media {
+    margin: 0;
+}
+.media :global(img),
+.placeholder {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: var(--aspect);
+    border-radius: 0.75rem;
+    background: var(--sl-color-gray-6, #161821);
+}
+.placeholder {
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    border: 1px dashed var(--sl-color-gray-5, #33363f);
+    color: var(--sl-color-gray-3, #8a8d96);
+    font-size: 0.9rem;
+    text-align: center;
+}
+figcaption {
+    margin-top: 0.5rem;
+    font-size: var(--sl-text-sm, 0.875rem);
+    color: var(--sl-color-gray-3, #8a8d96);
+}
+</style>

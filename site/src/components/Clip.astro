@@ -1,0 +1,66 @@
+---
+import { clip } from '../lib/media';
+
+interface Props {
+    name: string;
+    caption?: string;
+}
+
+const { name, caption } = Astro.props;
+const media = clip(name);
+const alt = media.recorded?.alt ?? media.take.alt;
+const files = media.recorded?.files;
+---
+
+<figure class="media" style={`--aspect: ${media.aspect}`}>
+    {files ? (
+            <video autoplay muted loop playsinline preload="metadata" poster={files.poster && `/media/${files.poster}`} aria-label={alt} data-clip>
+                {files.av1 && <source src={`/media/${files.av1}`} type="video/mp4; codecs=av01.0.08M.08" />}
+                {files.h264 && <source src={`/media/${files.h264}`} type="video/mp4" />}
+            </video>
+        ) : (
+            <div class="placeholder" role="img" aria-label={alt}>
+                <span>{alt}</span>
+            </div>
+        )}
+    {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<script>
+if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    for (const video of document.querySelectorAll<HTMLVideoElement>('video[data-clip]')) {
+        video.pause();
+        video.autoplay = false;
+        video.controls = true;
+    }
+}
+</script>
+
+<style>
+.media {
+    margin: 0;
+}
+video,
+.placeholder {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: var(--aspect);
+    border-radius: 0.75rem;
+    background: var(--sl-color-gray-6, #161821);
+}
+.placeholder {
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    border: 1px dashed var(--sl-color-gray-5, #33363f);
+    color: var(--sl-color-gray-3, #8a8d96);
+    font-size: 0.9rem;
+    text-align: center;
+}
+figcaption {
+    margin-top: 0.5rem;
+    font-size: var(--sl-text-sm, 0.875rem);
+    color: var(--sl-color-gray-3, #8a8d96);
+}
+</style>

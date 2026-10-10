@@ -123,6 +123,14 @@ desktop-shot dir *steps: build env
 logs:
     journalctl --user -f -u 'universe-*'
 
+# The website in site/: just site [build|dev|preview|check]; its reference pages come from this checkout's universe, its screenshots and clips from `just docs-media fetch` (placeholders without them, an error under DOCS_STRICT=1)
+site *args="build": build
+    #!/usr/bin/env -S nix develop --quiet --command bash
+    set -euo pipefail
+    cd "{{ justfile_directory() }}/site"
+    bun install --frozen-lockfile --silent
+    exec bun --bun run {{ args }}
+
 # Every suite, or the ones named: rust, python, or one of python's ui, modules, sources, bindings; desktop runs the GTK app in a headless weston; vm (never by default, KVM) boots a NixOS VM whose kernel drivers read every recorded pad of tests/pads
 test *suites: build develop env
     #!/usr/bin/env -S nix develop --quiet --command bash

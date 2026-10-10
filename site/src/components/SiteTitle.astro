@@ -1,0 +1,32 @@
+---
+import Default from '@astrojs/starlight/components/SiteTitle.astro';
+---
+
+<div class="title">
+    <Default />
+    <a class="version" href="/docs/changelog/" title="The release these pages describe">{__UNIVERSE_VERSION__}</a>
+</div>
+
+<style>
+.title {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+}
+.version {
+    font-size: var(--sl-text-xs);
+    font-weight: 500;
+    line-height: 1.6;
+    color: var(--sl-color-gray-3);
+    text-decoration: none;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 999px;
+    padding: 0 0.55rem;
+    white-space: nowrap;
+}
+.version:hover {
+    color: var(--sl-color-white);
+    border-color: var(--sl-color-gray-3);
+}
+</style>

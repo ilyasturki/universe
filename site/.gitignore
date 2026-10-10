@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.astro/
+public/favicon.svg
+src/content/docs/docs/reference/
+src/content/docs/docs/developers/
+src/content/docs/docs/changelog.md
