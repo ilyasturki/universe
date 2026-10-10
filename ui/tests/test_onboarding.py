@@ -423,7 +423,7 @@ def test_a_step_with_nothing_to_do_lands_on_its_button(look, empty_api, empty):
     assert form.rows[0]["key"] == "everything"
     look.press(Qt.Key.Key_Return)
     until(lambda: form.idle is True and focused(look, "setupNav"), "Add everything leaves nothing to do: Continue has the focus")
-    until(lambda: empty_api.allGames.count == 2, "the imports land")
+    until(lambda: not any(r.get("state") in ("queued", "importing") for r in form.rows), "the imports land")
     for step in range(1, len(form.steps)):
         look.press(Qt.Key.Key_I)
         until(lambda step=step: form.step == step, "X moves on")
