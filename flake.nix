@@ -108,7 +108,12 @@
             ]
           ))
           && !(lib.hasPrefix ".dev" rel)
-          && rel != ".claude/worktrees";
+          && rel != ".claude/worktrees"
+          && !(lib.elem rel [
+            "site/node_modules"
+            "site/dist"
+            "site/.astro"
+          ]);
       };
 
       core = pkgs.rustPlatform.buildRustPackage {
@@ -636,6 +641,7 @@
             actionlint
             shellcheck
             maturin
+            bun
             (pyEnv (
               ps:
               uiPy ps
