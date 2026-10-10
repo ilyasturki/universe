@@ -28,6 +28,7 @@ BuildRequires:  python3-setuptools
 BuildRequires:  scdoc
 BuildRequires:  systemd-rpm-macros
 BuildRequires:  tzdata
+BuildRequires:  dbus-daemon
 BuildRequires:  blueprint-compiler
 BuildRequires:  glib2-devel
 BuildRequires:  pkgconfig(gtk4) >= 4.22
