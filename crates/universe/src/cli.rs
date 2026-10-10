@@ -1006,7 +1006,9 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
                 std::fs::create_dir_all(dir)?;
             }
-            crate::desktop::screenshot(desktop_profile(), path, screen, *window, *cursor).await.map_err(|e| anyhow::anyhow!("{e}"))?;
+            crate::desktop::screenshot(desktop_profile(), path, screen, *window, *cursor, || println!("{}", crate::screenshots::GRABBED))
+                .await
+                .map_err(|e| anyhow::anyhow!("{e}"))?;
             println!("{}", path.display());
             return Ok(());
         }
@@ -2594,7 +2596,9 @@ fn nest_shot(path: &std::path::Path, overlays: bool) -> anyhow::Result<()> {
         std::fs::create_dir_all(dir)?;
     }
     let shot = if overlays { crate::nest::Shot::AllRealLayers } else { crate::nest::Shot::BasePlane };
-    let Some(saved) = nest.frame(path, shot, WAIT)? else { anyhow::bail!("gamescope wrote no screenshot within {} s", WAIT.as_secs()) };
+    let Some(saved) = nest.frame(path, shot, WAIT, || println!("{}", crate::screenshots::GRABBED))? else {
+        anyhow::bail!("gamescope wrote no screenshot within {} s", WAIT.as_secs())
+    };
     println!("{}", saved.display());
     Ok(())
 }

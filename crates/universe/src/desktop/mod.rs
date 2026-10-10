@@ -436,7 +436,8 @@ pub async fn show_osd(profile: Profile, icon: &str, label: &str, level: Option<f
 }
 
 /// `screen` is the DRM connector a whole-screen shot takes; `window` the focused window alone.
-pub async fn screenshot(profile: Profile, path: &std::path::Path, screen: &str, window: bool, cursor: bool) -> Result<(), String> {
+/// `grabbed` runs as the desktop answers: GNOME's extension once Mutter has read the pixels, before its png is encoded; the others once the file is written.
+pub async fn screenshot(profile: Profile, path: &std::path::Path, screen: &str, window: bool, cursor: bool, grabbed: impl FnOnce()) -> Result<(), String> {
     let _ = std::fs::remove_file(path);
     match profile {
         Profile::Gnome => gnome::screenshot(path, window, cursor).await?,
@@ -448,6 +449,7 @@ pub async fn screenshot(profile: Profile, path: &std::path::Path, screen: &str, 
         Profile::X11 | Profile::Cinnamon if x11_reachable() => x11::screenshot(path, window).await?,
         p => return Err(unsupported(p, "screenshot")),
     }
+    grabbed();
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
     while !std::fs::metadata(path).is_ok_and(|m| m.len() > 0) {
         if std::time::Instant::now() > deadline {

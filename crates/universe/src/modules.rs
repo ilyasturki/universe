@@ -499,21 +499,40 @@ impl Hooker {
 }
 
 pub async fn run_blocking(hooker: &Hooker, hook: &str, env: &HookEnv) -> crate::Result<HookOutcome> {
+    run_lines(hooker, hook, env, |_| {}).await
+}
+
+/// `run_blocking`, each stdout line handed to `on_line` the moment the hook prints it.
+pub async fn run_lines(hooker: &Hooker, hook: &str, env: &HookEnv, mut on_line: impl FnMut(&str) + Send) -> crate::Result<HookOutcome> {
+    use tokio::io::{AsyncBufReadExt, AsyncReadExt};
     let Some(exe) = hooker.hook(hook) else {
         return Ok(HookOutcome { status: 0, stdout: String::new(), stderr: String::new() });
     };
-    let child = command(&exe, hooker.dir(), &hooker.data_dir(), hooker.prefix())?
+    let mut child = command(&exe, hooker.dir(), &hooker.data_dir(), hooker.prefix())?
         .envs(env.vars.iter().map(|(k, v)| (k.as_str(), v.as_str())))
         .spawn()
         .map_err(|e| crate::Error::Io(format!("{}: {e}", exe.display())))?;
+    let mut stdout = tokio::io::BufReader::new(child.stdout.take().expect("piped"));
+    let mut stderr = child.stderr.take().expect("piped");
+    let errors = tokio::spawn(async move {
+        let mut text = Vec::new();
+        let _ = stderr.read_to_end(&mut text).await;
+        String::from_utf8_lossy(&text).into_owned()
+    });
+    let run = async {
+        let (mut printed, mut line) = (String::new(), Vec::new());
+        while stdout.read_until(b'\n', &mut line).await? > 0 {
+            let text = String::from_utf8_lossy(&line);
+            on_line(text.trim_end_matches(['\n', '\r']));
+            printed.push_str(&text);
+            line.clear();
+        }
+        Ok::<_, std::io::Error>((child.wait().await?, printed))
+    };
     let timeout = hooker.timeout();
-    match tokio::time::timeout(timeout, child.wait_with_output()).await {
-        Ok(Ok(out)) => {
-            let o = HookOutcome {
-                status: out.status.code().unwrap_or(-1),
-                stdout: String::from_utf8_lossy(&out.stdout).into(),
-                stderr: String::from_utf8_lossy(&out.stderr).into(),
-            };
+    match tokio::time::timeout(timeout, run).await {
+        Ok(Ok((status, stdout))) => {
+            let o = HookOutcome { status: status.code().unwrap_or(-1), stdout, stderr: errors.await.unwrap_or_default() };
             if o.status != 0 {
                 tracing::warn!("hook {}:{hook} exited {}: {}", hooker.id(), o.status, o.stderr.trim());
             }

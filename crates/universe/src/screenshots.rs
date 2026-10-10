@@ -10,6 +10,9 @@ use crate::sessions::Session;
 const HEAD_GRACE_S: i64 = 90;
 const TAIL_GRACE_S: i64 = 120;
 
+/// A `screenshot` hook's line of its own, flushed, the moment it holds the pixels; the path follows once the file is written.
+pub const GRABBED: &str = "grabbed";
+
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Shot {
     pub game: String,

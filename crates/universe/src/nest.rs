@@ -254,10 +254,20 @@ impl Nest {
     }
 
     /// gamescope takes one shot at a time: a request made while another is in flight is dropped, and waits out `timeout`.
-    pub fn frame(&self, into: &Path, shot: Shot, timeout: Duration) -> Result<Option<PathBuf>> {
+    /// `grabbed` runs once the shot is composited, long before its png is written: gamescope paints a request at its next vblank, so one
+    /// frame at the panel's refresh after it, two with the overlay layers in it so a cue drawn after `grabbed` stays out of the picture.
+    pub fn frame(&self, into: &Path, shot: Shot, timeout: Duration, grabbed: impl FnOnce()) -> Result<Option<PathBuf>> {
         let src = Path::new(SCREENSHOT_PATH);
         let before = std::fs::metadata(src).and_then(|m| m.modified()).ok();
         self.set_card(self.root, "GAMESCOPECTRL_REQUEST_SCREENSHOT", shot as u32)?;
+        let frames = match shot {
+            Shot::BasePlane => 1,
+            Shot::AllRealLayers => 2,
+        };
+        // A reply: the server holds the request before the frames are counted.
+        let hz = self.refresh()?.unwrap_or(60);
+        std::thread::sleep(Duration::from_secs(frames) / hz);
+        grabbed();
         let deadline = Instant::now() + timeout;
         loop {
             let now = std::fs::metadata(src).and_then(|m| m.modified()).ok();

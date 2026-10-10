@@ -726,7 +726,7 @@ impl Core {
     /// The game as gamescope last painted it, without the overlay: `state/frame.png`, or `None` when nothing was painted in time.
     pub fn nest_frame(&self) -> Result<Option<String>> {
         let started = std::time::Instant::now();
-        let shot = self.nest_or()?.frame(&paths::state_home().join("frame.png"), crate::nest::Shot::BasePlane, FRAME_WAIT)?;
+        let shot = self.nest_or()?.frame(&paths::state_home().join("frame.png"), crate::nest::Shot::BasePlane, FRAME_WAIT, || {})?;
         match &shot {
             Some(_) => tracing::debug!("nest: frame in {} ms", started.elapsed().as_millis()),
             None => tracing::warn!("nest: no frame within {} ms", FRAME_WAIT.as_millis()),
@@ -1032,6 +1032,11 @@ impl Core {
     }
 
     pub async fn screenshot(&self) -> Result<String> {
+        self.screenshot_with(|| {}).await
+    }
+
+    /// `grabbed` runs once, as soon as a hook says it holds the pixels (a hook that never says is taken at its path): the cue need not wait for the file.
+    pub async fn screenshot_with(&self, mut grabbed: impl FnMut() + Send) -> Result<String> {
         self.steam_owns("Screenshots")?;
         let cfg = self.config.read().await.clone();
         let (game, env) = match self.current().await {
@@ -1057,12 +1062,23 @@ impl Core {
         if shooters.is_empty() {
             return Err(Error::Unavailable("no enabled module takes screenshots".into()));
         }
-        let mut failures = Vec::new();
+        let (mut failures, mut cued) = (Vec::new(), false);
+        let mut cue = || {
+            if !std::mem::replace(&mut cued, true) {
+                grabbed();
+            }
+        };
         for m in shooters.into_iter().map(Hooker::Module) {
             let menv = self.module_env(&m, game.as_ref(), &cfg, &env);
-            let out = modules::run_blocking(&m, "screenshot", &menv).await?;
-            let path = out.stdout.trim().to_string();
+            let out = modules::run_lines(&m, "screenshot", &menv, |line| {
+                if line.trim() == crate::screenshots::GRABBED {
+                    cue();
+                }
+            })
+            .await?;
+            let path = out.stdout.lines().map(str::trim).rfind(|l| !l.is_empty() && *l != crate::screenshots::GRABBED).unwrap_or_default().to_string();
             if out.status == 0 && !path.is_empty() {
+                cue();
                 return Ok(path);
             }
             failures.push(format!("{}: {}", m.id(), out.stderr.trim().lines().last().unwrap_or("no path printed")));
@@ -2384,6 +2400,22 @@ mod tests {
         let dir = screenshot_sandbox("echo \"$SCREENSHOTS_DIR/${GAME_ID:-none}.png\"");
         let shot = open().await.screenshot().await.unwrap();
         assert_eq!(shot, dir.path().join("state/screenshots/none.png").to_string_lossy(), "no game stands in for the launcher");
+    }
+
+    #[tokio::test]
+    async fn a_shots_grab_is_told_once_as_the_hook_prints_it() {
+        let dir = screenshot_sandbox("echo grabbed\nsleep 0.3\necho grabbed\necho \"$SCREENSHOTS_DIR/x.png\"");
+        let mut grabs = Vec::new();
+        let shot = open().await.screenshot_with(|| grabs.push(std::time::Instant::now())).await.unwrap();
+        let returned = std::time::Instant::now();
+        assert!(shot.ends_with("/x.png"), "{shot}: the path alone");
+        assert_eq!(grabs.len(), 1, "one shot, one grab");
+        assert!(returned - grabs[0] >= std::time::Duration::from_millis(250), "told at the line, not with the path");
+
+        std::fs::write(dir.path().join("modules/screenshot/bin/shot"), "#!/bin/sh\necho \"$SCREENSHOTS_DIR/y.png\"\n").unwrap();
+        let mut grabs = 0;
+        open().await.screenshot_with(|| grabs += 1).await.unwrap();
+        assert_eq!(grabs, 1, "a hook that never says is taken at its path");
     }
 
     #[tokio::test]

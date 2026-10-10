@@ -310,7 +310,7 @@ every 10 s, since the 30-minute timeout writes no file.
 | `host_gamescope(screen)` | `host_gamescope(screen)` | — | the gamescope a launcher starts itself in: `[env, MANGOHUD_CONFIGFILE=<state>/mangoapp.conf, XKB_DEFAULT_LAYOUT=…, XKB_DEFAULT_VARIANT=…, gamescope, args…]` from `launch.gamescope_bin`, the global `gamescope_*` fields at the screen's mode, `launch.gamescope_args`, `--mangoapp` whenever mangoapp is installed and `--hdr-enabled` when `launch.hdr` is, `--prefer-output` and `--hide-cursor-delay` when it gets the screen to itself (see Gamescope), the keyboard layout (see below); writes that conf with the HUD hidden (a game shows it). `None` when the binary is not installed |
 | `keyboard_layout()` | `keyboard_layout()` | — | `{layout, variant}`, the session's xkb keyboard layout (`fr` / `bepo`, `us` / `intl`…): `XKB_DEFAULT_LAYOUT` and `XKB_DEFAULT_VARIANT` when set, else what the desktop keeps — GNOME's `org.gnome.desktop.input-sources` (the most recently used source, else the first), Cinnamon's `org.cinnamon.desktop.input-sources`, Hyprland's `input:kb_layout`, KDE's `kxkbrc`, the active layout sway (`swaymsg -t get_inputs`) and niri (`niri msg keyboard-layouts`) name, turned back into its code through xkeyboard-config's `rules/evdev.lst` (`XKB_CONFIG_ROOT`, else `X11/xkb` or `xkeyboard-config-2` under `XDG_DATA_DIRS`) — else `localectl`'s X11 layout or the console keymap up to its charset, else `us`. gamescope builds a US keymap of its own whatever the session's, so both the launcher's gamescope and a game's own get it as `XKB_DEFAULT_LAYOUT` / `XKB_DEFAULT_VARIANT` (which libxkbcommon reads), and a frontend draws its on-screen keyboard from it |
 | `adopt_scope()` | `adopt_scope()` | — (`universe play` does it unless `--no-wait`) | moves the calling process into the transient scope `universe-launcher-<pid>.scope` (`StartTransientUnit` on the user manager) and returns its name; every later `launch` binds the game to it. Idempotent. `Unavailable` without a user systemd |
-| `screenshot()` | `screenshot()` | `universe screenshot` | runs the `screenshot` hook of each enabled module declaring one (the screenshot module), the first path printed winning; returns the PNG path (see Screenshots). `Unavailable` when no module is on for the game, `Io` naming each hook's last stderr line when every one failed |
+| `screenshot()`, `screenshot_with(grabbed)` | `screenshot()` | `universe screenshot` | runs the `screenshot` hook of each enabled module declaring one (the screenshot module), the first path printed winning; returns the PNG path (see Screenshots). `grabbed` is called once, when a hook prints `grabbed` (it holds the pixels; the file comes later), or with the path from a hook that never prints it. `Unavailable` when no module is on for the game, `Io` naming each hook's last stderr line when every one failed |
 | `current()` | `current()` | `universe status` | `{session_id, id, title, unit, screen, started_at, gamescope_pid, launcher_pid}` (`gamescope_pid` is the launcher's gamescope the game was started into and `launcher_pid` that launcher, both `0` for a gamescope of the game's own), or `None`. The CLI wraps it: `status --json` prints `{"current": … or null, "recent": [the 10 newest session rows across the library], "pending_journals": [see Journal]}` |
 | `sessions(id)` | `sessions(id)` | `universe sessions <name>` | `[SessionRow]`, newest first (by `ended_at`); `id = ""` spans every visible game (not removed, not hidden) |
 | `session_log(id, session_id, tail)` | `session_log(id, session_id="", tail=0)` | `universe logs <name> [session] [-n N] [-f]` | what a session's processes wrote (see Logs): `[{time, source, priority, message}]`, oldest first, the last `tail` lines (0: all). `session_id` `""` is the running session, else the newest played; `NotFound` for a session that never was, `[]` once the journal has let the unit go, and for an import |
@@ -1234,7 +1234,9 @@ the `screenshot` hook writes wherever `SCREENSHOTS_DIR` points, and with no sess
 `<state>/screenshots/`, a shot of the launcher that no listing shows, taken with no game (no `GAME_*`,
 the module's global settings). `taken_at` is the name's
 moment; `session` is the session whose span covers it, with the journal module's own grace (90 s
-before the start, 120 s after the end), or empty. The hook answers once the pixels are grabbed, so
+before the start, 120 s after the end), or empty. The hook prints `grabbed` on a line of its own,
+flushed, the moment it holds the pixels, and the path once the file is written (gamescope encodes a
+4K png in about 0.6 s on one core). The hook answers once the pixels are grabbed, so
 a cue that follows its return never lands in the shot: the launcher plays the shutter and, inside
 gamescope, paints a flash over the game (see `frontends.md`); the pad's `screenshot` macro reports
 back as a `screenshot` event on the watcher (`{"event": "screenshot", "path": …}`, the path empty
@@ -1243,8 +1245,11 @@ when it failed). A journal entry names them by basename, which resolves to `scre
 The **screenshot** module takes them, apart from recording: its own `enabled` switch, per game, is
 whether a game takes screenshots at all, and capture's settings have no say. Inside the launcher's
 gamescope (`GAMESCOPE_WAYLAND_DISPLAY` set) its hook asks gamescope itself, whatever the desktop:
-`universe nest-shot <path> [--overlays]` sets `GAMESCOPECTRL_REQUEST_SCREENSHOT` on its root and
-copies the `/tmp/gamescope.png` it writes — the game alone at its render size with `window = true`,
+`universe nest-shot <path> [--overlays]` sets `GAMESCOPECTRL_REQUEST_SCREENSHOT` on its root,
+prints `grabbed` one frame later at the panel's refresh (`GAMESCOPE_DISPLAY_REFRESH_RATE_FEEDBACK`,
+60 Hz when unset; gamescope composites a request at its next vblank), two with `--overlays` so a cue
+drawn after it stays out of the overlay layers, then copies the `/tmp/gamescope.png` it writes and
+prints the path — the game alone at its render size with `window = true`,
 the overlay layers (mangoapp's HUD) too with `false`. gamescope takes one shot at a time, so a
 screenshot pressed while HOME's frame of the game is being taken is dropped, and the hook falls back
 to gpu-screen-recorder as below.
@@ -1252,8 +1257,10 @@ Elsewhere it asks the desktop, `universe desktop-shot` (see Desktop): the focuse
 `window = true` (the default), the session's screen with `false`, the cursor per `cursor` (both per
 game). On GNOME the extension grabs it (`org.universe.Windows.Screenshot(path, window, cursor)`):
 Mutter reads the framebuffer synchronously, so the grab returns at the press, before the PNG is
-encoded. When the desktop takes none it is a gpu-screen-recorder `-o` capture of `SESSION_SCREEN`
-when gpu-screen-recorder is installed, else the hook fails.
+encoded, and `desktop-shot` prints `grabbed` then; spectacle, grim and the X server print it once
+the file is written. When the desktop takes none it is a gpu-screen-recorder `-o` capture of `SESSION_SCREEN`
+when gpu-screen-recorder is installed, else the hook fails. The hook passes `grabbed` on as either
+command prints it; a hook that never prints it is taken as grabbed with its path.
 
 `thumb` is the shot's thumbnail, a 960 px wide JPEG under `$XDG_CACHE_HOME/universe/thumbs/` (one flat
 directory, `<game>--<stem>-<mtime>.jpg`, so a file replaced in place gets a fresh one), and
@@ -1850,7 +1857,7 @@ freeze       = "bin/freeze"       # blocking, right after the game's unit froze 
 thaw         = "bin/thaw"
 session-end  = "bin/stop"         # short and blocking, inside the game unit's ExecStopPost; this is where a recording is filed
 post-process = "bin/process"      # async (transient unit), after the session-end hooks
-screenshot   = "bin/shot"         # on demand
+screenshot   = "bin/shot"         # on demand: prints the png's path, and before it `grabbed` (flushed) the moment it holds the pixels
 check        = "bin/check"        # blocking, from doctor, while the module is on (available or not) and set up: one check per stdout line
 timeout_s    = 20                 # for blocking hooks; the sum bounds the game unit's TimeoutStopSec
 
