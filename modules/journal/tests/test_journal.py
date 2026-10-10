@@ -1,5 +1,4 @@
 import base64
-import io
 import json
 import locale
 import os
@@ -8,9 +7,11 @@ import shutil
 import stat
 import subprocess
 import sys
-import urllib.error
+import threading
 from datetime import datetime, timedelta
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -637,32 +638,45 @@ def test_a_prompt_file_replaces_the_built_in_prompt(tmp_path, fakebin):
     assert "-c\ntools.web_search=false" in "\n".join(providers.codex_args("m", [], "s", "o", "p", ".", web_search=False))
 
 
-class Reply:
-    """What urlopen hands back: a context manager whose read() gives the body."""
+@pytest.fixture
+def endpoint():
+    """An OpenAI-style endpoint on localhost: `answer(payload)` gives (status, body, headers) for each request, `seen` keeps them."""
+    seen = []
+    state = SimpleNamespace(answer=lambda payload: (200, chat_reply(), {}))
 
-    def __init__(self, payload):
-        self._body = json.dumps(payload).encode()
+    class Handler(BaseHTTPRequestHandler):
+        def answer(self):
+            sent = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            payload = json.loads(sent) if sent else None
+            seen.append(SimpleNamespace(method=self.command, path=self.path, auth=self.headers.get("Authorization"), payload=payload))
+            status, body, headers = state.answer(payload)
+            data = body.encode() if isinstance(body, str) else json.dumps(body).encode()
+            self.send_response(status)
+            for name, value in headers.items():
+                self.send_header(name, value)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
 
-    def read(self):
-        return self._body
+        do_GET = do_POST = answer
 
-    def __enter__(self):
-        return self
+        def log_message(self, *args):
+            pass
 
-    def __exit__(self, *_):
-        return False
-
-
-def http_error(code, body, headers=None):
-    return urllib.error.HTTPError("https://api.test/v1/chat/completions", code, "err", headers or {}, io.BytesIO(json.dumps(body).encode()))
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True).start()
+    state.url, state.seen = f"http://127.0.0.1:{server.server_port}/v1", seen
+    yield state
+    server.shutdown()
+    server.server_close()
 
 
 def chat_reply(answer=ANSWER):
-    return Reply({"choices": [{"message": {"content": json.dumps(answer)}}]})
+    return {"choices": [{"message": {"content": answer if isinstance(answer, str) else json.dumps(answer)}}]}
 
 
-def openai_opts(**kw):
-    return providers.Options(provider="openai", model="gpt-x", base_url="https://api.test/v1", api_key="sk-test", **kw)
+def openai_opts(endpoint, **kw):
+    return providers.Options(provider="openai", model="gpt-x", base_url=endpoint.url, api_key="sk-test", **kw)
 
 
 def png(tmp_path, name="a.png"):
@@ -670,93 +684,78 @@ def png(tmp_path, name="a.png"):
     return img.Image(str(tmp_path / name), datetime(2026, 9, 11, 12, 1), "shot")
 
 
-def test_the_endpoint_gets_the_schema_the_prompt_and_the_images_inline(tmp_path, monkeypatch):
-    sent = []
-
-    def urlopen(req, timeout=None):
-        sent.append((req, json.loads(req.data), timeout))
-        return chat_reply()
-
-    monkeypatch.setattr(providers.urllib.request, "urlopen", urlopen)
-    out = providers.run_openai(openai_opts(effort="medium"), "SYSTEM", "BRIEF", [png(tmp_path)], str(tmp_path))
-    assert out == ANSWER
-    req, payload, timeout = sent[0]
-    assert req.full_url == "https://api.test/v1/chat/completions" and req.get_header("Authorization") == "Bearer sk-test"
-    assert timeout == providers.TIMEOUT_S and payload["model"] == "gpt-x"
-    assert payload["messages"][0] == {"role": "system", "content": "SYSTEM"}
+def test_the_endpoint_gets_the_schema_the_prompt_and_the_shots_inline_and_the_entry_lands(tmp_path, fakebin, endpoint):
+    make_png(tmp_path / "games" / "testgame" / "screenshots" / SHOT)
+    settings = {"provider": "openai", "model": "gpt-x", "base_url": endpoint.url, "api_key": "sk-test", "effort": "medium"}
+    res, journal_dir = run_process(tmp_path, fakebin, settings)
+    assert res.returncode == 0, res.stderr
+    [sent] = endpoint.seen
+    assert (sent.method, sent.path, sent.auth) == ("POST", "/v1/chat/completions", "Bearer sk-test")
+    payload = sent.payload
+    assert payload["model"] == "gpt-x" and payload["messages"][0]["role"] == "system" and payload["messages"][0]["content"]
     content = payload["messages"][1]["content"]
-    assert content[0] == {"type": "text", "text": "BRIEF"}
-    assert content[1]["type"] == "image_url" and content[1]["image_url"]["url"].startswith("data:image/jpeg;base64,")
-    assert base64.b64decode(content[1]["image_url"]["url"].split(",", 1)[1])[:2] == b"\xff\xd8", "a real jpeg, whatever the shot was"
+    assert content[0]["type"] == "text" and content[0]["text"]
+    [shot] = [c for c in content if c["type"] == "image_url"]
+    assert shot["image_url"]["url"].startswith("data:image/jpeg;base64,")
+    assert base64.b64decode(shot["image_url"]["url"].split(",", 1)[1])[:2] == b"\xff\xd8", "a real jpeg, whatever the shot was"
     schema = payload["response_format"]["json_schema"]
     assert schema["strict"] is True and schema["schema"] == pr.OUTPUT_SCHEMA
     assert payload["reasoning_effort"] == "medium" and payload["web_search_options"] == {}
+    entry = json.loads((fakebin / "universe.args").read_text().splitlines()[2])
+    assert entry["title"] == ANSWER["title"] and state_files(journal_dir) == []
 
 
-def test_the_endpoint_is_asked_again_without_a_field_it_refuses(tmp_path, monkeypatch):
-    seen = []
-
-    def urlopen(req, timeout=None):
-        payload = json.loads(req.data)
-        seen.append(sorted(k for k in payload if k in ("web_search_options", "reasoning_effort") or k == "response_format"))
+def test_the_endpoint_is_asked_again_without_a_field_it_refuses(tmp_path, endpoint):
+    def answer(payload):
         if "web_search_options" in payload:
-            raise http_error(400, {"error": {"message": "Unrecognized request argument supplied: web_search_options"}})
+            return 400, {"error": {"message": "Unrecognized request argument supplied: web_search_options"}}, {}
         if payload["response_format"]["type"] == "json_schema":
-            raise http_error(400, {"error": {"message": "response_format.json_schema is not supported by this model"}})
-        return chat_reply()
+            return 400, {"error": {"message": "response_format.json_schema is not supported by this model"}}, {}
+        return 200, chat_reply(), {}
 
-    monkeypatch.setattr(providers.urllib.request, "urlopen", urlopen)
-    out = providers.run_openai(openai_opts(), "SYSTEM", "BRIEF", [], str(tmp_path))
-    assert out == ANSWER
-    assert seen == [
+    endpoint.answer = answer
+    assert providers.run_openai(openai_opts(endpoint), "SYSTEM", "BRIEF", [], str(tmp_path)) == ANSWER
+    fields = [sorted(k for k in s.payload if k in ("web_search_options", "reasoning_effort", "response_format")) for s in endpoint.seen]
+    assert fields == [
         ["reasoning_effort", "response_format", "web_search_options"],
         ["reasoning_effort", "response_format"],
         ["reasoning_effort", "response_format"],
     ], "one field dropped per refusal, and a rebuilt payload does not bring back a dropped one"
 
 
-def test_the_endpoints_failures_are_told_apart(tmp_path, monkeypatch):
-    def refusing(code, body, headers=None):
-        def urlopen(req, timeout=None):
-            raise http_error(code, body, headers)
+# (status, body, headers) the endpoint answers -> the failure run_openai raises, and how long a quota waits.
+FAILURES = {
+    "rate limit": ((429, {"error": {"message": "Rate limit reached. Try again in 30s"}}, {}), providers.QuotaExceeded, (20, 40)),
+    "spent account": (
+        (429, {"error": {"message": "You exceeded your current quota", "code": "insufficient_quota"}}, {}),
+        providers.QuotaExceeded,
+        (3600, None),
+    ),
+    "retry-after": ((429, {"error": {"message": "slow down"}}, {"Retry-After": "120"}), providers.QuotaExceeded, (100, 140)),
+    "bad key": ((401, {"error": {"message": "bad key"}}, {}), providers.Permanent, None),
+    "overloaded": ((503, {"error": {"message": "overloaded"}}, {}), providers.Transient, None),
+    "prose": ((200, chat_reply("sorry, no"), {}), providers.Transient, None),
+    "not json": ((200, "<html>proxy</html>", {}), providers.Transient, None),
+}
 
-        monkeypatch.setattr(providers.urllib.request, "urlopen", urlopen)
 
-    refusing(429, {"error": {"message": "Rate limit reached. Try again in 30s"}})
-    with pytest.raises(providers.QuotaExceeded) as info:
-        providers.run_openai(openai_opts(), "S", "B", [], str(tmp_path))
-    assert timedelta(seconds=20) < info.value.until - datetime.now() < timedelta(seconds=40)
-    assert info.value.provider == "openai"
-
-    refusing(429, {"error": {"message": "You exceeded your current quota", "code": "insufficient_quota"}})
-    with pytest.raises(providers.QuotaExceeded) as info:
-        providers.run_openai(openai_opts(), "S", "B", [], str(tmp_path))
-    assert info.value.until - datetime.now() > timedelta(hours=1), "a spent account waits far longer than a rate limit"
-
-    refusing(429, {"error": {"message": "slow down"}}, {"Retry-After": "600"})
-    with pytest.raises(providers.QuotaExceeded) as info:
-        providers.run_openai(openai_opts(), "S", "B", [], str(tmp_path))
-    assert timedelta(minutes=9) < info.value.until - datetime.now() < timedelta(minutes=11)
-
-    refusing(401, {"error": {"message": "bad key"}})
-    with pytest.raises(providers.Permanent, match="refused the key"):
-        providers.run_openai(openai_opts(), "S", "B", [], str(tmp_path))
-
-    refusing(503, {"error": {"message": "overloaded"}})
-    with pytest.raises(providers.Transient, match="503"):
-        providers.run_openai(openai_opts(attempts=1), "S", "B", [], str(tmp_path))
-
-    def broken(req, timeout=None):
-        return Reply({"choices": [{"message": {"content": "sorry, no"}}]})
-
-    monkeypatch.setattr(providers.urllib.request, "urlopen", broken)
-    with pytest.raises(providers.Transient, match="not JSON"):
-        providers.run_openai(openai_opts(attempts=1), "S", "B", [], str(tmp_path))
-
-    with pytest.raises(providers.Permanent, match="no API key"):
-        providers.run_openai(providers.Options(provider="openai", model="m", base_url="https://api.test/v1"), "S", "B", [], str(tmp_path))
-    with pytest.raises(providers.Permanent, match="no model"):
-        providers.run_openai(providers.Options(provider="openai", base_url="https://api.test/v1", api_key="k"), "S", "B", [], str(tmp_path))
+def test_the_endpoints_failures_are_told_apart(tmp_path, endpoint):
+    for case, (reply, raised, waits) in FAILURES.items():
+        endpoint.answer = lambda payload, reply=reply: reply
+        with pytest.raises(raised) as info:
+            providers.run_openai(openai_opts(endpoint, attempts=1), "S", "B", [], str(tmp_path))
+        if waits:
+            low, high = waits
+            wait = (info.value.until - datetime.now()).total_seconds()
+            assert low < wait and (high is None or wait < high), case
+            assert info.value.provider == "openai"
+    for opts in (
+        providers.Options(provider="openai", model="m", base_url=endpoint.url),
+        providers.Options(provider="openai", base_url=endpoint.url, api_key="k"),
+    ):
+        with pytest.raises(providers.Permanent):
+            providers.run_openai(opts, "S", "B", [], str(tmp_path))
+    assert len(endpoint.seen) == len(FAILURES), "no key or no model asks nothing"
 
 
 def test_the_payload_drops_frames_until_the_request_fits(tmp_path, monkeypatch):
@@ -770,15 +769,12 @@ def test_the_payload_drops_frames_until_the_request_fits(tmp_path, monkeypatch):
     assert urls[0][0].kind == "shot", "the player's own shots are the last to go"
 
 
-def test_the_endpoint_lists_its_models(monkeypatch):
-    monkeypatch.setattr(providers.urllib.request, "urlopen", lambda req, timeout=None: Reply({"data": [{"id": "gpt-x"}, {"id": "llama-3"}, {"nope": 1}]}))
-    assert providers.models(openai_opts()) == ["gpt-x", "llama-3"]
-
-    def refuse(req, timeout=None):
-        raise urllib.error.URLError("no route to host")
-
-    monkeypatch.setattr(providers.urllib.request, "urlopen", refuse)
-    assert providers.models(openai_opts()) == []
+def test_the_endpoint_lists_its_models(endpoint):
+    endpoint.answer = lambda payload: (200, {"data": [{"id": "gpt-x"}, {"id": "llama-3"}, {"nope": 1}]}, {})
+    assert providers.models(openai_opts(endpoint)) == ["gpt-x", "llama-3"]
+    assert [(s.method, s.path, s.auth) for s in endpoint.seen] == [("GET", "/v1/models", "Bearer sk-test")]
+    endpoint.answer = lambda payload: (500, "down", {})
+    assert providers.models(openai_opts(endpoint)) == []
     assert providers.models(providers.Options(provider="stub")) == []
 
 
