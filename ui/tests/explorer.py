@@ -189,8 +189,6 @@ class Explorer:
         self._launches = []
         fake.launchRequested.connect(self._launches.append)
 
-    # The window ------------------------------------------------------------------------------------------------
-
     def open(self):
         if self.look is not None:
             # Kept, not dropped: an engine torn down mid-walk deletes objects PySide still wraps.
@@ -240,8 +238,6 @@ class Explorer:
             10000,
         )
 
-    # What the window shows -------------------------------------------------------------------------------------
-
     def hints(self):
         root = self.look.root
         if self.look.stacked:
@@ -269,7 +265,6 @@ class Explorer:
         )
 
     def observe(self):
-        """The state on screen: the named items the focus sits in, and their cursors."""
         window = self.look.window
         focus = window.activeFocusItem()
         chain, cursor = [], {}
@@ -313,8 +308,6 @@ class Explorer:
         found = found.toVariant() if hasattr(found, "toVariant") else found
         return [str(t) for t in found or []]
 
-    # The walk ----------------------------------------------------------------------------------------------------
-
     def record(self, path, move=None):
         """The state on screen, a known one when only a cursor the screen does not show tells them apart."""
         key, page, chain, cursor, focus = self.observe()
@@ -354,12 +347,10 @@ class Explorer:
         self._launches.clear()
         self.press(key)
         if self._launches:
-            # The walk stops at a launch and goes on from a new window.
             before.edges[key] = "launch:" + self._launches[0]
             self.open()
             self.current = self.record([])
         elif self.api.theme.current != self.name:
-            # Picked another look: that one gets its own walk.
             before.edges[key] = "look:" + self.api.theme.current
             self.open()
             self.current = self.record([])
@@ -375,7 +366,6 @@ class Explorer:
             before.findings.append(("warning", f"{key}: {w}"))
 
     def home(self):
-        """Back to home with B, as a player would; a new window when B never gets there."""
         self.resets += 1
         for _ in range(HOME_WITHIN + 2):
             if self.current.home:
@@ -399,7 +389,6 @@ class Explorer:
         return None
 
     def routes(self, start):
-        """The shortest run of keys known to lead from `start` to each state it reaches."""
         seen = {start.key: []}
         queue = deque([start])
         while queue:
@@ -436,7 +425,6 @@ class Explorer:
         return self.current.key == goal.key
 
     def outcome(self, state, key):
-        """What `key` did from `state`: the page it led to, or the launch, look or quit it set off."""
         target = state.edges.get(key, "")
         known = self.states.get(target)
         return known.page if known is not None else target.partition(":")[0]
@@ -447,7 +435,6 @@ class Explorer:
         return len(tries) >= SATURATED and set(tries[:-SATURATED]) >= set(tries[-SATURATED:]) and bool(tries[:-SATURATED])
 
     def next_goal(self, failed):
-        """The next state and key: a button the region never tried, then moves and buttons that still find pages, the nearest first."""
         self.depth = self.routes(self.origin)
         near = self.routes(self.current)
         expanded = {}
@@ -509,8 +496,6 @@ class Explorer:
                 look.engine = None
         self.write()
         return self.findings
-
-    # What it found -------------------------------------------------------------------------------------------------
 
     def judge(self):
         states = self.states

@@ -26,7 +26,6 @@ def small(path: Path) -> QImage:
 
 
 def changed(before: QImage, after: QImage) -> list[int]:
-    """The indexes of the pixels whose luma moved past PIXEL."""
     a, b = bytes(before.constBits()), bytes(after.constBits())
     if a == b:
         return []
@@ -35,7 +34,6 @@ def changed(before: QImage, after: QImage) -> list[int]:
 
 
 def diff_image(after: Path, pixels: list[int], dest: Path) -> None:
-    """The after shot dimmed, its changed pixels in red."""
     mask = QImage(*COMPARED, QImage.Format.Format_ARGB32)
     mask.fill(QColor(0, 0, 0, 0))
     for p in pixels:
