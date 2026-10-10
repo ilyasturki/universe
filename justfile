@@ -158,8 +158,8 @@ speed: build develop env
     cargo test --quiet -p universe --test cli within_its_budget
     tools/reap "{{ python }}" -m pytest -q -k within_its_budget
 
-# The quit landing's speed budget, on the GPU: a gamescope take (tools/ui-record) of the sample game in .dev-frames, launched, quit from HOME's dock and landing home, then the longest the picture stands still between the quit and the landing (tools/frame-gaps); over LIMIT ms it fails. The take is target/frame-gaps.mp4
-frame-gaps limit="800": build develop
+# The quit landing's speed budget, on the GPU: a gamescope take (tools/ui-record) of the sample game in .dev-frames, launched, quit from HOME's dock and landing home, then the longest the picture stands still from the Return on Quit to the landing, before the game's exit (tools/frame-gaps); over LIMIT ms it fails. The take is target/frame-gaps.mp4
+frame-gaps limit="100": build develop
     #!/usr/bin/env -S nix develop --quiet --command bash
     set -euo pipefail
     cd "{{ justfile_directory() }}"
@@ -167,7 +167,7 @@ frame-gaps limit="800": build develop
     [ -d .dev-frames/data/games/sample-game ] || just sample install
     UNIVERSE_RECORD_GAMESCOPE=1 UNIVERSE_UI_ARGS=--no-gamepad UNIVERSE_UI_GAP=400 timeout -k 15 300 just ui-record target/frame-gaps.mp4 \
         Wait:4 Expect:sample-game Return Wait:12 Guide Wait:3 Right Right Return Wait:3 Down Wait:2 Mark:quit Return Wait:15 Mark:landed
-    tools/frame-gaps target/frame-gaps.mp4 quit landed "{{ limit }}"
+    tools/frame-gaps target/frame-gaps.mp4 quit+0.4 quit+1.0 "{{ limit }}"
 
 # Against this machine: transient units on the user systemd, a scope around the test process, the DRM cards
 test-live: build

@@ -8,10 +8,18 @@ USAGE = """usage: tools/frame-gaps TAKE.mp4 FROM TO [LIMIT_MS]
 The longest time a tools/ui-record take's picture stands still before it moves
 again, between its marks FROM and TO (TAKE.marks): the wait for a key's answer,
 or a frame the animations dropped. A still that runs to TO, the screen at rest,
-does not count. Over LIMIT_MS, it exits 1."""
+does not count. Over LIMIT_MS, it exits 1.
+
+FROM and TO are a mark, or a mark and seconds after it (quit+0.4): a Mark: key
+is a phase of its own, so the key after it lands one gap later."""
 W, H, FPS = 160, 90, 60
 # Out of 255 per pixel: the encode's noise on a frame that did not change stays under it.
 STILL = 0.4
+
+
+def at_mark(marks, spec):
+    name, _, after = spec.partition("+")
+    return float(marks[name]) + float(after or 0)
 
 
 def main(argv):
@@ -24,7 +32,7 @@ def main(argv):
     take, start, end = argv[:3]
     limit = float(argv[3]) if len(argv) == 4 else None
     marks = dict(line.split() for line in Path(take).with_suffix(".marks").read_text().splitlines())
-    t0, t1 = float(marks[start]), float(marks[end])
+    t0, t1 = at_mark(marks, start), at_mark(marks, end)
     raw = subprocess.run(
         [
             *("ffmpeg", "-hide_banner", "-loglevel", "error", "-ss", f"{t0:.3f}", "-to", f"{t1:.3f}", "-i", take),
