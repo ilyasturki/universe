@@ -64,11 +64,8 @@ jobs:
           echo "$RUNNER_TEMP/bun/bin" >> "$GITHUB_PATH"
       - name: The screenshots and clips, from the site-media branch
         run: |
-          if git rev-parse -q --verify origin/site-media >/dev/null; then
-            git archive origin/site-media src/assets/media public/media | tar -x -C site
-          else
-            echo "no site-media branch yet: every screenshot and clip is a placeholder"
-          fi
+          tools/docs-media fetch
+          tools/docs-media check
       - run: bun install --cwd site --frozen-lockfile
       - name: Build
         working-directory: site
