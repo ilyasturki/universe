@@ -201,7 +201,7 @@ fn proton_env(g: &crate::game::Game, r: &Resolved, config: &Config, env: &mut BT
     } else if !env.contains_key("PROTONPATH") {
         tracing::warn!("{}: Proton '{}' not installed: umu-run downloads its own UMU-Proton", g.id, r.effective.proton);
     }
-    env.insert("GAMEID".into(), if g.launch.umu_id.is_empty() { "umu-default".into() } else { g.launch.umu_id.clone() });
+    env.insert("GAMEID".into(), r.effective.umu_id.clone());
     if !g.launch.store.is_empty() {
         env.insert("STORE".into(), g.launch.store.clone());
     }
@@ -586,6 +586,13 @@ mod tests {
         assert!(!p.env.contains_key("PROTON_NO_NTSYNC") && !p.env.contains_key("PROTON_ENABLE_HDR"));
         assert_eq!(p.cwd, dir.path());
         assert!(dir.path().join("pfx").is_dir());
+
+        let gameid = |g: Game| plan(&crate::library::resolve(g, &cfg, &[]), &cfg, &BTreeMap::new(), None, None, false, true).unwrap().env["GAMEID"].clone();
+        let mut g = r.game.clone();
+        g.metadata.steam_appid = 578330;
+        assert_eq!(gameid(g.clone()), "umu-578330", "a GOG game or an import gets its Steam twin's fixes");
+        g.launch.umu_id = "umu-lego".into();
+        assert_eq!(gameid(g), "umu-lego", "the game's own umu id wins");
     }
 
     #[test]

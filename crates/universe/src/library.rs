@@ -33,6 +33,8 @@ pub struct Effective {
     pub options: serde_json::Map<String, serde_json::Value>,
     pub proton: String,
     pub proton_path: String,
+    /// umu-run's `GAMEID`: `launch.umu_id`, else `umu-<metadata.steam_appid>`, else `umu-default`.
+    pub umu_id: String,
     pub esync: bool,
     pub fsync: bool,
     pub ntsync: bool,
@@ -226,6 +228,11 @@ pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Modu
             .or_insert_with(|| config.proton_path(&proton).map(|p| p.to_string_lossy().into()).unwrap_or_default())
             .clone(),
         proton,
+        umu_id: match (game.launch.umu_id.as_str(), game.metadata.steam_appid) {
+            ("", 0) => "umu-default".into(),
+            ("", appid) => format!("umu-{appid}"),
+            (own, _) => own.into(),
+        },
         esync: game.launch.esync.unwrap_or(config.launch.esync),
         fsync: game.launch.fsync.unwrap_or(config.launch.fsync),
         ntsync: game.launch.ntsync.unwrap_or(config.launch.ntsync),

@@ -113,7 +113,7 @@ comma-separated for lists, `""` deletes the key. A runner is written under its s
  "effective": {"runner": "dolphin", "runner_name": "Dolphin", "runner_kind": "emulator",
                "runner_path": "/…/bin/dolphin-emu", "platform": "Nintendo GameCube",
                "options": {"batch": true, "user_directory": ""},
-               "proton": "proton-ge", "proton_path": "…", "esync": true, "fsync": true, "ntsync": true,
+               "proton": "proton-ge", "proton_path": "…", "umu_id": "umu-default", "esync": true, "fsync": true, "ntsync": true,
                "wayland": true, "hdr": false, "discrete_gpu": true, "dlss_upgrade": false, "fsr4_upgrade": false, "xess_upgrade": false,
                "optiscaler": false, "mangohud": false, "gamescope": true, "gamescope_args": "", "gamescope_resolution": "auto", "gamescope_refresh": "auto", "gamescope_scaler": "", "gamescope_filter": "", "gamescope_sharpness": null, "gamescope_adaptive_sync": "auto", "fps_limit": "auto", "hide_cursor": true, "env": {},
                "working_dir": "/…/games/melee", "prefix": "", "modules": {"capture": {"enabled": true, "cursor": false}}},
@@ -124,7 +124,8 @@ comma-separated for lists, `""` deletes the key. A runner is written under its s
 `effective` is what the launch will use: the game's own keys over the global defaults, the runner
 resolved (`runner_path` empty when its program was not found), the platform the runner implies when
 the game sets none, `working_dir` and `prefix` as the launch would make them (the program's folder;
-`<prefixes_root>/<id>` for a Proton or Wine game, empty otherwise), and each active module's settings
+`<prefixes_root>/<id>` for a Proton or Wine game, empty otherwise), `umu_id` the `GAMEID` a Proton
+launch gets (see Proton and Wine), and each active module's settings
 for this game under `modules` — its defaults, then `config.toml`'s, then the game's own. The game's
 own `modules` table stays what `game.toml` holds, like `launch`. The upscaler upgrades are the bools their `auto` came to on this GPU (see
 `gpu()`); `gamescope_adaptive_sync` stays `auto`, `on` or `off`, since the screen is only known
@@ -607,7 +608,9 @@ unless the limit is `none`.
 ### Proton and Wine
 
 `proton` runs `umu-run <exe>` with `WINEPREFIX` (`launch.prefix`, else `<prefixes_root>/<id>`),
-`PROTONPATH`, `GAMEID` (`launch.umu_id`, else `umu-default`), `STORE`, then the switches as the env
+`PROTONPATH`, `GAMEID` (`effective.umu_id`: `launch.umu_id`, else `umu-<metadata.steam_appid>` when
+the game has one — a GOG game or an import then gets the protonfixes and GE-Proton's per-game
+switches of its Steam twin — else `umu-default`), `STORE`, then the switches as the env
 Proton reads: `esync`/`fsync`/`ntsync` off are `PROTON_NO_ESYNC`/`_FSYNC`/`_NTSYNC=1`; `wayland`,
 `hdr`, `dlss_upgrade`, `fsr4_upgrade`, `xess_upgrade` and `optiscaler` on are
 `PROTON_ENABLE_WAYLAND`, `PROTON_ENABLE_HDR`, `PROTON_DLSS_UPGRADE`, `PROTON_FSR4_UPGRADE`,
@@ -1129,7 +1132,7 @@ its `api` rules it out, else "")}`.
 
 | Rust | Python | CLI | Role |
 |---|---|---|---|
-| `media_refresh(id, force, progress)` | `media_refresh(id, force, progress)` | `universe media <name> refresh` | `(changed, total)`: fills the empty slots of `media/`, each from the first provider with a picture for it — the game's source (the `art` of its `game` event, recorded under the source's id), `steam` (Steam's CDN by app id: the pin `metadata.steam_appid`, the source's `steam_appid`, else the Steam release GOG GamesDB lists; the 920×430 `header_2x` through the keyless `IStoreBrowseService/GetItems`), `gamesdb` (GOG GamesDB's game: the pin `metadata.gamesdb_id`, the store release by the game's Steam, GOG or Epic id, else a search by title that counts only a hit named like it, one released on the game's platform first, twins told apart by year), `libretro` (an emulator game's box art and logo, by its ROM's file name and the runner's platform), then `sgdb` with the user's key (first with `keys.prefer_sgdb`); a logo with no see-through pixel is passed over (GamesDB's is at times an opaque poster); a square nobody has is made from the box front (`generated`), and a provider's square replaces it once one comes. An empty description, genres or developers come from Steam's store page (`appdetails`: the description as text, `summary`, `developers`, `publishers`, `genres`, `metacritic`, the year), then what GamesDB has left (`release_year` only when 0); `.sync.json`'s `sources` names the provider of each slot, of `screenshots` (Steam's, else GamesDB's, 8 at most) and of `description`. An emulator game still titled after its file (`title_of` its `launch.exe`) takes GamesDB's name when the match is pinned or named alike and released on the game's platform. `force` refetches the filled slots and fields and asks again where a search found nothing; a pick does not stop its slot's default from being fetched; `id=""` does every game. No key is needed; requests to `store.steampowered.com` keep under 200 in 5 minutes |
+| `media_refresh(id, force, progress)` | `media_refresh(id, force, progress)` | `universe media <name> refresh` | `(changed, total)`: fills the empty slots of `media/`, each from the first provider with a picture for it — the game's source (the `art` of its `game` event, recorded under the source's id), `steam` (Steam's CDN by app id: the pin `metadata.steam_appid`, the source's `steam_appid`, else the Steam release GOG GamesDB lists; the 920×430 `header_2x` through the keyless `IStoreBrowseService/GetItems`), `gamesdb` (GOG GamesDB's game: the pin `metadata.gamesdb_id`, the store release by the game's Steam, GOG or Epic id, else a search by title that counts only a hit named like it, one released on the game's platform first, twins told apart by year), `libretro` (an emulator game's box art and logo, by its ROM's file name and the runner's platform), then `sgdb` with the user's key (first with `keys.prefer_sgdb`); a logo with no see-through pixel is passed over (GamesDB's is at times an opaque poster); a square nobody has is made from the box front (`generated`), and a provider's square replaces it once one comes. An empty description, genres or developers come from Steam's store page (`appdetails`: the description as text, `summary`, `developers`, `publishers`, `genres`, `metacritic`, the year), then what GamesDB has left (`release_year` only when 0); the Steam app id it found lands in an unset `metadata.steam_appid`, which `GAMEID` reads (see Proton and Wine); `.sync.json`'s `sources` names the provider of each slot, of `screenshots` (Steam's, else GamesDB's, 8 at most) and of `description`. An emulator game still titled after its file (`title_of` its `launch.exe`) takes GamesDB's name when the match is pinned or named alike and released on the game's platform. `force` refetches the filled slots and fields and asks again where a search found nothing; a pick does not stop its slot's default from being fetched; `id=""` does every game. No key is needed; requests to `store.steampowered.com` keep under 200 in 5 minutes |
 | `media_refresh_many(ids, force, progress)` | `media_refresh_many(ids, force, progress)` | — | `media_refresh` over the games named, in turn: what an import just added |
 | `media_cancel()` | `media_cancel()` | — | stops a running library-wide `media_refresh` or a `media_refresh_many` after the game in hand; it returns normally with what it got to. A single game's refresh is not touched |
 | `media_status(id)` | `media_status(id)` | `universe media <name> status` | `[{id, title, entry, sgdb_key, slots: [{slot, path, default, override, origin, default_origin, kind}]}]`; `path` is what shows, `default` the fetched file under `media/`, `override` the pick under `media/picked/`; `kind ∈ picked, default, missing`; `origin` is `picked` or the provider that wrote the default (`steam`, `gamesdb`, `libretro`, `sgdb`, a source's id such as `epic`, or `generated`; empty when nobody recorded it), `default_origin` that provider whatever sits over it; `entry` (`{provider, id, name, year, verified, current}`, absent when unmatched) is the catalogue game the art is matched to — SteamGridDB's when the user's key is set (`sgdb_key`), else GOG GamesDB's — as the last refresh or candidates call cached it (offline: `name` empty until then); `id=""` does every game |
@@ -2050,7 +2053,8 @@ as its own. A `game` may carry `steam_appid` (the game's Steam app id, a number 
 Steam's CDN art, store page and screenshots for it, whatever the store) and `art`, slot (`box_front`,
 `square`, `banner`, `background`, `logo`) → the URL of the store's own picture for it, which the
 next `media_refresh` takes before any other provider; both land in the game's `media/.sync.json`
-(`source_appid`, `source_art`), not in `game.toml`. `image` is the store listing's picture and no
+(`source_appid`, `source_art`), not in `game.toml`, until that refresh writes the app id it ends up
+with into an unset `metadata.steam_appid`. `image` is the store listing's picture and no
 more. The **steam** source hands `steam_appid`; **epic** its `keyImages` as `art` (`DieselGameBoxTall`
 the box front, `DieselGameBox` the background, `DieselGameBoxLogo` the logo); **gog** a catalogue
 hit's `coverVertical` as the box front — its library has only a wide picture, so a GOG game's art

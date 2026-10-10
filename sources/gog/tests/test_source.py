@@ -562,7 +562,7 @@ def prefix(src, hooks, monkeypatch, tmp_path):
     (source_dir / "GalaxyCommunication.exe").write_bytes(b"MZ stub")
     monkeypatch.setenv("SOURCE_DIR", str(source_dir))
     game = {
-        "effective": {"runner_kind": "proton", "runner_path": "/nix/bin/umu-run", "proton_path": "/nix/proton-ge", "prefix": str(pfx)},
+        "effective": {"runner_kind": "proton", "runner_path": "/nix/bin/umu-run", "proton_path": "/nix/proton-ge", "prefix": str(pfx), "umu_id": "umu-578330"},
         "launch": {"umu_id": "", "arch": ""},
     }
     monkeypatch.setenv("UNIVERSE_GAME_JSON", json.dumps(game))
@@ -576,7 +576,9 @@ def test_pre_launch_registers_galaxys_service_in_the_prefix(src, hooks, prefix, 
     assert sc[sc.index("/nix/bin/umu-run") :] == ["/nix/bin/umu-run", "sc", "create", "GalaxyCommunication", f"binpath={src.GALAXY_SERVICE_EXE}"]
     assert reg[reg.index("/nix/bin/umu-run") :][:4] == ["/nix/bin/umu-run", "reg", "add", src.GALAXY_PATHS_KEY]
     env = dict(a.removeprefix("--setenv=").split("=", 1) for a in sc if a.startswith("--setenv="))
-    assert (env["WINEPREFIX"], env["PROTONPATH"], env["GAMEID"], env["PROTON_VERB"]) == (str(prefix), "/nix/proton-ge", "umu-default", "run")
+    assert (env["WINEPREFIX"], env["PROTONPATH"], env["GAMEID"], env["PROTON_VERB"]) == (str(prefix), "/nix/proton-ge", "umu-578330", "run"), (
+        "the GAMEID the game launches with"
+    )
     assert env["PATH"] == os.environ["PATH"]
     assert (prefix / "drive_c/ProgramData/GOG.com/Galaxy/redists/GalaxyCommunication.exe").read_bytes() == b"MZ stub"
     assert start[0] == "systemd-run"

@@ -756,11 +756,15 @@ impl<'a> Lookup<'a> {
         found
     }
 
+    /// The app id already known, no request made; zero when none is.
+    fn known_appid(&self) -> u64 {
+        [self.game.metadata.steam_appid, self.cache.source_appid, self.cache.steam_appid].into_iter().find(|a| *a > 0).unwrap_or(0)
+    }
+
     async fn steam_appid(&mut self) -> u64 {
-        for known in [self.game.metadata.steam_appid, self.cache.source_appid, self.cache.steam_appid] {
-            if known > 0 {
-                return known;
-            }
+        let known = self.known_appid();
+        if known > 0 {
+            return known;
         }
         if self.gamesdb().await.is_some() && self.cache.steam_appid > 0 {
             return self.cache.steam_appid;
@@ -1109,6 +1113,12 @@ async fn refresh_with(net: &Net, config: &Config, game: &Game, force: bool) -> c
         }
     }
 
+    // umu-run's GAMEID follows it (`effective.umu_id`), so a GOG game or an import gets Proton's fixes for its Steam twin.
+    let appid = look.known_appid();
+    if g.metadata.steam_appid == 0 && appid > 0 {
+        g.metadata.steam_appid = appid;
+        changed = true;
+    }
     look.cache.fetched_at = chrono::Local::now().to_rfc3339();
     write_cache_in(&dir, &look.cache)?;
     if changed {
@@ -1469,6 +1479,9 @@ mod tests {
         assert_eq!(cache.gamesdb_name, "Hollow Knight");
         assert_eq!(cache.sources["box_front"], "steam");
         assert_eq!(cache.sources["description"], "steam");
+        let g = Game::load(&game.toml_path()).unwrap();
+        assert_eq!(g.metadata.steam_appid, 367520, "kept in game.toml, where GAMEID reads it");
+        assert_eq!(crate::library::resolve(g, &keyless(), &[]).effective.umu_id, "umu-367520");
     }
 
     #[tokio::test]

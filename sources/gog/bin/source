@@ -836,7 +836,7 @@ def wine_command(game):
     if effective.get("runner_kind") == "proton":
         env.update(
             PROTONPATH=effective.get("proton_path") or "",
-            GAMEID=launch.get("umu_id") or "umu-default",
+            GAMEID=effective.get("umu_id") or "umu-default",
             STORE="gog",
             PROTON_VERB="run",
             UMU_RUNTIME_UPDATE="0",
