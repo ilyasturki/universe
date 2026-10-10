@@ -30,6 +30,7 @@ def _core_error() -> type[Exception]:
 CoreError = _core_error()
 # Past the session toast, not over it.
 SKIPPED_NOTICE_MS = 4500
+SESSION_POLL_MS = 2000
 
 
 log = logging.getLogger("universe.client")
@@ -100,7 +101,7 @@ class CoreClient(QObject):
         self._debounce.setInterval(300)
         self._debounce.timeout.connect(self._flush)
         self._poll = QTimer(self)
-        self._poll.setInterval(2000)
+        self._poll.setInterval(SESSION_POLL_MS)
         self._poll.timeout.connect(self._poll_session)
         self._watcher = QFileSystemWatcher(self)
         self._watcher.directoryChanged.connect(self._mark)

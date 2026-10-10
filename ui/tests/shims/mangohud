@@ -1,0 +1,3 @@
+#!/bin/sh
+# MangoHud wraps the game it starts; its layer has no frames to draw here.
+exec "$@"

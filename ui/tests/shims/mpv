@@ -1,0 +1,10 @@
+#!/bin/sh
+# mpv as tools/sample's game runs it: --vo=image writes the grabbed frame, any other run holds its window until a signal.
+for arg; do
+    case "$arg" in --vo-image-outdir=*) out="${arg#*=}" ;; esac
+done
+if [ -n "${out:-}" ]; then
+    printf '\211\120\116\107\015\012\032\012\000\000\000\015\111\110\104\122\000\000\000\001\000\000\000\001\010\006\000\000\000\037\025\304\211\000\000\000\015\111\104\101\124\170\332\143\144\370\317\120\017\000\003\206\001\200\132\064\175\153\000\000\000\000\111\105\116\104\256\102\140\202' >"$out/00000001.png"
+    exit 0
+fi
+exec sleep 600
