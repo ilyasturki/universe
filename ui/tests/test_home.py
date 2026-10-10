@@ -960,6 +960,16 @@ def test_a_quit_lands_on_the_tiles_cover_and_the_games_exit_swaps_nothing(api, f
     assert len({s["label"] for s in seen[quit:]}) == 1, "the mark reads one state from Quit until it has faded"
 
 
+@pytest.mark.parametrize("look", ["reprise"], indirect=True)
+def test_a_tile_a_library_reload_rebuilds_has_its_cover_up_at_once(api, look):
+    page = look.page("homePage")
+    old = tile_of(look, "the-technomancer")
+    until(lambda: whole(layers(old)), "the tile's cover is up")
+    api.universe.libraryChanged.emit([])
+    new = until(lambda: (tile := descendant(page, "tile:the-technomancer")) is not None and tile is not old and tile, "no tile rebuilt")
+    assert whole(layers(new)), "the cover the cache holds is there in the new tile's first frame, not faded in over its empty card"
+
+
 def test_an_output_picked_becomes_current_and_brings_its_level(api, fake):
     home = api.home
     changed = record(home.outputsChanged)

@@ -20,10 +20,12 @@ Item {
     // The incoming layer fades in on top; one already whole underneath (a swap undone midway) stays there as the top fades out.
     property bool aOnTop: false
     readonly property int status: (showA ? a : b).status
+    // For the one swap that shows a first picture the cache already held: there at once, as a lone Image's would be.
+    property bool instant: false
 
     onSourceChanged: loader.restart()
     onSourceSizeChanged: loader.restart()
-    Component.onCompleted: loader.restart()
+    Component.onCompleted: load()
 
     function sized(layer) {
         return layer.sourceSize.width === sourceSize.width && layer.sourceSize.height === sourceSize.height;
@@ -42,9 +44,12 @@ Item {
             incoming.source = "";
             incoming.sourceSize = sourceSize;
         }
+        // A cache hit is Ready within the assignment.
+        instant = shown.source == "";
         incoming.source = source;
         // A source the hidden layer already holds fires no statusChanged.
         commit();
+        instant = false;
     }
 
     // A source that fails is shown too, as nothing: `status` says so.
@@ -79,6 +84,7 @@ Item {
             root.commit()
 
         Behavior on opacity {
+            enabled: !root.instant
             Ease {
                 duration: root.duration
             }
