@@ -2,6 +2,7 @@ import importlib.machinery
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -114,7 +115,7 @@ def test_check_holds_pages_to_the_takes_and_strict_to_a_recording_of_them_at_tha
     assert '<Clip name="ghost"> is no take' in out
 
 
-def test_publish_leaves_the_media_branch_one_commit_of_the_latest_media(tmp_path):
+def test_publish_leaves_the_media_branch_one_commit_that_fetch_lands_in_the_site(tmp_path):
     git = ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "init.defaultBranch=main"]
     subprocess.run([*git, "init", "-q", str(tmp_path)], check=True)
     subprocess.run([*git, "-C", str(tmp_path), "commit", "-q", "--allow-empty", "-m", "main"], check=True)
@@ -133,8 +134,11 @@ def test_publish_leaves_the_media_branch_one_commit_of_the_latest_media(tmp_path
         assert done.returncode == 0, done.stdout + done.stderr
         count = subprocess.run(["git", "-C", str(tmp_path), "rev-list", "--count", "throwaway"], capture_output=True, text=True, check=True).stdout
         assert count.strip() == "1", f"publish {version} left {count.strip()} commits"
-    files = subprocess.run(["git", "-C", str(tmp_path), "ls-tree", "-r", "--name-only", "throwaway"], capture_output=True, text=True, check=True).stdout
-    assert {"src/assets/media/manifest.json", "src/assets/media/library.avif", "public/media/browse.av1.mp4"} <= set(files.split())
-    shown = subprocess.run(["git", "-C", str(tmp_path), "show", "throwaway:src/assets/media/manifest.json"], capture_output=True, text=True, check=True).stdout
-    assert json.loads(shown)["version"] == "0.0.13"
+    shutil.rmtree(tmp_path / "site/src/assets/media")
+    shutil.rmtree(tmp_path / "site/public/media")
+    code, out = docs_media(tmp_path, "fetch", "throwaway")
+    assert code == 0, out
+    manifest = json.loads((tmp_path / "site/src/assets/media/manifest.json").read_text())
+    assert manifest["version"] == "0.0.13", "fetch lands the last published media where the site reads them"
+    assert (tmp_path / "site/src/assets/media/library.avif").is_file() and (tmp_path / "site/public/media/browse.av1.mp4").is_file()
     assert subprocess.run(["git", "-C", str(tmp_path), "rev-parse", "main"], capture_output=True, text=True, check=True).stdout == main
