@@ -377,8 +377,8 @@ the full one in place, the cursor back on Resume, and freezes the game then if `
 From there the launcher is home again, with the game pinned first on the rail (`RecentGames.
 playingId`, played before or not) under a PLAYING mark (PAUSED while frozen), its art the last
 frame gamescope painted when HOME brought the launcher up (`api.home.frame`, `nest_frame`), its
-hero pill reading "Resume", and the tab bar's badge "<title> · m:ss" on every tab; the badge is a
-chrome slot past the glass: A resumes, Start opens the game menu. A resumes on the pinned game
+hero's first button reading "Resume", and the tab bar's badge "<title> · m:ss" on every tab; the badge is a
+chrome slot past the glass and the power button: A resumes, Start opens the game menu. A resumes on the pinned game
 wherever it is (`api.home.toGame()`), the game menu offers "Resume" and "Quit <title>" for it.
 Play on another game asks "Quit X and start Y?" (`ui/ConfirmDialog.qml`, the pop-up list in the middle of the screen); yes stops the session,
 and `sessionEnded` starts the pending launch. Every quit goes through `api.home.stop()`: the
@@ -647,14 +647,20 @@ storage") and, past a hairline, Remove from library…; either opens on A or Rig
 Remove asks in place (Keep it / Remove from the library) and goes through
 `api.universe.remove(id, false)`: the watcher drops the game, the detail page closes if it was on it. An item's `gap` draws the hairline above it, `detail` a
 secondary text at the right, `more` a chevron that Right opens; `push(list, heading, after)` stacks a list over the
-one showing, `cancel()` pops before it closes.
+one showing, `cancel()` pops before it closes. A list swapped in (`push`, `pop`, a `show()` while open) takes its
+cursor before its rows, so no other row lights on the way, slides in from the right (deeper) or the left (back) as
+it fades in, over `Theme.durQuick`, and the panel eases to its new size meanwhile; a list that comes back stands
+where it was scrolled. The PS5 `Menu` and the Switch 2 `Picker` set their cursor before their rows too.
 
 ## The hint bar
 
 Every page and overlay exposes `hints`, `[{ glyph, label, dim }]`, and the bar on screen shows
-the one with the focus (`theme.qml` picks the menu's, the tab bar's or the page's). The Universe look's
-lists stay short — the main action, More (Start) and Back where there is one — and leave out the
-shortcuts they would repeat on every page: X (details) and Y (favourite) still work unlisted.
+the one with the focus (`theme.qml` picks the menu's, the tab bar's or the page's). In the Universe look every
+button that acts on what has the focus is listed: the main action, X Game page and Y Favourite or
+Unfavourite on a game (Home's rail and hero, the Library; the game page lists Y, and drops it on the
+heart, whose A does the same), Y Journal on a Media item that has an entry, More (Start) and Back.
+A menu, a question or the text sheet over a page puts its own hints on the bar (`theme.qml`
+`overlayHints`), the game page's bar included.
 `theme.qml` adds `LB RB` Tabs itself, on the tab bar and on a tab page that is not modal.
 `ui/Hints.js` splits them: the page's hints on the left in the order the page wrote them, the
 near-global `LB RB` on the right, so it never moves as the labels around it change. The clock and the pad's
@@ -724,7 +730,8 @@ dialogs, the sheets, the lightbox, the search overlay) carries a bare `HoverHand
 
 ## Power
 
-B held anywhere (`api.keys.cancelHeld`) opens the power menu, in the Universe look also Settings › About ›
+B held anywhere (`api.keys.cancelHeld`) opens the power menu, in the Universe look also the top bar's power
+button (past the search glass; both say their name while the bar's frame is on them) and Settings › About ›
 Power: Quit Universe first, then Suspend, Reboot and Power off as `api.system.actions` lists them,
 then Stay. The Universe look asks it with `ConfirmDialog.choose`, the centered question with more than two
 answers; the Switch 2 look with its picker (Power Options: Quit Universe, Sleep Mode, Restart, Turn
@@ -823,10 +830,16 @@ row and the Options menu, with the same menu.
 
 ## Detail, recordings and journal
 
-The detail page is the game's logo over its background, Play and the heart, then the play time,
+The detail page is the game's logo over its background and a row of its tools (`pills`: Play, the
+heart, Game settings, Media when the game has a screenshot, a recording or a journal entry,
+Achievements when `achievementsTotal` is not 0, and ··· for the game menu), then the play time,
 when it was last played and the sessions (`ui/StatRow.qml`, each left out while zero), the
-description and the store's screenshots (`assets.screenshotList`), nothing else. Start is the game's
-menu: its recordings, journal and screenshots are under Media ›, the rest under Manage ›.
+description and the store's screenshots (`assets.screenshotList`), nothing else. Game settings and
+Achievements open their page, Media the menu's Media list beside the button (the page itself when
+the game has one kind), ··· and Start the game menu beside ···, its recordings, journal and
+screenshots under Media ›, the rest under Manage ›. B fades the page out where it stands; the same
+game opened again starts at the top. Home's hero holds the same entry points for the game under the
+cursor: Continue (or Play, Resume), Game page and ···, one press up from the rail.
 
 Every page about one game — Game settings, Artwork, Sessions and logs, Screenshots, Recordings,
 Journal — opens under the same `ui/GameHeader.qml`: the page's name in caps over the game's title,
@@ -1131,7 +1144,8 @@ by title — ending in an "Add a game…" action. `setValue(index, value)` write
 `set_runner_setting` (a `launch.*` row through `set_setting`); on the add row it keeps the picked
 file and `pendingTitle()` proposes a title from it, which `addGame(title)` sends to `add_game`. A
 game row opens the Install page's options: Game settings (the Universe look: `settingsRequested(game)`, which
-`theme.qml` `pushSub`s over the runner page, B coming back to the row; Switch 2: its
+`theme.qml` `pushSub`s over the runner page, B coming back to the row: the runner page comes back
+as a new page, so the game rides in its args as `returnGame`; Switch 2: its
 GameSettingsPage), Uninstall… when installed, Remove from library…, through `uninstall(id)` /
 `remove(id)` on the form (a `message` when done); Uninstall's confirmation names the store when
 `api.universe.uninstallVia(id)` does ("Uninstall through Steam", "Steam removes the files"), the
@@ -1184,11 +1198,11 @@ the Library: `ui/CoverGrid.qml` and `switch2/pages/SoftwareGrid.qml` take `addTi
 after the last game (a "+" tile, the cursor on it as `addSelected` / `atAddTile`, never a model
 index; `currentGame` is null there and A emits `addRequested`). With nothing in the library, Home
 and the Library are the prompt: the Universe look's hero band reads "Welcome", a line on where games come
-from, and Add a game and Set up; its rail tile (`ui/LibraryTile.qml` `kind: "add"`, a plus with no
-words, as the Library's own add tile) adds one instead of opening the Library; the Switch 2
-HOME row's disc does the same and All Software says so under its tile. The Universe look's Library is no tab
-of its own: `theme.qml` keeps it past the three the bar shows (`libraryTab`), Home's rail tile opens it
-(`libraryRequested`), the bar lights Home while it is up, LB / RB step over it and B returns to Home.
+from, and Add a game and Set up; its rail tile (`ui/LibraryTile.qml` `kind: "add"`, a plus over
+"Add a game", as the Library's own add tile) adds one instead of opening the Library; the Switch 2
+HOME row's disc does the same and All Software says so under its tile. The Universe look's Library is the
+bar's second tab (Home · Library · Media · Settings, `libraryTab`); Home's rail tile stays a way in
+(`libraryRequested`) and B returns to Home.
 Its grid runs in Home's order (`RecentFirstGames`) and fades the rows past either edge over 80 px
 rather than cutting them at the hints; the focused row scrolls clear of the fade.
 
@@ -1278,11 +1292,12 @@ stays, a game's data page moves it) and `saves.auto_backup` (a `bool` row).
 (the upscaler upgrades are left to Settings). `done` holds a row per launcher still on its way or
 that brought games, and per store signed in (`state` again), and, under a read-only config, why the
 install folder and the preferences were skipped. `idle` is true when no row on the step does
-anything: the looks then put the focus on Continue (Finish on `done`). `added` is true once games
+anything: the looks then put the focus on Continue (Finish on `done`), on the step's arrival and the
+moment its last row stops doing anything (Add everything, an import that took the last row). `added` is true once games
 came in or are on their way. Under the rows sit two buttons, Back ("Skip setup" on the first step,
 "Close" once `added`) and Continue ("Finish" on the last), reached with Down past the last row,
 Left/Right between them, A to press one — B and X do the same from anywhere in the dialog, the
-hint bar showing both in the Universe look and PS5, their glyphs on the buttons in Switch 2; B on the first step asks "Skip setup?" first (Keep going, Skip),
+hint bar showing both in the Universe look and PS5, their glyphs on the buttons in the Universe look and Switch 2; B on the first step asks "Skip setup?" first (Keep going, Skip),
 unless `added`. The Universe look and Switch 2 count the steps ("2 / 5") over the title, PS5 draws them as
 dots. The Universe look's Home rail lands on its first game when it fills while the page is up (the setup
 importing behind the dialog, the add page), as a cold start does.
