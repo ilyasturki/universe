@@ -11,9 +11,6 @@ var FACE = {
     sony: { south: ["", "cross"], east: ["", "circle"], north: ["", "triangle"], west: ["", "square"],
             lb: ["L1"], rb: ["R1"], lt: ["L2"], rt: ["R2"], select: ["", "create"], start: ["", "menu"],
             guide: ["PS"], ls: ["L3"], rs: ["R3"] },
-    "sony-ds4": { south: ["", "cross"], east: ["", "circle"], north: ["", "triangle"], west: ["", "square"],
-                  lb: ["L1"], rb: ["R1"], lt: ["L2"], rt: ["R2"], select: ["", "share"], start: ["", "menu"],
-                  guide: ["PS"], ls: ["L3"], rs: ["R3"] },
     xbox: { south: ["A"], east: ["B"], north: ["Y"], west: ["X"],
             lb: ["LB"], rb: ["RB"], lt: ["LT"], rt: ["RT"], select: ["", "view"], start: ["", "menu"],
             guide: ["", "xbox"], ls: ["LS"], rs: ["RS"] },
@@ -27,6 +24,7 @@ var FACE = {
             lb: ["L1"], rb: ["R1"], lt: ["L2"], rt: ["R2"], select: ["", "view"], start: ["", "menu"],
             guide: ["", "steam"], ls: ["L3"], rs: ["R3"] }
 };
+FACE["sony-ds4"] = Object.assign({}, FACE.sony, { select: ["", "share"] });
 
 var EXTRA = {
     fn_left: ["Fn"], fn_right: ["Fn"], paddle_left: ["LB"], paddle_right: ["RB"],
