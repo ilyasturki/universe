@@ -154,6 +154,13 @@ lint *args:
 # Every local gate, lint then every suite: what the pre-push hook runs (`just check` is the sandboxed version)
 verify: lint test
 
+# Each recorded pad of tests/pads as a uinput pad on this desktop (Steam and other apps see it for a moment, under a name of its own), read by `controller ls`, the watcher and the launcher, then taken away: just test-pads [pad…]
+test-pads *pads: build develop
+    #!/usr/bin/env -S nix develop --quiet --command bash
+    set -euo pipefail
+    cd "{{ justfile_directory() }}"
+    UNIVERSE_UI_BIN="{{ ui_bin }}" "{{ python }}" tools/pad-check --via uinput --universe "{{ UNIVERSE_BIN }}" {{ pads }}
+
 # The speed budgets, at their strict limits on a quiet machine: home on a 1,000-game library (left out of `just test`), `ls --json` on 1,000 games, a pad's screenshot to its grab; `just frame-gaps` is the quit landing's, on the GPU
 speed: build develop env
     #!/usr/bin/env -S nix develop --quiet --command bash

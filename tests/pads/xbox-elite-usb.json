@@ -3,7 +3,10 @@
   "family": "xbox-elite",
   "bus": "usb",
   "driver": "xpad",
-  "source": {"evdev": "public: xpad in Linux 7.2"},
+  "source": {
+    "evdev": "public: xpad in Linux 7.2",
+    "usb": "public: the interface xpad in Linux 7.2 binds (vendor class, subclass and protocol) and the packets it parses"
+  },
   "print": {"south": "A", "east": "B", "west": "X", "north": "Y"},
   "evdev": {
     "name": "Microsoft X-Box One Elite 2 pad",
@@ -45,5 +48,6 @@
     "paddle_p3": "BTN_GRIPL",
     "paddle_p4": "BTN_GRIPL2"
   },
-  "axes": {"lx": "ABS_X", "ly": "ABS_Y", "rx": "ABS_RX", "ry": "ABS_RY", "lt": "ABS_Z", "rt": "ABS_RZ"}
+  "axes": {"lx": "ABS_X", "ly": "ABS_Y", "rx": "ABS_RX", "ry": "ABS_RY", "lt": "ABS_Z", "rt": "ABS_RZ"},
+  "usb": {"protocol": "xbox-one", "class": [255, 71, 208], "version": "0513", "product": "Xbox Elite Wireless Controller Series 2"}
 }

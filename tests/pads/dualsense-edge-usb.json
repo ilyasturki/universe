@@ -3,7 +3,10 @@
   "family": "dualsense-edge",
   "bus": "usb",
   "driver": "playstation",
-  "source": {"evdev": "public: hid-playstation in Linux 7.2"},
+  "source": {
+    "evdev": "public: hid-playstation in Linux 7.2",
+    "hid": "public: hid-tools' PS5ControllerUSB (hidtools/device/sony_gamepad.py); the Edge's product id on a DualSense's descriptor"
+  },
   "print": {"south": "Cross", "east": "Circle", "west": "Square", "north": "Triangle"},
   "evdev": {
     "name": "Sony Interactive Entertainment DualSense Edge Wireless Controller",
@@ -45,5 +48,14 @@
     "paddle_left": "BTN_TRIGGER_HAPPY3",
     "paddle_right": "BTN_TRIGGER_HAPPY4"
   },
-  "axes": {"lx": "ABS_X", "ly": "ABS_Y", "rx": "ABS_RX", "ry": "ABS_RY", "lt": "ABS_Z", "rt": "ABS_RZ"}
+  "axes": {"lx": "ABS_X", "ly": "ABS_Y", "rx": "ABS_RX", "ry": "ABS_RY", "lt": "ABS_Z", "rt": "ABS_RZ"},
+  "hid": {
+    "protocol": "dualsense",
+    "descriptor": "05010905a1018501093009310932093509330934150026ff007508950681020600ff09209501810205010939150025073500463b016514750495018142650005091901290f150025017501950f81020600ff0921950d81020600ff0922150026ff0075089534810285020923952f9102850509239528b10285080924952fb102850909249513b102850a0925951ab10285200926953fb102852109279504b10285220940953fb10285800928953fb10285810929953fb1028582092a9509b1028583092b953fb1028584092c953fb1028585092d9502b10285a0092e9501b10285e0092f953fb10285f00930953fb10285f10931953fb10285f20932950fb102c0",
+    "features": {
+      "05": "05fffff2ff04009d225edd922252ddba2251dd1c021c02fb1f05e0831f99df0720fcdf050000000000",
+      "09": "0900000000000000000000000000000000000000",
+      "20": "20417567203138203230323030363a32303a323903000400130300001e000001410a00000000000000000000040200002a000100060001000600000098d8b3b7"
+    }
+  }
 }

@@ -1,0 +1,9 @@
+#!/usr/bin/env python3
+# tools/pad-check [--via uinput|kernel] [pad…]: each recorded pad of tests/pads made real and read the way Universe reads it (tools/padsim/check.py)
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from padsim.check import main
+
+sys.exit(main())

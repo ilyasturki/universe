@@ -4,7 +4,11 @@
   "family": "xbox",
   "bus": "usb",
   "driver": "xpad",
-  "source": {"evdev": "public: xpad in Linux 7.2, as an Xbox 360 pad", "sdl": "captured on 2026-10-05"},
+  "source": {
+    "evdev": "public: xpad in Linux 7.2, as an Xbox 360 pad",
+    "sdl": "captured on 2026-10-05",
+    "usb": "public: the interface xpad in Linux 7.2 binds (vendor class, subclass and protocol) and the packets it parses"
+  },
   "print": {"south": "B", "east": "A", "west": "Y", "north": "X"},
   "evdev": {
     "name": "Microsoft X-Box 360 pad",
@@ -76,5 +80,6 @@
       "a5": "a5"
     },
     "mapping": "030000005e0400008e02000014010000,Xbox 360 Controller,a:b0,b:b1,back:b6,dpdown:h0.4,dpleft:h0.8,dpright:h0.2,dpup:h0.1,guide:b8,leftshoulder:b4,leftstick:b9,lefttrigger:a2,leftx:a0,lefty:a1,rightshoulder:b5,rightstick:b10,righttrigger:a5,rightx:a3,righty:a4,start:b7,x:b2,y:b3,platform:Linux,"
-  }
+  },
+  "usb": {"protocol": "xbox-360", "class": [255, 93, 1], "version": "0114", "product": "8BitDo Pro 3", "packet": 32}
 }

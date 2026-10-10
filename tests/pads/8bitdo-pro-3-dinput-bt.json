@@ -4,7 +4,11 @@
   "family": "8bitdo-pro-3",
   "bus": "bluetooth",
   "driver": "hid-generic",
-  "source": {"evdev": "captured on 2026-09-21; axis ranges public: hid-generic's 8-bit axes", "sdl": "captured on 2026-10-05"},
+  "source": {
+    "evdev": "captured on 2026-09-21; axis ranges public: hid-generic's 8-bit axes",
+    "sdl": "captured on 2026-10-05",
+    "hid": "synthesized: a descriptor laid out as SDL 3's 8BitDo driver reads report 4, mapping by hid-generic to the captured evdev view; the report at rest captured on 2026-09-21"
+  },
   "print": {"south": "B", "east": "A", "west": "Y", "north": "X"},
   "evdev": {
     "name": "8BitDo Pro 3",
@@ -83,5 +87,13 @@
       "a5": "a5"
     },
     "mapping": "0500546cc82d00000960000000006800,*,a:b1,b:b0,back:b4,dpdown:h0.4,dpleft:h0.8,dpright:h0.2,dpup:h0.1,guide:b5,leftshoulder:b9,leftstick:b7,lefttrigger:a4,leftx:a0,lefty:a1,rightshoulder:b10,rightstick:b8,righttrigger:a5,rightx:a2,righty:a3,start:b6,x:b3,y:b2,hint:!SDL_GAMECONTROLLER_USE_BUTTON_LABELS:=1,paddle1:b12,paddle2:b11,paddle3:b14,paddle4:b13,crc:6c54,platform:Linux,"
+  },
+  "hid": {
+    "protocol": "generic",
+    "descriptor": "05010905a10185040939150025073500463b01651475049501814265007504950181030930093109320935150026ff00750895048102050209c509c495028102050919012918150025017501951881020600ff0901150026ff0075089535810285060902953fb10285300903953fb102c0",
+    "report": 4,
+    "rest": "040f807f7f80000000000000096050b8",
+    "features": {"06": "06000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"},
+    "synthesized": true
   }
 }

@@ -3,7 +3,10 @@
   "family": "switch2-pro",
   "bus": "usb",
   "driver": "",
-  "source": {"evdev": "public: the unmerged hid-nintendo Switch 2 series (v13) as research/controllers.md reads it; no Linux 7.2 driver reads this pad"},
+  "source": {
+    "evdev": "public: the unmerged hid-nintendo Switch 2 series (v13) as research/controllers.md reads it; no Linux 7.2 driver reads this pad",
+    "usb": "public: only its ids, for doctor to find a pad no driver reads"
+  },
   "print": {"south": "B", "east": "A", "west": "Y", "north": "X"},
   "evdev": {
     "name": "Nintendo Co., Ltd. Switch 2 Pro Controller",
@@ -43,5 +46,6 @@
     "c": "BTN_C",
     "capture": "KEY_RECORD"
   },
-  "axes": {"lx": "ABS_X", "ly": "ABS_Y", "rx": "ABS_RX", "ry": "ABS_RY"}
+  "axes": {"lx": "ABS_X", "ly": "ABS_Y", "rx": "ABS_RX", "ry": "ABS_RY"},
+  "usb": {"protocol": "none", "class": [255, 0, 0], "version": "0100", "product": "Pro Controller"}
 }

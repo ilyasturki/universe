@@ -1,0 +1,43 @@
+#!/usr/bin/env python3
+# tools/pad-replay [--via uinput|kernel] PAD: one recorded pad of tests/pads made real until stdin closes. Lines on stdin:
+# `press SLOT`, `release SLOT`, `move ROLE VALUE` (a stick -1..1, a trigger 0..1), `unplug`, `plug`; what the drivers send it comes out on stdout.
+import argparse
+import os
+import sys
+import threading
+import time
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from padsim import corpus, devices
+
+parser = argparse.ArgumentParser(prog="pad-replay")
+parser.add_argument("pad", choices=corpus.names())
+parser.add_argument("--via", choices=("uinput", "kernel"), default="kernel")
+args = parser.parse_args()
+pad = devices.start(corpus.load(args.pad), args.via)
+
+
+def outputs():
+    shown = 0
+    while True:
+        while shown < len(pad.outputs):
+            print(f"output {pad.outputs[shown].hex()}", flush=True)
+            shown += 1
+        time.sleep(0.05)
+
+
+threading.Thread(target=outputs, daemon=True).start()
+print("ready", flush=True)
+try:
+    for line in sys.stdin:
+        word, *rest = line.split()
+        if word in ("press", "release"):
+            pad.press(rest[0], word == "press")
+        elif word == "move":
+            pad.move(rest[0], float(rest[1]))
+        elif word == "unplug":
+            pad.destroy()
+        elif word == "plug":
+            pad.create()
+finally:
+    pad.close()
