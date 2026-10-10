@@ -931,28 +931,36 @@ FocusScope {
             menu.hide();
     }
 
-    function refresh() {
-        if (listForm !== null)
-            listForm.load();
-        else if (sectionId === "launch")
+    // `id`: the section to load, the one shown when none is given.
+    function refresh(id) {
+        var s = id || sectionId;
+        if (s === "modules")
+            modulesForm.load();
+        else if (s === "sources")
+            sourceList.load();
+        else if (s === "launch")
             launch.load();
-        else if (sectionId === "runners")
+        else if (s === "runners")
             runners.load();
-        else if (refreshable)
+        else if (s === "install")
             sources.load();
-        else if (sectionId === "controller")
+        else if (s === "controller")
             controller.load();
-        else if (sectionId === "artwork") {
+        else if (s === "artwork") {
             if (artwork.item)
                 artwork.item.load();
-        } else if (sectionId === "doctor")
+        } else if (s === "doctor")
             modulesForm.loadDoctor();
-        else if (sectionId === "sound")
+        else if (s === "sound")
             api.home.loadOutputs();
-        else if (sectionId === "system")
+        else if (s === "system")
             api.system.reload();
-        else if (sectionId === "storage")
+        else if (s === "storage")
             api.screens.storage.load();
+        else if (s === "themes") {
+            api.theme.rescan();
+            addons.load();
+        }
     }
 
     function refreshNow() {
@@ -1567,19 +1575,8 @@ FocusScope {
         var mainHad = !side.activeFocus;
         launch.showAdvanced = false;
         controller.showAdvanced = false;
-        refresh();
         // `sectionId` still names the section left.
-        if (sections[section].id === "sound")
-            api.home.loadOutputs();
-        else if (sections[section].id === "doctor")
-            modulesForm.loadDoctor();
-        else if (sections[section].id === "themes") {
-            api.theme.rescan();
-            addons.load();
-        } else if (sections[section].id === "storage")
-            api.screens.storage.load();
-        else if (sections[section].id === "runners")
-            runners.load();
+        refresh(sections[section].id);
         Qt.callLater(function () {
             cards.reset();
             if (mainHad)
