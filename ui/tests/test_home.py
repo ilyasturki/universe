@@ -885,7 +885,8 @@ def test_home_from_the_game_zooms_the_frame_into_its_tile(api, fake, monkeypatch
     until(lambda: not flip.property("covering") and not flip.property("running"))
     assert swaps == [True], "gamescope swapped while the frame covered everything"
     assert fake.core.game_shown is False
-    assert look.page("homePage").property("currentGame").property("id") == "mirrors-edge", "the cursor lands on the playing game"
+    home = look.page("homePage")
+    until(lambda: (game := home.property("currentGame")) is not None and game.property("id") == "mirrors-edge", "the cursor lands on the playing game")
     until(lambda: 0.005 < red_fraction(window.grabWindow()) < 0.2, "the frame is the tile's art now")
     blank.stop()
     assert all(blank.seen), "from the cover to the frame the tile never showed its empty card"
