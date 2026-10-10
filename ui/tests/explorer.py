@@ -144,7 +144,7 @@ class Explorer:
         self.out = Path(out)
         self.size = (width, height)
         self.budget_s = budget_s
-        self.log = log or (lambda: [])
+        self.log = log or list
         self.states = {}
         self.findings = []
         self.steps = 0
@@ -279,8 +279,7 @@ class Explorer:
                 found.append(("focus-hidden", f"the focused {state.chain[-1] if state.chain else 'item'} is not visible"))
             elif focus.width() > 0 and focus.height() > 0 and not rect.intersects(screen):
                 found.append(("focus-off-screen", f"the focused {state.chain[-1] if state.chain else 'item'} is off screen at {rect.x():.0f},{rect.y():.0f}"))
-        for text in self.truncated():
-            found.append(("truncated", text))
+        found.extend(("truncated", text) for text in self.truncated())
         return found
 
     def truncated(self):
