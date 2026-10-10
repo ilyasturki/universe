@@ -96,9 +96,12 @@ A udev rule, `70-universe.rules`, and a module load, `universe.conf`, cover all 
 | AUR | The packages install both under `/usr/lib`. `game-devices-udev` is an optional dependency. |
 | Fedora (COPR) | The package installs both, and suggests `steam-devices`. |
 | install.sh | Asks for your password to put them under `/etc/udev/rules.d` and `/etc/modules-load.d`, reloads udev and loads uhid. It skips this when a distribution package already installed the rule. Without sudo, it prints the commands to run as root, then a reboot. |
-| NixOS | `programs.universe.controller.enable`, on by default, turns on uinput, adds the rule and `game-devices-udev-rules` to udev, and loads uhid at boot. |
+| NixOS | `programs.universe.controller.enable`, on by default, turns on uinput, adds the rule and `game-devices-udev-rules` to udev, and loads uhid at boot. It renumbers those rules so they open your pads to your session: added to `services.udev.packages` as shipped, they run too late to. |
 
-`game-devices-udev` and `steam-devices` open your pads' hidraw nodes to your session. Emulators need that for a pad's gyro, touchpad and extra buttons, while Universe's menus and macros work without it.
+A pad's hidraw nodes carry its gyro, its touchpad and some of its extra buttons. Emulators read them through SDL, and need them open to your session. Universe's menus and macros work without them.
+
+- `game-devices-udev` opens Sony and Nintendo pads, so a DualShock 4, a DualSense or a Switch Pro needs nothing from Steam. On NixOS, `programs.universe.controller.enable` brings it.
+- It opens no hidraw node for an Xbox Series pad on Bluetooth or an 8BitDo Pro 3 in D-input mode. `steam-devices` opens the Xbox pad's (`hardware.steam-hardware.enable` on NixOS). Without a rule that opens it, SDL reads the pad from its `/dev/input` node instead: the emulator still gets it, and an 8BitDo loses its gyro and rumble.
 
 ## System check
 
@@ -107,10 +110,21 @@ With `controller.enabled` on in `config.toml` (the default), [Settings › Syste
 - **Key macros (uinput)** fails when `/dev/uinput` isn't writable, and key macros then do nothing. Its fix is game-devices-udev on Arch or steam-devices on Fedora and Debian, then a reboot; on NixOS, `hardware.uinput.enable` and the `uinput` group; elsewhere, a udev rule that gives your session `/dev/uinput`.
 - **Controllers** lists the pads Universe reads, each with its family and connection, or "no pad connected". It never fails.
 - **Controller buttons** fails when a pad's button sends no code on this connection, and names them after "not seen on this connection". The fix is to learn them in Settings › Controller. A button the pad never sends, like the 8BitDo Pro 3's Star, shows up here too.
-- **Controller extras (hidraw)** appears when a connected pad has hidraw nodes, and fails when one isn't readable, since emulators then lose the gyro, the touchpad and the extra buttons. The fix is game-devices-udev on Arch (`pkgs.game-devices-udev-rules` in `services.udev.packages` on NixOS) or steam-devices on Fedora and Debian, then replugging the pad.
+- **Controller extras (hidraw)** appears when a connected pad has hidraw nodes, and fails when one isn't readable, since emulators then lose the gyro, the touchpad and the extra buttons. The fix is game-devices-udev on Arch or steam-devices on Fedora and Debian, then replugging the pad. On NixOS, `programs.universe.controller.enable` already opens Sony and Nintendo pads, so the fix is `hardware.steam-hardware.enable` for the others.
 - **Switch 2 Pro Controller** appears only while one is on USB, and always fails, as described above.
 
 No entry checks `/dev/uhid` or SDL3. When Virtual pads can't use them, the game gets your physical pads and the module logs why.
+
+## Record your pad
+
+`universe controller dump` prints a pad as Universe reads it: its family, connection and kernel driver, the codes its `/dev/input` node reports, and its HID report descriptor. Emulator controls adds SDL3's view of the pad, the one emulators get, whether the module is on or off. Pass the pad's id from `universe controller ls`:
+
+```sh
+universe controller ls
+universe controller dump <id> --walk --json > my-pad.json
+```
+
+`--walk` asks you to press each button, then to move each stick and pull each trigger, and adds what the pad sent for each. The project's pad tests replay recordings like this one, one per model and connection ([Controllers by model](/docs/developers/api/#controllers-by-model) lists them), so a pad Universe reads wrong is worth reporting with its file attached. The [`universe controller`](/docs/reference/cli/controller/) reference has every option.
 
 ## Battery levels
 

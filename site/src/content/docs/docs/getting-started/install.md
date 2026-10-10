@@ -90,7 +90,7 @@ imports = [ inputs.universe.homeModules.default ];
 programs.universe.enable = true;
 ```
 
-The NixOS module sets up gpu-screen-recorder for recordings, `/dev/uinput` and `/dev/uhid` with the controller rules, and gamescope. The Home Manager module installs the CLI, both apps and the GNOME Shell extension. Set `programs.universe.settings` and your `config.toml` comes from Nix: the settings pages can then read it but not change it.
+The NixOS module sets up gpu-screen-recorder for recordings, `/dev/uinput` and `/dev/uhid` with the controller rules, game-devices-udev-rules so emulators read Sony and Nintendo pads without Steam's rules, and gamescope. The Home Manager module installs the CLI, both apps and the GNOME Shell extension. Set `programs.universe.settings` and your `config.toml` comes from Nix: the settings pages can then read it but not change it.
 
 Every option is listed in [Nix options](/docs/reference/nix/).
 
