@@ -752,9 +752,11 @@ image, owned, linked, dir, detail, installed, pending, partial, busy, status, ac
 download_size, partial_bytes, size, sizeText, sizeKind}`, installed first. `linked` is the core's
 `game_id` (see `source_library`): a library game stands for the install, the store's own or a Lutris
 import in its folder. An installed row reads `status` "In your library" when linked, "Not in your
-library" otherwise, with `dir` the folder the store found it in and `detail` "Found in <dir>"; the
-looks branch on `owned`, `installed` and `linked`, never on `status`. `folders` are the folders the
-store's games are found in (`games_dir`, then `scan_dirs`), for the On this PC meta. `load()` (opening the page) serves the core's cache and the
+library" otherwise, with `dir` the folder the store found it in and `detail` "Found in <dir>" (both
+empty on any other row); the looks branch on `owned`, `installed` and `linked`, never on `status`.
+`folders` are the folders the store's games are found in (`games_dir`, then `scan_dirs`), for the On
+this PC meta; `uninstalls` says the store declares `uninstall`, so Delete files… goes through it.
+`load()` (opening the page) serves the core's cache and the
 disk, re-listed once 15 min old, never the store; `refresh()` (Y) asks the store, so a game
 bought since shows up — `libraryAt` and `libraryAge` say when that last happened, for the header.
 A refresh the store refuses keeps the listing shown, toasts the reason and leaves it in `error`
@@ -764,10 +766,12 @@ Sizes: an install's is measured (`sizeKind` `disk`); a game not installed shows 
 once known (`download`), and `peek(index)` — call it as the cursor lands on a row — fetches one
 `info` at a time, off the busy flag, and the core remembers it. `install(index)` installs, resumes
 a stopped download (the same call: the source continues over its folder) or updates. An installed
-row the library lacks (`linked` false, `action` "Add to library") takes `adopt(index)`: an `adopt` job (`source_adopt`), which brings that one game in and no other,
-then a toast once the reload shows the row linked. The first run's adoption and Universe Desktop's
-Find Installed Games stay the store's whole `scan`. `trash(index)` sends such a row's folder to the
-trash (`source_trash`), off the network; the core's refusal is the toast.
+row the library lacks (`linked` false, `action` "Add to library") takes `adopt(index)`: an `adopt`
+job (`source_adopt`), which brings that one game in and no other, then a toast once the reload shows
+the row linked. The first run's adoption and Universe Desktop's Find Installed Games stay the
+store's whole `scan`. `trash(id)`, by the store's id since the confirm outlives reloads, removes
+such a row's folder (`source_trash`: through the store, or to the trash), never while that row's
+add runs; the core's refusal is the toast.
 While an install or update runs
 `job` is `{id, game, title, label, message, done, total, ok, cancelled}`, `done`/`total` in bytes and
 `message` the live line ("Installing X · 42% · 3.4 GB of 8.2 GB"); the rows are rebuilt at its start

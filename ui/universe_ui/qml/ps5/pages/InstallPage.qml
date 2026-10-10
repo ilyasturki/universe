@@ -495,7 +495,7 @@ FocusScope {
         } else if (id === "trash") {
             shell.dialogAsk({
                 message: "Delete " + title + "'s Files?",
-                detail: g.dir + " goes to the trash. No game in your library uses it.",
+                detail: (sources.uninstalls ? sourceName + " uninstalls it" : g.dir + " goes to the trash") + ". No game in your library uses it.",
                 buttons: ["Cancel", "Delete"],
                 danger: 1,
                 index: 0

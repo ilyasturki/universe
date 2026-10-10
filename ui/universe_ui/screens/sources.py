@@ -334,10 +334,10 @@ class SourcesBrowser(AsyncScreen):
         row = next((r for r in self._rows if r["id"] == game_id), None)
         if not row or not row["installed"] or row["game_id"] or (self._adding and self._adding["game"] == game_id):
             return
-        source, title = self._source, row["title"]
+        source, title, uninstalls = self._source, row["title"], self._uninstalls()
 
         def done(path, error):
-            self.message.emit(error or f"{title}'s files are in the trash")
+            self.message.emit(error or (f"Uninstalled {title}" if uninstalls else f"{title}'s files are in the trash"))
             self._reload(False)
 
         self._run(lambda: self._client.trash(source, game_id), done)
@@ -429,6 +429,9 @@ class SourcesBrowser(AsyncScreen):
         current = self._current_source() or {}
         return list(dict.fromkeys(str(d) for d in [current.get("games_dir"), *(current.get("scan_dirs") or [])] if d))
 
+    def _uninstalls(self):
+        return "uninstall" in ((self._current_source() or {}).get("capabilities") or [])
+
     sources = Property(list, lambda self: list(self._sources), notify=sourcesChanged)
     stores = Property(list, lambda self: [{"id": s["id"], "name": s.get("name") or s["id"]} for s in _stores(self._sources)], notify=sourcesChanged)
     source = Property(str, lambda self: self._source, notify=sourceChanged)
@@ -436,6 +439,8 @@ class SourcesBrowser(AsyncScreen):
     libraryAt = Property(str, _library_at, notify=sourceChanged)
     libraryAge = Property(str, lambda self: _age(self._library_at()), notify=sourceChanged)
     folders = Property(list, _folders, notify=sourceChanged)
+    # Delete files… goes through the store, which then removes the install itself, when it has an uninstall verb.
+    uninstalls = Property(bool, _uninstalls, notify=sourceChanged)
     error = Property(str, lambda self: self._error, notify=sourceChanged)
     freeSpace = Property(float, lambda self: float(self._free), notify=sourcesChanged)
     rows = Property(list, lambda self: list(self._rows), notify=rowsChanged)

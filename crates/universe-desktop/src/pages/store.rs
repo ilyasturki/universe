@@ -940,7 +940,11 @@ impl StorePage {
         if self.app().and_then(|app| app.job()).is_some_and(|job| job.target() == id) {
             return;
         }
-        let body = gettext("{} goes to the trash. No game in your library uses it.").replace("{}", &tilde(&entry.dir));
+        let body = if self.uninstalls() {
+            gettext("{} uninstalls it. No game in your library uses it.").replace("{}", &text(&self.store(), "name"))
+        } else {
+            gettext("{} goes to the trash. No game in your library uses it.").replace("{}", &tilde(&entry.dir))
+        };
         let dialog = adw::AlertDialog::new(Some(&gettext("Delete {}'s Files?").replace("{}", &entry.title)), Some(&body));
         dialog.add_responses(&[("cancel", &gettext("_Cancel")), ("trash", &gettext("_Delete Files"))]);
         dialog.set_response_appearance("trash", adw::ResponseAppearance::Destructive);
@@ -953,13 +957,19 @@ impl StorePage {
         dialog.present(Some(self));
     }
 
+    /// Delete Files… goes through the store, which removes the install itself, when it has an uninstall verb.
+    fn uninstalls(&self) -> bool {
+        self.store()["capabilities"].as_array().is_some_and(|caps| caps.iter().any(|c| c == "uninstall"))
+    }
+
     fn trash(&self, entry: &Entry) {
         let (page, source, id, title) = (self.downgrade(), self.imp().source.borrow().clone(), entry.id.clone(), entry.title.clone());
+        let done = if self.uninstalls() { gettext("{} is uninstalled") } else { gettext("{}'s files are in the trash") };
         glib::spawn_future_local(async move {
             let result = backend::pinned(move |core| async move { core.source_trash(&source, &id).await }).await;
             let Some(page) = page.upgrade() else { return };
             match result {
-                Ok(_) => page.say(&gettext("{}'s files are in the trash").replace("{}", &title)),
+                Ok(_) => page.say(&done.replace("{}", &title)),
                 Err(e) => page.say(&e.to_string()),
             }
             page.imp().loaded_at.set(None);

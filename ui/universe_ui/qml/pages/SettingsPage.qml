@@ -1484,7 +1484,7 @@ FocusScope {
             return;
         } else if (action === "trash") {
             Sound.panel();
-            menu.confirm("Keep them", "trash", "Move the folder to the trash", "Delete " + row.label + "'s files?", cards, cards.focusRect, function () {
+            menu.confirm("Keep them", "trash", sources.uninstalls ? "Uninstall through " + sourceName : "Move the folder to the trash", "Delete " + row.label + "'s files?", cards, cards.focusRect, function () {
                 Sound.enter();
                 sources.trash(row.storeId);
             });

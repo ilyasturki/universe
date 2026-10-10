@@ -2186,8 +2186,8 @@ impl Core {
             .ok_or_else(|| Error::NotFound(format!("{} finds no install of {game_id}", m.id())))
     }
 
-    /// Trashes the install of `game_id` the source's `scan` finds when no library game stands for it: the folder trashed. One the
-    /// library holds goes through `uninstall`.
+    /// Removes the install of `game_id` the source's `scan` finds when no library game stands for it, through the store when it
+    /// uninstalls, else its folder to the trash: the folder. One the library holds goes through `uninstall`.
     pub async fn source_trash(&self, source: &str, game_id: &str) -> Result<String> {
         let m = self.source(source).await?;
         let dir = self
@@ -2211,7 +2211,12 @@ impl Core {
                 return Err(Error::Invalid(why));
             }
         }
-        trash(&dir)?;
+        // A store that uninstalls forgets the install too; its folder alone in the trash would leave it listed as installed.
+        if m.can("uninstall") {
+            self.run_verb(&m, "uninstall", &[game_id.to_string()], None).await?;
+        } else {
+            trash(&dir)?;
+        }
         Ok(dir.to_string_lossy().into())
     }
 
@@ -2941,7 +2946,9 @@ scan) for i in 1 2 3; do echo "{\"event\":\"game\",\"id\":\"$i\",\"title\":\"Gam
             ("held", pc.join("Held")),
             ("linked", pc.join("Linked")),
             ("orphan", pc.join("Orphan")),
+            ("kept", pc.join("Kept")),
         ];
+        let asked = dir.path().join("asked");
         for (_, d) in &installs {
             std::fs::create_dir_all(d.join("bin")).unwrap();
         }
@@ -2951,7 +2958,11 @@ scan) for i in 1 2 3; do echo "{\"event\":\"game\",\"id\":\"$i\",\"title\":\"Gam
             .collect();
         std::fs::write(
             dir.path().join("sources/fake/run"),
-            format!("#!/bin/sh\ncase \"$1\" in\nscan) {} ;;\nesac\necho '{{\"event\":\"done\"}}'\n", echo.join("; ")),
+            format!(
+                "#!/bin/sh\ncase \"$1\" in\nscan) {} ;;\nuninstall) echo \"$2\" >> '{}' ;;\nesac\necho '{{\"event\":\"done\"}}'\n",
+                echo.join("; "),
+                asked.display()
+            ),
         )
         .unwrap();
         std::fs::write(
@@ -2980,6 +2991,15 @@ scan) for i in 1 2 3; do echo "{\"event\":\"game\",\"id\":\"$i\",\"title\":\"Gam
         assert_eq!(core.source_trash("fake", "orphan").await.unwrap(), pc.join("Orphan").to_string_lossy());
         assert!(!pc.join("Orphan").exists() && paths::home().join(".local/share/Trash/files/Orphan").is_dir(), "to the trash");
         assert!(matches!(core.source_trash("fake", "orphan").await, Err(Error::NotFound(_))), "gone from the disk");
+        assert!(!asked.exists(), "a store without the verb is not asked");
+
+        std::fs::write(dir.path().join("sources/fake/source.toml"), "api = 2\nid = \"fake\"\nname = \"Fake\"\nexe = \"run\"\ncapabilities = [\"uninstall\"]\n")
+            .unwrap();
+        let core = open().await;
+        assert!(matches!(core.source_trash("fake", "held").await, Err(Error::Invalid(_))), "the store is asked only past the same guards");
+        core.source_trash("fake", "kept").await.unwrap();
+        assert_eq!(std::fs::read_to_string(&asked).unwrap(), "kept\n", "a store that uninstalls is asked, so it forgets the install too");
+        assert!(pc.join("Kept").is_dir(), "its files are the store's to remove");
     }
 
     #[tokio::test]
