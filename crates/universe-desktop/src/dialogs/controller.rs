@@ -24,14 +24,6 @@ const STEPS: [u64; 4] = [1, 2, 5, 10];
 /// `[controller.layout]` per model: empty follows the print, which the core names per device.
 const LAYOUTS: [&str; 3] = ["", "positional", "xbox"];
 
-fn layout_words(layout: &str) -> String {
-    if layout == "positional" {
-        gettext("A on the right")
-    } else {
-        gettext("A at the bottom")
-    }
-}
-
 fn text(v: &Value, key: &str) -> String {
     match &v[key] {
         Value::String(s) => s.clone(),
@@ -304,10 +296,13 @@ impl Controller {
         self.layout.set_visible(device.is_some());
         if let Some(device) = &device {
             let family = text(device, "family");
-            let printed = format!("{} ({})", gettext("As printed"), layout_words(&text(device, "printed_layout")));
-            let names = [printed, layout_words("positional"), layout_words("xbox")];
+            let names = [gettext("As printed"), gettext("A on the right"), gettext("A at the bottom")];
             self.layout.set_model(Some(&gtk::StringList::new(&names.iter().map(String::as_str).collect::<Vec<_>>())));
-            self.layout.set_subtitle(&gettext("Where A sits in Nintendo games on every {name}").replace("{name}", &text(device, "family_name")));
+            self.layout.set_subtitle(&if text(device, "printed_layout") == "positional" {
+                gettext("As printed, A is on the right")
+            } else {
+                gettext("As printed, A is at the bottom")
+            });
             let chosen = state["layout"][family.as_str()].as_str().unwrap_or("");
             self.layout.set_selected(LAYOUTS.iter().position(|l| *l == chosen).unwrap_or(0) as u32);
         }

@@ -1420,7 +1420,7 @@ position. The hint glyphs follow the same rule (`PadNames.hintSlot`). The screen
 `testing`, the `rows`/`groups` of one card, titled with the pad's name and nothing under it (a Controller picker row when two pads are connected,
 a "Test the buttons" and a "Set up the buttons" row while the watcher is `ready`, a "Nintendo games" enum row whose `key` is
 `controller.layout.<family>` (choices as printed, A on the right, A at the bottom; `choiceValues` `""`, `positional`, `xbox`;
-the printed one named from the device's `printed_layout`), then a row per button of the family — each
+its detail naming the printed side from the device's `printed_layout`; Switch 2 opens it in the full picker), then a row per button of the family — each
 with its `slot` and `family`, so the row draws the button's glyph, and its `press` and `hold`
 macros, each carrying its `label` — the extras (back buttons, Fn) first, then the standard
 buttons) and `bind`, `unbind`, `learn`, `cancelLearn`, `setTesting`, `startWalk`, `finishWalk`, `cancelWalk`,

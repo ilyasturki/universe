@@ -53,8 +53,9 @@ HOME_SUMMONS = ("controller.home_summons", "HOME opens Universe", "HOME pressed 
 # [controller.layout] per model: empty follows the print, which the core names per device.
 LAYOUT_LABEL = "Nintendo games"
 LAYOUT_VALUES = ("", "positional", "xbox")
-LAYOUT_WORDS = {"positional": "A on the right", "xbox": "A at the bottom"}
-LAYOUT_DETAIL = "Where A sits in Nintendo games on every {name}. A game set to one layout for every controller still wins."
+LAYOUT_CHOICES = ("As printed", "A on the right", "A at the bottom")
+LAYOUT_PRINTED = {"positional": "on the right", "xbox": "at the bottom"}
+LAYOUT_DETAIL = "Where A sits in Nintendo games on every {name}. As printed, A is {printed}."
 
 
 class Watcher(Stream):
@@ -670,10 +671,10 @@ class ControllerScreen(AdvancedRows, QObject):
     # The override is the model's: every pad of the family follows it.
     def _layout_row(self, device, name, config):
         family = device["family"]
-        labels = [f"As printed ({LAYOUT_WORDS.get(device['printed_layout'], LAYOUT_WORDS['xbox'])})", *(LAYOUT_WORDS[v] for v in LAYOUT_VALUES[1:])]
         chosen = str(_dig(config, f"controller.layout.{family}") or "")
-        value = labels[LAYOUT_VALUES.index(chosen)] if chosen in LAYOUT_VALUES else labels[0]
-        row = _row(name, f"controller.layout.{family}", LAYOUT_LABEL, "enum", value, labels, detail=LAYOUT_DETAIL.format(name=name))
+        value = LAYOUT_CHOICES[LAYOUT_VALUES.index(chosen)] if chosen in LAYOUT_VALUES else LAYOUT_CHOICES[0]
+        printed = LAYOUT_PRINTED.get(device["printed_layout"], LAYOUT_PRINTED["xbox"])
+        row = _row(name, f"controller.layout.{family}", LAYOUT_LABEL, "enum", value, LAYOUT_CHOICES, detail=LAYOUT_DETAIL.format(name=name, printed=printed))
         row.update(choiceValues=list(LAYOUT_VALUES), family=family)
         return row
 

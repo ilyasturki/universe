@@ -104,6 +104,17 @@ FocusScope {
                     choices: r.choices,
                     value: r.value
                 });
+            else if (String(r.key).indexOf("controller.layout.") === 0)
+                out.push({
+                    key: r.key,
+                    label: r.label,
+                    type: "enum",
+                    display: r.display,
+                    detail: r.detail,
+                    choices: r.choices,
+                    value: r.value,
+                    form: i
+                });
             else if (r.type === "info")
                 out.push({
                     key: "",
@@ -249,6 +260,17 @@ FocusScope {
         } else if (row.type === "bool") {
             Sound.play("select");
             controller.toggle(row.form);
+        } else if (String(row.key).indexOf("controller.layout.") === 0) {
+            Sound.play("ok");
+            var layouts = row.choices || [];
+            shell.pick({
+                title: row.label,
+                choices: layouts,
+                index: layouts.indexOf(String(row.value))
+            }, function (i) {
+                if (i >= 0)
+                    controller.setValue(row.form, layouts[i]);
+            });
         } else if (String(row.key).indexOf("controller.") === 0) {
             rows.edit(row, function (value) {
                 controller.setValue(row.form, value);

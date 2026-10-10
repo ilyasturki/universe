@@ -89,6 +89,17 @@ FocusScope {
                     choices: r.choices,
                     value: r.value
                 });
+            else if (String(r.key).indexOf("controller.layout.") === 0)
+                out.push({
+                    key: r.key,
+                    label: r.label,
+                    type: "enum",
+                    display: r.display,
+                    detail: r.detail,
+                    choices: r.choices,
+                    value: r.value,
+                    form: i
+                });
             else if (r.type === "info")
                 out.push({
                     key: "",
