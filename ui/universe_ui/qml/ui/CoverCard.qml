@@ -16,6 +16,7 @@ Item {
     property bool showHeart: true
     property bool playing: false
     property bool arriving: false
+    property bool markHeld: false
     property real progress: -1
     property int focusOrigin: Item.Center
     property real ringOpacity: 1.0
@@ -162,7 +163,7 @@ Item {
         Loader {
             objectName: "mark"
             active: root.marked || opacity > 0
-            opacity: root.marked ? 1.0 : 0.0
+            opacity: root.marked && !root.markHeld ? 1.0 : 0.0
             anchors.left: parent.left
             anchors.bottom: parent.bottom
             anchors.margins: Theme.dp(12)

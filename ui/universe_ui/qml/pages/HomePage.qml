@@ -32,6 +32,8 @@ FocusScope {
     // On the hero the menu opens beside its More button, as that button's A does.
     readonly property Item menuAnchor: tileSelected ? null : heroActions.activeFocus ? moreButton : rail.currentItem ? rail.currentItem.artItem : null
     property bool menuOpen: false
+    // The home flip's box is over the playing tile: its mark comes in once the box lets go, not with it.
+    property bool flipCovering: false
 
     property bool tileSelected: false
     readonly property int focusIndex: tileSelected ? railCount : rail.currentIndex
@@ -564,6 +566,7 @@ FocusScope {
                     artSource: page.coverOf(model.assets)
                     frameSource: model.id === page.playingId && !api.home.quitting ? api.home.frame : ""
                     playing: model.id === page.playingId
+                    markHeld: model.id === page.playingId && page.flipCovering
                     arriving: model.installing
                     progress: model.progress
                     selected: tile.selected

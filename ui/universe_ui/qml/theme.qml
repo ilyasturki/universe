@@ -971,6 +971,10 @@ FocusScope {
                             item.menuOpen = Qt.binding(function () {
                                 return root.menuOpen;
                             });
+                        if ("flipCovering" in item)
+                            item.flipCovering = Qt.binding(function () {
+                                return flip.covering;
+                            });
                     }
 
                     Connections {

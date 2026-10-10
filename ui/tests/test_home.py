@@ -830,19 +830,19 @@ def layers(tile):
     return tile.findChild(QObject, "cover").childItems()
 
 
-def whole(tile):
-    """One of the tile's art layers is decoded and fully opaque: it shows a picture, never its empty card."""
-    return any(layer.property("ready") and layer.property("opacity") == 1.0 for layer in layers(tile))
+def whole(art):
+    """One of the art's layers is decoded and fully opaque: the tile shows a picture, never its empty card."""
+    return any(layer.property("ready") and layer.property("opacity") == 1.0 for layer in art)
 
 
 @pytest.fixture
 def sampled():
-    """`sampled(probe)` reads `probe()` every few milliseconds the event loop runs, into the returned timer's `seen`, until it is
+    """`sampled(probe)` reads `probe()` twice a frame while the event loop runs, into the returned timer's `seen`, until it is
     stopped or the test ends."""
     timers = []
 
     def sample(probe):
-        timer = QTimer(interval=4)
+        timer = QTimer(interval=8)
         timer.seen = []
         timer.timeout.connect(lambda: timer.seen.append(probe()))
         timer.start()
@@ -854,8 +854,8 @@ def sampled():
         timer.stop()
 
 
-def shown_layer(tile, source):
-    return next(layer for layer in layers(tile) if layer.property("ready") and layer.property("source").toString() == source)
+def shown_layer(art, source):
+    return next(layer for layer in art if layer.property("ready") and layer.property("source").toString() == source)
 
 
 @pytest.mark.parametrize("look", ["reprise"], indirect=True)
@@ -872,9 +872,10 @@ def test_home_from_the_game_zooms_the_frame_into_its_tile(api, fake, monkeypatch
     fake.launch("mirrors-edge", "")
     until(lambda: api.home.shown == "game")
     tile = tile_of(look, "mirrors-edge")
-    until(lambda: whole(tile), "the tile's cover is up")
+    art = layers(tile)
+    until(lambda: whole(art), "the tile's cover is up")
     root.goToTab(elsewhere)
-    blank = sampled(lambda: whole(tile))
+    blank = sampled(lambda: whole(art))
     swaps = []
     real_focus = fake.core.focus_pid
     monkeypatch.setattr(fake.core, "focus_pid", lambda pid: (swaps.append(flip.property("covering")), real_focus(pid)))
@@ -888,7 +889,7 @@ def test_home_from_the_game_zooms_the_frame_into_its_tile(api, fake, monkeypatch
     until(lambda: 0.005 < red_fraction(window.grabWindow()) < 0.2, "the frame is the tile's art now")
     blank.stop()
     assert all(blank.seen), "from the cover to the frame the tile never showed its empty card"
-    sizes = (shown_layer(tile, api.home.frame).property("sourceSize"), flip.findChild(QObject, "frame").property("sourceSize"))
+    sizes = (shown_layer(art, api.home.frame).property("sourceSize"), flip.findChild(QObject, "frame").property("sourceSize"))
     assert sizes[0] == sizes[1], "the tile asks for the frame at the flip's size: one decode serves both"
     invoke(root, "resumeSession")
     assert flip.property("growing") is True and api.home.shown == "launcher", "the tile grows first"
@@ -914,9 +915,9 @@ def test_a_quit_lands_on_the_tiles_cover_and_the_games_exit_swaps_nothing(api, f
     fake.launch("mirrors-edge", "")
     until(lambda: home.shown == "game")
     tile = tile_of(look, "mirrors-edge")
-    cover, rebuilt = read(tile, "artSource").toString(), record(tile.destroyed)
+    cover, rebuilt, art = read(tile, "artSource").toString(), record(tile.destroyed), layers(tile)
     home.toLauncher()
-    until(lambda: home.frame != "" and any(layer.property("source").toString() == home.frame and layer.property("opacity") == 1.0 for layer in layers(tile)))
+    until(lambda: home.frame != "" and any(layer.property("source").toString() == home.frame and layer.property("opacity") == 1.0 for layer in art))
     home.toGame()
     until(lambda: fake.core.game_shown is True)
     home.guide(True)
@@ -925,9 +926,21 @@ def test_a_quit_lands_on_the_tiles_cover_and_the_games_exit_swaps_nothing(api, f
     asked = []
     real_stop = fake.core.stop
     monkeypatch.setattr(fake.core, "stop", asked.append)
-    mark = tile.findChild(QObject, "mark")
-    art = tile.findChild(QObject, "cover")
-    samples = sampled(lambda: rebuilt or (home.quitting, whole(tile), art.property("source").toString(), mark.property("opacity"), tile.property("markText")))
+    mark, crossfade = tile.findChild(QObject, "mark"), tile.findChild(QObject, "cover")
+
+    def probe():
+        if rebuilt:
+            return None
+        return {
+            "quitting": home.quitting,
+            "whole": whole(art),
+            "art": crossfade.property("source").toString(),
+            "covered": flip.property("covering"),
+            "mark": mark.property("opacity"),
+            "label": tile.property("markText"),
+        }
+
+    samples = sampled(probe)
     home.stop()
     until(lambda: asked and not flip.property("covering") and not flip.property("running"), "the frame shrank into the tile")
     landing = flip.findChild(QObject, "landing")
@@ -938,11 +951,13 @@ def test_a_quit_lands_on_the_tiles_cover_and_the_games_exit_swaps_nothing(api, f
     samples.stop()
     assert not rebuilt, "the end of the session rebuilt no tile"
     seen = samples.seen
-    assert all(whole for _, whole, *_ in seen), "from Quit to the game's end the tile never showed its empty card"
-    assert {art for quitting, _, art, *_ in seen if quitting} == {cover} and seen[-1][2] == cover, "the tile asks for its cover from Quit on"
-    assert any(0.0 < opacity < 1.0 for quitting, *_, opacity, _ in seen if not quitting), "the mark fades out"
-    quit = next(i for i, (quitting, *_) in enumerate(seen) if quitting)
-    assert len({label for *_, label in seen[quit:]}) == 1, "the mark reads one state from Quit until it has faded"
+    assert all(s["whole"] for s in seen), "from Quit to the game's end the tile never showed its empty card"
+    assert {s["art"] for s in seen if s["quitting"]} == {cover} and seen[-1]["art"] == cover, "the tile asks for its cover from Quit on"
+    quit = next(i for i, s in enumerate(seen) if s["quitting"])
+    landed = next(i for i, s in enumerate(seen) if i > quit and not s["covered"])
+    assert seen[landed]["mark"] < 1.0 and any(0.0 < s["mark"] < 1.0 for s in seen[landed:] if s["quitting"]), "the mark comes in after the box"
+    assert any(0.0 < s["mark"] < 1.0 for s in seen if not s["quitting"]), "the mark fades out"
+    assert len({s["label"] for s in seen[quit:]}) == 1, "the mark reads one state from Quit until it has faded"
 
 
 def test_an_output_picked_becomes_current_and_brings_its_level(api, fake):
