@@ -664,7 +664,7 @@ cursor before its rows, so no other row lights on the way, slides in from the ri
 it fades in, over `Theme.durQuick`, and the panel eases to its new size meanwhile; a list that comes back stands
 where it was scrolled. `refresh(list)` reads the showing list again in place (Settings' add-on list as the
 index lands), the cursor kept on its index or the new last row. The PS5 `Menu` and the Switch 2 `Picker`
-set their cursor before their rows too.
+set their cursor before their rows too, and have the same `refresh(list)` for their add-on lists.
 
 ## The hint bar
 
@@ -1216,7 +1216,8 @@ from, and Add a game and Set up; its rail tile (`ui/LibraryTile.qml` `kind: "add
 "Add a game", as the Library's own add tile) adds one instead of opening the Library; the Switch 2
 HOME row's disc does the same and All Software says so under its tile. The Universe look's Library is the
 bar's second tab (Home · Library · Media · Settings, `libraryTab`); Home's rail tile stays a way in
-(`libraryRequested`) and B returns to Home.
+(`libraryRequested`) and B returns to Home. B on the bar over any tab but Home goes Home too, rather than back
+down into that tab; over Home it hands the page the focus back.
 Its grid runs in Home's order (`RecentFirstGames`) and fades the rows past either edge over 80 px
 rather than cutting them at the hints; the focused row scrolls clear of the fade.
 

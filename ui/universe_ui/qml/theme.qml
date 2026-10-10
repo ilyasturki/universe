@@ -217,8 +217,9 @@ FocusScope {
     }
 
     function restoreFocus() {
-        if (subOpen && subLoader.item)
-            subLoader.item.forceActiveFocus();
+        // A sub page still loading holds the focus in its loader, not on the tab under it.
+        if (subOpen)
+            (subLoader.item || subLoader).forceActiveFocus();
         else if (detailOpen && detailLoader.item)
             detailLoader.item.forceActiveFocus();
         else if (focusOwner === "search" && searchLoader.item)
@@ -909,7 +910,12 @@ FocusScope {
                 root.openMenu(game, anchor);
             }
             onEntered: root.focusPage()
-            onDismissed: root.focusPage()
+            // B over another tab goes home, as on its page; over Home it gives the page the focus back.
+            onDismissed: {
+                if (root.tabIndex !== 0)
+                    root.goToTab(0);
+                root.focusPage();
+            }
             onPointed: root.focusOwner = "chrome"
         }
 
@@ -1060,6 +1066,7 @@ FocusScope {
 
         HintBar {
             id: hintBar
+            objectName: "hintBar"
             anchors.bottom: parent.bottom
             anchors.left: parent.left
             anchors.right: parent.right
@@ -1187,6 +1194,7 @@ FocusScope {
 
     Loader {
         id: subLoader
+        objectName: "subLoader"
 
         anchors.fill: parent
         active: root.subOpen || subLoader.opacity > 0.01

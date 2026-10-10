@@ -1,7 +1,7 @@
 import os
 
 import pytest
-from looks import LOOKS, MENU, Look, call, content_rows, current_row, invoke, lit_fraction, lit_rows, read, render, settle
+from looks import LOOKS, MENU, FocusTrace, Look, call, content_rows, current_row, invoke, lit_fraction, lit_rows, read, render, settle
 from PySide6.QtCore import QCoreApplication, QEvent, QObject, Qt
 from PySide6.QtGui import QKeyEvent
 from PySide6.QtQuick import QQuickItem
@@ -579,6 +579,9 @@ def test_the_reprise_bar_holds_the_library_and_power(look, api):
     until(lambda: confirm.property("open") is True and read(confirm, "items")[0]["action"] == "quit", "the bar's power button asks Power")
     look.press(Qt.Key.Key_Escape)
     until(lambda: confirm.property("open") is False and bar.property("activeFocus") is True, "Stay leaves the focus on the bar")
+    look.press(Qt.Key.Key_Escape)
+    home = look.home()
+    until(lambda: root.property("tabIndex") == 0 and home.property("activeFocus") is True, "B on another tab's bar goes home, not back to that tab")
 
 
 def library(look):
@@ -914,6 +917,7 @@ def test_the_reprise_game_menu_groups_its_rows_and_hides_the_media_a_game_has_no
     assert [i.get("gap", False) for i in items] == [False, True, False, False, False], "play, then the rest"
     assert items[3]["more"] is True and items[4]["more"] is True
     look.press(Qt.Key.Key_Down, 3)
+    trace = FocusTrace(look.window, menu)
     look.press(Qt.Key.Key_Return)
     assert depth() == 1 and lit_rows(menu) == [0], "the list pushed is built lit on its cursor alone"
     until(lambda: menu.property("open") is True and depth() == 1)
@@ -922,6 +926,9 @@ def test_the_reprise_game_menu_groups_its_rows_and_hides_the_media_a_game_has_no
     assert actions() == list(counts), "the kinds the game has, no counts"
     look.press(Qt.Key.Key_Escape)
     assert depth() == 0 and lit_rows(menu) == [3], "the list B comes back to lights the row that opened it, none on the way"
+    settle(look.window)
+    trace.stop()
+    assert trace.most_lit() == 1 and trace.foreign("gameMenu") == [], "every frame of the push and the pop: one row lit, the focus in the menu"
     assert menu.property("open") is True and menu.property("index") == 3 and actions()[3] == "media", "B comes back to the row that opened it"
     look.press(Qt.Key.Key_Escape)
     until(lambda: menu.property("open") is False)
@@ -965,11 +972,28 @@ def test_back_from_a_runner_games_settings_lands_on_its_row(look, api):
     look.press(Qt.Key.Key_Return)
     sub = look.page("gameSettingsPage")
     until(lambda: sub.property("activeFocus") is True)
+    settle(look.window)
+    trace = FocusTrace(look.window)
     look.press(Qt.Key.Key_Escape)
     back = look.page("formPage")
     body = until(lambda: back.findChild(QObject, "cardSections"))
     cards = until(lambda: body.findChild(QObject, "settingsCards"))
     until(lambda: body.property("zone") == "rows" and form.rows[cards.property("index")].get("gameId") == game, "back on the game's row")
+    settle(look.window)
+    assert trace.stop().foreign("subLoader") == [], "no frame hands the focus to the tab under the pages on the way back"
+
+
+@pytest.mark.parametrize("look", LOOKS, indirect=True)
+def test_back_from_a_page_shows_the_focus_on_no_third_item(look):
+    page = look.open("pages/GameSettingsPage.qml", look.game("the-technomancer"))
+    until(lambda: page.property("activeFocus") is True)
+    settle(look.window)
+    trace = FocusTrace(look.window)
+    look.press(Qt.Key.Key_Escape)
+    home = look.home()
+    until(lambda: home.property("activeFocus") is True, "home has the focus back")
+    settle(look.window)
+    assert trace.stop().foreign("gameSettingsPage", "homePage") == [], "every frame of the way back: the focus on the page left or home"
 
 
 def game_settings(look, key):
