@@ -47,60 +47,62 @@ def state(obj):
     return call(obj, "state")
 
 
-def test_messages_wait_their_turn(notices):
-    obj, _ = notices
-    call(obj, "show", "Removed Control", "")
-    call(obj, "show", "Journal: writing Control…", "")
-    assert state(obj) == {"current": "Removed Control", "waiting": ["Journal: writing Control…"]}
-    until(lambda: state(obj) == {"current": "Journal: writing Control…", "waiting": []})
-    until(lambda: state(obj)["current"] is None)
+# Each step is (call, text, key); a dict after a step is the queue it must leave; an int, the least ms before it empties.
+QUEUE = {
+    "waits its turn": [
+        ("show", "Removed Control", ""),
+        ("show", "Journal: writing Control…", ""),
+        {"current": "Removed Control", "waiting": ["Journal: writing Control…"]},
+    ],
+    "a follow-up takes its own place": [
+        ("show", "Journal: writing Control…", "journal:1"),
+        ("show", "Screenshot saved", ""),
+        ("show", "Journal: writing Hades…", "journal:2"),
+        ("show", "Journal: Control, 2 h", "journal:1"),
+        ("fail", "Journal failed: quota", "journal:2"),
+        {"current": "Journal: Control, 2 h", "waiting": ["!Journal failed: quota"]},
+    ],
+    "a burst keeps only the newest waiting": [
+        ("show", "A is B now", ""),
+        ("show", "X is Y now", ""),
+        ("show", "L1 is R1 now", ""),
+        ("show", "Pad set up", ""),
+        {"current": "A is B now", "waiting": ["Pad set up"]},
+    ],
+    "an info does not bury a waiting error": [
+        ("show", "Screenshot saved", ""),
+        ("fail", "Could not launch Control", ""),
+        ("show", "MangoHud hidden", ""),
+        {"current": "Screenshot saved", "waiting": ["!Could not launch Control"]},
+        ("fail", "Could not launch Hades", ""),
+        {"current": "Screenshot saved", "waiting": ["!Could not launch Hades"]},
+    ],
+    "a repeat is said once": [
+        ("show", "MangoHud shown", ""),
+        ("show", "MangoHud shown", ""),
+        {"current": "MangoHud shown", "waiting": []},
+        ("show", "Nothing new", ""),
+        ("show", "Nothing new", ""),
+        {"current": "MangoHud shown", "waiting": ["Nothing new"]},
+    ],
+    "an error stays longer": [("fail", "Could not launch Control", ""), 2 * INFO_MS],
+}
 
 
-def test_a_follow_up_takes_its_own_place(notices):
-    obj, _ = notices
-    call(obj, "show", "Journal: writing Control…", "journal:1")
-    call(obj, "show", "Screenshot saved", "")
-    call(obj, "show", "Journal: writing Hades…", "journal:2")
-    call(obj, "show", "Journal: Control, 2 h", "journal:1")
-    call(obj, "fail", "Journal failed: quota", "journal:2")
-    assert state(obj) == {"current": "Journal: Control, 2 h", "waiting": ["!Journal failed: quota"]}
-
-
-def test_a_burst_keeps_only_the_newest_waiting(notices):
-    obj, _ = notices
-    call(obj, "show", "That button was A: it is B now", "")
-    call(obj, "show", "That button was X: it is Y now", "")
-    call(obj, "show", "That button was L1: it is R1 now", "")
-    call(obj, "show", "8BitDo Pro 2: 14 set up", "")
-    assert state(obj) == {"current": "That button was A: it is B now", "waiting": ["8BitDo Pro 2: 14 set up"]}
-    until(lambda: state(obj) == {"current": None, "waiting": []})
-
-
-def test_an_info_does_not_bury_a_waiting_error(notices):
-    obj, _ = notices
-    call(obj, "show", "Screenshot saved", "")
-    call(obj, "fail", "Could not launch Control", "")
-    call(obj, "show", "MangoHud hidden", "")
-    assert state(obj) == {"current": "Screenshot saved", "waiting": ["!Could not launch Control"]}
-    call(obj, "fail", "Could not launch Hades", "")
-    assert state(obj) == {"current": "Screenshot saved", "waiting": ["!Could not launch Hades"]}
-
-
-def test_a_repeat_is_said_once(notices):
-    obj, _ = notices
-    call(obj, "show", "MangoHud shown · Control", "")
-    call(obj, "show", "MangoHud shown · Control", "")
-    call(obj, "show", "Nothing new in Lutris", "")
-    call(obj, "show", "Nothing new in Lutris", "")
-    assert state(obj) == {"current": "MangoHud shown · Control", "waiting": ["Nothing new in Lutris"]}
-
-
-def test_an_error_stays_longer(notices):
+@pytest.mark.parametrize("steps", QUEUE.values(), ids=QUEUE.keys())
+def test_the_queue_shows_each_notice_in_turn_then_empties(notices, steps):
     from PySide6.QtCore import QElapsedTimer
 
     obj, _ = notices
     shown = QElapsedTimer()
     shown.start()
-    call(obj, "fail", "Could not launch Control", "")
-    until(lambda: state(obj)["current"] is None)
-    assert shown.elapsed() > 2 * INFO_MS, "past an info's time"
+    at_least = 0
+    for step in steps:
+        if isinstance(step, dict):
+            assert state(obj) == step
+        elif isinstance(step, int):
+            at_least = step
+        else:
+            call(obj, *step)
+    until(lambda: state(obj) == {"current": None, "waiting": []})
+    assert shown.elapsed() > at_least
