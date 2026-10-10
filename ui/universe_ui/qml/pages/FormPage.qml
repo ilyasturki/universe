@@ -10,7 +10,8 @@ FocusScope {
     focus: true
 
     // { runner } | { module } | { source }: one runner's, one module's or one source's settings (a game's is GameSettingsPage);
-    // `key` (and a module setting's `settingModule`) lands the cursor on that row, Advanced turned on if it sits behind it.
+    // `key` (and a module setting's `settingModule`) lands the cursor on that row, Advanced turned on if it sits behind it;
+    // `returnGame` on the row of that game, back from its settings.
     property var args: ({})
     readonly property string runner: args.runner || ""
     readonly property string module: args.module || ""
@@ -18,7 +19,6 @@ FocusScope {
     readonly property var form: formOf(args)
     readonly property var info: form.info === undefined ? null : form.info
     readonly property var login: api.screens.login
-    property int returnIndex: -1
     property string landKey: ""
     property string landModule: ""
 
@@ -110,25 +110,40 @@ FocusScope {
         api.screens.runner.load("")
 
     // The derived runner/module/source are still stale here: read the args themselves. The cursor settles once the page is
-    // laid out: a search hit lands, the row a game's settings were opened from comes back, anything else starts on the sidebar.
+    // laid out: the row a game's settings were opened from comes back, a search hit lands, anything else starts on the sidebar.
     onArgsChanged: {
         var id = args.runner || args.module || args.source || "";
-        var form = formOf(args);
-        landKey = args.key || "";
+        // The next page's args, handed over as this one goes.
+        if (id === "")
+            return;
+        landKey = args.returnGame ? "" : args.key || "";
         landModule = args.settingModule || "";
         body.section = 0;
         body.zone = "side";
-        if (id !== "")
-            form.load(id);
-        Qt.callLater(page.settle);
+        formOf(args).load(id);
+        settling.restart();
+    }
+
+    // Owned by the page, unlike a Qt.callLater: it dies with it.
+    Timer {
+        id: settling
+        interval: 0
+        onTriggered: page.settle()
     }
 
     function settle() {
-        if (page.returnIndex >= 0 && page.runner !== "") {
-            body.landOn(page.returnIndex);
-            page.returnIndex = -1;
-        } else if (!landNow())
+        if (!landBack() && !landNow())
             body.reset();
+    }
+
+    function landBack() {
+        var id = args.returnGame || "";
+        var i = id === "" ? -1 : form.rows.findIndex(function (r) {
+            return r.key === "game" && r.gameId === id;
+        });
+        if (i >= 0)
+            body.landOn(i);
+        return i >= 0;
     }
 
     // A search hit: the card holding the row, the cursor on it; a source's rows come back from a thread, so it lands once they are there.
@@ -184,7 +199,6 @@ FocusScope {
         var cards = body.cards;
         if (action === "settings") {
             cards.forceActiveFocus();
-            page.returnIndex = cards.index;
             page.settingsRequested(api.allGames.byId(row.gameId));
         } else if (action === "uninstall") {
             Sound.panel();

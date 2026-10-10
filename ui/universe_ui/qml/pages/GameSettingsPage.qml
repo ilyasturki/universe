@@ -104,7 +104,14 @@ FocusScope {
         body.section = 0;
         body.zone = "side";
         form.load(args.game.id);
-        Qt.callLater(page.settle);
+        settling.restart();
+    }
+
+    // Owned by the page, unlike a Qt.callLater: a page swapped out before its turn never settles.
+    Timer {
+        id: settling
+        interval: 0
+        onTriggered: page.settle()
     }
 
     function settle() {

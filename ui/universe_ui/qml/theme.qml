@@ -434,13 +434,14 @@ FocusScope {
         }
     }
 
-    function pushSub(source, args) {
+    // `back` joins the page's args when B comes back to it: the new page is another instance, so where to land rides here.
+    function pushSub(source, args, back) {
         if (!subOpen || subSwapping)
             return;
         Sound.enter();
         subReturn = {
             source: subSource,
-            args: subArgs
+            args: Object.assign({}, subArgs, back || {})
         };
         subSwapping = true;
         subSwap.target = {
@@ -1188,6 +1189,8 @@ FocusScope {
             function onSettingsRequested(game) {
                 root.pushSub("pages/GameSettingsPage.qml", {
                     game: game
+                }, {
+                    returnGame: game.id
                 });
             }
             function onMessage(text) {

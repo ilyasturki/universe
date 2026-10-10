@@ -863,6 +863,36 @@ def test_the_reprise_game_menu_groups_its_rows_and_hides_the_media_a_game_has_no
     until(lambda: api.allGames.byId("mini-metro") is None)
 
 
+@reprise
+def test_back_from_a_runner_games_settings_lands_on_its_row(look, api):
+    def row():
+        """The game's row where it is now: the form's rows grow as its data comes in."""
+        return next(k for k, r in enumerate(form.rows) if r.get("gameId") == game)
+
+    page = look.open("pages/FormPage.qml", {"runner": "dolphin"})
+    form = api.screens.runner
+    game = until(lambda: next((r["gameId"] for r in form.rows if r.get("gameId")), None), "the Games card")
+    menu = page.findChild(QObject, "menu")
+    invoke(page, "activate", row(), form.rows[row()])
+    until(lambda: menu.property("open") is True)
+    look.press(Qt.Key.Key_End)
+    look.press(Qt.Key.Key_Return)
+    assert read(menu, "items")[1]["action"] == "yes" and lit_rows(menu) == [0], "the question asked in place: Keep it alone lit"
+    look.press(Qt.Key.Key_Escape)
+    until(lambda: menu.property("open") is False)
+    body = page.findChild(QObject, "cardSections")
+    invoke(body, "landOn", row())
+    invoke(page, "activate", row(), form.rows[row()])
+    until(lambda: menu.property("open") is True)
+    look.press(Qt.Key.Key_Return)
+    look.page("gameSettingsPage")
+    look.press(Qt.Key.Key_Escape)
+    back = look.page("formPage")
+    body = until(lambda: back.findChild(QObject, "cardSections"))
+    cards = until(lambda: body.findChild(QObject, "settingsCards"))
+    until(lambda: body.property("zone") == "rows" and form.rows[cards.property("index")].get("gameId") == game, "back on the game's row")
+
+
 def game_settings(look, key):
     """The game's settings page, landed on `key`."""
     page = look.open("pages/GameSettingsPage.qml", {**look.game("the-technomancer"), "key": key})
