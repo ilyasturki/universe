@@ -1731,6 +1731,8 @@ impl Core {
                 let s = m.merged_settings(&cfg, None);
                 let mut j = m.to_json();
                 j["games_dir"] = s.get("games_dir").cloned().unwrap_or(serde_json::Value::Null);
+                let scanned = s.get("scan_dirs").and_then(|v| v.as_str()).unwrap_or("");
+                j["scan_dirs"] = scanned.split(',').map(str::trim).filter(|d| !d.is_empty()).map(|d| paths::expand(d).to_string_lossy().into_owned()).collect();
                 j["library_cached"] = serde_json::json!(caches.get(m.id()).map(|v| v.len()).unwrap_or(0));
                 j["library_at"] = serde_json::Value::String(Self::library_at(m));
                 j["logged_in"] = serde_json::Value::Bool(logins.contains_key(m.id()));
@@ -2866,6 +2868,7 @@ install) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":t
         archived.save().unwrap();
         let before: Vec<Vec<u8>> = [&imported, &parked].iter().map(|g| std::fs::read(g.toml_path()).unwrap()).collect();
         let core = open().await;
+        assert_eq!(core.sources().await[0]["scan_dirs"], serde_json::json!([pc]), "where the page says it looked");
 
         let list = core.source_library("gog", true).await.unwrap();
         let linked: Vec<(&str, &str, bool)> =

@@ -541,6 +541,7 @@
       "logged_in": true,
       "user": "yasso",
       "games_dir": "/mnt/games/PC",
+      "scan_dirs": ["/mnt/games/PC", "/mnt/games/gog"],
       "library_at": "2026-09-11T19:03:00+02:00",
       "capabilities": ["achievements", "cloud-saves"],
       "login": {"kind": "code", "hint": "Sign in at the link. The address it lands on ends in code=…: enter what follows code=, or the whole address.", "purpose": "install games"},

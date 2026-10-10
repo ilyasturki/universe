@@ -592,14 +592,22 @@ impl StorePage {
         let mut installed: Vec<&Entry> = games.iter().filter(|e| e.installed && shown(e)).collect();
         installed.sort_by(by_title);
         for entry in &installed {
-            let mut line = vec![];
-            if pending.contains(&entry.id) {
-                line.push(gettext("Update available"));
-            }
+            let mut line = vec![if pending.contains(&entry.id) {
+                gettext("Update available")
+            } else if entry.game_id.is_empty() {
+                gettext("Not in your library")
+            } else {
+                gettext("In your library")
+            }];
             if entry.disk > 0 {
                 line.push(size(entry.disk));
             }
-            let row = self.row(entry, &line.join(" · "));
+            let mut line = line.join(" · ");
+            if entry.game_id.is_empty() && !entry.dir.is_empty() {
+                line = format!("{line}\n{}", gettext("Found in {}").replace("{}", &tilde(&entry.dir)));
+            }
+            let row = self.row(entry, &line);
+            row.set_subtitle_lines(if entry.game_id.is_empty() { 2 } else { 1 });
             if self.in_library(entry) {
                 row.add_suffix(&button(&gettext("_Play"), "win.play-game", &entry.game_id));
             }
@@ -623,6 +631,10 @@ impl StorePage {
         let mut about = vec![ngettext("{} game", "{} games", count as u32).replace("{}", &count.to_string())];
         if on_disk > 0 {
             about.push(size(on_disk));
+        }
+        let folders = self.folders();
+        if !folders.is_empty() {
+            about.push(gettext("in {}").replace("{}", &folders.iter().map(|d| tilde(d)).collect::<Vec<_>>().join(", ")));
         }
         imp.installed_group.set_description(Some(&about.join(" · ")));
         imp.installed_group.set_visible(!installed.is_empty());
@@ -685,12 +697,33 @@ impl StorePage {
         self.sync_job_row();
     }
 
-    /// `12 games · refreshed 3 h ago`, or why the store could not be reached.
+    /// The store listed, as `sources()` gives it.
+    fn store(&self) -> Value {
+        let imp = self.imp();
+        let source = imp.source.borrow().clone();
+        imp.stores.borrow().iter().find(|s| text(s, "id") == source).cloned().unwrap_or_default()
+    }
+
+    /// The folders the store's games are found in: its install folder, then the ones it scans.
+    fn folders(&self) -> Vec<String> {
+        let store = self.store();
+        let scanned = store["scan_dirs"].as_array().into_iter().flatten().filter_map(|d| d.as_str().map(str::to_string));
+        let mut out: Vec<String> = Vec::new();
+        for d in std::iter::once(text(&store, "games_dir")).chain(scanned) {
+            if !d.is_empty() && !out.contains(&d) {
+                out.push(d);
+            }
+        }
+        out
+    }
+
+    /// `12 games in your GOG account · refreshed 3 h ago`, or why the store could not be reached.
     fn listing_line(&self, count: usize) -> String {
         let imp = self.imp();
-        let games = ngettext("{} game", "{} games", count as u32).replace("{}", &count.to_string());
-        let source = imp.source.borrow().clone();
-        let store = imp.stores.borrow().iter().find(|s| text(s, "id") == source).cloned().unwrap_or_default();
+        let store = self.store();
+        let games = ngettext("{} game in your {} account", "{} games in your {} account", count as u32)
+            .replacen("{}", &count.to_string(), 1)
+            .replacen("{}", &text(&store, "name"), 1);
         let at = chrono::DateTime::parse_from_rfc3339(&text(&store, "library_at")).map(|t| t.timestamp()).ok();
         let age = at.map(|at| format::ago(at, chrono::Local::now()));
         match (imp.error.borrow().is_empty(), age) {

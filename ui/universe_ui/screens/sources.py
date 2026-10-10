@@ -22,7 +22,7 @@ def _source_row(game, updates, art, job):
     if busy:
         status = job["label"].split(" ")[0] + "…"  # the live line is `job.message`; rows stay put while it runs
     elif installed:
-        status = "Update available" if pending else "Installed" if game.get("game_id") else "Not in the library"
+        status = "Update available" if pending else "In your library" if game.get("game_id") else "Not in your library"
     elif partial:
         status = "Paused · " + (f"{_size(partial_bytes)} of {_size(disk)} kept" if disk else f"{_size(partial_bytes)} kept")
     elif game.get("owned"):
@@ -30,12 +30,18 @@ def _source_row(game, updates, art, job):
     else:
         status = "Not owned"
     size = disk if installed or partial else download
-    played = "Play from library" if game.get("game_id") else "Add to library"
+    linked = bool(game.get("game_id"))
+    played = "Play from library" if linked else "Add to library"
+    found = str(game.get("dir") or "") if installed and not linked else ""
     return {
         "id": str(game.get("id") or ""),
         "title": str(game.get("title") or ""),
         "game_id": str(game.get("game_id") or ""),
         "image": art(game.get("game_id")) or str(game.get("image") or ""),
+        "owned": bool(game.get("owned")),
+        "linked": linked,
+        "dir": found,
+        "detail": f"Found in {found}" if found else "",
         "installed": installed,
         "pending": pending,
         "partial": partial,
@@ -421,12 +427,17 @@ class SourcesBrowser(AsyncScreen):
         current = self._current_source()
         return str((current or {}).get("library_at") or "")
 
+    def _folders(self):
+        current = self._current_source() or {}
+        return list(dict.fromkeys(str(d) for d in [current.get("games_dir"), *(current.get("scan_dirs") or [])] if d))
+
     sources = Property(list, lambda self: list(self._sources), notify=sourcesChanged)
     stores = Property(list, lambda self: [{"id": s["id"], "name": s.get("name") or s["id"]} for s in _stores(self._sources)], notify=sourcesChanged)
     source = Property(str, lambda self: self._source, notify=sourceChanged)
     current = Property(QVARIANT, _current_source, notify=sourceChanged)
     libraryAt = Property(str, _library_at, notify=sourceChanged)
     libraryAge = Property(str, lambda self: _age(self._library_at()), notify=sourceChanged)
+    folders = Property(list, _folders, notify=sourceChanged)
     error = Property(str, lambda self: self._error, notify=sourceChanged)
     freeSpace = Property(float, lambda self: float(self._free), notify=sourcesChanged)
     rows = Property(list, lambda self: list(self._rows), notify=rowsChanged)

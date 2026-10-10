@@ -1627,6 +1627,7 @@ class FakeCore:
         out = self._manifests("sources")
         for source in out:
             source["library_cached"] = len(self._data.get("source_library", {}).get(source["id"], []))
+            source.setdefault("scan_dirs", [])
         return out
 
     def _manifests(self, kind):

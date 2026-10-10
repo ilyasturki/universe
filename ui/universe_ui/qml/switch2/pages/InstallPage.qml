@@ -36,7 +36,7 @@ FocusScope {
         if (sources.query)
             return group("Results for “" + sources.query + "”", all);
         var owned = all.filter(function(i) { return !rows[i].installed; });
-        return owned.length > 0 ? group("Owned, not installed", owned) : [];
+        return owned.length > 0 ? group("Not installed", owned) : [];
     }
     readonly property var current: index >= 0 && index < cells.length && !cells[index].heading ? cells[index] : null
 
@@ -55,7 +55,7 @@ FocusScope {
         }
         if (jobs.length > 0)
             out = group("Installing", [running > 0 ? running + " running" : "", paused > 0 ? paused + " paused" : ""].filter(Boolean).join(" · "), jobs);
-        return out.concat(group("Installed", Format.plural(installed.length, "game", "games") + (page.onDisk > 0 ? " · " + Format.bytes(page.onDisk) : ""), installed));
+        return out.concat(group("On this PC", Format.plural(installed.length, "game", "games") + (page.onDisk > 0 ? " · " + Format.bytes(page.onDisk) : "") + (sources.folders.length > 0 ? " · in " + sources.folders.join(", ") : ""), installed));
     }
     readonly property var currentLine: rowIndex >= 0 && rowIndex < lines.length && !lines[rowIndex].heading ? lines[rowIndex] : null
     readonly property real onDisk: {
@@ -239,7 +239,7 @@ FocusScope {
         else if (g.pending)
             items.push({ label: "Update", act: "update" });
         if (g.installed && !g.game_id)
-            items.push({ label: "Add to Library", act: "adopt" });
+            items.push({ label: "Add to Library", act: "adopt" }, { label: "Delete Files…", act: "trash" });
         if (inLibrary)
             items.push({ label: "Start", act: "start" }, { label: "Software Information", act: "info" }, { label: "Game Settings", act: "settings" });
         if (g.installed && g.game_id)
@@ -266,6 +266,9 @@ FocusScope {
                 var via = api.universe.uninstallVia(gameId);
                 shell.dialogAsk({ message: "Uninstall " + title + "?", detail: (via ? via + " removes the files" : "The install folder goes to the trash") + "; the hours and the journal stay.",
                                   buttons: ["Cancel", "Uninstall"], danger: 1 }, function(k) { if (k === 1) sources.uninstall(gameId); });
+            } else if (a === "trash") {
+                shell.dialogAsk({ message: "Delete " + title + "'s files?", detail: g.dir + " goes to the trash. No game in your library uses it.",
+                                  buttons: ["Cancel", "Delete"], danger: 1, index: 0 }, function(k) { if (k === 1) sources.trash(row); });
             } else if (a === "remove") {
                 shell.dialogAsk({ message: "Remove " + title + " from the library?", detail: "The entry is archived; the files are left where they are.",
                                   buttons: ["Cancel", "Remove"], danger: 1 }, function(k) { if (k === 1) sources.remove(gameId); });
@@ -730,7 +733,7 @@ FocusScope {
                     readonly property real fraction: !g ? 0 : live ? (page.sources.job.total > 0 ? page.sources.job.done / page.sources.job.total : 0)
                                                      : g.partial && g.disk_size > 0 ? g.partial_bytes / g.disk_size : 0
                     readonly property string meta: !g ? "" : live ? page.sources.job.message.replace(page.sources.job.label + " · ", "")
-                                                   : g.partial ? g.status : g.pending ? "Update available" : g.status
+                                                   : g.partial ? g.status : g.pending ? "Update available" : [g.status, g.detail].filter(Boolean).join(" · ")
 
                     x: page.room
                     y: page.room + page.lineY(index)

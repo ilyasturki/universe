@@ -279,7 +279,7 @@ FocusScope {
                     type: "action",
                     display: g.partial ? "Paused · " + Format.bytes(g.partial_bytes) + " kept" : g.status,
                     choices: [],
-                    detail: "",
+                    detail: g.detail,
                     row: i,
                     installed: g.installed,
                     busy: g.busy,
@@ -339,16 +339,16 @@ FocusScope {
                     rows: [rows.length - 1]
                 });
             }
-            var where = currentSource && currentSource.games_dir ? " · " + currentSource.games_dir : "";
+            var where = sources.folders.length > 0 ? " · in " + sources.folders.join(", ") : "";
             var sized = onDisk > 0 ? " · " + Format.bytes(onDisk) : "";
             groups.push({
-                title: "Installed",
+                title: "On this PC",
                 meta: (listed.length > 0 || !busy ? Format.plural(installed.length, "game", "games") + sized + where : "") + busy,
                 rows: installed
             });
             groups.push({
-                title: "Owned, not installed",
-                meta: Format.plural(owned.length, "game", "games") + (sources.libraryAge && !stale ? " · refreshed " + sources.libraryAge : ""),
+                title: "Not installed",
+                meta: Format.plural(owned.length, "game", "games") + " in your " + sourceName + " account" + (sources.libraryAge && !stale ? " · refreshed " + sources.libraryAge : ""),
                 warning: stale,
                 rows: owned
             });
@@ -1398,6 +1398,11 @@ FocusScope {
                 icon: "plus",
                 label: "Add to library",
                 action: "adopt"
+            }, {
+                icon: "trash",
+                label: "Delete files…",
+                action: "trash",
+                danger: true
             });
         if (row.gameId && api.allGames.byId(row.gameId))
             out.push({
@@ -1474,6 +1479,13 @@ FocusScope {
             menu.confirm("Keep it", "trash", via ? "Uninstall through " + via : "Trash the install folder", "Uninstall " + row.label + "?", cards, cards.focusRect, function () {
                 Sound.enter();
                 sources.uninstall(row.gameId);
+            });
+            return;
+        } else if (action === "trash") {
+            Sound.panel();
+            menu.confirm("Keep them", "trash", "Move the folder to the trash", "Delete " + row.label + "'s files?", cards, cards.focusRect, function () {
+                Sound.enter();
+                sources.trash(row.row);
             });
             return;
         } else if (action === "remove") {

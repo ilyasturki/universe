@@ -109,7 +109,7 @@ FocusScope {
         if (installed.length > 0)
             out.push({
                 id: "installed",
-                title: "Installed",
+                title: "On this PC",
                 items: installed
             });
         return out;
@@ -170,8 +170,8 @@ FocusScope {
         }
         out.push({
             heading: true,
-            label: "Installed",
-            meta: Format.plural(installed.length, "game", "games") + (page.onDisk > 0 ? " · " + Format.bytes(page.onDisk) : "")
+            label: "On this PC",
+            meta: Format.plural(installed.length, "game", "games") + (page.onDisk > 0 ? " · " + Format.bytes(page.onDisk) : "") + (sources.folders.length > 0 ? " · in " + sources.folders.join(", ") : "")
         });
         installed.forEach(function (k) {
             out.push({
@@ -329,7 +329,7 @@ FocusScope {
             return g.status;
         if (g.installed)
             return g.status + (g.sizeText ? " · " + g.sizeText : "");
-        if (g.status === "Not owned")
+        if (!g.owned)
             return "Not owned on " + sourceName;
         return "Owned on " + sourceName + (g.download_size > 0 ? " · " + Format.bytes(g.download_size) : "");
     }
@@ -370,7 +370,7 @@ FocusScope {
                 label: "Update",
                 glyph: "download"
             };
-        if (!g.installed && g.status !== "Not owned")
+        if (!g.installed && g.owned)
             return {
                 act: "install",
                 label: "Install",
@@ -394,7 +394,13 @@ FocusScope {
     function moreOf(g) {
         var game = libraryGameOf(g);
         if (!game)
-            return [];
+            return g.installed && !g.linked ? [
+                {
+                    label: "Delete Files…",
+                    glyph: "trash",
+                    act: "trash"
+                }
+            ] : [];
         var session = api.universe.currentSession;
         var main = mainOf(g);
         // Play once: the card's own button when that is Play, nowhere before the files are there.
@@ -416,7 +422,7 @@ FocusScope {
     function actionsFor(g) {
         var main = mainOf(g);
         var out = main ? [main] : [];
-        if (libraryGameOf(g))
+        if (moreOf(g).length > 0)
             out.push({
                 act: "more",
                 label: "Options",
@@ -485,6 +491,17 @@ FocusScope {
             }, function (k) {
                 if (k === 1)
                     sources.uninstall(gameId);
+            });
+        } else if (id === "trash") {
+            shell.dialogAsk({
+                message: "Delete " + title + "'s Files?",
+                detail: g.dir + " goes to the trash. No game in your library uses it.",
+                buttons: ["Cancel", "Delete"],
+                danger: 1,
+                index: 0
+            }, function (k) {
+                if (k === 1)
+                    sources.trash(index);
             });
         } else if (id === "remove") {
             shell.dialogAsk({
@@ -1652,7 +1669,7 @@ FocusScope {
 
             Label {
                 width: parent.width
-                text: [page.sizesOf(page.cardEntry), page.cardEntry && !page.cardEntry.installed && page.gamesDir ? (page.sources.freeSpace > 0 ? Format.bytes(page.sources.freeSpace) + " free in " : "Into ") + page.gamesDir : ""].filter(Boolean).join("\n")
+                text: [page.cardEntry ? page.cardEntry.detail : "", page.sizesOf(page.cardEntry), page.cardEntry && !page.cardEntry.installed && page.gamesDir ? (page.sources.freeSpace > 0 ? Format.bytes(page.sources.freeSpace) + " free in " : "Into ") + page.gamesDir : ""].filter(Boolean).join("\n")
                 color: Theme.textSecondary
                 wrapMode: Text.WordWrap
                 lineHeight: 1.2

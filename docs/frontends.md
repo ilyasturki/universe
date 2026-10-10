@@ -748,8 +748,13 @@ rail's tiles pick their art the same way.
 `api.screens.sources` (`SourcesBrowser`) lists one source's games — `source`, one of `stores` (the
 enabled, available sources, `{id, name}`), the first until `pick(id)` lists another from its cache
 and the disk as `load()` does, dropping a search: `rows` of `{id, title, game_id,
-image, installed, pending, partial, busy, status, action, disk_size, download_size, partial_bytes,
-size, sizeText, sizeKind}`, installed first. `load()` (opening the page) serves the core's cache and the
+image, owned, linked, dir, detail, installed, pending, partial, busy, status, action, disk_size,
+download_size, partial_bytes, size, sizeText, sizeKind}`, installed first. `linked` is the core's
+`game_id` (see `source_library`): a library game stands for the install, the store's own or a Lutris
+import in its folder. An installed row reads `status` "In your library" when linked, "Not in your
+library" otherwise, with `dir` the folder the store found it in and `detail` "Found in <dir>"; the
+looks branch on `owned`, `installed` and `linked`, never on `status`. `folders` are the folders the
+store's games are found in (`games_dir`, then `scan_dirs`), for the On this PC meta. `load()` (opening the page) serves the core's cache and the
 disk, re-listed once 15 min old, never the store; `refresh()` (Y) asks the store, so a game
 bought since shows up — `libraryAt` and `libraryAge` say when that last happened, for the header.
 A refresh the store refuses keeps the listing shown, toasts the reason and leaves it in `error`
@@ -759,8 +764,7 @@ Sizes: an install's is measured (`sizeKind` `disk`); a game not installed shows 
 once known (`download`), and `peek(index)` — call it as the cursor lands on a row — fetches one
 `info` at a time, off the busy flag, and the core remembers it. `install(index)` installs, resumes
 a stopped download (the same call: the source continues over its folder) or updates. An installed
-row the library lacks (`game_id` empty, `status` "Not in the library", `action` "Add to library")
-takes `adopt(index)`: an `adopt` job (`source_adopt`), which brings that one game in and no other,
+row the library lacks (`linked` false, `action` "Add to library") takes `adopt(index)`: an `adopt` job (`source_adopt`), which brings that one game in and no other,
 then a toast once the reload shows the row linked. The first run's adoption and Universe Desktop's
 Find Installed Games stay the store's whole `scan`. `trash(index)` sends such a row's folder to the
 trash (`source_trash`), off the network; the core's refusal is the toast.
@@ -775,15 +779,21 @@ the network.
 Reprise keeps it as Settings › Install: with two stores or more a Store card first (one row, the
 store's name; A opens the menu of them), an Installing card (running and paused, a hairline of
 progress under a paused row), an Updates card when some are pending (one row, Update everything,
-`updateAll()`; a game's own Update is in its row's menu), then Installed and Owned, every game with its size in figures of one
-width, the library's age or the store's failure in the card meta; A opens the row's menu (Cancel
-install · Resume · Update · Add to library · Game settings · Uninstall… · Remove…), Install first asks in a
+`updateAll()`; a game's own Update is in its row's menu), then On this PC (its meta the folders
+looked in) and Not installed ("in your GOG account"), every game with its size in figures of one
+width, the library's age or the store's failure in the card meta, a row's `detail` under the cards
+while it has the cursor; A opens the row's menu (Cancel install · Resume · Update · Add to library ·
+Delete files… · Game settings · Uninstall… · Remove…; Delete files… on a row the library lacks,
+after a confirm), Install first asks in a
 `ConfirmDialog` with the download, the disk and the free space; X refreshes; the cursor on a game
 without a size peeks it. The Switch 2 look's `pages/InstallPage.qml` is two tabs on the bumpers:
-Store, the tiles of what is owned and not installed (a download or a pause painted on the tile's
-foot) and the search's results, A installs after the same confirm; Manage, the install folder's
-strip (used · free), then Installing and Installed as rows with a size and an action — A is the
-row's menu, X cancels the running job from either tab. With two stores or more the rail's first entry,
+Store, Not installed, the tiles of what is owned and not installed (a download or a pause painted
+on the tile's foot) and the search's results, A installs after the same confirm; Manage, the
+install folder's strip (used · free), then Installing and On this PC as rows with a size and an
+action (an unlinked row's line ends in its `detail`) — A is the row's menu (Add to Library and
+Delete Files… for a row the library lacks), X cancels the running job from either tab. The PS5
+look's Store lists Ready to install, Updates and On this PC; a card the library lacks offers Add to
+Library and, under its Options button, Delete Files…, its `detail` under the status line. With two stores or more the rail's first entry,
 the store's name, opens the menu of them; in the PS5 look's Store, a Change Store icon heads the top
 row and the Options menu, with the same menu.
 
@@ -1492,7 +1502,9 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
   shows its verb — Play for a game installed and in the library, Resume, Install, Update — with a
   menu beside it (an installed game the library lacks: Add to Library, an add job, and Delete
   Files…, which names the folder and asks first; one it holds: Uninstall…), and Refresh is the
-  header's button. The first run adopts what `discover()` finds through the store a launcher's `via`
+  header's button. Its groups are On This PC (the folders looked in), Not Installed (in your
+  account) and In the Store (search results outside the listing); an installed row reads In your
+  library or Not in your library, the second with the folder it was found in. The first run adopts what `discover()` finds through the store a launcher's `via`
   names, turning it on when it is off; one that found nothing while signed out is listed on the
   stores step, and adopted again once its sign-in succeeds.
 - **Search provider**: `org.gnome.Shell.SearchProvider2` at

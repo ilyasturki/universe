@@ -688,7 +688,7 @@ def test_an_installed_game_the_library_lacks_is_added_on_its_own(api, fake):
     said = record(browser.message)
     at = next(i for i, r in enumerate(browser.rows) if r["title"] == asylum)
     row = browser.rows[at]
-    assert (row["installed"], row["game_id"], row["status"], row["action"]) == (True, "", "Not in the library", "Add to library")
+    assert (row["installed"], row["linked"], row["dir"]) == (True, False, "/mnt/games/PC/Batman Arkham Asylum GOTY"), "on disk, nobody's: where it was found"
     linked = next(i for i, r in enumerate(browser.rows) if r["game_id"] == "dead-cells")
     assert browser.adopt(linked) == "", "a game the library holds has nothing to add"
     assert browser.adopt(at) != ""

@@ -77,7 +77,7 @@ def test_start_opens_every_action_the_focused_game_s_first_and_play_only_once(lo
     until(lambda: store.property("row") == 2 and read(store, "current")["installed"] and read(store, "current")["game_id"] == "")
     look.press(Qt.Key.Key_F1)
     acts = opened_menu(look)
-    assert acts[0] == "adopt" and "play" not in acts, "on disk but not in the library: Add to Library, nothing to play"
+    assert acts[:2] == ["adopt", "trash"] and "play" not in acts, "on disk but not in the library: Add to Library or Delete Files, nothing to play"
     look.press(Qt.Key.Key_Escape)
     until(lambda: look.menu().property("open") is False)
     look.press(Qt.Key.Key_Right)
