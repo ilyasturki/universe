@@ -8,7 +8,7 @@ and timings in `core/Theme.qml` are measured on 1080p frames of the console (Son
 holds and the columns and grids narrow.
 
 The type is Source Sans 3 (OFL, `assets/fonts/`), the nearest open face to the console's SST, in
-its Light, Regular and Semibold; Settings › Themes › Font takes a `.ttf` you own instead
+its Light, Regular and Semibold; Settings › Appearance › Font takes a `.ttf` you own instead
 (`api.theme.fontPath`, stored as `ps5Font`). The sounds are synthesized by `assets/sounds/generate.py`.
 
 ## The screens

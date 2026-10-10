@@ -19,7 +19,7 @@ The sounds are synthesized by `assets/sounds/generate.py` (run it to rewrite the
 modelled on the console's own sound for that action: `tick` for lists, `tick-tile` on the HOME row,
 `tick-side` in a sidebar, `edge`, `ok`, `back`, `tab`, `select` / `deselect` for a toggle,
 `open`, `type`, `home` (reaching HOME, by the button or B), `launch`, and `icon-<icon>` for each
-bottom-bar icon on A. Settings › Themes › Sound folder swaps any of them for a WAV of the same name.
+bottom-bar icon on A. Settings › Appearance › Sound folder swaps any of them for a WAV of the same name.
 
 The focus ring's shader ships as `assets/shaders/ring.frag.qsb`, rebuilt from `ring.frag` with
 `qsb --glsl "100 es,120,150" --hlsl 50 --msl 12 -o ring.frag.qsb ring.frag`.
@@ -57,5 +57,5 @@ plain navigation. `ui/HintGlyph.qml` draws them the HOME way from the same promp
 just ui-fake --theme switch2 --windowed --keys "Down Return Wait Right Shot:out.png" --quit-after 3000
 ```
 
-A bare `universe-ui` writes the pad it sees, and any pick in Settings › Themes, into the real
+A bare `universe-ui` writes the pad it sees, and any pick in Settings › Appearance, into the real
 `ui-memory.json`.
