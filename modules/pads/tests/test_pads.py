@@ -15,6 +15,7 @@ import pytest
 BIN_DIR = Path(__file__).resolve().parents[1] / "bin"
 sys.path.insert(0, str(BIN_DIR))
 import _pads  # noqa: E402
+import _uhid  # noqa: E402
 from _pads import GUIDE, MISC1, NEUTRAL, SOUTH, PadState, pack_report, parse_rumble  # noqa: E402
 
 
@@ -216,12 +217,12 @@ def uhid_events(data):
     out, at = [], 0
     while at < len(data):
         (kind,) = struct.unpack_from("<I", data, at)
-        if kind == _pads.UHID_CREATE2:
+        if kind == _uhid.UHID_CREATE2:
             _, name, _phys, uniq, rd_size, _bus, _vendor, product, _version, _country = struct.unpack_from("<I128s64s64sHHIIII", data, at)
             out.append(("create", name.rstrip(b"\0").decode(), uniq.rstrip(b"\0").decode(), product))
             at += struct.calcsize("<I128s64s64sHHIIII") + rd_size
         else:
-            out.append(("destroy" if kind == _pads.UHID_DESTROY else kind, "", "", 0))
+            out.append(("destroy" if kind == _uhid.UHID_DESTROY else kind, "", "", 0))
             at += 4
     return out
 

@@ -5,17 +5,12 @@ import struct
 import sys
 from dataclasses import dataclass
 
+from _uhid import BUS_USB, UHID, UHID_GET_REPORT, UHID_OUTPUT, UHID_SET_REPORT, UHID_START, Device
+
 # DragonRise: SDL sends an unlisted product of it the PlayStation capability query, and no listing of 0x555x makes it another type.
 VENDOR = 0x0079
 FIRST_PRODUCT = 0x5550
 MAX_PLAYERS = 8
-UHID = "/dev/uhid"
-
-UHID_DESTROY, UHID_START, UHID_OUTPUT, UHID_GET_REPORT, UHID_GET_REPORT_REPLY = 1, 2, 6, 9, 10
-UHID_CREATE2, UHID_INPUT2, UHID_SET_REPORT, UHID_SET_REPORT_REPLY = 11, 12, 13, 14
-UHID_EVENT_SIZE = 4380
-BUS_USB = 0x03
-EIO = 5
 
 # Generic Desktop / Game Pad on the outside, for SDL's filter; vendor usages inside, so hid-input makes no evdev node of it.
 REPORT_DESCRIPTOR = bytes(
@@ -182,49 +177,26 @@ class VirtualPad:
         self.name = f"Universe Pad {player + 1}"
         self.started = False
         self.seq = 0
-        self.fd = os.open(UHID, os.O_RDWR | os.O_CLOEXEC)
-        create = struct.pack(
-            "<I128s64s64sHHIIII",
-            UHID_CREATE2,
-            self.name.encode(),
-            b"",
-            f"universe-pad-{player + 1}".encode(),
-            len(REPORT_DESCRIPTOR),
-            BUS_USB,
-            VENDOR,
-            product(player),
-            1,
-            0,
-        )
-        os.write(self.fd, create + REPORT_DESCRIPTOR)
+        self.device = Device(self.name, f"universe-pad-{player + 1}", REPORT_DESCRIPTOR, BUS_USB, VENDOR, product(player), version=1, path=UHID)
+        self.fd = self.device.fd
 
     def send(self, state, tick_us, guide):
         self.seq += 1
-        report = pack_report(state, self.seq, tick_us, guide)
-        os.write(self.fd, struct.pack("<IH", UHID_INPUT2, len(report)) + report)
+        self.device.input(pack_report(state, self.seq, tick_us, guide))
 
     def handle(self):
         """Answers the kernel's request; a rumble the emulator sent comes back as (low, high)."""
-        buf = os.read(self.fd, UHID_EVENT_SIZE)
-        kind = struct.unpack_from("<I", buf)[0]
+        kind, fields = self.device.event()
         if kind == UHID_START:
             self.started = True
         elif kind == UHID_GET_REPORT:
-            request, number = struct.unpack_from("<IB", buf, 4)
-            if number == REPORT_CAPABILITIES:
-                os.write(self.fd, struct.pack("<IIHH", UHID_GET_REPORT_REPLY, request, 0, len(CAPABILITIES)) + CAPABILITIES)
-            else:
-                os.write(self.fd, struct.pack("<IIHH", UHID_GET_REPORT_REPLY, request, EIO, 0))
+            request, number, _ = fields
+            self.device.reply_get(request, CAPABILITIES if number == REPORT_CAPABILITIES else None)
         elif kind == UHID_SET_REPORT:
-            request = struct.unpack_from("<I", buf, 4)[0]
-            os.write(self.fd, struct.pack("<IIH", UHID_SET_REPORT_REPLY, request, 0))
+            self.device.reply_set(fields[0])
         elif kind == UHID_OUTPUT:
-            size = struct.unpack_from("<H", buf, 4 + 4096)[0]
-            return parse_rumble(buf[4 : 4 + size])
+            return parse_rumble(fields[0])
         return None
 
     def close(self):
-        try:
-            os.write(self.fd, struct.pack("<I", UHID_DESTROY))
-        finally:
-            os.close(self.fd)
+        self.device.close()
