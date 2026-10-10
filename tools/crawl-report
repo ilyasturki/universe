@@ -30,12 +30,8 @@ def changed(before: QImage, after: QImage) -> list[int]:
     a, b = bytes(before.constBits()), bytes(after.constBits())
     if a == b:
         return []
-    out = []
-    for i in range(0, len(a), 4):
-        # Format_RGB32 is B, G, R, X in memory.
-        if abs(a[i] - b[i]) * 0.114 + abs(a[i + 1] - b[i + 1]) * 0.587 + abs(a[i + 2] - b[i + 2]) * 0.299 > PIXEL:
-            out.append(i // 4)
-    return out
+    # Format_RGB32 is B, G, R, X in memory.
+    return [i // 4 for i in range(0, len(a), 4) if abs(a[i] - b[i]) * 0.114 + abs(a[i + 1] - b[i + 1]) * 0.587 + abs(a[i + 2] - b[i + 2]) * 0.299 > PIXEL]
 
 
 def diff_image(after: Path, pixels: list[int], dest: Path) -> None:
