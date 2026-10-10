@@ -28,6 +28,23 @@ Item {
 
     readonly property bool hovered: pointer.item !== null && pointer.item.hovering
 
+    readonly property bool marked: playing || arriving
+    // Kept until the mark has faded: the session's end clears `playing` and `quitting` in no set order.
+    property bool quitSeen: false
+    readonly property bool quitting: playing && api.home.quitting
+    onQuittingChanged: if (quitting)
+        quitSeen = true
+    onMarkedChanged: if (marked && !quitting)
+        quitSeen = false
+    // Held as the mark fades.
+    property string markText
+
+    Binding on markText {
+        when: root.marked
+        value: root.arriving ? (root.progress >= 0 ? "INSTALLING · " + Math.round(root.progress * 100) + "%" : "INSTALLING") : root.quitSeen ? "QUITTING" : api.home.paused ? "PAUSED" : "PLAYING"
+        restoreMode: Binding.RestoreNone
+    }
+
     readonly property bool showsFrame: String(frameSource) !== ""
     readonly property url shownSource: showsFrame ? frameSource : artSource
     readonly property bool artMissing: String(shownSource) === "" || cover.status === Image.Error
@@ -143,10 +160,18 @@ Item {
         }
 
         Loader {
-            active: root.playing || root.arriving
+            objectName: "mark"
+            active: root.marked || opacity > 0
+            opacity: root.marked ? 1.0 : 0.0
             anchors.left: parent.left
             anchors.bottom: parent.bottom
             anchors.margins: Theme.dp(12)
+
+            Behavior on opacity {
+                Ease {
+                    duration: Theme.durBase
+                }
+            }
 
             sourceComponent: Rectangle {
                 width: mark.width + Theme.dp(26)
@@ -167,7 +192,7 @@ Item {
 
                     CapsLabel {
                         anchors.verticalCenter: parent.verticalCenter
-                        text: root.arriving ? (root.progress >= 0 ? "INSTALLING · " + Math.round(root.progress * 100) + "%" : "INSTALLING") : api.home.paused ? "PAUSED" : "PLAYING"
+                        text: root.markText
                         color: Theme.text
                         size: Theme.dp(13)
                     }

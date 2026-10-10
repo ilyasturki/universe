@@ -111,6 +111,11 @@ FocusScope {
         return String(assets.square) !== "" ? assets.square : assets.boxFront;
     }
 
+    function playingCover() {
+        var i = playingIndex();
+        return i < 0 ? "" : coverOf(railModel.get(i).assets);
+    }
+
     function playingIndex() {
         for (var i = 0; i < railCount; i++)
             if (railModel.get(i).id === playingId)
@@ -557,7 +562,7 @@ FocusScope {
 
                     game: model
                     artSource: page.coverOf(model.assets)
-                    frameSource: model.id === page.playingId ? api.home.frame : ""
+                    frameSource: model.id === page.playingId && !api.home.quitting ? api.home.frame : ""
                     playing: model.id === page.playingId
                     arriving: model.installing
                     progress: model.progress

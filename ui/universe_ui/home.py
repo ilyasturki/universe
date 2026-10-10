@@ -434,6 +434,7 @@ class Home(QObject):
             return
         self._stopping = True
         self.stopping.emit(str(session.get("title") or ""))
+        self.changed.emit()
         # No session to stop yet: it is stopped the moment the core hands one back.
         if session is self._pending:
             self._stop_on_launch = True
@@ -640,6 +641,8 @@ class Home(QObject):
     # `{id, title}` of the launch the core has not made a session of yet, else null.
     pending = Property(QVARIANT, lambda self: self._pending, notify=changed)
     paused = Property(bool, lambda self: self._paused, notify=changed)
+    # Quit was asked and the session has not ended yet.
+    quitting = Property(bool, lambda self: self._stopping, notify=changed)
     pauseOnHome = Property(bool, lambda self: self._pause_on_home, notify=changed)
     flipped = Property(bool, lambda self: self._flipped, notify=changed)
     frame = Property(str, lambda self: self._frame, notify=changed)

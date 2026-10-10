@@ -6,6 +6,8 @@ Item {
     id: flip
 
     property rect tile: Qt.rect(0, 0, 0, 0)
+    // What the tile shows once the frame has shrunk into it: the box ends on it, so letting go changes nothing.
+    property url art: ""
     property bool covering: false
     property bool pending: false
     property var then: null
@@ -17,12 +19,14 @@ Item {
     visible: covering || running
     enabled: false
 
-    function cover(rect) {
+    function cover(rect, art) {
         shrink.stop();
         grow.stop();
         settle.stop();
         tile = rect || fallback;
         shrink.fades = !rect;
+        flip.art = rect && art ? art : "";
+        landing.opacity = 0.0;
         place(Qt.rect(0, 0, width, height), 0, 1.0);
         covering = true;
         pending = true;
@@ -86,6 +90,19 @@ Item {
                     api.home.covered();
                 }
             }
+        }
+
+        // The tile's own request of its cover, at its size: one decode for both.
+        Image {
+            id: landing
+            objectName: "landing"
+            anchors.fill: parent
+            source: flip.art
+            fillMode: Image.PreserveAspectCrop
+            sourceSize: Qt.size(Math.ceil(flip.tile.width), Math.ceil(flip.tile.height))
+            asynchronous: true
+            mipmap: true
+            opacity: 0.0
         }
     }
 
@@ -151,6 +168,18 @@ Item {
                 duration: Theme.durScene
                 easing.type: Easing.InCubic
             }
+            SequentialAnimation {
+                PauseAnimation {
+                    duration: Theme.durScene * 0.6
+                }
+                NumberAnimation {
+                    target: landing
+                    property: "opacity"
+                    to: String(flip.art) !== "" ? 1.0 : 0.0
+                    duration: Theme.durScene * 0.4
+                    easing.type: Easing.InOutQuad
+                }
+            }
         }
         ScriptAction {
             script: flip.covering = false
@@ -200,6 +229,13 @@ Item {
                 target: box
                 property: "opacity"
                 to: 1.0
+                duration: Theme.durQuick
+                easing.type: Easing.OutCubic
+            }
+            NumberAnimation {
+                target: landing
+                property: "opacity"
+                to: 0.0
                 duration: Theme.durQuick
                 easing.type: Easing.OutCubic
             }

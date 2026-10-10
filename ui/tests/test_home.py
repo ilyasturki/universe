@@ -903,6 +903,48 @@ def test_home_from_the_game_zooms_the_frame_into_its_tile(api, fake, monkeypatch
     stop(api)
 
 
+@pytest.mark.parametrize("look", ["reprise"], indirect=True)
+def test_a_quit_lands_on_the_tiles_cover_and_the_games_exit_swaps_nothing(api, fake, monkeypatch, look, sampled):
+    from universe_ui import home as home_module
+
+    monkeypatch.setattr(home_module, "FRESH_S", 0.0)
+    monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
+    home, flip = api.home, look.find("homeFlip")
+    assert home.attachOverlay(Overlay()) is True
+    fake.launch("mirrors-edge", "")
+    until(lambda: home.shown == "game")
+    tile = tile_of(look, "mirrors-edge")
+    cover, rebuilt = read(tile, "artSource").toString(), record(tile.destroyed)
+    home.toLauncher()
+    until(lambda: home.frame != "" and any(layer.property("source").toString() == home.frame and layer.property("opacity") == 1.0 for layer in layers(tile)))
+    home.toGame()
+    until(lambda: fake.core.game_shown is True)
+    home.guide(True)
+    home.guide(False)
+    until(lambda: home.open and not home._capturing, "the dock is up over the game")
+    asked = []
+    real_stop = fake.core.stop
+    monkeypatch.setattr(fake.core, "stop", asked.append)
+    mark = tile.findChild(QObject, "mark")
+    art = tile.findChild(QObject, "cover")
+    samples = sampled(lambda: rebuilt or (home.quitting, whole(tile), art.property("source").toString(), mark.property("opacity"), tile.property("markText")))
+    home.stop()
+    until(lambda: asked and not flip.property("covering") and not flip.property("running"), "the frame shrank into the tile")
+    landing = flip.findChild(QObject, "landing")
+    assert landing.property("source").toString() == cover and landing.property("opacity") == 1.0, "the box ended on the tile's cover"
+    assert fake.core.frames == 2, "the quit took the press's stale frame"
+    real_stop(asked[0])
+    until(lambda: rebuilt or (not home.quitting and mark.property("opacity") == 0.0), "the game is gone and its mark with it")
+    samples.stop()
+    assert not rebuilt, "the end of the session rebuilt no tile"
+    seen = samples.seen
+    assert all(whole for _, whole, *_ in seen), "from Quit to the game's end the tile never showed its empty card"
+    assert {art for quitting, _, art, *_ in seen if quitting} == {cover} and seen[-1][2] == cover, "the tile asks for its cover from Quit on"
+    assert any(0.0 < opacity < 1.0 for quitting, *_, opacity, _ in seen if not quitting), "the mark fades out"
+    quit = next(i for i, (quitting, *_) in enumerate(seen) if quitting)
+    assert len({label for *_, label in seen[quit:]}) == 1, "the mark reads one state from Quit until it has faded"
+
+
 def test_an_output_picked_becomes_current_and_brings_its_level(api, fake):
     home = api.home
     changed = record(home.outputsChanged)

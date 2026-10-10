@@ -33,7 +33,7 @@ One context property, `api`:
 | `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written, a game's sessions and their logs, a game's data and the storage view, the changelog, Wi-Fi and Bluetooth) |
 | `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed` and `--size` turn it off) |
 | `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `overlay`, `osd`, `frame`, `ground`, `accent`, `detail`, `unlocked`, `screenshot`, `installed`, `unavailable`; the built-in ones, then the installed themes, see "Themes"), `current`, `frame`, `ground` and `accent` (the current look's colours), `set(id)` (false for one that is `unavailable`), `rescan()`, `failed()`, `escape()`, `takeNotice()`, `landing` / `takeLanding()`, `fontPath` (the current look's own font file, stored under `<id>Font`: `switch2Font`, `ps5Font`), `soundsPath` (a folder of WAVs, stored under `<id>Sounds`) and `soundFiles` (`{name: url}` of the WAVs in it, the name lowercased: each replaces the look's bundled sound of that name, `sound/SoundPool.qml`'s `overrides`; Switch 2 offers it in Settings › Appearance), `bootIntro` (the startup animation's switch, every look's: on until `ui-memory.json`'s `bootIntro` is false) |
-| `api.home` | the HOME button over a running game (see "HOME and the dock"): `shown` (`game` / `launcher`), `underGame` (the game is on screen over the launcher, inside gamescope), `open`, `loading` (a session this client launched has no window up yet), `paused`, `pauseOnHome`, `flipped`, `frame`, `volumePercent`, `muted`, `outputs` (`loadOutputs()` fills it); `pressed()`, `stopping(title)`; `openDock()`, `closeDock()`, `dockClosed()`, `toGame()`, `toLauncher(landing?)` / `takeLanding()`, `covered()`, `stop()`, `setPauseOnHome(on)`, `screenshot()` (→ `screenshotGrabbed()` at the grab, then `screenshotTaken(path)`, and `screenshotLost()` when it fails after the grab), `volume(change, value)`, `setOutput(id)`, `runtime()` / `setRuntime(key, value)` (the running game's HUD, frame limit and filter, for this session alone), `launchChoices(key)`, `setLaunchValueAll(key, value)` (every game's default, the game following it), `screenRefresh()`, `escapeHeld()` (HOME held 5 s) |
+| `api.home` | the HOME button over a running game (see "HOME and the dock"): `shown` (`game` / `launcher`), `underGame` (the game is on screen over the launcher, inside gamescope), `open`, `loading` (a session this client launched has no window up yet), `paused`, `pauseOnHome`, `quitting` (`stop()` was asked and the session has not ended yet), `flipped`, `frame`, `volumePercent`, `muted`, `outputs` (`loadOutputs()` fills it); `pressed()`, `stopping(title)`; `openDock()`, `closeDock()`, `dockClosed()`, `toGame()`, `toLauncher(landing?)` / `takeLanding()`, `covered()`, `stop()`, `setPauseOnHome(on)`, `screenshot()` (→ `screenshotGrabbed()` at the grab, then `screenshotTaken(path)`, and `screenshotLost()` when it fails after the grab), `volume(change, value)`, `setOutput(id)`, `runtime()` / `setRuntime(key, value)` (the running game's HUD, frame limit and filter, for this session alone), `launchChoices(key)`, `setLaunchValueAll(key, value)` (every game's default, the game following it), `screenRefresh()`, `escapeHeld()` (HOME held 5 s) |
 | `api.boot` | the startup animation (see "Startup animation"): `running`, `started()` (its first frame is on screen), `skipped()`, `landed(skipped)` (the ground opens: each look builds its home), `land()`, `finish()` |
 
 A `Game` exposes `id`, `title`, `sortTitle`, `favorite` (writable), `hidden`, `playTime`,
@@ -377,7 +377,7 @@ the full one in place, the cursor back on Resume, and freezes the game then if `
 From there the launcher is home again, with the game pinned first on the rail (`RecentGames.
 playingId`, played before or not; once its session ends it stays there, ranked by that end, with no
 new layout: a view takes a hint-less layout change as a reset of every delegate) under a PLAYING
-mark (PAUSED while frozen), its art the last
+mark (PAUSED while frozen, QUITTING from `stop()` on, fading out with the session), its art the last
 frame gamescope painted when HOME brought the launcher up (`api.home.frame`, `nest_frame`), its
 hero's first button reading "Resume", and the tab bar's badge "<title> · m:ss" on every tab; the badge is a
 chrome slot past the glass and the power button: A resumes, Start opens the game menu. A resumes on the pinned game
@@ -466,9 +466,11 @@ the Universe look's `ui/HomeFlip.qml` paints the frame full screen and calls it 
 host did it (a game that exits by itself leaves the launcher on screen too, with nothing to zoom). The Universe look then lands on Home with the
 cursor on the playing game (`HomePage.landOnPlaying`, every detail, sub page and search closed)
 and shrinks the frame into that tile, which shows the same frame as its art: both ask for it at
-`Theme.frameSize`, one decode. A tile's art is `ui/CrossfadeImage.qml` in its opaque mode: a new
-picture fades in over the old one, never over the empty card. Resuming grows the tile back to full
-screen (`HomePage.playingTileRect`) and only then `toGame()`.
+`Theme.frameSize`, one decode. A quit lands on the cover instead (`HomePage.playingCover`): the tile
+shows it from `quitting` on, and the box fades from the frame into it over the shrink's last 40 %, so
+the session ending seconds later changes no picture. A tile's art is `ui/CrossfadeImage.qml` in its
+opaque mode: a new picture fades in over the old one, never over the empty card. Resuming grows the
+tile back to full screen (`HomePage.playingTileRect`) and only then `toGame()`.
 
 The host owns what the QML cannot: the overlay window is created once (`create_overlay`,
 `Home.attachOverlay`) with `STEAM_OVERLAY=1`, mapped at opacity 0 and never unmapped — gamescope
