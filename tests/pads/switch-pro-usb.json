@@ -4,8 +4,8 @@
   "bus": "usb",
   "driver": "nintendo",
   "source": {
-    "evdev": "public: hid-nintendo in Linux 7.2",
-    "sdl": "public: SDL 3's HIDAPI Switch driver, written 2026-09-27",
+    "evdev": "public: Linux 7.2.8's view of the pad replayed from its hid or usb data, recorded in the VM check",
+    "sdl": "public: SDL 3.4.16's view of the replayed pad, recorded in the VM check",
     "hid": "public: the Pro Controller descriptor joycontrol serves (joycontrol/profile/sdp_record_hid.xml); flash calibration as dekuNukem's Nintendo_Switch_Reverse_Engineering documents it"
   },
   "print": {"south": "B", "east": "A", "west": "Y", "north": "X"},
@@ -14,14 +14,14 @@
     "vendor": "057e",
     "product": "2009",
     "version": "8000",
-    "keys": ["BTN_SOUTH", "BTN_EAST", "BTN_NORTH", "BTN_WEST", "BTN_TL", "BTN_TR", "BTN_TL2", "BTN_TR2", "BTN_SELECT", "BTN_START", "BTN_MODE", "BTN_THUMBL", "BTN_THUMBR", "BTN_Z"],
+    "keys": ["BTN_SOUTH", "BTN_EAST", "BTN_NORTH", "BTN_WEST", "BTN_Z", "BTN_TL", "BTN_TR", "BTN_TL2", "BTN_TR2", "BTN_SELECT", "BTN_START", "BTN_MODE", "BTN_THUMBL", "BTN_THUMBR"],
     "abs": {
-      "ABS_X": [-32767, 32767, 250, 500],
-      "ABS_Y": [-32767, 32767, 250, 500],
+      "ABS_HAT0X": [-1, 1, 0, 0],
+      "ABS_HAT0Y": [-1, 1, 0, 0],
       "ABS_RX": [-32767, 32767, 250, 500],
       "ABS_RY": [-32767, 32767, 250, 500],
-      "ABS_HAT0X": [-1, 1, 0, 0],
-      "ABS_HAT0Y": [-1, 1, 0, 0]
+      "ABS_X": [-32767, 32767, 250, 500],
+      "ABS_Y": [-32767, 32767, 250, 500]
     },
     "ff": true
   },
@@ -49,7 +49,7 @@
   "sdl": {
     "name": "Nintendo Switch Pro Controller",
     "joystick_name": "Nintendo Switch Pro Controller",
-    "guid": "03004d8f7e0500000920000000006800",
+    "guid": "0300bb977e0500000920000000006803",
     "gamepad_type": true,
     "axes": 6,
     "gyro": true,
@@ -78,7 +78,7 @@
       "a4": "a4",
       "a5": "a5"
     },
-    "mapping": "03004d8f7e0500000920000000006800,*,a:b0,b:b1,x:b2,y:b3,back:b4,guide:b5,start:b6,leftstick:b7,rightstick:b8,leftshoulder:b9,rightshoulder:b10,dpup:h0.1,dpdown:h0.4,dpleft:h0.8,dpright:h0.2,leftx:a0,lefty:a1,rightx:a2,righty:a3,lefttrigger:a4,righttrigger:a5,misc1:b11,crc:8f4d,platform:Linux,"
+    "mapping": "0300bb977e0500000920000000006803,*,a:b0,b:b1,back:b4,dpdown:h0.4,dpleft:h0.8,dpright:h0.2,dpup:h0.1,guide:b5,leftshoulder:b9,leftstick:b7,lefttrigger:a4,leftx:a0,lefty:a1,rightshoulder:b10,rightstick:b8,righttrigger:a5,rightx:a2,righty:a3,start:b6,x:b2,y:b3,misc1:b11,crc:97bb,platform:Linux,"
   },
   "hid": {
     "protocol": "nintendo",

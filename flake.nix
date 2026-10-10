@@ -559,6 +559,30 @@
         postInstall = "";
       });
 
+      # What the VM check runs: the pad replayer, the recorded pads, and the uhid plumbing it shares with the pads module
+      vmSrc = lib.cleanSourceWith {
+        src = ./.;
+        filter =
+          path: type:
+          let
+            rel = relOf path;
+          in
+          !(lib.elem (baseNameOf path) junk)
+          && (
+            lib.elem rel [
+              "tools"
+              "tools/pad-check"
+              "tests"
+              "modules"
+              "modules/pads"
+              "modules/pads/bin"
+              "modules/pads/bin/_uhid.py"
+            ]
+            || under "tools/padsim" rel
+            || under "tests/pads" rel
+          );
+      };
+
       lint = pkgs.stdenvNoCC.mkDerivation {
         name = "universe-lint";
         src = lintSrc;
@@ -676,6 +700,13 @@
           LD_PRELOAD=$preload HOME=$PWD ${ui}/bin/universe-ui --help > /dev/null
           touch $out
         '';
+      };
+
+      # Out of `checks`, so `nix flake check` needs no KVM: `just test vm` and the nightly workflow build it.
+      vmChecks.${system}.pads = import ./nix/vm-pads.nix {
+        inherit pkgs universe ui;
+        module = self.nixosModules.default;
+        src = vmSrc;
       };
 
       nixosModules.default = import ./nix/nixos.nix {

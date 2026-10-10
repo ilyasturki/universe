@@ -4,24 +4,26 @@
   "bus": "usb",
   "driver": "xpad",
   "source": {
-    "evdev": "public: xpad in Linux 7.2",
-    "usb": "public: the interface xpad in Linux 7.2 binds (vendor class, subclass and protocol) and the packets it parses"
+    "evdev": "public: Linux 7.2.8's view of the pad replayed from its hid or usb data, recorded in the VM check",
+    "usb": "public: the interface xpad in Linux 7.2 binds (vendor class, subclass and protocol) and the packets it parses",
+    "sdl": "public: SDL 3.4.16's view of the replayed pad, recorded in the VM check"
   },
   "print": {"south": "A", "east": "B", "west": "X", "north": "Y"},
   "evdev": {
     "name": "Microsoft Xbox Series S|X Controller",
     "vendor": "045e",
     "product": "0b12",
-    "keys": ["BTN_SOUTH", "BTN_EAST", "BTN_NORTH", "BTN_WEST", "BTN_TL", "BTN_TR", "BTN_SELECT", "BTN_START", "BTN_MODE", "BTN_THUMBL", "BTN_THUMBR", "KEY_RECORD"],
+    "version": "0509",
+    "keys": ["KEY_RECORD", "BTN_SOUTH", "BTN_EAST", "BTN_NORTH", "BTN_WEST", "BTN_TL", "BTN_TR", "BTN_SELECT", "BTN_START", "BTN_MODE", "BTN_THUMBL", "BTN_THUMBR"],
     "abs": {
-      "ABS_X": [-32768, 32767, 16, 128],
-      "ABS_Y": [-32768, 32767, 16, 128],
-      "ABS_RX": [-32768, 32767, 16, 128],
-      "ABS_RY": [-32768, 32767, 16, 128],
       "ABS_HAT0X": [-1, 1, 0, 0],
       "ABS_HAT0Y": [-1, 1, 0, 0],
-      "ABS_Z": [0, 1023, 0, 0],
-      "ABS_RZ": [0, 1023, 0, 0]
+      "ABS_RX": [-32768, 32767, 16, 128],
+      "ABS_RY": [-32768, 32767, 16, 128],
+      "ABS_RZ": [0, 1023, 0, 0],
+      "ABS_X": [-32768, 32767, 16, 128],
+      "ABS_Y": [-32768, 32767, 16, 128],
+      "ABS_Z": [0, 1023, 0, 0]
     },
     "ff": true
   },
@@ -46,5 +48,39 @@
     "share": "KEY_RECORD"
   },
   "axes": {"lx": "ABS_X", "ly": "ABS_Y", "rx": "ABS_RX", "ry": "ABS_RY", "lt": "ABS_Z", "rt": "ABS_RZ"},
+  "sdl": {
+    "name": "Xbox Series X Controller",
+    "joystick_name": "Xbox Series X Controller",
+    "guid": "0300f5a35e040000120b000009050000",
+    "gamepad_type": true,
+    "axes": 6,
+    "gyro": false,
+    "labels": [1, 2, 3, 4],
+    "bindings": {
+      "b0": "b0",
+      "b1": "b1",
+      "b2": "b2",
+      "b3": "b3",
+      "b4": "b6",
+      "b5": "b8",
+      "b6": "b7",
+      "b7": "b9",
+      "b8": "b10",
+      "b9": "b4",
+      "b10": "b5",
+      "b11": "h0.1",
+      "b12": "h0.4",
+      "b13": "h0.8",
+      "b14": "h0.2",
+      "b15": "b11",
+      "a0": "a0",
+      "a1": "a1",
+      "a2": "a3",
+      "a3": "a4",
+      "a4": "a2",
+      "a5": "a5"
+    },
+    "mapping": "0300f5a35e040000120b000009050000,Xbox Series X Controller,a:b0,b:b1,x:b2,y:b3,back:b6,guide:b8,start:b7,leftstick:b9,rightstick:b10,leftshoulder:b4,rightshoulder:b5,dpup:h0.1,dpdown:h0.4,dpleft:h0.8,dpright:h0.2,misc1:b11,leftx:a0,lefty:a1,rightx:a3,righty:a4,lefttrigger:a2,righttrigger:a5,platform:Linux,"
+  },
   "usb": {"protocol": "xbox-one", "class": [255, 71, 208], "version": "0509", "product": "Controller"}
 }

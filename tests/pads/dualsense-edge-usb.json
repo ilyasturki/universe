@@ -4,24 +4,26 @@
   "bus": "usb",
   "driver": "playstation",
   "source": {
-    "evdev": "public: hid-playstation in Linux 7.2",
-    "hid": "public: hid-tools' PS5ControllerUSB (hidtools/device/sony_gamepad.py); the Edge's product id on a DualSense's descriptor"
+    "evdev": "public: Linux 7.2.8's view of the pad replayed from its hid or usb data, recorded in the VM check",
+    "hid": "public: hid-tools' PS5ControllerUSB (hidtools/device/sony_gamepad.py); the Edge's product id on a DualSense's descriptor",
+    "sdl": "public: SDL 3.4.16's view of the replayed pad, recorded in the VM check"
   },
   "print": {"south": "Cross", "east": "Circle", "west": "Square", "north": "Triangle"},
   "evdev": {
     "name": "Sony Interactive Entertainment DualSense Edge Wireless Controller",
     "vendor": "054c",
     "product": "0df2",
+    "version": "8000",
     "keys": ["BTN_SOUTH", "BTN_EAST", "BTN_NORTH", "BTN_WEST", "BTN_TL", "BTN_TR", "BTN_TL2", "BTN_TR2", "BTN_SELECT", "BTN_START", "BTN_MODE", "BTN_THUMBL", "BTN_THUMBR", "BTN_TRIGGER_HAPPY1", "BTN_TRIGGER_HAPPY2", "BTN_TRIGGER_HAPPY3", "BTN_TRIGGER_HAPPY4"],
     "abs": {
-      "ABS_X": [0, 255, 0, 0],
-      "ABS_Y": [0, 255, 0, 0],
-      "ABS_Z": [0, 255, 0, 0],
+      "ABS_HAT0X": [-1, 1, 0, 0],
+      "ABS_HAT0Y": [-1, 1, 0, 0],
       "ABS_RX": [0, 255, 0, 0],
       "ABS_RY": [0, 255, 0, 0],
       "ABS_RZ": [0, 255, 0, 0],
-      "ABS_HAT0X": [-1, 1, 0, 0],
-      "ABS_HAT0Y": [-1, 1, 0, 0]
+      "ABS_X": [0, 255, 0, 0],
+      "ABS_Y": [0, 255, 0, 0],
+      "ABS_Z": [0, 255, 0, 0]
     },
     "ff": true
   },
@@ -49,6 +51,45 @@
     "paddle_right": "BTN_TRIGGER_HAPPY4"
   },
   "axes": {"lx": "ABS_X", "ly": "ABS_Y", "rx": "ABS_RX", "ry": "ABS_RY", "lt": "ABS_Z", "rt": "ABS_RZ"},
+  "sdl": {
+    "name": "DualSense Edge Wireless Controller",
+    "joystick_name": "DualSense Edge Wireless Controller",
+    "guid": "0300e0274c050000f20d000000006800",
+    "gamepad_type": true,
+    "axes": 6,
+    "gyro": true,
+    "labels": [5, 6, 7, 8],
+    "bindings": {
+      "b0": "b0",
+      "b1": "b1",
+      "b2": "b2",
+      "b3": "b3",
+      "b4": "b4",
+      "b5": "b5",
+      "b6": "b6",
+      "b7": "b7",
+      "b8": "b8",
+      "b9": "b9",
+      "b10": "b10",
+      "b11": "h0.1",
+      "b12": "h0.4",
+      "b13": "h0.8",
+      "b14": "h0.2",
+      "b15": "b12",
+      "b16": "b16",
+      "b17": "b15",
+      "b18": "b14",
+      "b19": "b13",
+      "b20": "b11",
+      "a0": "a0",
+      "a1": "a1",
+      "a2": "a2",
+      "a3": "a3",
+      "a4": "a4",
+      "a5": "a5"
+    },
+    "mapping": "0300e0274c050000f20d000000006800,*,a:b0,b:b1,back:b4,dpdown:h0.4,dpleft:h0.8,dpright:h0.2,dpup:h0.1,guide:b5,leftshoulder:b9,leftstick:b7,lefttrigger:a4,leftx:a0,lefty:a1,rightshoulder:b10,rightstick:b8,righttrigger:a5,rightx:a2,righty:a3,start:b6,x:b2,y:b3,touchpad:b11,misc1:b12,paddle1:b16,paddle2:b15,paddle3:b14,paddle4:b13,crc:27e0,platform:Linux,"
+  },
   "hid": {
     "protocol": "dualsense",
     "descriptor": "05010905a1018501093009310932093509330934150026ff007508950681020600ff09209501810205010939150025073500463b016514750495018142650005091901290f150025017501950f81020600ff0921950d81020600ff0922150026ff0075089534810285020923952f9102850509239528b10285080924952fb102850909249513b102850a0925951ab10285200926953fb102852109279504b10285220940953fb10285800928953fb10285810929953fb1028582092a9509b1028583092b953fb1028584092c953fb1028585092d9502b10285a0092e9501b10285e0092f953fb10285f00930953fb10285f10931953fb10285f20932950fb102c0",

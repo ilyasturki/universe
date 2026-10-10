@@ -50,7 +50,8 @@ class Protocol:
 
     def __init__(self, pad, uniq):
         self.pad = pad
-        self.uniq = uniq
+        # A pad on a cable has no uniq; its address still answers the pairing and device-info requests.
+        self.address = uniq or "02:00:00:00:00:02"
         self.bluetooth = pad.bus == "bluetooth"
         self.seq = 0
 
@@ -90,7 +91,7 @@ class Sony(Protocol):
             return None
         report = bytearray.fromhex(data)
         if number in self.pairing:
-            report[1:7] = mac_bytes(self.uniq)
+            report[1:7] = mac_bytes(self.address)
         if self.bluetooth and number in self.signed:
             crc_sign(report, 0xA3, len(report) - 4)
         return bytes(report)
@@ -216,7 +217,7 @@ class Nintendo(Protocol):
         if data[0] == 0x80 and len(data) > 1:
             command = data[1]
             if command == 0x01:
-                return [bytes([0x81, 0x01, 0x00, 0x03, *mac_bytes(self.uniq)]).ljust(64, b"\0")]
+                return [bytes([0x81, 0x01, 0x00, 0x03, *mac_bytes(self.address)]).ljust(64, b"\0")]
             if command in (0x02, 0x03):
                 return [bytes([0x81, command]).ljust(64, b"\0")]
             return []
@@ -224,7 +225,7 @@ class Nintendo(Protocol):
             return []
         subcommand, args = data[10], data[11:]
         if subcommand == 0x02:
-            address = bytes(int(b, 16) for b in self.uniq.split(":"))
+            address = bytes(int(b, 16) for b in self.address.split(":"))
             return [self.reply(0x82, 0x02, bytes([0x03, 0x48, 0x03, 0x02, *address, 0x01, 0x01]))]
         if subcommand == 0x10:
             start, size = struct.unpack_from("<IB", args)

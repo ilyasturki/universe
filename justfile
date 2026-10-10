@@ -123,7 +123,7 @@ desktop-shot dir *steps: build env
 logs:
     journalctl --user -f -u 'universe-*'
 
-# Every suite, or the ones named: rust, python, or one of python's ui, modules, sources, bindings; desktop runs the GTK app in a headless weston
+# Every suite, or the ones named: rust, python, or one of python's ui, modules, sources, bindings; desktop runs the GTK app in a headless weston; vm (never by default, KVM) boots a NixOS VM whose kernel drivers read every recorded pad of tests/pads
 test *suites: build develop env
     #!/usr/bin/env -S nix develop --quiet --command bash
     set -euo pipefail
@@ -139,7 +139,8 @@ test *suites: build develop env
             bindings) tools/reap "{{ python }}" -m pytest -q crates/universe-py/tests ;;
             ui|modules|extension|sources) tools/reap "{{ python }}" -m pytest -q -n "$workers" -m "not speed" "$suite" ;;
             desktop) tools/desktop-test ;;
-            *) echo "test: unknown suite '$suite' (rust, python, ui, modules, extension, sources, bindings, desktop)" >&2; exit 2 ;;
+            vm) nix build .#vmChecks.x86_64-linux.pads --no-link -L ;;
+            *) echo "test: unknown suite '$suite' (rust, python, ui, modules, extension, sources, bindings, desktop, vm)" >&2; exit 2 ;;
         esac
     done
 

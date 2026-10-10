@@ -4,24 +4,26 @@
   "bus": "bluetooth",
   "driver": "microsoft",
   "source": {
-    "evdev": "public: hid-input's mapping of the descriptor in xpadneo's docs/descriptors/xbxs.md, Linux 7.2",
-    "hid": "public: an Xbox Series X|S pad's Bluetooth descriptor, xpadneo's docs/descriptors/xbxs.md"
+    "evdev": "public: Linux 7.2.8's view of the pad replayed from its hid or usb data, recorded in the VM check",
+    "hid": "public: an Xbox Series X|S pad's Bluetooth descriptor, xpadneo's docs/descriptors/xbxs.md",
+    "sdl": "public: SDL 3.4.16's view of the replayed pad through evdev (no udev rule opens its hidraw node), recorded in the VM check"
   },
   "print": {"south": "A", "east": "B", "west": "X", "north": "Y"},
   "evdev": {
     "name": "Xbox Wireless Controller",
     "vendor": "045e",
     "product": "0b13",
-    "keys": ["BTN_SOUTH", "BTN_EAST", "BTN_C", "BTN_NORTH", "BTN_WEST", "BTN_Z", "BTN_TL", "BTN_TR", "BTN_TL2", "BTN_TR2", "BTN_SELECT", "BTN_START", "BTN_MODE", "BTN_THUMBL", "BTN_THUMBR", "KEY_RECORD"],
+    "version": "0000",
+    "keys": ["KEY_RECORD", "BTN_SOUTH", "BTN_EAST", "BTN_C", "BTN_NORTH", "BTN_WEST", "BTN_Z", "BTN_TL", "BTN_TR", "BTN_TL2", "BTN_TR2", "BTN_SELECT", "BTN_START", "BTN_MODE", "BTN_THUMBL", "BTN_THUMBR"],
     "abs": {
+      "ABS_BRAKE": [0, 1023, 3, 63],
+      "ABS_GAS": [0, 1023, 3, 63],
+      "ABS_HAT0X": [-1, 1, 0, 0],
+      "ABS_HAT0Y": [-1, 1, 0, 0],
+      "ABS_RZ": [0, 65535, 255, 4095],
       "ABS_X": [0, 65535, 255, 4095],
       "ABS_Y": [0, 65535, 255, 4095],
-      "ABS_Z": [0, 65535, 255, 4095],
-      "ABS_RZ": [0, 65535, 255, 4095],
-      "ABS_GAS": [0, 1023, 3, 63],
-      "ABS_BRAKE": [0, 1023, 3, 63],
-      "ABS_HAT0X": [-1, 1, 0, 0],
-      "ABS_HAT0Y": [-1, 1, 0, 0]
+      "ABS_Z": [0, 65535, 255, 4095]
     },
     "ff": true
   },
@@ -46,6 +48,40 @@
     "share": "KEY_RECORD"
   },
   "axes": {"lx": "ABS_X", "ly": "ABS_Y", "rx": "ABS_Z", "ry": "ABS_RZ", "lt": "ABS_BRAKE", "rt": "ABS_GAS"},
+  "sdl": {
+    "name": "Xbox Series X Controller",
+    "joystick_name": "Xbox Series X Controller",
+    "guid": "050018dc5e040000130b000000000000",
+    "gamepad_type": true,
+    "axes": 6,
+    "gyro": false,
+    "labels": [1, 2, 3, 4],
+    "bindings": {
+      "b0": "b0",
+      "b1": "b1",
+      "b2": "b3",
+      "b3": "b4",
+      "b4": "b10",
+      "b5": "b12",
+      "b6": "b11",
+      "b7": "b13",
+      "b8": "b14",
+      "b9": "b6",
+      "b10": "b7",
+      "b11": "h0.1",
+      "b12": "h0.4",
+      "b13": "h0.8",
+      "b14": "h0.2",
+      "b15": "b15",
+      "a0": "a0",
+      "a1": "a1",
+      "a2": "a2",
+      "a3": "a3",
+      "a4": "a5",
+      "a5": "a4"
+    },
+    "mapping": "050018dc5e040000130b000000000000,Xbox Series X Controller,a:b0,b:b1,x:b3,y:b4,back:b10,guide:b12,start:b11,leftstick:b13,rightstick:b14,leftshoulder:b6,rightshoulder:b7,dpup:h0.1,dpdown:h0.4,dpleft:h0.8,dpright:h0.2,misc1:b15,leftx:a0,lefty:a1,rightx:a2,righty:a3,lefttrigger:a5,righttrigger:a4,platform:Linux,"
+  },
   "hid": {
     "protocol": "generic",
     "descriptor": "05010905a10185010901a10009300931150027ffff0000950275108102c00901a10009320935150027ffff0000950275108102c0050209c5150026ff039501750a810215002500750695018103050209c4150026ff039501750a81021500250075069501810305010939150125083500463b016614007504950181427504950115002500350045006500810305091901290f150025017501950f810215002500750195018103050c0ab2001500250195017501810215002500750795018103050f09218503a102099715002501750495019102150025007504950191030970150025647508950491020950660110550e150026ff0075089501910209a7150026ff0075089501910265005500097c150026ff00750895019102c0c0"

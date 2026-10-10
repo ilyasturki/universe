@@ -21,6 +21,8 @@ from . import corpus, devices
 
 REPO = Path(__file__).resolve().parents[2]
 CONFIRM = {"A", "Cross"}
+# Sony and Nintendo pads, whose gyro, touchpad and rumble emulators get through SDL's HIDAPI drivers on hidraw.
+SDL_HIDAPI_VENDORS = (0x054C, 0x057E)
 
 
 class Failed(Exception):
@@ -69,11 +71,18 @@ def events(match):
 
 
 class Profile:
-    """A profile, runtime directory and lock of its own: the desktop's launcher and its watcher are left alone."""
+    """A profile, runtime directory and lock of its own: the desktop's launcher and its watcher are left alone. `user` runs Universe
+    as that user (the session's, whose devices udev opens to it) while the devices are made as root."""
 
-    def __init__(self, universe, modules):
+    def __init__(self, universe, modules, user=None):
         self.dir = Path(tempfile.mkdtemp(prefix="pad-check-"))
         self.universe = universe
+        self.ids = {}
+        if user:
+            import pwd
+
+            entry = pwd.getpwnam(user)
+            self.ids = {"user": entry.pw_uid, "group": entry.pw_gid, "extra_groups": os.getgrouplist(user, entry.pw_gid)}
         runtime = self.dir / "run"
         runtime.mkdir(mode=0o700)
         self.env = {
@@ -85,15 +94,23 @@ class Profile:
             "PIPEWIRE_REMOTE": "/nonexistent",
             "RUST_LOG": "warn",
         }
+        if user:
+            self.env.update(HOME=str(self.dir), USER=user, LOGNAME=user)
         for kind in ("DATA", "CONFIG", "STATE", "CACHE"):
             path = self.dir / kind.lower()
             path.mkdir()
             self.env[f"UNIVERSE_{kind}_HOME"] = str(path)
         (self.dir / "config/config.toml").write_text('schema = 1\n[modules]\nenabled = ["controls"]\n[sources]\nenabled = []\n')
+        if self.ids:
+            for path in [self.dir, *self.dir.rglob("*")]:
+                os.chown(path, self.ids["user"], self.ids["group"])
         self.run("controller", "bind", "*", "start", "hold", "mangohud")
 
+    def call(self, argv):
+        return subprocess.run(argv, env=self.env, capture_output=True, text=True, timeout=60, check=False, **self.ids)
+
     def run(self, *args, check=True):
-        out = subprocess.run([self.universe, *args], env=self.env, capture_output=True, text=True, timeout=60, check=False)
+        out = self.call([self.universe, *args])
         if check and out.returncode != 0:
             raise Failed(f"universe {' '.join(args)}: {out.stderr.strip()[-300:]}")
         return out.stdout
@@ -102,7 +119,7 @@ class Profile:
         return json.loads(self.run("--json", *args))
 
     def spawn(self, argv, **env):
-        return subprocess.Popen(argv, env={**self.env, **env}, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        return subprocess.Popen(argv, env={**self.env, **env}, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, **self.ids)
 
     def close(self):
         shutil.rmtree(self.dir, ignore_errors=True)
@@ -192,10 +209,15 @@ class Check:
         bound = os.path.basename(os.path.realpath(link)) if link.exists() else ""
         if self.pad.driver and bound != self.pad.driver:
             raise Failed(f"bound by {bound or 'nothing'}, not {self.pad.driver}")
+        if self.pad.hid and self.pad.vendor in SDL_HIDAPI_VENDORS:
+            nodes = [f"/dev/{n.name}" for n in (Path(sysfs_device(self.listing["id"])) / "hidraw").glob("hidraw*")]
+            shut = [n for n in nodes if self.profile.call(["test", "-r", n, "-a", "-w", n]).returncode != 0]
+            if not nodes or shut:
+                raise Failed(f"the session cannot open {shut or 'a hidraw node'}: SDL's HIDAPI driver will not read the pad")
 
     def sdl(self):
         hook = Path(self.profile.env["UNIVERSE_MODULES_PATH"]) / "controls" / "bin" / "pads"
-        out = subprocess.run([str(hook)], env=self.profile.env, capture_output=True, text=True, timeout=30, check=False)
+        out = self.profile.call([str(hook)])
         lines = [json.loads(line) for line in out.stdout.splitlines() if line.startswith("{")]
         mine = [line for line in lines if line["device"] == sysfs_device(self.listing["id"])] or [
             line for line in lines if (line["vendor"], line["product"]) == (self.pad.vendor, self.pad.product)
@@ -204,8 +226,9 @@ class Check:
             raise Failed(f"SDL3 lists no such pad: {out.stderr.strip()[-200:]}")
         view = mine[0]["sdl"]
         self.recorded["sdl"] = view
-        if self.pad.sdl and not (self.pad.hid or {}).get("synthesized") and view != self.pad.sdl:
-            differ = sorted(k for k in view.keys() | self.pad.sdl.keys() if view.get(k) != self.pad.sdl.get(k))
+        if self.pad.sdl and not (self.pad.hid or {}).get("synthesized") and comparable(view) != comparable(self.pad.sdl):
+            seen, kept = comparable(view), comparable(self.pad.sdl)
+            differ = sorted(k for k in seen.keys() | kept.keys() if seen.get(k) != kept.get(k))
             raise Failed(f"SDL3's view differs from tests/pads in {differ}: {json.dumps({k: view.get(k) for k in differ})}")
 
     def dump(self):
@@ -289,10 +312,12 @@ class Check:
             node = virtual_hidraw()
             fd = os.open(node, os.O_RDWR)
             try:
-                self.device.press("south")
-                if not seen(fd, lambda r: r[0] == 0x01 and r[8] & 0x20, 3):
-                    raise Failed("Universe Pad 1 never reported the press")
-                self.device.press("south", False)
+                self.device.press("start")
+                if not seen(fd, lambda r: r[0] == 0x01 and r[9] & 0x20, 3):
+                    raise Failed("Universe Pad 1 never reported Start")
+                self.device.press("start", False)
+                if not self.pad.evdev.get("ff"):
+                    return
                 before = len(self.device.outputs)
                 os.write(fd, bytes([0x02, 0x01, 0x00, 0x80, 0x80]).ljust(48, b"\0"))
                 deadline = time.monotonic() + 3
@@ -338,6 +363,16 @@ def desktop_watcher():
     return False
 
 
+def comparable(view):
+    """SDL's view without the CRC of the pad's name that SDL versions put in a GUID's bytes 2-3 (and the mapping's crc field), the
+    mapping's fields in any order."""
+    out = dict(view)
+    out["guid"] = view["guid"][:4] + "0000" + view["guid"][8:]
+    guid, name, *fields = [f for f in view.get("mapping", "").split(",") if f]
+    out["mapping"] = [guid[:4] + "0000" + guid[8:], name, *sorted(f for f in fields if not f.startswith("crc:"))]
+    return out
+
+
 def virtual_hidraw():
     for entry in Path("/sys/class/hidraw").iterdir():
         with contextlib.suppress(OSError):
@@ -365,6 +400,7 @@ def main(argv=None):
     parser.add_argument("--ui", default=os.environ.get("UNIVERSE_UI_BIN") or shutil.which("universe-ui") or "", help="universe-ui; empty skips the launcher")
     parser.add_argument("--modules", default=os.environ.get("UNIVERSE_MODULES_PATH") or str(REPO / "modules"))
     parser.add_argument("--record", action="store_true", help="print what the kernel and SDL3 show of each pad, as tests/pads keeps it")
+    parser.add_argument("--as", dest="user", help="run Universe as this user, the devices being made as root (the VM check)")
     args = parser.parse_args(argv)
     if args.via == "uinput" and desktop_watcher():
         print("a launcher or a game's watcher reads the pads on this desktop: a press here would reach it; close it first", file=sys.stderr)
@@ -381,7 +417,7 @@ def main(argv=None):
             print(f"{name}: skipped, no driver to read it", flush=True)
             skipped += 1
             continue
-        profile = Profile(args.universe, args.modules)
+        profile = Profile(args.universe, args.modules, args.user)
         try:
             check = Check(pad, args.via, profile, args.ui, args.record)
             spent = check.run()

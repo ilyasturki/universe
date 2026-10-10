@@ -5,7 +5,7 @@
   "bus": "usb",
   "driver": "xpad",
   "source": {
-    "evdev": "public: xpad in Linux 7.2, as an Xbox 360 pad",
+    "evdev": "public: Linux 7.2.8's view of the pad replayed from its hid or usb data, recorded in the VM check",
     "sdl": "captured on 2026-10-05",
     "usb": "public: the interface xpad in Linux 7.2 binds (vendor class, subclass and protocol) and the packets it parses"
   },
@@ -17,14 +17,14 @@
     "version": "0114",
     "keys": ["BTN_SOUTH", "BTN_EAST", "BTN_NORTH", "BTN_WEST", "BTN_TL", "BTN_TR", "BTN_SELECT", "BTN_START", "BTN_MODE", "BTN_THUMBL", "BTN_THUMBR"],
     "abs": {
-      "ABS_X": [-32768, 32767, 16, 128],
-      "ABS_Y": [-32768, 32767, 16, 128],
-      "ABS_RX": [-32768, 32767, 16, 128],
-      "ABS_RY": [-32768, 32767, 16, 128],
       "ABS_HAT0X": [-1, 1, 0, 0],
       "ABS_HAT0Y": [-1, 1, 0, 0],
-      "ABS_Z": [0, 255, 0, 0],
-      "ABS_RZ": [0, 255, 0, 0]
+      "ABS_RX": [-32768, 32767, 16, 128],
+      "ABS_RY": [-32768, 32767, 16, 128],
+      "ABS_RZ": [0, 255, 0, 0],
+      "ABS_X": [-32768, 32767, 16, 128],
+      "ABS_Y": [-32768, 32767, 16, 128],
+      "ABS_Z": [0, 255, 0, 0]
     },
     "ff": true
   },

@@ -4,24 +4,26 @@
   "bus": "usb",
   "driver": "playstation",
   "source": {
-    "evdev": "public: hid-playstation in Linux 7.2",
-    "hid": "public: hid-tools' PS4ControllerUSB (hidtools/device/sony_gamepad.py); a 05c4's descriptor on the 09cc"
+    "evdev": "public: Linux 7.2.8's view of the pad replayed from its hid or usb data, recorded in the VM check",
+    "hid": "public: hid-tools' PS4ControllerUSB (hidtools/device/sony_gamepad.py); a 05c4's descriptor on the 09cc",
+    "sdl": "public: SDL 3.4.16's view of the replayed pad, recorded in the VM check"
   },
   "print": {"south": "Cross", "east": "Circle", "west": "Square", "north": "Triangle"},
   "evdev": {
     "name": "Sony Interactive Entertainment Wireless Controller",
     "vendor": "054c",
     "product": "09cc",
+    "version": "8000",
     "keys": ["BTN_SOUTH", "BTN_EAST", "BTN_NORTH", "BTN_WEST", "BTN_TL", "BTN_TR", "BTN_TL2", "BTN_TR2", "BTN_SELECT", "BTN_START", "BTN_MODE", "BTN_THUMBL", "BTN_THUMBR"],
     "abs": {
-      "ABS_X": [0, 255, 0, 0],
-      "ABS_Y": [0, 255, 0, 0],
-      "ABS_Z": [0, 255, 0, 0],
+      "ABS_HAT0X": [-1, 1, 0, 0],
+      "ABS_HAT0Y": [-1, 1, 0, 0],
       "ABS_RX": [0, 255, 0, 0],
       "ABS_RY": [0, 255, 0, 0],
       "ABS_RZ": [0, 255, 0, 0],
-      "ABS_HAT0X": [-1, 1, 0, 0],
-      "ABS_HAT0Y": [-1, 1, 0, 0]
+      "ABS_X": [0, 255, 0, 0],
+      "ABS_Y": [0, 255, 0, 0],
+      "ABS_Z": [0, 255, 0, 0]
     },
     "ff": true
   },
@@ -45,6 +47,40 @@
     "dpad_right": "ABS_HAT0X+"
   },
   "axes": {"lx": "ABS_X", "ly": "ABS_Y", "rx": "ABS_RX", "ry": "ABS_RY", "lt": "ABS_Z", "rt": "ABS_RZ"},
+  "sdl": {
+    "name": "PS4 Controller",
+    "joystick_name": "PS4 Controller",
+    "guid": "03008fe54c050000cc09000000006800",
+    "gamepad_type": true,
+    "axes": 6,
+    "gyro": true,
+    "labels": [5, 6, 7, 8],
+    "bindings": {
+      "b0": "b0",
+      "b1": "b1",
+      "b2": "b2",
+      "b3": "b3",
+      "b4": "b4",
+      "b5": "b5",
+      "b6": "b6",
+      "b7": "b7",
+      "b8": "b8",
+      "b9": "b9",
+      "b10": "b10",
+      "b11": "h0.1",
+      "b12": "h0.4",
+      "b13": "h0.8",
+      "b14": "h0.2",
+      "b20": "b11",
+      "a0": "a0",
+      "a1": "a1",
+      "a2": "a2",
+      "a3": "a3",
+      "a4": "a4",
+      "a5": "a5"
+    },
+    "mapping": "03008fe54c050000cc09000000006800,*,a:b0,b:b1,back:b4,dpdown:h0.4,dpleft:h0.8,dpright:h0.2,dpup:h0.1,guide:b5,leftshoulder:b9,leftstick:b7,lefttrigger:a4,leftx:a0,lefty:a1,rightshoulder:b10,rightstick:b8,righttrigger:a5,rightx:a2,righty:a3,start:b6,x:b2,y:b3,touchpad:b11,crc:e58f,platform:Linux,"
+  },
   "hid": {
     "protocol": "dualshock4",
     "descriptor": "05010905a10185010930093109320935150026ff007508950481020939150025073500463b016514750495018142650005091901290e150025017501950e81020600ff0920750695011500257f8102050109330934150026ff007508950281020600ff09219536810285050922951f9102850409239524b102850209249524b102850809259503b102851009269504b102851109279502b10285120602ff0921950fb102851309229516b10285140605ff09209510b10285150921952cb1020680ff858009209506b102858109219506b102858209229505b102858309239501b102858409249504b102858509259506b102858609269506b102858709279523b10285880928953fb102858909299502b102859009309505b102859109319503b102859209329503b10285930933950cb10285940934953fb10285a009409506b10285a109419501b10285a209429501b10285a309439530b10285a40944950db10285f00947953fb10285f10948953fb10285f20949950fb10285a7094a9501b10285a8094b9501b10285a9094c9508b10285aa094e9501b10285ab094f9539b10285ac09509539b10285ad0951950bb10285ae09529501b10285af09539502b10285b00954953fb10285e009579502b10285b30955953fb10285b40955953fb10285b50956953fb10285d00958953fb10285d40959953fb102c0",
