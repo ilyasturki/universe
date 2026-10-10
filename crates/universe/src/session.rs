@@ -664,6 +664,10 @@ pub(crate) mod tests {
             .unwrap();
         let emu = dir.join("dolphin-emu");
         std::fs::write(&emu, b"#!/bin/sh\n").unwrap();
+        let umu = crate::tools::dir().join("umu-run");
+        std::fs::create_dir_all(crate::tools::dir()).unwrap();
+        std::fs::write(&umu, b"#!/bin/sh\n").unwrap();
+        std::fs::set_permissions(&umu, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
         let rom = dir.join("F-Zero GX.iso");
         std::fs::write(&rom, b"").unwrap();
         let post_ran = dir.join("post-ran");
