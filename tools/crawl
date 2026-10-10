@@ -13,5 +13,10 @@ mkdir -p "$out"
 faketime="$(dirname "$(command -v faketime)")/../lib/libfaketimeMT.so.1"
 cd "$tree"
 # Shots show a clock and dates: the wall clock stands still, the monotonic one that drives timers and animations runs.
-LD_PRELOAD="$faketime" FAKETIME="2026-10-01 12:00:00" FAKETIME_DONT_FAKE_MONOTONIC=1 UNIVERSE_CRAWL_OUT="$out" \
-    "$here/tools/reap" "$here/.venv/bin/python" -m pytest -q -n 3 -p no:cacheprovider -o faulthandler_timeout=3600 ui/tests/crawl.py
+# Preloaded into the dev shell's programs only: the system's /usr/bin/env, reap's shebang, has another glibc.
+status=0
+UNIVERSE_CRAWL_OUT="$out" "$here/tools/reap" env LD_PRELOAD="$faketime" FAKETIME="2026-10-01 12:00:00" FAKETIME_DONT_FAKE_MONOTONIC=1 \
+    "$here/.venv/bin/python" -m pytest -q -n 3 -p no:cacheprovider -o faulthandler_timeout=3600 ui/tests/crawl.py || status=$?
+# A finished walk, passed or not: `just crawl-report` takes it rather than walking that commit again.
+touch "$out/done"
+exit "$status"
