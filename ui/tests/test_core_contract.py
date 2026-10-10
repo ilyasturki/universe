@@ -45,6 +45,9 @@ SEED = {
         }.items()
     },
     "data/games/dead-cells/game.toml": 'schema = 1\nid = "dead-cells"\ntitle = "Dead Cells"\n[source]\nkind = "gog"\n',
+    # An emulator game: the emulator-only modules' settings reach its effective.modules alone.
+    "data/games/super-mario-strikers/game.toml": 'schema = 1\nid = "super-mario-strikers"\ntitle = "Super Mario Strikers"\nplatform = "Nintendo GameCube"\n'
+    '[launch]\nrunner = "dolphin"\nexe = "/roms/strikers.rvz"\n',
     "data/games/dead-cells/achievements.json": json.dumps(
         {"source": "gog", "fetched_at": "2026-09-18T19:02:00+02:00", "items": [{"key": "prisoner", "name": "Prisoner", "unlocked_at": "", "rarity": 91.0}]}
     ),

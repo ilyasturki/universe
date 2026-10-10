@@ -795,7 +795,11 @@ class FakeCore:
         effective["working_dir"] = launch.get("working_dir") or (os.path.dirname(exe) if exe else "")
         prefixes = str(self._config.get("paths", {}).get("prefixes_root") or "~/.local/share/universe/prefixes")
         effective["prefix"] = (launch.get("prefix") or os.path.join(prefixes, game["id"])) if spec.get("kind") in ("proton", "wine") else ""
-        effective["modules"] = {m["id"]: self.module_settings(m["id"], game["id"]) for m in self._data.get("modules", []) if m.get("enabled")}
+        effective["modules"] = {
+            m["id"]: self.module_settings(m["id"], game["id"])
+            for m in self._data.get("modules", [])
+            if m.get("enabled") and (not (m.get("applies") or {}).get("runner_kinds") or effective["runner_kind"] in m["applies"]["runner_kinds"])
+        }
         effective["proton_path"] = ""
         appid = int((out.get("metadata") or {}).get("steam_appid") or 0)
         effective["umu_id"] = launch.get("umu_id") or (f"umu-{appid}" if appid and spec.get("kind") == "proton" else "umu-default")
