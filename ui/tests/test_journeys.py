@@ -18,6 +18,8 @@ from PySide6.QtTest import QTest
 from uitest import record, until
 
 universe_core = pytest.importorskip("universe_core")
+# Each starts the real core's processes (a store source, a private bus, its systemd): load stretches any of them past the budget.
+pytestmark = pytest.mark.slow
 
 PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
 ROOT = Path(__file__).resolve().parents[2]
@@ -247,7 +249,6 @@ def quit_game(look, client):
 
 
 @needs_tree
-@pytest.mark.slow
 def test_a_game_launched_from_home_and_quit_from_its_menu_leaves_a_session_row(journey):
     game = journey.sample()
     look = journey.start()
@@ -273,7 +274,6 @@ def test_a_game_launched_from_home_and_quit_from_its_menu_leaves_a_session_row(j
 
 
 @needs_tree
-@pytest.mark.slow
 def test_arguments_set_on_the_games_page_reach_it_on_every_launch_after_a_restart(journey):
     game = journey.sample()
     look = journey.start()
@@ -326,7 +326,6 @@ def store_row(journey, store_id):
     return next((r for r in journey.api.screens.sources.rows if r["id"] == store_id), {})
 
 
-@pytest.mark.slow
 def test_a_store_game_installed_from_settings_joins_the_library_installed(journey):
     store(journey)
     look = journey.start()
