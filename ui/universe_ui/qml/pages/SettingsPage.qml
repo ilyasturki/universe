@@ -143,7 +143,8 @@ FocusScope {
             glyph: "A",
             label: acceptLabel !== "" ? acceptLabel : "Select",
             dim: acceptLabel === ""
-        },
+        }
+    ].concat(quickHints, [
         {
             glyph: "Start",
             label: "More",
@@ -153,7 +154,36 @@ FocusScope {
             glyph: "B",
             label: "Back"
         }
-    ]
+    ])
+
+    // Kept in step with the cards' Keys.onPressed, which tries Y's actions in this order.
+    readonly property var quickHints: {
+        var out = [];
+        if (canRemove || canRefresh)
+            out.push({
+                glyph: "X",
+                label: canRemove ? "Remove" : "Refresh"
+            });
+        var row = cards.currentRow;
+        if (listForm !== null) {
+            if (row && row.key === "module")
+                out.push({
+                    glyph: "Y",
+                    label: row.value === true ? "Disable" : "Enable",
+                    dim: row.warning !== "" && row.value !== true
+                });
+        } else if (sectionId === "launch" && launch.hasAdvanced)
+            out.push({
+                glyph: "Y",
+                label: launch.showAdvanced ? "Hide advanced" : "Show advanced"
+            });
+        else if (componentsBar)
+            out.push({
+                glyph: "Y",
+                label: "Hide progress"
+            });
+        return out;
+    }
 
     // X and Y do these straight away; More lists them.
     readonly property var moreItems: {
@@ -988,7 +1018,25 @@ FocusScope {
             return;
         }
         Sound.favourite(!row.value);
+        toggled = row.module;
         listForm.toggle(cards.index);
+    }
+
+    // The entry Y just turned on or off: it moves to the other card, and the cursor goes with it.
+    property string toggled: ""
+
+    Connections {
+        target: page.listForm
+        ignoreUnknownSignals: true
+        function onRowsChanged() {
+            var at = page.toggled !== "" ? page.listForm.indexOf(page.toggled) : -1;
+            page.toggled = "";
+            // After the cards' own layout pass, which puts the cursor back on the first card.
+            if (at >= 0)
+                Qt.callLater(function () {
+                    cards.index = at;
+                });
+        }
     }
 
     function addonsMenu(kind) {

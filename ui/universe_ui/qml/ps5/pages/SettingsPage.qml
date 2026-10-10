@@ -782,7 +782,26 @@ FocusScope {
             return;
         }
         Sound.play("select");
+        toggled = row.module;
         listForm.toggle(row.form);
+    }
+
+    // The entry X just turned on or off: it moves to the other group, and the cursor goes with it.
+    property string toggled: ""
+
+    Connections {
+        target: page.listForm
+        ignoreUnknownSignals: true
+        function onRowsChanged() {
+            var id = page.toggled;
+            page.toggled = "";
+            if (id !== "")
+                Qt.callLater(function () {
+                    page.focusWhere(function (r) {
+                        return r.action === "module" && r.module === id;
+                    });
+                });
+        }
     }
 
     function refreshNow() {

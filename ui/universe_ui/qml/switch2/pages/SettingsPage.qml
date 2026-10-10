@@ -955,7 +955,28 @@ FocusScope {
             return;
         }
         Sound.play(row.value ? "deselect" : "select");
+        toggled = row.module;
         listForm.toggle(row.form);
+    }
+
+    // The entry X just turned on or off: it moves to the other group, and the cursor goes with it.
+    property string toggled: ""
+
+    Connections {
+        target: page.listForm
+        ignoreUnknownSignals: true
+        function onRowsChanged() {
+            var id = page.toggled;
+            page.toggled = "";
+            if (id !== "")
+                Qt.callLater(function () {
+                    var at = page.content.findIndex(function (r) {
+                        return r.action === "module" && r.module === id;
+                    });
+                    if (at >= 0)
+                        rows.index = at;
+                });
+        }
     }
 
     function refreshNow() {

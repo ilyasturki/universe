@@ -1085,6 +1085,27 @@ def test_the_sound_section_plays_through_the_output_picked(look, fake):
     until(lambda: current() == "Headphones", "the output picked plays")
 
 
+def test_a_module_row_toggles_on_its_hinted_button_and_draws_no_switch(look, api, fake):
+    glyph, key = ("Y", Qt.Key.Key_F) if not look.stacked else ("X", Qt.Key.Key_I)
+
+    def hinted():
+        hints = read(look.root if look.stacked else page, "hints")
+        return any(h["glyph"] == glyph and not h.get("dim") for h in hints)
+
+    def capture():
+        return next(m for m in fake.modules() if m["id"] == "capture")["enabled"]
+
+    page = look.settings("modules")
+    if look.stacked:
+        look.press(Qt.Key.Key_Right)
+    assert not any("switch" in r for r in content_rows(page)), "a row A opens draws no switch"
+    until(lambda: capture() is True and hinted(), f"{glyph} is hinted on the running module under the cursor")
+    look.press(key)
+    until(lambda: capture() is False, f"{glyph} turns it off")
+    look.press(key)
+    until(lambda: capture() is True, "the cursor went with it to the Off card: the same button turns it back on")
+
+
 @pytest.fixture
 def logind_reboots_only(fake):
     fake.core.power_list = ["reboot"]

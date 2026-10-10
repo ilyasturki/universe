@@ -1026,7 +1026,10 @@ the chevron since A opens a page, `detail` the entry's description, or what is m
 is), the ones running first, the others in an "Off" card. No row draws a switch: A opens the
 entry's page, which starts with its Enabled switch; Y in the Universe look, X in the consoles'
 (each hinted) toggles it in the list (`toggle(index)`, refused with a warning while it is off).
-`indexOf(id)` finds an entry's row for the cursor to land on again. A built-in's `meta` is empty: its
+`indexOf(id)` finds an entry's row for the cursor to land on again, and the cursor follows a toggled
+entry to its new card. The Universe look's Settings bar names X and Y as the consoles' do: X Refresh
+(Remove on a variable); Y Enable or Disable on an entry, Show or Hide advanced on Launch, Hide progress
+while a component job shows. A built-in's `meta` is empty: its
 version is the app's own. An add-on's reads `v1.2.0 · from the index`, `· Unlisted` or `· your own
 folder` by its `origin`, and `unlisted` is also its `tag`. The consoles mark the row with `opens: true`
 for their chevron. Each list ends on a
