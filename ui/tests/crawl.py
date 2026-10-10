@@ -69,9 +69,15 @@ def test_crawl(api, fake, qtlog, monkeypatch, name):
     def refused(*_):
         raise UniverseError("Busy", "the explorer leaves the library as it found it")
 
+    def set_but_order(ident, key, value, original=fake.core.set):
+        if key in ("favourite", "hidden"):
+            refused()
+        return original(ident, key, value)
+
     # A game played, favoured, hidden or removed would reorder Home for the rest of the walk, and for the next run's shots.
-    for write in ("launch", "set", "remove", "uninstall", "uninstall_via", "remove_screenshot", "remove_recording", "remove_journal_entry"):
+    for write in ("launch", "remove", "uninstall", "remove_screenshot", "remove_recording", "remove_journal_entry"):
         monkeypatch.setattr(fake.core, write, refused)
+    monkeypatch.setattr(fake.core, "set", set_but_order)
     seen = [0]
 
     def warnings():
