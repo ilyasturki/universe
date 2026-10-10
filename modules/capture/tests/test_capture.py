@@ -669,8 +669,13 @@ def test_record_follows_the_monitor_that_replaces_the_recorded_one(tmp_path, liv
     assert flag_values(second, "-o") == [pending_path(tmp_path)]
     state = _timeline(tmp_path)
     assert state["screen"] == "HDMI-A-1" and not state["paused"]
-    calls = universe_calls(livebin)
-    assert sum(a == "osd" and "HDMI-A-1" in calls[i + 3] for i, a in enumerate(calls)) == 1, "the player is told the new monitor once"
+
+    def told():
+        calls = universe_calls(livebin)
+        return sum(a == "osd" and "HDMI-A-1" in calls[i + 3] for i, a in enumerate(calls))
+
+    # The OSD follows the timeline's write: wait for it, not for the write.
+    assert _wait_for(told) and told() == 1, "the player is told the new monitor once"
 
     assert _end_session(env, thread) == pending_path(tmp_path)
     assert done == [0] and len(_gsr_runs(livebin)) == 2, "the session's own stop is not a switch"
