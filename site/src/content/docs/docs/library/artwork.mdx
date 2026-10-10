@@ -1,0 +1,90 @@
+---
+title: Artwork
+description: Where each game's box art, backgrounds and logos come from, fetching what's missing, picking other art, fixing a wrong match, and SteamGridDB.
+sidebar:
+  order: 8
+---
+
+import Shot from '../../../../components/Shot.astro';
+import Clip from '../../../../components/Clip.astro';
+
+Every game has five pictures. Universe fetches them after a store install, an Add to library, a scan, a Lutris import or the first run's imports; a game added by hand waits until you ask. What it fetches is a default you can replace. Your pick always shows first, and going back to the default loses nothing.
+
+## The five pictures
+
+- **Box front**: the game's page, the launch screen and its settings.
+- **Square**: Home's row in the Universe look, and the Switch 2 tiles.
+- **Banner**: news cards and the info pane, and the backdrop of a game with no background.
+- **Background**: behind Home and the game's page.
+- **Logo**: over the background, and at launch.
+
+## Where the art comes from
+
+Each empty picture is filled from the first source that has one, in this order:
+
+1. the game's store, when it sends pictures with the game;
+2. Steam, by the game's Steam app id;
+3. GOG GamesDB, by the game's store id, else by its title;
+4. libretro's thumbnails, for an [emulated game](/docs/library/emulated/#artwork-for-emulated-games);
+5. SteamGridDB, with your own key, or before all the others with Prefer SteamGridDB art.
+
+Only SteamGridDB needs a key. When no source has a square, Universe makes one from the box front, and a square from a source replaces it once one comes. The description, the genres and the developers come from Steam's store page, then from GOG GamesDB.
+
+The fetched pictures are kept in `~/.local/share/universe/games/<id>/media/`, and your picks in its `picked/` folder.
+
+## The whole library
+
+Settings › **Artwork** shows the library as a grid, with a row per game and a column per picture. A pick is badged **Pick**, and an empty cell reads **missing**. **A** on a cell opens that game's browser on that picture.
+
+<Shot name="settings-artwork" />
+
+**Fetch missing art** sits above the titles, Up from the first row. It asks first, then fills every game's empty pictures from the stores, GOG GamesDB, libretro and, with your key, SteamGridDB. Your picks stay on top. While it runs the button reads **Stop** with the count, and **A** stops it after the game in hand. With nothing to fetch it reads **Nothing missing**.
+
+## One game's art
+
+The game menu (**Start** on a game) › **Manage** › **Artwork** shows the game's five pictures. **A** on one opens its browser, which shows the picture in use, the default under your pick, and the candidates from every source. **A** on a candidate (**Use this**) makes it your pick. **Load more** fetches SteamGridDB's next page. Without a key, the last cell reads **Add a SteamGridDB key for more art**, and asks for one.
+
+**Start** opens the page's menu:
+
+- **Fetch missing art** fills this game's empty pictures;
+- **Use a file…** takes an image of your own;
+- **Back to default** drops your pick, and **X** does the same;
+- **Wrong game?** fixes the match, as does **Y**.
+
+## When the art is another game's
+
+Universe matches each game to an entry of GOG GamesDB, or of SteamGridDB once you've set a key. When the art shows another game, Wrong game? searches that catalogue for the game's title and lists the hits. **A** (**Use this game**) takes one, and **Y** (**Another name**) searches again under another name. The candidates and the next fetch follow the game you picked.
+
+The pictures fetched already stay until you replace them. Pick each one again from the candidates, which now come from the right game, or fetch them all again from a terminal with `universe media <name> refresh --force`.
+
+The ids the match uses are also in Game settings › **Desktop and library**, behind **Y**, as **Steam app id**, **GOG GamesDB id** and **SteamGridDB id**.
+
+## SteamGridDB
+
+With your own key from steamgriddb.com, SteamGridDB's community art joins the candidates, along with its square art. Without one, art comes from the stores, GOG GamesDB and libretro. The key goes in Settings › **Game defaults** › **API keys**, which **Y** reveals:
+
+- **SteamGridDB key (optional)**: the key itself.
+- **SteamGridDB key file**: a file holding it, read when the key is empty. It defaults to `~/.config/steamgriddb/api_key`.
+- **Prefer SteamGridDB art**: SteamGridDB fills a picture before the stores and GOG GamesDB do.
+
+The key cell at the end of a game's candidates sets the same key.
+
+## From a terminal
+
+[`universe media`](/docs/reference/cli/media/) takes a game's name, or `all` for `refresh` and `status`:
+
+```sh
+universe media all refresh                # every game's missing art
+universe media celeste status             # what each picture shows, and where it came from
+universe media celeste set logo ~/Pictures/celeste-logo.png
+universe media celeste unset logo         # back to the default
+universe media celeste candidates background
+universe media celeste search
+universe media celeste pin gamesdb <id>
+```
+
+`set` also takes an `https://` address. It knows a sixth slot, `screenshot`, for the store's promotional shots. `refresh --force` fetches the filled pictures again, and `pin` takes `steam`, `gamesdb` or `sgdb` with that catalogue's id for the game.
+
+## In the other looks
+
+The Switch 2 look has no Artwork section in its settings. A game's art is in its Software Options › **Artwork** instead. The PS5 look's Settings › Artwork lists the games missing art, with the same Fetch missing art.
