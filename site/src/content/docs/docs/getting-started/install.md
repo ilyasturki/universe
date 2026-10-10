@@ -23,7 +23,7 @@ Three packages on the AUR:
 paru -S universe
 ```
 
-gamescope, MangoHud, gpu-screen-recorder and the controller rules (`game-devices-udev`) are optional dependencies: install the ones you want. The store tools (umu-launcher, gogdl, legendary, butler, ludusavi) are fetched on first use when they're missing.
+gamescope, MangoHud, gpu-screen-recorder and the udev rules that make pads readable (`game-devices-udev`) are optional dependencies: install the ones you want. The store tools (gogdl, legendary, butler), umu-launcher and ludusavi are fetched on first use when they're missing.
 
 ## Fedora
 

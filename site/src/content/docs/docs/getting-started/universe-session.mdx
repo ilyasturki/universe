@@ -1,0 +1,69 @@
+---
+title: The Universe session
+description: Log in to Universe instead of a desktop, with the launcher on the whole screen in its own gamescope, like SteamOS's Game Mode.
+sidebar:
+  order: 3
+---
+
+import Shot from '../../../../components/Shot.astro';
+
+The Universe session is an entry on your login screen, next to GNOME or Plasma. Log in to it and Universe Big Screen takes the whole screen inside its own gamescope, with no desktop behind it, the way SteamOS runs Steam in Game Mode. It fits a PC under the TV that you only ever drive with a controller.
+
+It needs gamescope. On a desktop, Universe Big Screen runs without it when it's missing; the session can't.
+
+## Adding it to the login screen
+
+- The Arch and Fedora packages install it.
+- The [installer](/docs/getting-started/install/#steamos-bazzite-and-other-distributions) adds it with your password, through sudo, as `/usr/share/wayland-sessions/universe.desktop`. Where `/usr` is read-only, as on SteamOS and Bazzite, it goes under `/usr/local/share/wayland-sessions` instead, which GDM and SDDM read and LightDM doesn't. Without sudo, the installer prints the command to run as root.
+- On NixOS, set `programs.universe.session.enable`. It needs `programs.universe.enable`, which brings the session's gamescope.
+
+Then pick **Universe** in the login screen's session menu. To boot straight into it on NixOS, make it the default session and log in automatically:
+
+```nix
+programs.universe.enable = true;
+programs.universe.session.enable = true;
+services.displayManager.defaultSession = "universe";
+services.displayManager.autoLogin.user = "alice"; # your user name
+```
+
+The session's gamescope follows your global gamescope settings, HDR included. [Gamescope, HDR and frame rate](/docs/running/gamescope/) has them.
+
+## Inside the session
+
+The startup animation plays once, at login. From there it's the Universe Big Screen you know from the desktop, **HOME** and the dock over a game included, with these differences.
+
+### Logging out
+
+Hold **B** for the power menu, or open it from the power button in the top bar or Settings › About › **Power**. In the session its first item reads **Log out** instead of **Quit Universe**, and it takes you back to the login screen. **Suspend**, **Reboot** and **Power off** follow when logind allows them.
+
+<Shot name="power-menu" />
+
+There's no lock screen. Waking the machine from suspend lands on the launcher, as does an automatic login at boot.
+
+### Network and Bluetooth
+
+Settings › [Network](/docs/settings/network/) joins Wi-Fi networks through NetworkManager. A cable needs nothing set up. Settings › [Bluetooth](/docs/settings/bluetooth/) pairs controllers, keyboards and headphones.
+
+:::note
+Universe doesn't set up WEP or WPA Enterprise networks. Join one of those once from a desktop session; after that, NetworkManager has it saved and the session can connect to it.
+:::
+
+Your first controller comes by USB cable, or use a keyboard, since pairing over Bluetooth needs something to drive Settings with. Plug in a DualSense or a DualShock 4 and Universe offers to pair it there and then. Choose **Pair**, and from then on it connects without the cable. If a game is on screen at that moment, a notice tells you to plug the controller in again from **HOME** instead.
+
+### System tools
+
+Nothing in the session can ask for a password. The system tools Universe uses (gamescope, MangoHud and gpu-screen-recorder) still install from inside it without a prompt, from Settings › Emulators & Proton › **Tools** or from a System check row. The packages and the installer put a helper in place for those three programs and nothing else, and it installs them through PackageKit. If the installer ran without sudo, the helper is missing and those rows can't install. Where PackageKit can't install one, as on NixOS, on an image-based system, or where the distribution doesn't package it, the rows show the fix to apply yourself instead; on NixOS that's a module option or a package to add to your configuration.
+
+## When it can't start
+
+There's no desktop to fall back to, so the login screen comes back:
+
+- at once when gamescope isn't installed;
+- when gamescope quits before the launcher comes up, or shows nothing for 30 seconds;
+- when the launcher crashes five times in a row, each time within a minute of starting. A single crash only restarts it, without the startup animation.
+
+To find out why, log in to a desktop session and run [`universe doctor`](/docs/reference/cli/doctor/), or open Settings › System check. Its **Gamescope** line says whether gamescope is there.
+
+## In the other looks
+
+The Switch 2 look's **Power Options** and the PS5 look's power menu say **Log Out**. The PS5 Control Center's Power panel has a **Log Out** of its own.

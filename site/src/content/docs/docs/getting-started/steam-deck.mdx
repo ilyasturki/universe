@@ -1,0 +1,68 @@
+---
+title: Steam Deck and Game Mode
+description: Universe on a Steam Deck, from the install on SteamOS to its controls, screen and performance rows, and inside Steam's Game Mode.
+sidebar:
+  order: 4
+---
+
+import Shot from '../../../../components/Shot.astro';
+
+Universe knows a Steam Deck by its board, the LCD model and the OLED one alike. Its hints then draw the Deck's own buttons, and Settings gains the Deck's display and power controls. You can run it in Desktop Mode as on any PC, or add it to Steam and play from Game Mode.
+
+## Installing on SteamOS
+
+On SteamOS, use the [installer](/docs/getting-started/install/#steamos-bazzite-and-other-distributions). In Desktop Mode, open Konsole and set a password first. The installer asks for it once, for sudo, and a Deck has none until you set one.
+
+```sh
+passwd
+curl -fsSL https://github.com/ilyasturki/universe/releases/latest/download/install.sh | sh
+```
+
+Universe itself goes in `~/.local`. SteamOS keeps `/usr` read-only, so the few files that need root go under `/etc` and `/usr/local` instead.
+
+## The Deck's controls
+
+Universe reads the built-in controls as a **Steam Deck** controller, and that's the card Settings › Controller shows. The hints draw the Deck's buttons (A, B, X and Y, L1 and R1, L2 and R2, View and Menu) from the first start, before you press anything, and switch when you pick up another controller.
+
+- Outside Game Mode, **HOME** is the Steam button.
+- The extra buttons have rows of their own: **L4**, **L5**, **R4**, **R5**, **Quick access**, **Left trackpad** and **Right trackpad**. None does anything until you give it a macro, as [Macros and paddles](/docs/controllers/macros/) explains.
+- In Game Mode, Universe gets the controls through Steam Input's virtual controller, as Steam maps them.
+- Where neither Steam nor InputPlumber runs, the kernel starts the controls as a mouse and keyboard. Hold **Menu** for about half a second to turn them into a controller.
+
+## Performance and display
+
+On a Deck, Settings › **Performance** holds one card, **Performance and display**, marked Steam Deck or Steam Deck OLED. Each row shows only where the machine lets Universe set it:
+
+- **Brightness**, the screen's backlight.
+- **Refresh rate**, from 40 to 60 Hz on the LCD model and 45 to 90 Hz on the OLED. A lower rate saves battery. It's there only in the [Universe session](/docs/getting-started/universe-session/), where Universe's gamescope drives the panel itself, and not in a window on the desktop.
+- **Power limit**, the most the APU may draw over time, in watts.
+- **GPU clock**, **Auto** or a fixed clock in 100 MHz steps.
+- **SteamOS fan curve**, on SteamOS only. Off leaves the fan to the firmware.
+
+On SteamOS, Universe goes through SteamOS's own helpers for the rows that need root. It keeps what you set in config.toml's `[system]`, brightness aside, and sets it again each time it starts, since the power limit and the clocks don't survive a reboot.
+
+Over a game, the dock's **System** group has the same rows for that game alone, and **Y** there makes a value every game's. [Playing](/docs/using/playing/) covers the dock. Universe Desktop has the rows too, all but Brightness and Refresh rate, in Preferences › **Performance** on a Deck.
+
+## The screen
+
+The looks have no separate layout for the Deck's 1280×800 screen. Each one scales with the screen's height, so the Deck shows the same screens as a 1080p TV at about three quarters of the size.
+
+<Shot name="deck-home" />
+
+## Steam's Game Mode
+
+To play from Game Mode, add Universe Big Screen to Steam as a non-Steam game. In Desktop Mode, open Steam's **Games** menu, choose **Add a Non-Steam Game to My Library…**, then tick **Universe Big Screen** and add it. Back in Game Mode, it sits in your library with your other non-Steam games.
+
+Inside Steam's gamescope, Universe doesn't start one of its own, and its games run in Steam's. Steam keeps what it already handles there, and Universe steps aside:
+
+- There's no dock over a game. The Steam and Quick Access buttons, Steam's overlay and its Quick Access menu stay Steam's.
+- The startup animation doesn't play.
+- The power menu (hold **B**) lists only **Quit Universe** and **Stay**, under the line "Back to Steam, whose menu has the power options."
+- Settings hides Sound, Network, Bluetooth and Performance. Steam's own menus have the sound, Wi-Fi, Bluetooth and the Deck's performance controls.
+- Game defaults and each game's settings drop **Show MangoHud**, **Frame rate limit** and **Pause on HOME**, and games start without Universe's MangoHud or frame limit. Steam's performance overlay and frame limit apply instead.
+- The controller macros for volume, mute, MangoHud and screenshots don't fire. The others still do.
+- Universe doesn't put back the values from Settings › Performance.
+- A screenshot, a change of sound output or anything else that reaches for what Steam owns is refused, with a message saying it belongs to Steam in Game Mode.
+- Steam's **Exit Game** closes Universe, and the game it's running with it.
+
+In the PS5 look, the Control Center doesn't open over a game either.
