@@ -30,7 +30,7 @@ Files:
 Environment:
   UNIVERSE_CONFIG_HOME, UNIVERSE_DATA_HOME, UNIVERSE_STATE_HOME — replace the XDG directories
   UNIVERSE_MODULES_PATH, UNIVERSE_SOURCES_PATH — extra module and source roots, colon-separated
-  RUST_LOG — tracing filter, warn by default
+  RUST_LOG — tracing filter, warn (and each screenshot's timings) by default
 
 Errors are printed as `universe: <kind>: <message>` on stderr with exit status 1; --json works on every command.";
 

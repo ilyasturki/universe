@@ -1062,9 +1062,10 @@ impl Core {
         if shooters.is_empty() {
             return Err(Error::Unavailable("no enabled module takes screenshots".into()));
         }
-        let (mut failures, mut cued) = (Vec::new(), false);
+        let (started, mut failures, mut grab) = (std::time::Instant::now(), Vec::new(), None);
         let mut cue = || {
-            if !std::mem::replace(&mut cued, true) {
+            if grab.is_none() {
+                grab = Some(started.elapsed());
                 grabbed();
             }
         };
@@ -1079,6 +1080,8 @@ impl Core {
             let path = out.stdout.lines().map(str::trim).rfind(|l| !l.is_empty() && *l != crate::screenshots::GRABBED).unwrap_or_default().to_string();
             if out.status == 0 && !path.is_empty() {
                 cue();
+                let grab = grab.unwrap_or_default().as_millis();
+                tracing::info!(target: "screenshot", "screenshot by {}: grabbed after {grab} ms, saved after {} ms", m.id(), started.elapsed().as_millis());
                 return Ok(path);
             }
             failures.push(format!("{}: {}", m.id(), out.stderr.trim().lines().last().unwrap_or("no path printed")));

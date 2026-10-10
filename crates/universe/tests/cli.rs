@@ -392,12 +392,14 @@ async fn the_controller_watch_reports_a_shots_grab_before_its_path() {
         &["controller", "watch", "--json"],
         &[NO_BUS, ("DBUS_SYSTEM_BUS_ADDRESS", "unix:path=/dev/null/bus"), ("XDG_RUNTIME_DIR", runtime.to_str().unwrap())],
     ));
-    for var in ["UNIVERSE_SESSION", "SteamGameId", "GAMESCOPE_WAYLAND_DISPLAY"] {
+    for var in ["UNIVERSE_SESSION", "SteamGameId", "GAMESCOPE_WAYLAND_DISPLAY", "RUST_LOG"] {
         cmd.env_remove(var);
     }
-    let mut child = cmd.stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::piped()).kill_on_drop(true).spawn().unwrap();
+    let pipe = std::process::Stdio::piped;
+    let mut child = cmd.stdin(pipe()).stdout(pipe()).stderr(pipe()).kill_on_drop(true).spawn().unwrap();
     let mut stdin = child.stdin.take().unwrap();
     let mut lines = tokio::io::BufReader::new(child.stdout.take().unwrap()).lines();
+    let mut log = tokio::io::BufReader::new(child.stderr.take().unwrap()).lines();
     let mut next = async |event: &str| loop {
         let line =
             tokio::time::timeout(std::time::Duration::from_secs(5), lines.next_line()).await.expect("no line within 5 s").unwrap().expect("the watch ended");
@@ -413,4 +415,14 @@ async fn the_controller_watch_reports_a_shots_grab_before_its_path() {
     let (saved, saved_at) = next("screenshot").await;
     assert!(saved["path"].as_str().is_some_and(|p| p.ends_with("/x.png")) && saved.get("phase").is_none(), "{saved}");
     assert!(saved_at - at >= std::time::Duration::from_millis(250), "the grab is told as the hook prints it");
+    let timing = async {
+        while let Some(line) = log.next_line().await.unwrap() {
+            if line.contains("screenshot by screenshot: grabbed after") {
+                return line;
+            }
+        }
+        panic!("the watch ended");
+    };
+    let timing = tokio::time::timeout(std::time::Duration::from_secs(5), timing).await.expect("each shot's timings on stderr, whatever RUST_LOG");
+    assert!(timing.contains("ms, saved after"), "{timing}");
 }
