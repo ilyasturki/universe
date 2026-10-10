@@ -616,8 +616,23 @@ impl Core {
             return Err(Error::NotFound("no session running".into()));
         }
         self.host.units.freeze(&marker.current.unit, on).await?;
-        let hook = if on { "freeze" } else { "thaw" };
-        let Ok(r) = self.get(&marker.current.id).await else { return Ok(()) };
+        self.session_hooks(marker, if on { "freeze" } else { "thaw" }).await;
+        Ok(())
+    }
+
+    /// A pad of the running game's dropped and brought back: the modules holding pads for it (the virtual pads') take it up.
+    pub async fn reconnect_hooks(&self) -> Result<()> {
+        let Some(marker) = read_marker() else { return Err(Error::NotFound("no session running".into())) };
+        if !self.host.units.is_active(&marker.current.unit).await {
+            return Err(Error::NotFound("no session running".into()));
+        }
+        self.session_hooks(marker, "reconnect").await;
+        Ok(())
+    }
+
+    /// `hook` of the running game's modules, under the env its launch gave them; a failing one is logged.
+    async fn session_hooks(&self, marker: Marker, hook: &str) {
+        let Ok(r) = self.get(&marker.current.id).await else { return };
         let cfg = self.config.read().await.clone();
         let base = HookEnv { vars: marker.hook_env };
         for m in self.hook_modules(&r, hook).await {
@@ -626,7 +641,6 @@ impl Core {
                 tracing::warn!("{hook} {}: {e}", m.id());
             }
         }
-        Ok(())
     }
 }
 
@@ -1041,6 +1055,30 @@ pub(crate) mod tests {
         let lines: Vec<String> = std::fs::read_to_string(&log).unwrap().lines().map(String::from).collect();
         assert_eq!(lines.len(), 2, "{lines:?}");
         assert!(lines[0].starts_with(&format!("freeze {sid} {{")) && lines[1].starts_with(&format!("thaw {sid} {{")), "{lines:?}");
+    }
+
+    #[tokio::test]
+    async fn a_reconnect_runs_the_running_games_reconnect_hooks() {
+        let _sb = sandbox();
+        let probe = std::path::PathBuf::from(std::env::var_os("UNIVERSE_MODULES_PATH").unwrap()).join("probe");
+        std::fs::create_dir_all(probe.join("bin")).unwrap();
+        std::fs::write(probe.join("module.toml"), "api = 2\nid = \"probe\"\n[hooks]\nreconnect = \"bin/reconnect\"\n").unwrap();
+        let log = paths::state_home().join("hooks.log");
+        let exe = probe.join("bin/reconnect");
+        std::fs::write(&exe, format!("#!/bin/sh\necho reconnect $SESSION_ID $MODULE_SETTINGS_JSON >> {}\n", log.display())).unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::write(
+            paths::config_home().join("config.toml"),
+            "[launch]\ngamescope = false\nmangohud = false\nfps_limit = \"none\"\n[modules]\nenabled = [\"probe\"]\n",
+        )
+        .unwrap();
+        let (core, _memory) = open().await;
+        assert!(matches!(core.reconnect_hooks().await, Err(Error::NotFound(_))), "no game, no session to tell");
+        let sid = core.launch("sample", "", "").await.unwrap();
+        core.reconnect_hooks().await.unwrap();
+        let lines: Vec<String> = std::fs::read_to_string(&log).unwrap().lines().map(String::from).collect();
+        assert!(lines.len() == 1 && lines[0].starts_with(&format!("reconnect {sid} {{")), "{lines:?}");
     }
 
     #[tokio::test]
