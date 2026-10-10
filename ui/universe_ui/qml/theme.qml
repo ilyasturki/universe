@@ -1517,7 +1517,7 @@ FocusScope {
         var page = root.activePage;
         var tile = page && page.landOnPlaying ? page.landOnPlaying(flip) : null;
         // Under a page the frame fades rather than shrinking into a tile nobody sees; a quit lands on the tile's cover.
-        flip.cover(landing === "" ? tile : null, api.home.quitting && page.playingCover ? page.playingCover() : "");
+        flip.cover(landing === "" ? tile : null, tile && api.home.quitting ? page.playingCover() : "");
         openLanding(landing);
     }
 
