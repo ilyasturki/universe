@@ -71,6 +71,7 @@ def gamescope(tmp_path):
     return run
 
 
+@pytest.mark.slow
 def test_fullscreen_hands_the_screen_to_gamescope_or_falls_back_to_the_desktop(gamescope):
     run = gamescope("up", "--theme", "switch2", WAYLAND_DISPLAY="wayland-0")
     assert run.code == 7, "quitting gamescope after the launcher came up quits, not a restart on the desktop"
