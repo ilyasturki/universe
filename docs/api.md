@@ -1756,7 +1756,10 @@ dummy_hcd for xpad's — and adds the driver bound, SDL3's view, the pads module
 | 8BitDo Pro 3, X-input (045e:028e) | USB | xpad, as an Xbox 360 pad | as an Xbox pad: A at the bottom whatever the print | the evdev pad | XInput | SDL view captured | nothing tells it from a 360 pad: keep it in D-input or Switch mode |
 
 A pad you own is recorded with `universe controller dump --walk --json <id> > tests/pads/<family>-<bus>.json` (the id from
-`controller ls`; `--walk` asks for each button, stick and trigger), its `source` parts then saying `captured on <date>`.
+`controller ls`; `--walk` asks for each button, stick and trigger), its `source` parts then saying `captured on <date>`. When a
+Linux or SDL update moves a public view and the VM check fails on it, `nix log .#vmChecks.x86_64-linux.pads > vm.log` then
+`tools/pad-record vm.log "Linux <version>" "SDL <version>"` writes the views it recorded into the public parts; captured
+parts are only compared.
 
 ## Network and Bluetooth
 

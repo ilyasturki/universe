@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+# tools/pad-record LOG KERNEL SDL: the `{"record": …}` lines of a VM check's log (`nix log .#vmChecks.x86_64-linux.pads`) written
+# into tests/pads, e.g. `tools/pad-record vm.log "Linux 7.2.8" "SDL 3.4.16"`. Public evdev and SDL views take the recording;
+# captured ones stay and are only compared.
+import json
+import re
+import sys
+from pathlib import Path
+
+PADS = Path(__file__).resolve().parents[1] / "tests" / "pads"
+ORDER = ("pad", "mode", "family", "bus", "driver", "source", "print", "evdev", "buttons", "axes", "sdl", "hid", "usb")
+
+
+def dump(value, indent=0):
+    """tests/pads' layout: a map of scalars and flat lists on one line when it fits."""
+    pad = "  " * indent
+    if isinstance(value, dict):
+        flat = all(not isinstance(v, dict | list) or (isinstance(v, list) and all(not isinstance(x, dict | list) for x in v)) for v in value.values())
+        line = json.dumps(value, ensure_ascii=False)
+        if flat and len(line) + len(pad) <= 150:
+            return line
+        inner = ",\n".join(f"{pad}  {json.dumps(k)}: {dump(v, indent + 1)}" for k, v in value.items())
+        return "{\n" + inner + "\n" + pad + "}"
+    return json.dumps(value, ensure_ascii=False)
+
+
+def main(log, kernel, sdl):
+    records = {}
+    for line in Path(log).read_text(errors="replace").splitlines():
+        found = re.search(r'(\{"record": .*\})\s*$', line)
+        if found:
+            record = json.loads(found.group(1))
+            records[record["record"]] = record
+    for name, record in sorted(records.items()):
+        path = PADS / f"{name}.json"
+        entry = json.loads(path.read_text())
+        source = entry["source"]
+        notes = []
+        if "evdev" in record:
+            seen = {k: record["evdev"][k] for k in ("name", "version", "keys", "abs", "ff")}
+            if source.get("evdev", "").startswith("public"):
+                entry["evdev"] = {
+                    "name": seen["name"],
+                    "vendor": entry["evdev"]["vendor"],
+                    "product": entry["evdev"]["product"],
+                    **{k: seen[k] for k in ("version", "keys", "abs", "ff")},
+                }
+                source["evdev"] = f"public: {kernel}'s view of the pad replayed from its hid or usb data, recorded in the VM check"
+                notes.append("evdev recorded")
+            else:
+                differ = [k for k in ("name", "keys", "abs") if seen[k] != entry["evdev"].get(k)]
+                notes.append(f"evdev captured, the VM differs in {differ}" if differ else "evdev captured, the VM agrees")
+        if "sdl" in record:
+            if not entry.get("sdl") or source.get("sdl", "").startswith("public"):
+                entry["sdl"] = record["sdl"]
+                source["sdl"] = f"public: {sdl}'s view of the replayed pad, recorded in the VM check"
+                notes.append("sdl recorded")
+            else:
+                differ = sorted(k for k in record["sdl"] if record["sdl"][k] != entry["sdl"].get(k))
+                notes.append(f"sdl captured, the VM differs in {differ}" if differ else "sdl captured, the VM agrees")
+        entry = {k: entry[k] for k in ORDER if k in entry} | {k: v for k, v in entry.items() if k not in ORDER}
+        path.write_text(dump(entry) + "\n")
+        print(f"{name}: {'; '.join(notes)}")
+    return 0 if records else 1
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 4:
+        sys.exit("usage: tools/pad-record LOG KERNEL SDL")
+    sys.exit(main(*sys.argv[1:]))
