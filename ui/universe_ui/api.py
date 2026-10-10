@@ -77,6 +77,14 @@ def describe_event(event):
     return " ".join(parts)
 
 
+def log_key(key, pressed, source):
+    try:
+        name = Qt.Key(key).name
+    except ValueError:
+        name = str(key)
+    logging.getLogger("universe.keys").info("key %s %s from %s", name, "press" if pressed else "release", source)
+
+
 def key_label(key):
     from PySide6.QtGui import QKeySequence
 
@@ -220,6 +228,8 @@ class Keys(QObject):
         kind = event.type()
         if kind in (QEvent.Type.KeyPress, QEvent.Type.KeyRelease):
             source = posted_source(event.key(), kind == QEvent.Type.KeyPress)
+            if os.environ.get("UNIVERSE_UI_INPUT_LOG") and not event.isAutoRepeat():
+                log_key(event.key(), kind == QEvent.Type.KeyPress, source or "keyboard")
             if source == "pad":
                 self._set_mode("pad", event)
             # A key with no keysym is not typing: InputPlumber's keyboard target sends KEY_UNKNOWN for every pad button.
