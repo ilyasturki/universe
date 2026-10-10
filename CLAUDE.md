@@ -22,4 +22,6 @@ A test over 2 s fails unless marked `@pytest.mark.slow`. A Qt warning, or an exc
 
 A speed budget is a test named `…_within_its_budget` whose limit comes from `speed_limit(strict, loose)` (conftest.py; `speed_limit` in crates/universe/tests/cli.rs): strict at the default 2 s budget, loose wherever `UNIVERSE_TEST_BUDGET_S` is raised or 0. One too slow for pre-push is also `@pytest.mark.speed`, which `just test` leaves out; `just speed` runs every budget, `just frame-gaps` the quit landing's on the GPU. The release tarball is installed and started on four distros by `just release-smoke` (release.yml's smoke job before upload).
 
+A pad change is checked against the recorded pads in tests/pads: `just test-pads` replays each as a uinput pad on this desktop, `just test vm` through the real kernel drivers in a VM; `universe controller dump --walk --json` records a new one.
+
 The full check is `just verify` (lint and every suite; the pre-push hook runs it). To see a UI change, follow the run-ui skill (.claude/skills/run-ui/SKILL.md).

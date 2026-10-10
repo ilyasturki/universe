@@ -1732,6 +1732,32 @@ bind from a terminal or from a launcher whose own watcher is waiting reaches the
 pads. Either reload rereads config.toml and the module list only, never the library, so pad
 events are not held up behind a rescan.
 
+### Controllers by model
+
+What reads each pad on Linux 7.2 and what Universe does with it. `tests/pads/` keeps each pad, bus and driver as recorded: its
+evdev view, the slot every control lands on, SDL3's view, the data that replays it, each part marked `captured on <date>` (off
+the pad itself) or `public: <source>`. On every push the core, controls-module and launcher tests read every file; `just
+test-pads` makes each one a uinput pad on the desktop and reads it through `controller ls`, the watcher and the launcher; `just
+test vm` (a NixOS VM, KVM, nightly in CI) replays each through the real kernel driver — uhid for the HID pads, a USB gadget on
+dummy_hcd for xpad's — and adds the driver bound, SDL3's view, the pads module's forwarder and a pad unplugged and back.
+
+| Pad | Bus | Kernel driver | Launcher, HOME, macros | Emulators (controls module) | Proton games | Recorded | Gaps |
+|---|---|---|---|---|---|---|---|
+| DualShock 4 (054c:05c4, 09cc) | USB, Bluetooth | hid-playstation | yes; Share and Options glyphs | SDL's PS4 driver: gyro, touchpad, rumble | GE-Proton's Sony pad, or as `sony_pad` sets it | public | the touchpad click and the mic button: hid-playstation gives the touchpad its own node |
+| DualSense (054c:0ce6) | USB, Bluetooth | hid-playstation | yes | SDL's PS5 driver: gyro, touchpad, rumble | as the DualShock 4 | public | as the DualShock 4 |
+| DualSense Edge (054c:0df2) | USB, Bluetooth | hid-playstation; Fn and back buttons from 7.2 | yes; Fn and back buttons bindable | SDL's PS5 driver, back buttons kept for Universe | as the DualShock 4 | Bluetooth captured | as the DualShock 4 |
+| Switch Pro (057e:2009) | USB, Bluetooth | hid-nintendo | yes; Capture bindable | SDL's Switch driver | through Steam Input | public | — |
+| Switch 2 Pro (057e:2069) | USB | none: the hid-nintendo Switch 2 series is not merged | no evdev node, so none; `doctor` says why | over SDL's libusb, one program at a time | no | public | Bluetooth works nowhere on Linux |
+| Xbox Series X\|S (045e:0b12) | USB | xpad | yes; Share bindable | the evdev pad | XInput | public | — |
+| Xbox Series X\|S (045e:0b13) | Bluetooth | hid-microsoft, or xpadneo | yes; Share bindable | SDL's Xbox driver | XInput | public | — |
+| Xbox Elite Series 2 (045e:0b00) | USB | xpad | yes; P1 to P4 bindable | the evdev pad | XInput | public | — |
+| Xbox Elite Series 2 (045e:0b05, 0b22) | Bluetooth | xpadneo (as 045e:028e), or hid-microsoft | yes; the paddles with xpadneo only | the evdev pad | XInput | SDL view captured | hid-microsoft maps no paddle |
+| 8BitDo Pro 3 (2dc8:6009), D-input | Bluetooth | hid-generic | yes; L4, R4, PL and PR bindable | SDL's 8BitDo driver: gyro | through Steam Input | captured | Star never reaches evdev |
+| 8BitDo Pro 3, X-input (045e:028e) | USB | xpad, as an Xbox 360 pad | as an Xbox pad: A at the bottom whatever the print | the evdev pad | XInput | SDL view captured | nothing tells it from a 360 pad: keep it in D-input or Switch mode |
+
+A pad you own is recorded with `universe controller dump --walk --json <id> > tests/pads/<family>-<bus>.json` (the id from
+`controller ls`; `--walk` asks for each button, stick and trigger), its `source` parts then saying `captured on <date>`.
+
 ## Network and Bluetooth
 
 Wi-Fi through NetworkManager and Bluetooth through BlueZ, both on the system bus, for a frontend
