@@ -240,7 +240,7 @@ def test_the_launch_keys_fixture_is_the_cores_table(cores):
 def test_the_ui_reads_every_field_the_core_sends_of_a_game(cores):
     core, _ = cores
     games = [core.get(g["id"]) for g in core.list()]
-    assert {g["id"] for g in games} == {"the-technomancer", "dead-cells"}
+    assert {g["id"] for g in games} == {"the-technomancer", "dead-cells", "super-mario-strikers"}
     for raw in games:
         game, meta, stats = Game(raw, None), raw["metadata"], raw["stats"]
         assert (game.id, game.title, game.favorite, game.hidden, game.tags) == (raw["id"], raw["title"], raw["favorite"], raw["hidden"], raw["tags"])
