@@ -16,6 +16,8 @@ time.tzset()
 
 # The flake's checks set 0: a shared builder's load says nothing of a test's own time.
 BUDGET_S = float(os.environ.get("UNIVERSE_TEST_BUDGET_S", "2"))
+# A raised or disabled budget (a loaded machine, the flake's builders) holds the speed budgets to their loose limits.
+STRICT = BUDGET_S == 2
 
 
 # pytest-qt ships with the UI suite only; the other suites read the same pyproject.
@@ -44,6 +46,11 @@ def pytest_runtest_makereport(item, call):
     if BUDGET_S and spent > BUDGET_S:
         report.outcome = "failed"
         report.longrepr = f"took {spent:.2f} s, over the {BUDGET_S:.0f} s budget: make it faster or mark it @pytest.mark.slow"
+
+
+@pytest.fixture
+def speed_limit():
+    return lambda strict_s, loose_s: strict_s if STRICT else loose_s
 
 
 @pytest.fixture(scope="session")

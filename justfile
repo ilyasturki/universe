@@ -131,9 +131,9 @@ test *suites: build develop env
     for suite in $suites; do
         case "$suite" in
             rust) cargo test ;;
-            python) tools/reap "{{ python }}" -m pytest -q -n "$workers" ;;
+            python) tools/reap "{{ python }}" -m pytest -q -n "$workers" -m "not speed" ;;
             bindings) tools/reap "{{ python }}" -m pytest -q crates/universe-py/tests ;;
-            ui|modules|extension|sources) tools/reap "{{ python }}" -m pytest -q -n "$workers" "$suite" ;;
+            ui|modules|extension|sources) tools/reap "{{ python }}" -m pytest -q -n "$workers" -m "not speed" "$suite" ;;
             desktop) tools/desktop-test ;;
             *) echo "test: unknown suite '$suite' (rust, python, ui, modules, extension, sources, bindings, desktop)" >&2; exit 2 ;;
         esac
@@ -149,6 +149,25 @@ lint *args:
 
 # Every local gate, lint then every suite: what the pre-push hook runs (`just check` is the sandboxed version)
 verify: lint test
+
+# The speed budgets, at their strict limits on a quiet machine: home on a 1,000-game library (left out of `just test`), `ls --json` on 1,000 games, a pad's screenshot to its grab; `just frame-gaps` is the quit landing's, on the GPU
+speed: build develop env
+    #!/usr/bin/env -S nix develop --quiet --command bash
+    set -euo pipefail
+    cd "{{ justfile_directory() }}"
+    cargo test --quiet -p universe --test cli within_its_budget
+    tools/reap "{{ python }}" -m pytest -q -k within_its_budget
+
+# The quit landing's speed budget, on the GPU: a gamescope take (tools/ui-record) of the sample game in .dev-frames, launched, quit from HOME's dock and landing home, then the longest the picture stands still between the quit and the landing (tools/frame-gaps); over LIMIT ms it fails. The take is target/frame-gaps.mp4
+frame-gaps limit="800": build develop
+    #!/usr/bin/env -S nix develop --quiet --command bash
+    set -euo pipefail
+    cd "{{ justfile_directory() }}"
+    export UNIVERSE_DEV=.dev-frames
+    [ -d .dev-frames/data/games/sample-game ] || just sample install
+    UNIVERSE_RECORD_GAMESCOPE=1 UNIVERSE_UI_ARGS=--no-gamepad UNIVERSE_UI_GAP=400 timeout -k 15 300 just ui-record target/frame-gaps.mp4 \
+        Wait:4 Expect:sample-game Return Wait:12 Guide Wait:3 Right Right Return Wait:3 Down Wait:2 Mark:quit Return Wait:15 Mark:landed
+    tools/frame-gaps target/frame-gaps.mp4 quit landed "{{ limit }}"
 
 # Against this machine: transient units on the user systemd, a scope around the test process, the DRM cards
 test-live: build

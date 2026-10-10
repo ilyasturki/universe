@@ -67,9 +67,9 @@ def build_client(args):
     from .universe_client import CoreClient
 
     if args.fake:
-        from .fake_core import FakeCore
+        from .fake_core import FIXTURE, FakeCore
 
-        return CoreClient(FakeCore(fake_launch=args.fake_launch))
+        return CoreClient(FakeCore(fixture=Path(os.environ.get("UNIVERSE_FAKE_LIBRARY") or FIXTURE), fake_launch=args.fake_launch))
     import universe_core
 
     return CoreClient(universe_core.Core())

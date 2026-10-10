@@ -118,8 +118,8 @@
           "universe"
         ];
         env.UNIVERSE_GIT_REV = gitRev;
-        # chrono ignores TZDIR, so the zone is given as a file
-        preCheck = "export TZ=${pkgs.tzdata}/share/zoneinfo/Europe/Paris";
+        # chrono ignores TZDIR, so the zone is given as a file; a shared builder's load holds the speed budgets to their loose limits
+        preCheck = "export TZ=${pkgs.tzdata}/share/zoneinfo/Europe/Paris UNIVERSE_TEST_BUDGET_S=0";
         # reqwest's platform verifier refuses to build a client on an empty CA store; the NetworkManager and BlueZ tests run their own dbus-daemon, the volume keys' test its own PipeWire, the game session's an Xvfb for gamescope
         nativeCheckInputs = [
           pkgs.cacert

@@ -1,3 +1,5 @@
+import copy
+import json
 import os
 import shutil
 import subprocess
@@ -204,3 +206,44 @@ def test_a_dead_socket_its_notifier_still_owns_is_no_wedge(tmp_path):
 def test_only_a_plain_fullscreen_start_opens_on_the_intro(argv, session, steam, restarts, wanted):
     client = SimpleNamespace(currentSession=session, underSteam=steam)
     assert host.boot_wanted(host.parse_args(argv), client, restarts) is wanted
+
+
+@pytest.mark.slow
+@pytest.mark.speed
+def test_a_thousand_game_library_opens_on_home_within_its_budget(tmp_path, fixture_art, speed_limit):
+    from universe_ui.fake_core import FIXTURE
+    from universe_ui.fixtures.art import SLOTS
+
+    painted = Path(os.environ["XDG_CACHE_HOME"]) / "universe" / "fake-art"
+    art = tmp_path / "cache" / "universe" / "fake-art"
+    art.mkdir(parents=True)
+    for f in painted.iterdir():
+        os.link(f, art / f.name)
+    library = json.loads(Path(FIXTURE).read_text())
+    shown = [g for g in library["games"] if not g.get("hidden")]
+    # The fixture's own games keep their ids, and with them their sessions and journal; the rest share their art.
+    games = [*library["games"]]
+    for n in range(len(games), 1000):
+        template = shown[n % len(shown)]
+        ident = f"{template['id']}-{n}"
+        games.append({**copy.deepcopy(template), "id": ident, "title": f"{template['title']} {n}", "favorite": False})
+        for name in [f"-{slot}.png" for slot in SLOTS if slot != "screenshot"] + ["-screenshot1.png", "-screenshot2.png"]:
+            os.link(painted / f"{template['id']}{name}", art / f"{ident}{name}")
+    (tmp_path / "library.json").write_text(json.dumps({**library, "games": games}))
+    env = {
+        **os.environ,
+        "QT_QPA_PLATFORM": "offscreen",
+        "PYTHONPATH": os.pathsep.join(sys.path),
+        "HOME": str(tmp_path),
+        "XDG_CACHE_HOME": str(tmp_path / "cache"),
+        "UNIVERSE_FAKE_LIBRARY": str(tmp_path / "library.json"),
+    }
+    argv = ["--fake", "--no-gamepad", "--size", "1280x720", "--key-delay", "0", "--key-gap", "10", "--keys", "Ready Mark:home Quit", "--quit-after", "60000"]
+    started = time.time()
+    run = subprocess.run(
+        [sys.executable, "-c", "from universe_ui import host; host.main()", *argv], env=env, capture_output=True, text=True, timeout=90, check=False
+    )
+    marks = [line.split()[-1] for line in run.stderr.splitlines() if line.startswith("universe.gamepad: mark home ")]
+    assert run.returncode == 0 and marks, run.stderr
+    took = float(marks[0]) - started
+    assert took < speed_limit(5, 15), f"home took {took:.2f} s"

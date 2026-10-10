@@ -3,11 +3,13 @@ import os
 import shutil
 import stat
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
 
 SHOT = Path(__file__).resolve().parents[1] / "bin" / "shot"
+CLI = os.environ.get("UNIVERSE_BIN", "")
 
 
 def _write_shim(path, body):
@@ -122,3 +124,47 @@ def test_no_desktop_shot_and_no_gsr_fails_saying_so(tmp_path, fakebin):
     result = run(env_for(tmp_path, fakebin, {}, FAKE_DESKTOP_OK="false"))
     assert result.returncode == 1 and result.stdout == ""
     assert "no gpu-screen-recorder" in result.stderr
+
+
+@pytest.mark.skipif(not os.path.isfile(CLI), reason="UNIVERSE_BIN names no built CLI")
+def test_a_pads_shot_is_grabbed_within_its_budget_of_the_press(tmp_path, speed_limit):
+    for sub in ("data", "config", "state", "cache", "sources", "run", "bin"):
+        (tmp_path / sub).mkdir()
+    (tmp_path / "config" / "config.toml").write_text(
+        'schema = 1\n[desktop]\nprofile = "sway"\n[controller]\nenabled = false\nmacros = []\n'
+        '[modules]\nenabled = ["screenshot"]\n[modules.screenshot]\nwindow = false\n[sources]\nenabled = []\n'
+    )
+    _write_shim(tmp_path / "bin" / "grim", 'echo png > "${@: -1}"')
+    env = {
+        **{k: v for k, v in os.environ.items() if k not in ("GAMESCOPE_WAYLAND_DISPLAY", "UNIVERSE_SESSION", "SteamGameId", "RUST_LOG")},
+        "PATH": f"{tmp_path / 'bin'}:{os.environ['PATH']}",
+        "HOME": str(tmp_path),
+        "UNIVERSE_BIN": CLI,
+        "UNIVERSE_MODULES_PATH": str(SHOT.parents[2]),
+        "UNIVERSE_SOURCES_PATH": str(tmp_path / "sources"),
+        "XDG_RUNTIME_DIR": str(tmp_path / "run"),
+        "DBUS_SESSION_BUS_ADDRESS": "unix:path=/dev/null/bus",
+        "DBUS_SYSTEM_BUS_ADDRESS": "unix:path=/dev/null/bus",
+        **{f"UNIVERSE_{kind.upper()}_HOME": str(tmp_path / kind) for kind in ("data", "config", "state", "cache")},
+    }
+    with subprocess.Popen(
+        [CLI, "controller", "watch", "--json"], env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True
+    ) as watch:
+        assert watch.stdin and watch.stdout
+
+        def next_screenshot():
+            for line in watch.stdout:
+                event = json.loads(line)
+                if event["event"] == "screenshot":
+                    return event
+            raise AssertionError("the watch ended")
+
+        assert json.loads(watch.stdout.readline())["event"] == "ready"
+        pressed = time.perf_counter()
+        watch.stdin.write('{"cmd": "run", "action": "screenshot"}\n')
+        watch.stdin.flush()
+        assert next_screenshot() == {"event": "screenshot", "phase": "grabbed"}
+        grabbed = time.perf_counter() - pressed
+        assert Path(next_screenshot()["path"]).read_text() == "png\n", "the shot is grim's"
+        watch.stdin.close()
+    assert grabbed < speed_limit(0.25, 1.5), f"grabbed {grabbed * 1000:.0f} ms after the press"

@@ -258,6 +258,28 @@ fn files_under(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
     std::fs::read_dir(dir).into_iter().flatten().flatten().flat_map(|e| if e.path().is_dir() { files_under(&e.path()) } else { vec![e.path()] }).collect()
 }
 
+/// The strict limit at conftest.py's default 2 s test budget, the loose one where it was raised or turned off (a loaded run, the flake).
+fn speed_limit(strict_ms: u64, loose_ms: u64) -> std::time::Duration {
+    let strict = std::env::var("UNIVERSE_TEST_BUDGET_S").map_or(true, |b| b.parse::<f64>() == Ok(2.0));
+    std::time::Duration::from_millis(if strict { strict_ms } else { loose_ms })
+}
+
+#[test]
+fn ls_lists_a_thousand_games_within_its_budget() {
+    let dir = no_desktop();
+    for i in 0..1000 {
+        let game = dir.path().join(format!("data/games/game-{i:04}"));
+        std::fs::create_dir_all(&game).unwrap();
+        std::fs::write(game.join("game.toml"), format!("schema = 1\nid = \"game-{i:04}\"\ntitle = \"Game {i}\"\n")).unwrap();
+    }
+    let started = std::time::Instant::now();
+    let out = universe(&dir, &["ls", "--json"], &[NO_BUS]);
+    let took = started.elapsed();
+    let games: Vec<serde_json::Value> = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| panic!("{e}: {}", text(&out.stderr)));
+    assert_eq!(games.len(), 1000);
+    assert!(took < speed_limit(1500, 6000), "listed in {took:?}");
+}
+
 #[test]
 fn session_window_without_a_session_fails_at_once_even_told_to_wait() {
     let dir = no_desktop();

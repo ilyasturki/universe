@@ -136,8 +136,8 @@ install -Dm644 gen/universe-desktop.1 -t %{buildroot}%{_mandir}/man1
 
 %check
 export CARGO_TARGET_DIR=target
-# the journal tests expect Paris local time, as the flake's check does
-TZ=Europe/Paris cargo test --frozen -p universe -p universe-desktop
+# the journal tests expect Paris local time, as the flake's check does; an unknown machine's load holds the speed budgets to their loose limits
+TZ=Europe/Paris UNIVERSE_TEST_BUDGET_S=0 cargo test --frozen -p universe -p universe-desktop
 
 %files
 %license LICENSE

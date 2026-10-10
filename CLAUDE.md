@@ -20,4 +20,6 @@ One test per new behaviour, at the highest seam that reaches it. Extend an exist
 
 A test over 2 s fails unless marked `@pytest.mark.slow`. A Qt warning, or an exception escaping a slot, fails the test.
 
+A speed budget is a test named `…_within_its_budget` whose limit comes from `speed_limit(strict, loose)` (conftest.py; `speed_limit` in crates/universe/tests/cli.rs): strict at the default 2 s budget, loose wherever `UNIVERSE_TEST_BUDGET_S` is raised or 0. One too slow for pre-push is also `@pytest.mark.speed`, which `just test` leaves out; `just speed` runs every budget, `just frame-gaps` the quit landing's on the GPU. The release tarball is installed and started on four distros by `just release-smoke` (release.yml's smoke job before upload).
+
 The full check is `just verify` (lint and every suite; the pre-push hook runs it). To see a UI change, follow the run-ui skill (.claude/skills/run-ui/SKILL.md).

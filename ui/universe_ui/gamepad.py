@@ -444,7 +444,8 @@ def launch_target(window):
 # pad thread, dropped as its presses are while covered; as if the watcher read them, `Press:slot`/`Unpress:slot`, `Axis:lx=0.6`;
 # the mouse, at 1080p design units (dp, so 1728 wide at 16:10): `Mouse:x,y` moves it, `Click:x,y` / `RightClick:x,y` press and release there, `MouseDown:x,y` / `MouseUp:x,y` one or the other,
 # `Wheel:x,y,N` rolls N notches (up positive), `HWheel:x,y,N` sideways (right positive), `Scroll:x,y,N` N pixels as a touchpad; `Type:text` types it from the keyboard (`_` a space);
-# a finger: `Tap:x,y`, `LongTap:x,y,ms` held that long, `Swipe:x1,y1,x2,y2` dragged across in eight moves; `Await` holds the script until a line comes on stdin, `Quit` quits;
+# a finger: `Tap:x,y`, `LongTap:x,y,ms` held that long, `Swipe:x1,y1,x2,y2` dragged across in eight moves; `Await` holds the script until a line comes on stdin,
+# `Ready` until a game is on screen for Return to launch, `Quit` quits;
 # `Volume:up`/`Volume:down`/`Volume:mute` as a pad's volume macro; `Expect:ID` quits with EXPECT_FAILED unless Return would launch game ID (`Expect:` none);
 # `Mark:NAME` logs NAME with the wall-clock time, which tools/ui-record turns into a time in its recording.
 class KeyScript(QObject):
@@ -487,6 +488,10 @@ class KeyScript(QObject):
             return
         if phase == "Quit":
             QCoreApplication.quit()
+            return
+        if phase == "Ready":
+            if not launch_target(self._window):
+                self._queue.insert(0, name)
             return
         if phase == "Expect":
             target = launch_target(self._window)

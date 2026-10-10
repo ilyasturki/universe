@@ -1,0 +1,55 @@
+#!/usr/bin/env python3
+import subprocess
+import sys
+from pathlib import Path
+
+USAGE = """usage: tools/frame-gaps TAKE.mp4 FROM TO [LIMIT_MS]
+
+The longest time a tools/ui-record take's picture stands still before it moves
+again, between its marks FROM and TO (TAKE.marks): the wait for a key's answer,
+or a frame the animations dropped. A still that runs to TO, the screen at rest,
+does not count. Over LIMIT_MS, it exits 1."""
+W, H, FPS = 160, 90, 60
+# Out of 255 per pixel: the encode's noise on a frame that did not change stays under it.
+STILL = 0.4
+
+
+def main(argv):
+    if argv[:1] in (["-h"], ["--help"]):
+        print(USAGE)
+        return 0
+    if len(argv) not in (3, 4):
+        print(USAGE, file=sys.stderr)
+        return 2
+    take, start, end = argv[:3]
+    limit = float(argv[3]) if len(argv) == 4 else None
+    marks = dict(line.split() for line in Path(take).with_suffix(".marks").read_text().splitlines())
+    t0, t1 = float(marks[start]), float(marks[end])
+    raw = subprocess.run(
+        [
+            *("ffmpeg", "-hide_banner", "-loglevel", "error", "-ss", f"{t0:.3f}", "-to", f"{t1:.3f}", "-i", take),
+            *("-vf", f"fps={FPS},scale={W}:{H},format=gray", "-f", "rawvideo", "-"),
+        ],
+        capture_output=True,
+        check=True,
+    ).stdout
+    frames = [raw[i : i + W * H] for i in range(0, len(raw) - W * H + 1, W * H)]
+    longest, at, still = 0, t0, 0
+    for n in range(1, len(frames)):
+        moved = sum(abs(a - b) for a, b in zip(frames[n], frames[n - 1], strict=True)) / (W * H) > STILL
+        if not moved:
+            still += 1
+            continue
+        if still + 1 > longest:
+            longest, at = still + 1, t0 + (n - still - 1) / FPS
+        still = 0
+    ms = longest * 1000 / FPS
+    print(f"{start} → {end}: {len(frames)} frames, longest still before a change {ms:.0f} ms from {at:.2f} s")
+    if limit is not None and ms > limit:
+        print(f"frame-gaps: over the {limit:.0f} ms budget", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

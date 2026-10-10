@@ -25,8 +25,8 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
 echo "── test"
-# the journal tests expect Paris local time, as the flake's check does
-TZ=Europe/Paris cargo test --quiet --locked -p universe --manifest-path "$repo/Cargo.toml"
+# the journal tests expect Paris local time, as the flake's check does; an unknown machine's load holds the speed budgets to their loose limits
+TZ=Europe/Paris UNIVERSE_TEST_BUDGET_S=0 cargo test --quiet --locked -p universe --manifest-path "$repo/Cargo.toml"
 
 echo "── dist"
 python=

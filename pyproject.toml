@@ -1,7 +1,10 @@
 [tool.pytest.ini_options]
 testpaths = ["ui/tests", "modules", "extension", "sources", "crates/universe-py/tests"]
 pythonpath = ["ui"]
-markers = ["slow: allowed past the 2 s a test is held to (conftest.py)"]
+markers = [
+  "slow: allowed past the 2 s a test is held to (conftest.py)",
+  "speed: a speed budget too slow for the pre-push check: `just speed` runs it",
+]
 # Its watchdog thread needs no GIL: a hang that holds it inside Qt's C++ is dumped and ended all the same.
 faulthandler_timeout = 60
 faulthandler_exit_on_timeout = true
@@ -20,7 +23,7 @@ qt_log_ignore = [
 [tool.ruff]
 line-length = 160
 target-version = "py311"
-include = ["*.py", "*.pyi", "**/pyproject.toml", "modules/*/bin/*", "sources/*/bin/*", "tools/release-notes", "tools/catalogue"]
+include = ["*.py", "*.pyi", "**/pyproject.toml", "modules/*/bin/*", "sources/*/bin/*", "tools/release-notes", "tools/catalogue", "tools/frame-gaps"]
 extend-exclude = ["modules/capture/bin/thaw", "modules/pads/bin/thaw"]
 
 [tool.ruff.lint]
