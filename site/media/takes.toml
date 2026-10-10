@@ -123,3 +123,138 @@ size = "1920x1080"
 kind = "still"
 keys = "wait:1500 shot:"
 alt = "Universe Desktop's library"
+
+[[take]]
+name = "search"
+look = "reprise"
+size = "1920x1080"
+kind = "still"
+keys = "Wait:4 Up Wait:1 Up Wait:1 Left Wait:1 Left Wait:2 Expect: Return Wait:3 Type:de Type:ad Wait:5 Shot:"
+alt = "Search over the home screen: the games whose title matches, and the settings that do"
+fake = true
+
+[[take]]
+name = "power-menu"
+look = "reprise"
+size = "1920x1080"
+kind = "still"
+keys = "Wait:4 Up Wait:1 Up Wait:1 Left Wait:2 Expect: Return Wait:5 Shot:"
+alt = "The Power menu: Quit Universe, Suspend, Reboot, Power off and Stay"
+fake = true
+
+[[take]]
+name = "game-menu"
+look = "reprise"
+size = "1920x1080"
+kind = "still"
+keys = "Wait:4 F1 Wait:5 Shot:"
+alt = "The game menu, opened with Start on a game of the home row"
+fake = true
+
+[[take]]
+name = "settings-stores"
+look = "reprise"
+size = "1920x1080"
+kind = "still"
+keys = "Wait:4 Up Wait:1 Up Wait:1 Left Wait:1 Left Wait:2 Expect: Return Wait:3 Type:stores Wait:3 Expect: Return Wait:2 Expect: Return Wait:6 Shot:"
+alt = "Settings, Stores: the store that is on, the ones that are off, and Get more"
+fake = true
+
+[[take]]
+name = "settings-downloads"
+look = "reprise"
+size = "1920x1080"
+kind = "still"
+keys = "Wait:4 Up Wait:1 Up Wait:1 Left Wait:1 Left Wait:2 Expect: Return Wait:3 Type:downloads Wait:3 Expect: Return Wait:2 Expect: Return Wait:6 Shot:"
+alt = "Settings, Downloads: installs in progress, updates, and the games each store has on this PC"
+fake = true
+
+[[take]]
+name = "settings-controller"
+look = "reprise"
+size = "1920x1080"
+kind = "still"
+keys = "Wait:4 Up Wait:1 Up Wait:1 Left Wait:1 Left Wait:2 Expect: Return Wait:3 Type:controller Wait:3 Expect: Return Wait:2 Expect: Return Wait:6 Shot:"
+alt = "Settings, Controller: the controller Universe reads, and its buttons"
+fake = true
+
+[[take]]
+name = "settings-game-defaults"
+look = "reprise"
+size = "1920x1080"
+kind = "still"
+keys = "Wait:4 Up Wait:1 Up Wait:1 Left Wait:1 Left Wait:2 Expect: Return Wait:3 Type:game_defaults Wait:3 Expect: Return Wait:2 Expect: Return Wait:6 Shot:"
+alt = "Settings, Game defaults: display, overlay, saves and updates for every game"
+fake = true
+
+[[take]]
+name = "settings-emulators-proton"
+look = "reprise"
+size = "1920x1080"
+kind = "still"
+keys = "Wait:4 Up Wait:1 Up Wait:1 Left Wait:1 Left Wait:2 Expect: Return Wait:3 Type:emulators Wait:3 Expect: Return Wait:2 Expect: Return Wait:6 Shot:"
+alt = "Settings, Emulators & Proton: the runners found, the ones Universe can install, and the tools"
+fake = true
+
+[[take]]
+name = "settings-features"
+look = "reprise"
+size = "1920x1080"
+kind = "still"
+keys = "Wait:4 Up Wait:1 Up Wait:1 Left Wait:1 Left Wait:2 Expect: Return Wait:3 Type:features Wait:3 Expect: Return Wait:2 Expect: Return Wait:6 Shot:"
+alt = "Settings, Features: the modules that are on, the ones that are off, and Get more"
+fake = true
+
+[[take]]
+name = "settings-artwork"
+look = "reprise"
+size = "1920x1080"
+kind = "still"
+keys = "Wait:4 Up Wait:1 Up Wait:1 Left Wait:1 Left Wait:2 Expect: Return Wait:3 Type:artwork Wait:3 Expect: Return Wait:2 Expect: Return Wait:6 Shot:"
+alt = "Settings, Artwork: the art each game is missing, and Fetch missing art"
+fake = true
+
+[[take]]
+name = "settings-appearance"
+look = "reprise"
+size = "1920x1080"
+kind = "still"
+keys = "Wait:4 Up Wait:1 Up Wait:1 Left Wait:1 Left Wait:2 Expect: Return Wait:3 Type:appearance Wait:3 Expect: Return Wait:2 Expect: Return Wait:6 Shot:"
+alt = "Settings, Appearance: the look, its sounds and the startup animation"
+fake = true
+
+[[take]]
+name = "settings-sound"
+look = "reprise"
+size = "1920x1080"
+kind = "still"
+keys = "Wait:4 Up Wait:1 Up Wait:1 Left Wait:1 Left Wait:2 Expect: Return Wait:3 Type:sound Wait:3 Expect: Return Wait:2 Expect: Return Wait:6 Shot:"
+alt = "Settings, Sound: the outputs the sound can play through"
+fake = true
+
+[[take]]
+name = "settings-storage"
+look = "reprise"
+size = "1920x1080"
+kind = "still"
+keys = "Wait:4 Up Wait:1 Up Wait:1 Left Wait:1 Left Wait:2 Expect: Return Wait:3 Type:storage Wait:3 Expect: Return Wait:2 Expect: Return Wait:6 Shot:"
+alt = "Settings, Storage: Universe's folders, the games by size, and what no game holds any more"
+fake = true
+
+[[take]]
+name = "settings-system-check"
+look = "reprise"
+size = "1920x1080"
+kind = "still"
+keys = "Wait:4 Up Wait:1 Up Wait:1 Left Wait:1 Left Wait:2 Expect: Return Wait:3 Type:system_check Wait:3 Expect: Return Wait:2 Expect: Return Wait:6 Shot:"
+alt = "Settings, System check: the checks that pass and the ones that need attention"
+fake = true
+
+[[take]]
+name = "settings-about"
+look = "reprise"
+size = "1920x1080"
+kind = "still"
+keys = "Wait:4 Up Wait:1 Up Wait:1 Left Wait:1 Left Wait:2 Expect: Return Wait:3 Type:about Wait:3 Expect: Return Wait:2 Expect: Return Wait:6 Shot:"
+alt = "Settings, About: the version, what's new, first-run setup and power"
+fake = true
