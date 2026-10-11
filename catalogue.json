@@ -1067,6 +1067,20 @@
       {
        "arch": "x86_64",
        "format": "appimage",
+       "sha256": "21aa550a312b449ad1f1a2868ccd2100c3ae52f5a03e6fcb46774df0632195cb",
+       "size": 94099251,
+       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-2ba2f75bcea7ef6bdd687046c7fcfb790faf9853/rpcs3-v0.0.43-20284-2ba2f75b_linux64.AppImage"
+      }
+     ],
+     "channel": "rolling",
+     "date": "2026-10-11T10:14:18Z",
+     "version": "0.0.43-20284-2ba2f75b"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "appimage",
        "sha256": "e86748388dd63cb57f31496fc60488881137f2bedb767753c518cd2c87ba2d21",
        "size": 94080895,
        "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-987129bc91191b42bfc17256641037c76c7a856e/rpcs3-v0.0.43-20273-987129bc_linux64.AppImage"
@@ -1131,20 +1145,6 @@
      "channel": "rolling",
      "date": "2026-10-06T10:35:37Z",
      "version": "0.0.43-20234-532b6520"
-    },
-    {
-     "assets": [
-      {
-       "arch": "x86_64",
-       "format": "appimage",
-       "sha256": "0a892bb02791e3b93e6c05829de0018e89e1e1421d1e58eea302901cc60d6edd",
-       "size": 94056736,
-       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-ba4a4b561edb562d9fd58268edaf927fa436f408/rpcs3-v0.0.43-20217-ba4a4b56_linux64.AppImage"
-      }
-     ],
-     "channel": "rolling",
-     "date": "2026-10-05T09:24:41Z",
-     "version": "0.0.43-20217-ba4a4b56"
     }
    ],
    "homepage": "https://github.com/RPCS3/rpcs3-binaries-linux",
@@ -1377,21 +1377,21 @@
       {
        "arch": "x86_64",
        "format": "appimage",
-       "sha256": "b42ba0296458831018837e7fcc1a12d216d7a1190fbc79be3c3f97baf884e57a",
+       "sha256": "460df1c1045b8e6a8ba2bf2a1b75789b6eb037f642a727bc687d62ef6513f5fd",
        "size": 70429176,
        "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-x86_64.AppImage"
       },
       {
        "arch": "aarch64",
        "format": "appimage",
-       "sha256": "2cf6944c58b024e5fd917c06119b4f0634b141ec5d86a8bd061b52be142ec8cd",
-       "size": 70801928,
+       "sha256": "023aeb8511363f21128e9ec51f11cb82ee7c34bb944c2dcee4f2b7f02a3af92b",
+       "size": 70814216,
        "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-aarch64.AppImage"
       }
      ],
      "channel": "rolling",
-     "date": "2026-10-09T16:59:51Z",
-     "version": "2026.10.09"
+     "date": "2026-10-11T08:28:27Z",
+     "version": "2026.10.11"
     }
    ],
    "homepage": "https://github.com/Vita3K/Vita3K",
@@ -1532,6 +1532,6 @@
    "name": "xemu"
   }
  },
- "generated_at": "2026-10-10T11:15:44Z",
+ "generated_at": "2026-10-11T11:29:12Z",
  "schema": 1
 }
