@@ -5,6 +5,7 @@ import ctypes.util
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -894,6 +895,11 @@ class FakeCore:
             node[leaf] = value == "true"
         elif leaf == "tags":
             node[leaf] = [v.strip() for v in value.split(",") if v.strip()]
+        elif key == "launch.args":
+            try:
+                node[leaf] = shlex.split(value)
+            except ValueError as e:
+                raise UniverseError("Invalid", f"{key}: {e}") from None
         else:
             node[leaf] = value
         self._write_game(game)

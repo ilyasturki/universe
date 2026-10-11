@@ -699,7 +699,12 @@ impl Build<'_> {
                 out.push(f);
                 continue;
             }
-            let own = as_kind(row.kind, render(own_value));
+            let own = match own_value.as_array() {
+                Some(words) if launch_keys::find(row.key).is_some_and(|k| k.kind == launch_keys::Kind::Words) => {
+                    shell_words::join(words.iter().map(render))
+                }
+                _ => as_kind(row.kind, render(own_value)),
+            };
             if row.scope == "both" {
                 let fallback = if render(dig(set, &key)).is_empty() { Origin::Default } else { Origin::Global };
                 f = f.inherits(own, Origin::Game, as_kind(row.kind, render(&global[row.key])), fallback);

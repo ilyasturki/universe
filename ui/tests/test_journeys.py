@@ -287,9 +287,9 @@ def test_arguments_set_on_the_games_page_reach_it_on_every_launch_after_a_restar
     walk(look, page, "launch.args")
     look.press(Qt.Key.Key_Return)
     sheet = until(lambda: (s := page.findChild(QObject, "textSheet")) is not None and s.property("open") is True and s)
-    type_text(look, "--delay,0")
+    type_text(look, "--delay 0 --title 'Sample Run'")
     look.press(Qt.Key.Key_Return)
-    until(lambda: journey.game(game)["launch"].get("args") == ["--delay", "0"], "game.toml holds the game's own arguments")
+    until(lambda: journey.game(game)["launch"].get("args") == ["--delay", "0", "--title", "Sample Run"], "game.toml holds the arguments as a shell splits them")
     until(lambda: sheet.property("open") is False)
     back_home(look)
     look.press(Qt.Key.Key_Return)
@@ -298,11 +298,11 @@ def test_arguments_set_on_the_games_page_reach_it_on_every_launch_after_a_restar
     look = journey.start()
     form = journey.api.screens.gameSettings
     form.load(game)
-    assert next(r for r in form.rows if r["key"] == "launch.args")["value"] == "--delay,0", "the page shows them after a restart"
+    assert next(r for r in form.rows if r["key"] == "launch.args")["value"] == "--delay 0 --title 'Sample Run'", "the page shows them after a restart, quoted as typed"
     until(lambda: look.root.property("returnLaunches") == game)
     look.press(Qt.Key.Key_Return)
     quit_game(look, journey.client)
-    assert [u["argv"][-3:] for u in journey.games_started()] == [[str(journey.root / "sample" / "sample-game"), "--delay", "0"]] * 2
+    assert [u["argv"][-5:] for u in journey.games_started()] == [[str(journey.root / "sample" / "sample-game"), "--delay", "0", "--title", "Sample Run"]] * 2
 
 
 MINI_METRO = "1434554947"

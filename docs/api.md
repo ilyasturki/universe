@@ -101,7 +101,7 @@ or global-only key is refused — with the maps `launch.dll_overrides.d3d11`, `l
 `launch.options.<key>` (validated against the runner's options); then `desktop.hide_cursor`, `hidden`,
 `favorite`, `tags`, `sort_title`, `platform`, the pins `metadata.steam_appid`, `metadata.gamesdb_id` and `metadata.sgdb_id`, `saves.name` (ludusavi's title, see Game data), and `capture.cursor` as a
 validated shorthand for `modules.capture.cursor`. Values are strings: `true`/`false` for booleans, `auto`/`on`/`off` for a toggle (`true`/`false` read as on/off),
-comma-separated for lists, `""` deletes the key. A runner is written under its shipped id (`yuzu` →
+comma-separated for lists, shell words for `launch.args` (`--delay 0 'a b'` is three arguments), `""` deletes the key. A runner is written under its shipped id (`yuzu` →
 `eden`).
 
 `Game` (JSON) is the contents of `game.toml` plus:

@@ -325,13 +325,13 @@ fn parse_value(value: &str) -> toml_edit::Value {
     value.into()
 }
 
-/// "" removes the key; lists as "a,b" for known list keys or "[a,b]".
+/// "" removes the key; lists as "a,b" for known list keys or "[a,b]", `launch.args` as shell words.
 pub fn set_dotted(doc: &mut toml_edit::DocumentMut, key: &str, value: &str) -> crate::Result<()> {
     let parts: Vec<&str> = key.split('.').collect();
     if parts.iter().any(|p| p.is_empty()) {
         return Err(crate::Error::Invalid(format!("bad key {key}")));
     }
-    let list_keys = ["tags", "args", "dlcs", "enabled"];
+    let list_keys = ["tags", "dlcs", "enabled"];
     let mut table: &mut toml_edit::Table = doc.as_table_mut();
     for p in &parts[..parts.len() - 1] {
         if !table.contains_key(p) || !table[p].is_table() {
@@ -361,7 +361,11 @@ pub fn set_dotted(doc: &mut toml_edit::DocumentMut, key: &str, value: &str) -> c
     // A build is a version, which `2606` or `2.8` would otherwise turn into a number.
     let is_build = key == "launch.runner_build" || (parts.len() == 3 && parts[0] == "runners" && last == "build");
     let is_store_id = matches!(key, "source.id" | "source.build_id" | "saves.name");
-    let v = if is_list && !value.starts_with('[') {
+    let is_words = parts.len() == 2 && parts[0] == "launch" && crate::launch_keys::find(last).is_some_and(|k| k.kind == crate::launch_keys::Kind::Words);
+    let v = if is_words {
+        let words = shell_words::split(value).map_err(|e| crate::Error::Invalid(format!("{key}: {e}")))?;
+        toml_edit::Value::Array(words.into_iter().collect())
+    } else if is_list && !value.starts_with('[') {
         parse_value(&format!("[{value}]"))
     } else if is_rate || is_text_map || is_system || is_build || is_store_id {
         value.into()

@@ -2766,7 +2766,7 @@ fn launch_keys(json: bool) -> anyhow::Result<()> {
             Kind::Int { max: None } => "int".into(),
             Kind::Str => "string".into(),
             Kind::Path => "path".into(),
-            Kind::List => "list".into(),
+            Kind::Words => "shell words".into(),
             Kind::Enum(choices) => choices.join(" | "),
             Kind::Resolution => "auto | WxH".into(),
             Kind::Refresh => "auto | Hz".into(),

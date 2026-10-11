@@ -15,7 +15,8 @@ pub enum Kind {
     },
     Str,
     Path,
-    List,
+    /// A list kept as written words: shell-quoted in a field, split as a shell splits them.
+    Words,
     Enum(&'static [&'static str]),
     /// `auto` or `WxH`.
     Resolution,
@@ -133,7 +134,7 @@ pub static LAUNCH_KEYS: &[LaunchKey] = &[
     advanced!("discrete_gpu", Kind::Bool, "true", "Discrete GPU", "Scaling", Both, &[], "On a laptop with two GPUs, the game and gamescope render on the stronger one rather than the one driving the screen. Off leaves the choice to the system. Nothing changes on a machine with one GPU."),
     advanced!("env", Kind::Map, "", "Environment variables", "Environment", Both, &[], "Environment variables for the game; a game's win over the global ones."),
     advanced!("wrapper", Kind::Str, "", "Wrapper command", "Launch", Game, &[], "A command the game runs through, innermost: gamemoderun, taskset -c 0-7…"),
-    advanced!("args", Kind::List, "", "Arguments", "Launch", Game, &[], "Arguments appended to the game's command line."),
+    advanced!("args", Kind::Words, "", "Arguments", "Launch", Game, &[], "Arguments appended to the game's command line."),
     advanced!("working_dir", Kind::Path, "", "Working directory", "Launch", Game, &[], "The folder the game starts in."),
     advanced!("pre_command", Kind::Str, "", "Before the game", "Launch", Game, &[], "A shell line run before the game starts."),
     advanced!("post_command", Kind::Str, "", "After the game", "Launch", Game, &[], "A shell line run once the game has ended."),
@@ -233,7 +234,7 @@ fn kind_name(kind: Kind) -> &'static str {
         Kind::Int { .. } => "int",
         Kind::Str => "string",
         Kind::Path => "path",
-        Kind::List => "list",
+        Kind::Words => "string",
         Kind::Enum(_) => "enum",
         Kind::Resolution => "resolution",
         Kind::Refresh => "refresh",

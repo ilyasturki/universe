@@ -66,7 +66,7 @@ universe config set launch.fps_limit
 universe config get launch
 ```
 
-`universe set` takes the launch keys without their `launch.` prefix and a runner option as `options.<key>`, and an empty value removes the game's own. `universe config set` with no value removes a default. A key set at the wrong level is refused, with an error like `launch.umu_run is a global key`. A list, such as `args`, is split on commas.
+`universe set` takes the launch keys without their `launch.` prefix and a runner option as `options.<key>`, and an empty value removes the game's own. `universe config set` with no value removes a default. A key set at the wrong level is refused, with an error like `launch.umu_run is a global key`. `args` is split as a shell splits words, so quote an argument that holds a space.
 
 [`universe launch-keys`](/docs/reference/cli/launch-keys/) prints every key with its type, default and scope. The [Launch keys](/docs/reference/launch-keys/) page lists them all, and [config.toml](/docs/reference/config/) covers the rest of the file.
 

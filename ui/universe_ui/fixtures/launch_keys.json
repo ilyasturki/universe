@@ -225,7 +225,7 @@
   },
   {
     "key": "args",
-    "type": "list",
+    "type": "string",
     "default": "",
     "choices": [],
     "label": "Arguments",

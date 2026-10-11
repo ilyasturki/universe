@@ -342,7 +342,11 @@ def png(core):
     return str(path)
 
 
-LAUNCH = [("set_field", "game", T, "launch.fps_limit", "60"), ("set_field", "game", T, "launch.env.DXVK_HUD", "fps")]
+LAUNCH = [
+    ("set_field", "game", T, "launch.fps_limit", "60"),
+    ("set_field", "game", T, "launch.env.DXVK_HUD", "fps"),
+    ("set_field", "game", T, "launch.args", "-w 'a b'"),
+]
 # Each: what to read, and the writes between two reads; a write is a call, or a function of the core for one that names its own data.
 WRITES = {
     "game flags": (

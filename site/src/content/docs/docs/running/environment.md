@@ -42,12 +42,12 @@ universe set <game> wrapper="gamemoderun"
 
 ## Arguments and working directory
 
-**Arguments** are appended to the game's command line. Separate them with commas, so `-windowed,-nolauncher` is two arguments and a space stays inside one. For an emulator they come last, after the runner page's **Arguments**, the flags of its options, the game's file and any a feature's hook adds.
+**Arguments** are appended to the game's command line. They're split as a shell splits words, so `-windowed -nolauncher` is two arguments and `--name 'My Save'` keeps its space inside one. For an emulator they come last, after the runner page's **Arguments**, the flags of its options, the game's file and any a feature's hook adds.
 
 **Working directory** is the folder the game starts in. It defaults to the folder holding the game's program, since some games quit when started from anywhere else.
 
 ```sh
-universe set <game> args=-windowed,-nolauncher working_dir=~/Games/MyGame
+universe set <game> args="-windowed -nolauncher" working_dir=~/Games/MyGame
 ```
 
 ## Before and after the game
