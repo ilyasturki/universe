@@ -18,11 +18,6 @@ BUDGET_S = float(os.environ.get("UNIVERSE_CRAWL_BUDGET_S", "3600"))
 # here fails the crawl. Take a line out once its fix lands. A page the walk's presses ran out before is told, not failed.
 KNOWN = {
     "reprise": {
-        # The action menu is 460 dp wide: a row's detail leaves its label no room.
-        ("truncated", "Use GE-Proton"),
-        ("truncated", "Remove GE-Proton"),
-        ("truncated", "Follow the newest GE-Proton"),
-        ("truncated", "Arcade Vault"),
         # A 46-letter title: the game menu's heading, the media pages' headers and the search's two lines elide it.
         ("truncated", "Batman: Arkham Asylum Game of the Year Edition"),
         # The session log's process column.

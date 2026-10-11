@@ -2,7 +2,7 @@ import QtQuick
 import "../core"
 import "../sound"
 
-// Items: MenuRow's plus `action` and `gap`; the row stays lit above the scrim as a live copy. `detail` sits at the row's right,
+// Items: MenuRow's plus `action` and `gap`; the row stays lit above the scrim as a live copy. `detail` sits at the row's right (under the label when it would cut it),
 // `more` draws a chevron there and lets Right open it, `gap` parts the row from the one above. With no anchor the list sits
 // in the middle of the screen, a question: `title` is asked, `note` says more under it.
 FocusScope {
@@ -257,7 +257,7 @@ FocusScope {
         readonly property real room: menu.height - Theme.dp(80)
         readonly property real fit: Math.min(room, (head.visible ? head.y + head.height : 0) + scroller.anchors.topMargin + scroller.contentHeight + scroller.bottomMargin)
 
-        width: Theme.dp(menu.centered ? 640 : 460)
+        width: Theme.dp(menu.centered ? 640 : 540)
         height: fit
         // The rows take their new size at once, under the panel's edge while it grows.
         clip: entrance.running
