@@ -15,7 +15,7 @@ The counter above each title shows where you are, `2 / 5` for instance. The setu
 
 - **X**, or **A** on **Continue**, goes to the next step. On the last step the button reads **Finish**.
 - **B**, or **A** on **Back**, goes back a step.
-- On the first step that button reads **Skip setup** and asks **Skip setup?** before closing, with **Skip** to end the setup and **Keep going** to stay. Once some games came in, it reads **Close** and closes without asking.
+- On the first step that button reads **Skip setup** and asks **Skip setup?** before closing, with **Skip** to end the setup and **Keep going** to stay. **B** on the question stays too. Once some games came in, or when you run the setup again after the first one, it reads **Close** and closes without asking.
 
 Imports run in the background. You can move on, and even finish, while a launcher's games are still coming in.
 

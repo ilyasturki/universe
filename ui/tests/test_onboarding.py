@@ -2,7 +2,7 @@ import json
 import threading
 
 import pytest
-from looks import SUBMIT, Look, activate, page_name
+from looks import SUBMIT, Look, activate, focus_names, page_name
 from PySide6.QtCore import QObject, Qt
 from uitest import index_of, record, rows_by_key, until
 
@@ -357,8 +357,10 @@ def reopen(look):
     if look.name == "ps5":
         about = look.settings("about")
         until(lambda: about.property("activeFocus"))
-    for key in TO_SETUP[look.name]:
-        look.press(key)
+    # A setup closed from the Home leaves its cursor on Set up.
+    if look.name == "ps5" or not look.home().property("onSetup"):
+        for key in TO_SETUP[look.name]:
+            look.press(key)
     if look.name != "ps5":
         until(lambda: look.home().property("onSetup") is True)
     look.press(Qt.Key.Key_Return)
@@ -387,7 +389,12 @@ def test_the_setup_in_each_look(stores_signed_out, look, empty_api, empty):
     look.press(Qt.Key.Key_Return)
     until(lambda: empty.onboarded() is True and not opened(look), "Skip skips it")
     reopen(look)
-    until(lambda: opened(look) and form.stepId == "found", "it runs again")
+    until(lambda: opened(look) and form.stepId == "found" and form.again, "it runs again")
+    until(lambda: focused(look, "setupRows"))
+    look.press(Qt.Key.Key_Escape)
+    until(lambda: not opened(look) and "onboardingPage" not in focus_names(look.window), "run again, B on its first step closes it without asking")
+    reopen(look)
+    until(lambda: opened(look) and form.stepId == "found")
     until(lambda: focused(look, "setupRows"))
     look.press(Qt.Key.Key_Down)
     look.press(Qt.Key.Key_Return)

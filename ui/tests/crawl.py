@@ -23,11 +23,7 @@ KNOWN = {
         # Seen once: Artwork's keyboard sheet closed and kept the focus, hidden; not reproduced by hand yet.
         ("focus-unseen", "artworkPage"),
     },
-    "switch2": {
-        # The setup opened from Settings asks "Skip setup?" on B, and B on the question keeps going: only A on Skip leaves.
-        ("b-never-home", "onboardingPage"),
-        ("b-never-home", "dialog"),
-    },
+    "switch2": set(),
     "ps5": {
         ("truncated", "Add a SteamGridDB key for more art"),
         ("truncated", "News cards, info pane; backdrops without a background"),

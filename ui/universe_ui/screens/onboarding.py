@@ -596,3 +596,5 @@ class Onboarding(RowsForm):
     loading = Property(bool, lambda self: self._loading, notify=loadingChanged)
     idle = Property(bool, _idle, notify=idleChanged)
     added = Property(bool, _added, notify=headChanged)
+    # Run again after a first start went through it: leaving skips nothing.
+    again = Property(bool, lambda self: self._client.onboarded(), notify=headChanged)

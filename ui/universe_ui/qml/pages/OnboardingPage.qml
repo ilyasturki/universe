@@ -22,7 +22,7 @@ FocusScope {
     signal closeRequested
     signal message(string text)
 
-    readonly property string backLabel: form.step > 0 ? "Back" : form.added ? "Close" : "Skip setup"
+    readonly property string backLabel: form.step > 0 ? "Back" : form.added || form.again ? "Close" : "Skip setup"
     readonly property string nextLabel: last ? "Finish" : "Continue"
     readonly property string acceptLabel: nav.activeFocus ? (nav.index === 1 ? nextLabel : backLabel) : selectLabel(cards.currentRow)
     readonly property var hints: prompts.open ? prompts.hints : editor.open ? editor.hints : confirm.open ? confirm.hints : [acceptLabel !== "" && {
@@ -145,9 +145,9 @@ FocusScope {
         form.next();
     }
 
-    // B on the first step asks before the setup is skipped, unless games came in: then it only closes.
+    // B on the first step asks before the setup is skipped, unless games came in or it runs again: then it only closes.
     function retreat() {
-        if (form.step > 0 || form.added) {
+        if (form.step > 0 || form.added || form.again) {
             Sound.cancel();
             form.step > 0 ? form.back() : form.finish();
             return;

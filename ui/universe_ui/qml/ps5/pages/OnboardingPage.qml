@@ -23,7 +23,7 @@ FocusScope {
     // A store's sign-in card is up: the list keeps that store's rows alone, so they fit beside it.
     readonly property bool signing: qrCard.visible
 
-    readonly property string backLabel: form.step > 0 ? "Back" : form.added ? "Close" : "Skip Setup"
+    readonly property string backLabel: form.step > 0 ? "Back" : form.added || form.again ? "Close" : "Skip Setup"
     readonly property string nextLabel: last ? "Finish" : "Continue"
     readonly property var hints: {
         var row = rows.currentRow;
@@ -96,9 +96,9 @@ FocusScope {
         form.next();
     }
 
-    // B on the first step asks before the setup is skipped, unless games came in: then it only closes.
+    // B on the first step asks before the setup is skipped, unless games came in or it runs again: then it only closes.
     function retreat() {
-        if (form.step > 0 || form.added) {
+        if (form.step > 0 || form.added || form.again) {
             Sound.play("back");
             form.step > 0 ? form.back() : form.finish();
             return;
