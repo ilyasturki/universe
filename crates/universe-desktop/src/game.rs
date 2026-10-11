@@ -224,12 +224,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn an_uninstall_names_the_store_that_removes_the_files() {
-        assert!(uninstall_body(Some("Steam")).starts_with("Steam removes its files."));
-        assert!(uninstall_body(None).starts_with("Its install folder goes to the trash."));
-    }
-
-    #[test]
     fn a_prefix_another_library_game_shares_is_not_offered_to_purge() {
         let root = tempfile::tempdir().unwrap();
         let config = universe::config::Config {

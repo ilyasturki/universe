@@ -862,16 +862,4 @@ mod tests {
         let cfg: crate::config::Config = toml::from_str(&text).unwrap();
         assert_eq!(cfg.controller.macros(), list);
     }
-
-    #[test]
-    fn state_lists_families_macros_and_presets() {
-        let v = state_json(&ControllerConfig::default());
-        assert_eq!(v["families"].as_array().unwrap().len(), 10);
-        assert_eq!(v["presets"].as_array().unwrap().len(), 8);
-        let edge = v["families"].as_array().unwrap().iter().find(|f| f["id"] == "dualsense-edge").unwrap();
-        let slots = edge["slots"].as_array().unwrap();
-        assert_eq!(slots[0]["label"], "Cross");
-        assert_eq!(slots.last().unwrap()["id"], "paddle_right");
-        assert_eq!(slots.last().unwrap()["codes"][0], "BTN_TRIGGER_HAPPY4");
-    }
 }

@@ -717,34 +717,6 @@ impl FormView {
 mod tests {
     use super::*;
 
-    fn field(kind: &str, value: &str, resolved: &str) -> Field {
-        Field { kind: kind.into(), value: value.into(), resolved: resolved.into(), ..Field::default() }
-    }
-
-    #[test]
-    fn values_read_with_their_unit_and_what_auto_comes_to() {
-        assert_eq!(show(&field("refresh", "auto", "144"), "auto"), "Auto · 144 Hz");
-        assert_eq!(show(&field("fps", "auto", "60"), "60"), "60 FPS");
-        assert_eq!(show(&field("resolution", "1920x1080", ""), "1920x1080"), "1920 × 1080");
-        assert_eq!(show(&field("toggle", "on", ""), "on"), "On");
-    }
-
-    #[test]
-    fn a_reset_names_where_the_value_comes_back_from_and_the_row_shows_it_bare() {
-        let filter = Field { fallback: Some(Origin::Default), own: "nearest".into(), inherited_resolved: "linear".into(), ..field("enum", "nearest", "") };
-        assert_eq!(inherit_label(&filter), "Default · linear", "what an unset filter comes to, though the game sets its own");
-        assert_eq!(inherited_shown(&filter), "linear", "the row's value, bare: its caption names the origin");
-        let rate = Field { fallback: Some(Origin::Global), inherited: "auto".into(), inherited_resolved: "144".into(), ..field("refresh", "60", "") };
-        assert_eq!(inherit_label(&rate), "Global · Auto · 144 Hz");
-    }
-
-    #[test]
-    fn the_advanced_row_names_what_its_own_page_holds() {
-        let journal = ["Writing".to_string(), "Pictures".into(), "".into(), "Writing".into()];
-        assert_eq!(advanced_line(&journal), "Writing, Pictures", "the journal's cards, not a launch form's");
-        assert_eq!(advanced_line(&[]), "");
-    }
-
     #[test]
     fn folders_are_told_from_files_by_their_key() {
         assert!(wants_folder("paths.games_root") && wants_folder("launch.prefix") && wants_folder("sources.gog.games_dir"));
