@@ -28,6 +28,10 @@ jobs:
           restore-prefixes-first-match: nix-build-
       # The out-links are gc roots: the save's garbage collection keeps what they point to
       - run: nix build .#universe .#universe-ui .#universe-desktop -o "$RUNNER_TEMP/package" -L
+      # The docs' fake takes played offscreen on the built UI: a take whose keys no longer reach their screen fails here
+      - run: tools/docs-media dry-run && tools/docs-media check
+        env:
+          UI_BIN: ${{ runner.temp }}/package-1/bin/universe-ui
       # The lint job builds the two lint checks; listing the rest keeps this job from compiling the Rust tree twice
       - run: nix build .#checks.x86_64-linux.pytest-ui .#checks.x86_64-linux.pytest-modules .#checks.x86_64-linux.pytest-sources .#checks.x86_64-linux.pytest-core-py .#checks.x86_64-linux.desktop-test -o "$RUNNER_TEMP/check" -L
       - run: nix flake check --no-build
