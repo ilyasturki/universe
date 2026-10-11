@@ -16,6 +16,9 @@ jobs:
       - run: nix build .#checks.x86_64-linux.lint .#checks.x86_64-linux.rust-lint --no-link -L
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
     steps:
       - uses: actions/checkout@v7
       - uses: DeterminateSystems/nix-installer-action@v23
@@ -35,11 +38,16 @@ jobs:
       # The lint job builds the two lint checks; listing the rest keeps this job from compiling the Rust tree twice
       - run: nix build .#checks.x86_64-linux.pytest-ui .#checks.x86_64-linux.pytest-modules .#checks.x86_64-linux.pytest-sources .#checks.x86_64-linux.pytest-core-py .#checks.x86_64-linux.desktop-test -o "$RUNNER_TEMP/check" -L
       - run: nix flake check --no-build
+      # 5G keeps the toolchain and the vendored crates beside the gc roots; the purge keeps one entry per branch inside the repo's 10 GB
       - if: always() && steps.nix-cache.outputs.hit-primary-key != 'true'
         uses: nix-community/cache-nix-action/save@v7
         with:
           primary-key: nix-build-${{ github.sha }}
-          gc-max-store-size-linux: 1G
+          gc-max-store-size-linux: 5G
+          purge: ${{ github.event_name == 'push' }}
+          purge-prefixes: nix-build-
+          purge-created: 0
+          purge-primary-key: never
   # Off NixOS: the core's tests, tools/dist, install.sh, the CLI and the UI offscreen, as a user other than root
   distros:
     runs-on: ubuntu-latest
