@@ -5,6 +5,10 @@ import Shot from '../components/Shot.astro';
 import lockupLight from '../../../brand/universe-lockup.svg';
 import lockupDark from '../../../brand/universe-lockup-dark.svg';
 import Landing from '../layouts/Landing.astro';
+import archLogo from '../assets/logos/archlinux.svg?raw';
+import fedoraLogo from '../assets/logos/fedora.svg?raw';
+import nixLogo from '../assets/logos/nixos.svg?raw';
+import deckLogo from '../assets/logos/steamdeck.svg?raw';
 
 const version = __UNIVERSE_VERSION__;
 const repo = __UNIVERSE_REPO__;
@@ -28,39 +32,42 @@ const looks = [
 ];
 
 const also = [
-    { title: 'Recordings and screenshots', text: 'Record every session if you want to. The videos land in the Media tab with your screenshots.' },
-    { title: 'Achievements', text: 'Each game lists the ones its store tracks, and an unlock shows a banner over the game.' },
-    { title: 'Saves', text: 'A backup after every session, GOG and Epic cloud saves synced, restored or exported from the game’s page.' },
-    { title: 'Runners', text: 'Proton, Wine and 21 emulators. The builds Universe can fetch install, update and roll back from the settings.' },
-    { title: 'Add-ons', text: 'Modules, stores and themes others made, installed from the settings or with universe extension.' },
-    { title: 'Any desktop', text: 'GNOME, KDE, Cinnamon, Sway, Hyprland, Niri or X11, or no desktop at all in the Universe session.' },
-    { title: 'Universe Desktop', text: 'A GTK app for mouse and keyboard on the same library, with a GNOME search provider for your games.' },
-    { title: 'A CLI', text: 'universe does everything the app does, from a terminal or a script, with --json on every command.' },
+    { title: 'Recordings and screenshots', text: 'Record every session if you like. Videos and screenshots land in the Media tab.' },
+    { title: 'Achievements', text: 'The ones each store tracks, with a banner over the game on unlock.' },
+    { title: 'Saves', text: 'Backed up after every session. GOG and Epic cloud saves synced.' },
+    { title: 'Runners', text: 'Proton, Wine and 21 emulators, installed, updated and rolled back from the settings.' },
+    { title: 'Add-ons', text: 'Modules, stores and themes made by others, installed from the settings.' },
+    { title: 'Any desktop', text: 'GNOME, KDE, Cinnamon, Sway, Hyprland, Niri, X11, or no desktop at all.' },
+    { title: 'Universe Desktop', text: 'A GTK app for mouse and keyboard, on the same library.' },
+    { title: 'A CLI', text: 'universe does everything the app does, with --json on every command.' },
 ];
 
 const installs = [
     {
         id: 'arch',
         name: 'Arch Linux',
-        lead: 'From the AUR: universe builds the latest release, universe-bin installs its prebuilt build, universe-git builds main. Each has a universe-desktop sibling for Universe Desktop.',
+        logo: archLogo,
+        lead: 'From the AUR. universe-bin is the prebuilt build, universe-git follows main. Add universe-desktop for Universe Desktop.',
         code: 'paru -S universe',
         lang: 'sh',
     },
     {
         id: 'fedora',
         name: 'Fedora',
-        lead: 'Fedora 44 and newer, from COPR, built from each release against Fedora’s own PySide6, GTK and libadwaita.',
+        logo: fedoraLogo,
+        lead: 'Fedora 44 and newer, from COPR.',
         code: 'sudo dnf copr enable ilyasturki/universe\nsudo dnf install universe universe-desktop',
         lang: 'sh',
     },
     {
         id: 'other',
         name: 'SteamOS and others',
-        lead: 'SteamOS, Bazzite and any other distribution: the latest release, installed for your user under ~/.local. It asks for your password once, for the controller rules and the login session.',
+        logo: deckLogo,
+        lead: 'SteamOS, Bazzite and any other distribution. Installs for your user under ~/.local and asks for your password once.',
         code: installer,
         lang: 'sh',
     },
-    { id: 'nix', name: 'Nix', lead: 'The flake has a NixOS module for the system side and a Home Manager module for the apps.', code: nix, lang: 'nix' },
+    { id: 'nix', name: 'Nix', logo: nixLogo, lead: 'A NixOS module for the system side, a Home Manager module for the apps.', code: nix, lang: 'nix' },
 ];
 ---
 
@@ -83,29 +90,59 @@ const installs = [
     <main>
         <section class="hero wrap">
             <h1>A game launcher for Linux you drive with a controller.</h1>
-            <p class="lead">
-                Your GOG, Steam, Epic, itch.io, Lutris and emulated games in one library, from the couch or on a Steam Deck. Each one launches in gamescope with
-                the runner it needs.
-            </p>
+            <p class="lead">GOG, Steam, Epic, itch.io, Lutris and emulated games in one library, played from the couch or on a Steam Deck.</p>
             <div class="actions">
                 <a class="button primary" href="#install">Install</a>
                 <a class="button" href="/docs/">Docs</a>
                 <a class="button" href={repo}>GitHub</a>
             </div>
-            <p class="note">Version {version}. Early days: I use it every day, but expect rough edges.</p>
+            <ul class="distros" aria-label="Install on">
+                {installs.map((way) => (
+                        <li>
+                            <a href="#install" data-install={way.id}><span class="logo" aria-hidden="true" set:html={way.logo}></span>{way.name}</a>
+                        </li>
+                    ))}
+            </ul>
+            <p class="note">Version {version}. Early days: expect rough edges.</p>
             <div class="stage">
                 <Clip name="home" />
             </div>
         </section>
 
+        <section class="install wrap" id="install">
+            <h2>Install</h2>
+            <p class="center">x86_64 Linux with a systemd user session. gamescope is optional, but on by default.</p>
+            <div class="tabs" data-tabs>
+                <div class="tablist" role="tablist" aria-label="Install">
+                    {installs.map((way, i) => (
+                            <button type="button" role="tab" id={`install-tab-${way.id}`} aria-controls={`install-${way.id}`} aria-selected={i === 0 ? 'true' : 'false'} tabindex={i === 0 ? 0 : -1}>
+                                <span class="logo" aria-hidden="true" set:html={way.logo}></span>
+                                {way.name}
+                            </button>
+                        ))}
+                </div>
+                {installs.map((way, i) => (
+                        <div class="panel" role="tabpanel" id={`install-${way.id}`} aria-labelledby={`install-tab-${way.id}`} hidden={i !== 0}>
+                            <p>{way.lead}</p>
+                            <div class="code">
+                                <Code code={way.code} lang={way.lang} themes={{ light: 'github-light', dark: 'github-dark' }} defaultColor={false} />
+                                <button type="button" class="copy-button" data-copy={way.code}>
+                                    Copy
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+            </div>
+            <p class="center">
+                Then open Universe Big Screen: a short setup finds your games. <a href="/docs/getting-started/install/">Every way to install</a>
+            </p>
+        </section>
+
         <section class="feature wrap">
             <div class="copy">
                 <h2>Your whole library</h2>
-                <p>
-                    GOG, Steam, Epic and itch.io games installed and updated from Universe, your Lutris games with their play time, and the ROM folders your
-                    emulators already know.
-                </p>
-                <p>The first run finds what your other launchers installed. Adding them moves nothing.</p>
+                <p>GOG, Steam, Epic and itch.io games installed and updated from Universe, plus your Lutris games and your emulators' ROM folders.</p>
+                <p>The first run finds what your other launchers installed, and moves nothing.</p>
                 <a class="more" href="/docs/library/gog/">The stores and imports</a>
             </div>
             <div class="media"><Shot name="library" sizes="(min-width: 60rem) 40rem, 100vw" /></div>
@@ -114,11 +151,8 @@ const installs = [
         <section class="feature flip wrap">
             <div class="copy">
                 <h2>A page for every game</h2>
-                <p>Art, screenshots, play time, achievements, saves and what it takes on disk.</p>
-                <p>
-                    Its settings sit one button away: the runner, the Proton build, the resolution, the frame rate cap. Each one starts from a default you set
-                    once for every game.
-                </p>
+                <p>Art, screenshots, play time, achievements, saves and disk use.</p>
+                <p>Its settings are one button away: runner, Proton build, resolution, frame cap. Each starts from a default you set once.</p>
                 <a class="more" href="/docs/using/game-page/">A game's page</a>
             </div>
             <div class="media"><Shot name="game-page" sizes="(min-width: 60rem) 40rem, 100vw" /></div>
@@ -157,10 +191,7 @@ const installs = [
         <section class="feature wrap">
             <div class="copy">
                 <h2>HOME over a running game</h2>
-                <p>
-                    HOME opens over the game and pauses it. From there, take a screenshot, show MangoHud, cap the frame rate, change the volume, reconnect a
-                    controller or quit.
-                </p>
+                <p>HOME pauses the game and opens over it: screenshot, MangoHud, frame cap, volume, controllers, quit.</p>
                 <a class="more" href="/docs/using/playing/">Playing, and HOME over a game</a>
             </div>
             <div class="media"><Clip name="home-over-game" /></div>
@@ -169,25 +200,22 @@ const installs = [
         <section class="strip wrap">
             <article>
                 <h3>Controllers</h3>
-                <p>
-                    DualSense, DualShock 4, Xbox, Switch Pro and 8BitDo Pro 3, each with its own button glyphs. With Emulator controls on, every emulator gets
-                    the pads you hold, one per player.
-                </p>
+                <p>DualSense, DualShock 4, Xbox, Switch Pro and 8BitDo, each with its own glyphs. Emulators get the pads you hold, one per player.</p>
                 <a class="more" href="/docs/controllers/supported/">Controllers</a>
             </article>
             <article>
                 <h3>Steam Deck</h3>
-                <p>Fits its 1280×800 screen. The back buttons are free for macros, and its refresh rate, power limit and fan curve are in the settings.</p>
+                <p>Fits its 1280×800 screen. Back buttons for macros; refresh rate, power limit and fan curve in the settings.</p>
                 <a class="more" href="/docs/getting-started/steam-deck/">Steam Deck</a>
             </article>
             <article>
                 <h3>Steam's Game Mode</h3>
-                <p>Add it to Steam as a non-Steam game and it runs inside Game Mode, leaving the overlay, the volume and the power menu to Steam.</p>
+                <p>Add it as a non-Steam game and it runs inside Game Mode.</p>
                 <a class="more" href="/docs/getting-started/steam-deck/#steams-game-mode">Game Mode</a>
             </article>
             <article>
                 <h3>The Universe session</h3>
-                <p>A login session with the launcher on the whole screen and no desktop behind it, like a console. Wi-Fi and Bluetooth are in its settings.</p>
+                <p>A login session with the launcher on the whole screen and no desktop, like a console.</p>
                 <a class="more" href="/docs/getting-started/universe-session/">The session</a>
             </article>
         </section>
@@ -202,35 +230,6 @@ const installs = [
                         </article>
                     ))}
             </div>
-        </section>
-
-        <section class="install wrap" id="install">
-            <h2>Install</h2>
-            <p class="center">x86_64 Linux with a systemd user session. gamescope is optional, but on by default.</p>
-            <div class="tabs" data-tabs>
-                <div class="tablist" role="tablist" aria-label="Install">
-                    {installs.map((way, i) => (
-                            <button type="button" role="tab" id={`install-tab-${way.id}`} aria-controls={`install-${way.id}`} aria-selected={i === 0 ? 'true' : 'false'} tabindex={i === 0 ? 0 : -1}>
-                                {way.name}
-                            </button>
-                        ))}
-                </div>
-                {installs.map((way, i) => (
-                        <div class="panel" role="tabpanel" id={`install-${way.id}`} aria-labelledby={`install-tab-${way.id}`} hidden={i !== 0}>
-                            <p>{way.lead}</p>
-                            <div class="code">
-                                <Code code={way.code} lang={way.lang} themes={{ light: 'github-light', dark: 'github-dark' }} defaultColor={false} />
-                                <button type="button" class="copy-button" data-copy={way.code}>
-                                    Copy
-                                </button>
-                            </div>
-                        </div>
-                    ))}
-            </div>
-            <p class="center">
-                Then open Universe Big Screen from your app menu: a short setup finds your games.
-                <a href="/docs/getting-started/install/">Every way to install</a>
-            </p>
         </section>
     </main>
 
@@ -265,6 +264,9 @@ for (const tabs of document.querySelectorAll<HTMLElement>('[data-tabs]')) {
             next.focus();
         });
     }
+}
+for (const link of document.querySelectorAll<HTMLAnchorElement>('[data-install]')) {
+    link.addEventListener('click', () => document.getElementById(`install-tab-${link.dataset.install}`)?.click());
 }
 for (const button of document.querySelectorAll<HTMLButtonElement>('[data-copy]')) {
     button.addEventListener('click', async () => {
@@ -351,6 +353,39 @@ h1 {
     background: var(--accent);
     border-color: var(--accent);
     color: var(--on-accent);
+}
+.distros {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem 1.5rem;
+    margin: 1.75rem 0 0;
+    padding: 0;
+    list-style: none;
+}
+.distros a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--muted);
+    font-weight: 600;
+    text-decoration: none;
+}
+.distros a:hover {
+    color: var(--text);
+}
+.logo {
+    display: inline-flex;
+    flex: none;
+}
+.logo :global(svg) {
+    width: 1.1em;
+    height: 1.1em;
+    fill: currentColor;
+}
+[role="tab"] .logo {
+    margin-right: 0.45rem;
+    vertical-align: -0.15em;
 }
 .note {
     margin-top: 1rem;
