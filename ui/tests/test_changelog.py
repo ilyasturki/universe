@@ -3,6 +3,8 @@ from looks import Look, invoke, read
 from PySide6.QtCore import Qt
 from uitest import until
 
+from universe_ui.errors import UniverseError
+
 
 @pytest.fixture
 def upgraded(app, xdg, tmp_path):
@@ -20,6 +22,32 @@ def upgraded(app, xdg, tmp_path):
 
 def versions(releases):
     return [r["version"] for r in releases]
+
+
+def named(item, name):
+    """Every item called `name` under `item`: a Repeater's delegates are its column's child items, not QObject children."""
+    found = [item] if item.objectName() == name else []
+    for child in item.childItems():
+        found += named(child, name)
+    return found
+
+
+def test_a_release_s_media_offline_leaves_its_entry_text(api, fake, monkeypatch):
+    changelog = api.screens.changelog
+    media = changelog.releases[0]["sections"][0]["items"][0]["media"]
+    errors = []
+    fake.error.connect(lambda kind, message: errors.append(kind))
+
+    def offline(url):
+        raise UniverseError("Unavailable", "offline")
+
+    monkeypatch.setattr(fake._core, "changelog_media", offline)
+    changelog.fetch(media["url"])
+    until(lambda: media["url"] not in changelog._asked, "the failure lands")
+    monkeypatch.undo()
+    assert changelog.files == {} and errors == [], "no file and no error: the entry reads as text"
+    changelog.fetch(media["url"])
+    until(lambda: changelog.files.get(media["url"]), "asked again once back online")
 
 
 def test_the_game_defaults_switch_and_abouts_are_one(api, fake):
@@ -50,6 +78,12 @@ def test_an_update_opens_whats_new_once_and_about_opens_the_changelog(look):
     page = look.page("changelogPage")
     until(lambda: page.property("fresh") is True, "the start opens what's new")
     assert versions(read(page, "releases")) == ["0.0.3", "0.0.2"]
+    shown = until(lambda: len(m := [i for i in named(page, "releaseMedia") if i.property("file")]) == 2 and m, "the highlights' media download")
+    assert sorted(m.property("media")["kind"] for m in shown) == ["clip", "still"]
+    still = until(lambda: next(iter(named(page, "releaseStill")), None), "the still is shown")
+    clip = until(lambda: next(iter(named(page, "releaseClip")), None), "the clip plays")
+    files = changelog.files
+    assert {still.property("source").toString(), clip.property("source").toString()} == set(files.values())
     look.press(Qt.Key.Key_Escape)
     until(lambda: changelog.pending == [], "B closes it, seen")
 

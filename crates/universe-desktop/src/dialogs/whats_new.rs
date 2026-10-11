@@ -1,8 +1,10 @@
 use adw::prelude::*;
 use gettextrs::gettext;
 use gtk::glib;
-use universe::changelog::Release;
+use universe::changelog::{Media, Release};
 
+use crate::backend;
+use crate::covers;
 use crate::pages::journal::markup;
 
 fn date(release: &Release) -> String {
@@ -41,9 +43,9 @@ fn release_box(release: &Release) -> gtk::Box {
         for item in &section.items {
             let entry = label("", "body");
             entry.set_hexpand(true);
-            match markup(item) {
+            match markup(&item.text) {
                 Some(text) => entry.set_markup(&text),
-                None => entry.set_text(item),
+                None => entry.set_text(&item.text),
             }
             let bullet = label("•", "body");
             bullet.set_valign(gtk::Align::Start);
@@ -51,9 +53,39 @@ fn release_box(release: &Release) -> gtk::Box {
             line.append(&bullet);
             line.append(&entry);
             column.append(&line);
+            if let Some(media) = &item.media {
+                column.append(&media_slot(media));
+            }
         }
     }
     column
+}
+
+/// Empty until the release's media is downloaded; offline it stays empty and the entry reads as text.
+fn media_slot(media: &Media) -> gtk::Box {
+    let slot = gtk::Box::builder().margin_start(18).margin_top(6).margin_bottom(6).build();
+    let (media, weak) = (media.clone(), slot.downgrade());
+    glib::spawn_future_local(async move {
+        let url = media.url.clone();
+        let file = match backend::run(async move { universe::changelog::media_file(&url).await }).await {
+            Ok(file) => file,
+            Err(e) => return tracing::debug!("{}: {e}", media.url),
+        };
+        let Some(slot) = weak.upgrade() else { return };
+        let shown: gtk::Widget = if media.kind == "clip" {
+            let stream = gtk::MediaFile::for_filename(&file);
+            stream.set_muted(true);
+            stream.set_loop(true);
+            gtk::Video::builder().media_stream(&stream).autoplay(true).hexpand(true).height_request(340).build().upcast()
+        } else {
+            let Some(texture) = covers::full(&file.to_string_lossy(), 1200, 675).await else { return };
+            gtk::Picture::builder().paintable(&texture).hexpand(true).can_shrink(true).build().upcast()
+        };
+        shown.set_tooltip_text(Some(&media.alt));
+        shown.update_property(&[gtk::accessible::Property::Description(&media.alt)]);
+        slot.append(&shown);
+    });
+    slot
 }
 
 pub fn present(parent: &impl IsA<gtk::Widget>, releases: &[Release]) {
@@ -96,7 +128,7 @@ pub fn about_notes(releases: &[Release], version: &str) -> String {
         for section in &release.sections {
             out.push_str(&format!("<p>{}</p><ul>", appstream_text(&section_title(&section.title))));
             for item in &section.items {
-                out.push_str(&format!("<li>{}</li>", appstream_text(item)));
+                out.push_str(&format!("<li>{}</li>", appstream_text(&item.text)));
             }
             out.push_str("</ul>");
         }
@@ -107,14 +139,14 @@ pub fn about_notes(releases: &[Release], version: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use universe::changelog::Section;
+    use universe::changelog::{Item, Section};
 
     #[test]
     fn the_about_notes_run_from_this_version_down_in_appstream_markup() {
         let release = |version: &str, item: &str| Release {
             version: version.into(),
             date: "2026-09-30".into(),
-            sections: vec![Section { title: "Fixed".into(), items: vec![item.into()] }],
+            sections: vec![Section { title: "Fixed".into(), items: vec![Item { text: item.into(), media: None }] }],
         };
         let releases = [release("0.1.0", "Not out yet."), release("0.0.9", "`universe doctor` & <friends>"), release("0.0.8", "Older.")];
         assert_eq!(

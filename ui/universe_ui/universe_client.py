@@ -870,6 +870,9 @@ class CoreClient(QObject):
     def whatsNew(self):
         return self._guarded([], self._core.whats_new)
 
+    def changelogMedia(self, url, on_file, on_error):
+        self._call_async(lambda: self._core.changelog_media(url), on_file, on_error)
+
     @Slot(result="QVariant")
     def controllerState(self):
         return self._guarded({}, self._core.controller_state)

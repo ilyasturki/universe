@@ -113,6 +113,9 @@ impl Core {
     fn whats_new(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.value_infallible(py, |c| c.whats_new())
     }
+    fn changelog_media(&self, py: Python<'_>, url: String) -> PyResult<String> {
+        self.run(py, |_| async move { universe::changelog::media_file(&url).await.map(|p| p.to_string_lossy().to_string()) })
+    }
 
     fn list(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.value_infallible(py, |c| c.list())

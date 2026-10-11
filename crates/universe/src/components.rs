@@ -1415,7 +1415,7 @@ impl Core {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use sha2::Digest;
 
@@ -1482,7 +1482,7 @@ mod tests {
         Build { version: version.into(), date: date.into(), channel: Channel::Stable, assets }
     }
 
-    fn serve(bodies: Vec<(&'static str, Vec<u8>)>) -> String {
+    pub(crate) fn serve(bodies: Vec<(&'static str, Vec<u8>)>) -> String {
         use std::io::{BufRead, BufReader, Write};
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let base = format!("http://{}", listener.local_addr().unwrap());

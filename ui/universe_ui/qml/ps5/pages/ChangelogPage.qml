@@ -2,6 +2,7 @@ import QtQuick
 import "../core"
 import "../sound"
 import "../ui"
+import "../../ui" as Base
 
 FocusScope {
     id: page
@@ -129,7 +130,7 @@ FocusScope {
 
                                 Item {
                                     width: notes.width
-                                    height: entry.height
+                                    height: entry.height + (shot.height > 0 ? Theme.dp(16) + shot.height : 0)
 
                                     Label {
                                         text: "•"
@@ -142,11 +143,24 @@ FocusScope {
 
                                         x: Theme.dp(30)
                                         width: parent.width - x
-                                        text: modelData
+                                        text: modelData.text
                                         textFormat: Text.RichText
                                         wrapMode: Text.WordWrap
                                         lineHeight: 1.4
                                         font.pixelSize: Theme.dp(Theme.fontBody)
+                                    }
+
+                                    Loader {
+                                        id: shot
+
+                                        x: entry.x
+                                        y: entry.height + Theme.dp(16)
+                                        width: Math.min(entry.width, Theme.dp(960))
+                                        active: !!modelData.media
+                                        sourceComponent: Base.ReleaseMedia {
+                                            media: modelData.media
+                                            store: page.store
+                                        }
                                     }
                                 }
                             }

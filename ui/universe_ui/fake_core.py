@@ -126,6 +126,14 @@ CLIP_S = 20
 
 SLOTS = ("box_front", "square", "banner", "background", "logo")
 FAKE_ORIGINS = {"box_front": "steam", "square": "generated", "banner": "steam", "background": "gamesdb", "logo": "libretro"}
+RELEASES = "https://github.com/ilyasturki/universe/releases/download/"
+
+
+def _entry(text, kind="", name=""):
+    media = {"kind": kind, "alt": text, "url": f"{RELEASES}v0.0.3/{name}.{'webp' if kind == 'still' else 'mp4'}"} if kind else None
+    return {"text": text, "media": media}
+
+
 CHANGELOG = [
     {
         "version": "0.0.3",
@@ -133,13 +141,16 @@ CHANGELOG = [
         "sections": [
             {
                 "title": "Added",
-                "items": ["A changelog under Settings › About, and what's new after an update.", "`universe doctor` names the module behind each check."],
+                "items": [
+                    _entry("A changelog under Settings › About, and what's new after an update.", "still", "changelog"),
+                    _entry("`universe doctor` names the module behind each check.", "clip", "doctor"),
+                ],
             },
-            {"title": "Fixed", "items": ["The dock reads the pad again over a game."]},
+            {"title": "Fixed", "items": [_entry("The dock reads the pad again over a game.")]},
         ],
     },
-    {"version": "0.0.2", "date": "2026-09-16", "sections": [{"title": "Changed", "items": ["Settings mark the values you changed."]}]},
-    {"version": "0.0.1", "date": "2026-09-13", "sections": [{"title": "Added", "items": ["The first release."]}]},
+    {"version": "0.0.2", "date": "2026-09-16", "sections": [{"title": "Changed", "items": [_entry("Settings mark the values you changed.")]}]},
+    {"version": "0.0.1", "date": "2026-09-13", "sections": [{"title": "Added", "items": [_entry("The first release.")]}]},
 ]
 
 
@@ -570,6 +581,24 @@ class FakeCore:
 
     def changelog(self):
         return copy.deepcopy(CHANGELOG)
+
+    def changelog_media(self, url):
+        from .fixtures.art import paint_candidate
+
+        name = url.rsplit("/", 1)[-1]
+        if not url.startswith(RELEASES) or (name.endswith(".mp4") and not shutil.which("ffmpeg")):
+            raise UniverseError("Unavailable", f"{url}: offline")
+        if name.endswith(".webp"):
+            return paint_candidate(self._cache, "changelog", "screenshot", url)
+        out = os.path.join(self._cache, f"changelog-{name}")
+        if not os.path.exists(out):
+            source = "testsrc=size=640x360:rate=30:duration=2"
+            subprocess.run(
+                ["ffmpeg", "-loglevel", "error", "-y", "-f", "lavfi", "-i", source, "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", out],
+                check=True,
+                timeout=30,
+            )
+        return out
 
     def whats_new(self):
         state = self._root / "state"

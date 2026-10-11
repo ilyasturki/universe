@@ -1,10 +1,13 @@
 import html
+import logging
 import re
 from datetime import date
 
-from PySide6.QtCore import QObject, Signal, Slot
+from PySide6.QtCore import QObject, QUrl, Signal, Slot
 
 from ..qt import QVARIANT, Property
+
+log = logging.getLogger(__name__)
 
 INLINE = re.compile(r"`(?P<code>[^`]+)`|\*\*(?P<strong>.+?)\*\*|\[(?P<text>[^\]]+)\]\([^)]+\)")
 MONTHS = ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
@@ -38,18 +41,24 @@ def _release(r):
     return {
         "version": str(r.get("version") or ""),
         "dateText": _date_text(r.get("date")),
-        "sections": [{"title": str(s.get("title") or ""), "items": [styled(str(i)) for i in s.get("items") or []]} for s in r.get("sections") or []],
+        "sections": [
+            {"title": str(s.get("title") or ""), "items": [{"text": styled(str(i.get("text") or "")), "media": i.get("media")} for i in s.get("items") or []]}
+            for s in r.get("sections") or []
+        ],
     }
 
 
 class Changelog(QObject):
     pendingChanged = Signal()
     opensChanged = Signal()
+    filesChanged = Signal()
 
     def __init__(self, client, parent=None):
         super().__init__(parent)
         self._client = client
         self._releases = None
+        self._files = {}
+        self._asked = set()
         # Built once per start: the core records this version as seen whether the page shows or not.
         self._pending = [_release(r) for r in client.whatsNew()]
         client.configWritten.connect(self._written)
@@ -62,6 +71,23 @@ class Changelog(QObject):
         if self._releases is None:
             self._releases = [_release(r) for r in self._client.changelog()]
         return self._releases
+
+    @Slot(str)
+    def fetch(self, url):
+        """Downloads a highlight's media once; offline, its entry stays text."""
+        if url in self._asked:
+            return
+        self._asked.add(url)
+
+        def landed(path):
+            self._files = {**self._files, url: QUrl.fromLocalFile(path).toString()}
+            self.filesChanged.emit()
+
+        def failed(e):
+            self._asked.discard(url)
+            log.info("%s: %s", url, e.message)
+
+        self._client.changelogMedia(url, landed, failed)
 
     @Slot()
     def dismiss(self):
@@ -78,5 +104,6 @@ class Changelog(QObject):
 
     releases = Property(QVARIANT, _all, constant=True)
     pending = Property(QVARIANT, lambda self: self._pending, notify=pendingChanged)
+    files = Property(QVARIANT, lambda self: self._files, notify=filesChanged)
     # config.toml's desktop.whats_new: the page opens by itself on the first start after an update.
     opensAfterUpdate = Property(bool, _opens, _set_opens, notify=opensChanged)

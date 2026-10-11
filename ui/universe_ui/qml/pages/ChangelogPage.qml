@@ -147,7 +147,7 @@ FocusScope {
 
                                 Item {
                                     width: notes.width
-                                    height: entry.height
+                                    height: entry.height + (shot.height > 0 ? Theme.dp(16) + shot.height : 0)
 
                                     Text {
                                         text: "•"
@@ -161,13 +161,26 @@ FocusScope {
 
                                         x: Theme.dp(28)
                                         width: parent.width - x
-                                        text: modelData
+                                        text: modelData.text
                                         textFormat: Text.RichText
                                         color: Theme.textSecondary
                                         font.family: Theme.sans
                                         font.pixelSize: Theme.dp(24)
                                         lineHeight: 1.4
                                         wrapMode: Text.WordWrap
+                                    }
+
+                                    Loader {
+                                        id: shot
+
+                                        x: entry.x
+                                        y: entry.height + Theme.dp(16)
+                                        width: Math.min(entry.width, Theme.dp(960))
+                                        active: !!modelData.media
+                                        sourceComponent: ReleaseMedia {
+                                            media: modelData.media
+                                            store: page.store
+                                        }
                                     }
                                 }
                             }
