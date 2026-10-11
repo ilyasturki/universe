@@ -57,11 +57,13 @@ jobs:
         with:
           primary-key: nix-build-${{ github.sha }}
           restore-prefixes-first-match: nix-build-
-      - name: The universe binary the reference pages come from, and bun
+      - name: The universe binary the reference pages come from, bun, and the libstdc++ sharp loads
+        id: tools
         run: |
           nix build .#universe -o "$RUNNER_TEMP/universe" -L
           nix build --inputs-from . nixpkgs#bun -o "$RUNNER_TEMP/bun"
           echo "$RUNNER_TEMP/bun/bin" >> "$GITHUB_PATH"
+          echo "libstdcxx=$(nix build --inputs-from . nixpkgs#stdenv.cc.cc.lib --no-link --print-out-paths)/lib" >> "$GITHUB_OUTPUT"
       - name: The screenshots and clips, from the site-media branch
         run: |
           tools/docs-media fetch
@@ -71,6 +73,8 @@ jobs:
         working-directory: site
         env:
           UNIVERSE_BIN: ${{ runner.temp }}/universe/bin/universe
+          # sharp's prebuilt addon needs a libstdc++, which nix's bun doesn't search the runner's /usr/lib for
+          LD_LIBRARY_PATH: ${{ steps.tools.outputs.libstdcxx }}
           UMAMI_WEBSITE_ID: ${{ vars.UMAMI_WEBSITE_ID }}
           DOCS_STRICT: ${{ github.event_name == 'workflow_dispatch' && inputs.strict && '1' || '' }}
         run: bun --bun run build
