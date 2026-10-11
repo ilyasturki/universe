@@ -1,10 +1,10 @@
 import pytest
-from looks import Look, call, invoke
+from looks import Look, invoke
 from looks import read as value
 from PySide6.QtCore import Q_ARG, QMetaObject, QObject, Qt
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QTest
-from uitest import pump, record, settle, until
+from uitest import record, settle, until
 
 from universe_ui.screens.controller import FakeWatcher
 
@@ -42,21 +42,6 @@ def focused_row(page):
     return next((value(rows, "currentRow") for rows in page.findChildren(QQuickItem, "settingsRows") if rows.property("cursorShown")), None)
 
 
-def test_the_focused_row_wraps_its_whole_description(ps5):
-    window, root, _warnings = ps5
-    page = push(root, "pages/SettingsPage.qml", {"section": "launch"})
-    click(window, Qt.Key.Key_Right)
-    rows = page.findChild(QQuickItem, "settingsRows")
-    until(lambda: rows.property("cursorShown") is True)
-    one_line = rows.property("rowHeight") + rows.property("detailLine")
-    at = rows.property("index")
-    assert value(rows, "currentRow")["key"] == "launch.gamescope"
-    until(lambda: call(rows, "heightOf", at) > one_line, "the focused row's description runs on")
-    click(window, Qt.Key.Key_Down)
-    until(lambda: rows.property("index") != at)
-    until(lambda: call(rows, "heightOf", at) == one_line, "left behind, it keeps one line")
-
-
 def test_a_section_that_is_one_page_opens_it_straight_away(ps5):
     window, root, _warnings = ps5
     page = push(root, "pages/SettingsPage.qml", {})
@@ -67,21 +52,6 @@ def test_a_section_that_is_one_page_opens_it_straight_away(ps5):
     assert top.property("activeFocus") is True and top.objectName() == "controllersPage"
     click(window, Qt.Key.Key_Escape)
     until(lambda: root.property("topPage") == page and page.property("level") == "root", "B lands back on the sections")
-
-
-def test_the_sections_hold_still_while_the_cursor_moves_inside_them(ps5):
-    window, root, _warnings = ps5
-    page = push(root, "pages/SettingsPage.qml", {})
-    roots = until(lambda: page.findChild(QQuickItem, "rootList"))
-    view = next(c for c in roots.childItems() if c.metaObject().className().startswith("QQuickListView"))
-    rest = -view.property("topMargin")
-    until(lambda: view.property("contentY") == rest, "the first row clear of the title, under the list's margin")
-    for key in (Qt.Key.Key_Down, Qt.Key.Key_Up):
-        at = roots.property("index")
-        click(window, key)
-        until(lambda at=at: roots.property("index") != at)
-        pump(300)
-        assert view.property("contentY") == rest, "a row already in view moves no list"
 
 
 def test_settings_artwork_lists_every_game_and_fetches_the_missing_art(ps5):

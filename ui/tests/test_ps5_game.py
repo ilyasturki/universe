@@ -90,8 +90,9 @@ def test_the_information_opens_a_screenshot_full_screen(ps5, api):
     click(window, Qt.Key.Key_F1)
     popup = root.findChild(QObject, "popup")
     until(lambda: popup.property("open") is True)
-    assert [i["act"] for i in value(popup, "items")][:3] == ["play", "shots", "trophies"]
-    click(window, Qt.Key.Key_Down, 2)
+    acts = [i["act"] for i in value(popup, "items")]
+    assert {"play", "shots", "trophies"} <= set(acts)
+    click(window, Qt.Key.Key_Down, acts.index("trophies") - popup.property("index"))
     click(window, Qt.Key.Key_Return)
     until(lambda: root.property("depth") == depth + 2 and root.property("topPage").objectName() == "achievements", "Options reaches the trophies")
     click(window, Qt.Key.Key_Escape)

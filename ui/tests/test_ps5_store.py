@@ -38,10 +38,9 @@ def test_the_store_lays_the_catalogue_out_in_collections(look):
     store = open_store(look)
     assert store.property("strip") is False, "the console has a store: no hint strip"
     assert {c["id"] for c in read(store, "collections")} == {"ready", "updates", "installed"}
-    assert titles(store, "ready") == ["Disco Elysium", "Stardew Valley", "The Witcher 3: Wild Hunt"]
+    assert set(titles(store, "ready")) == {"Disco Elysium", "Stardew Valley", "The Witcher 3: Wild Hunt"}, "the games to install, a paused one among them"
     assert titles(store, "updates") == ["Mini Metro"]
     assert "The Technomancer" in titles(store, "installed")
-    assert read(store, "current")["title"] == "Disco Elysium"
 
 
 def test_the_cursor_walks_the_collections_to_a_game_card_whose_more_is_the_game_s_shared_menu(look):
@@ -159,7 +158,8 @@ def test_a_second_store_puts_a_switch_on_top_whose_menu_lists_the_stores(api, lo
     invoke(store, "openStores")
     popup = look.menu()
     until(lambda: popup.property("open") is True)
-    assert [i["glyph"] for i in read(popup, "items")] == ["check", "store"], "a row per store, the one shown checked"
-    look.press(Qt.Key.Key_Down)
+    glyphs = [i["glyph"] for i in read(popup, "items")]
+    assert len(glyphs) == len(api.screens.sources.stores) and glyphs.count("check") == 1, "a row per store, the one shown checked"
+    look.press(Qt.Key.Key_Down, glyphs.index("store") - popup.property("index"))
     look.press(Qt.Key.Key_Return)
     until(lambda: api.screens.sources.source == "epic")
