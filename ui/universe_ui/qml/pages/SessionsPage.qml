@@ -18,6 +18,17 @@ FocusScope {
     property int index: 0
     readonly property var current: index >= 0 && index < rows.length ? rows[index] : null
     readonly property var log: store.log
+    // The process column fits the log's longest name, up to a quarter of the line.
+    readonly property real sourceWidth: Math.min(lines.width / 4, Math.ceil(longestSource.advanceWidth))
+
+    TextMetrics {
+        id: longestSource
+        font.family: "monospace"
+        font.pixelSize: Theme.dp(19)
+        text: (page.log || []).reduce(function (longest, line) {
+            return line.source.length > longest.length ? line.source : longest;
+        }, "")
+    }
     // 0 the sessions, 1 the log
     property int mode: 0
     readonly property bool reading: mode === 1
@@ -298,7 +309,7 @@ FocusScope {
                         }
 
                         Text {
-                            width: Theme.dp(150)
+                            width: page.sourceWidth
                             text: modelData.source
                             color: modelData.error ? "#f0757a" : modelData.warning ? "#f0c674" : Theme.textSecondary
                             font.family: "monospace"
@@ -307,7 +318,7 @@ FocusScope {
                         }
 
                         Text {
-                            width: parent.width - Theme.dp(92 + 150 + 28)
+                            width: parent.width - Theme.dp(92 + 28) - page.sourceWidth
                             text: modelData.message
                             color: modelData.error ? "#f0757a" : Theme.text
                             font.family: "monospace"

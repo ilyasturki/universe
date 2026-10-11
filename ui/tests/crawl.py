@@ -20,8 +20,6 @@ KNOWN = {
     "reprise": {
         # A 46-letter title: the game menu's heading, the media pages' headers and the search's two lines elide it.
         ("truncated", "Batman: Arkham Asylum Game of the Year Edition"),
-        # The session log's process column.
-        ("truncated", "pressure-vessel-wrap"),
         # Seen once: Artwork's keyboard sheet closed and kept the focus, hidden; not reproduced by hand yet.
         ("focus-unseen", "artworkPage"),
     },
@@ -49,7 +47,6 @@ KNOWN = {
         ("b-never-home", "dialog"),
     },
     "ps5": {
-        ("truncated", "pressure-vessel-wrap"),
         ("truncated", "Add a SteamGridDB key for more art"),
         ("truncated", "News cards, info pane; backdrops without a background"),
         # The PS5 look opens its setup on a first start with an empty library only.

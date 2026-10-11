@@ -14,6 +14,17 @@ FocusScope {
     readonly property string session: args && args.session !== undefined ? String(args.session) : ""
     readonly property var store: api.screens.sessions
     readonly property var log: store.log
+    // The process column fits the log's longest name, up to a quarter of the line.
+    readonly property real sourceWidth: Math.min(lines.width / 4, Math.ceil(longestSource.advanceWidth))
+
+    TextMetrics {
+        id: longestSource
+        font.family: "monospace"
+        font.pixelSize: Theme.dp(Theme.fontTiny)
+        text: (page.log || []).reduce(function (longest, line) {
+            return line.source.length > longest.length ? line.source : longest;
+        }, "")
+    }
     readonly property bool strip: true
 
     readonly property var hints: [
@@ -147,7 +158,7 @@ FocusScope {
                     }
 
                     Label {
-                        width: Theme.dp(190)
+                        width: page.sourceWidth
                         text: modelData.source
                         color: modelData.error ? Theme.danger : modelData.warning ? "#f0a64a" : Theme.textSecondary
                         font.family: "monospace"
@@ -156,7 +167,7 @@ FocusScope {
                     }
 
                     Label {
-                        width: parent.width - Theme.dp(110 + 190 + 32)
+                        width: parent.width - Theme.dp(110 + 32) - page.sourceWidth
                         text: modelData.message
                         color: modelData.error ? Theme.danger : Theme.text
                         font.family: "monospace"
