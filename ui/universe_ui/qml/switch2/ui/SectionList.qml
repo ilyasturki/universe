@@ -194,6 +194,8 @@ FocusScope {
                         visible: modelData.detail !== undefined && modelData.detail !== ""
                         text: modelData.detail || ""
                         color: Theme.textSecondary
+                        wrapMode: Text.WordWrap
+                        maximumLineCount: 2
                         elide: Text.ElideRight
                         font.pixelSize: Theme.dp(Theme.fontSmall)
                     }

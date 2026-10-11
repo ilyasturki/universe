@@ -27,7 +27,7 @@ FocusScope {
     readonly property real detailLine: Theme.dp(58)
     readonly property real inset: Theme.dp(24)
     readonly property real room: Theme.dp(Theme.ringRoom)
-    // Row index → the height of a failed check's wrapped problem and fix, reported by the row once laid out.
+    // Row index → the height of a detail, or a failed check's problem and fix, wrapped: reported by the row once laid out.
     property var fixHeights: ({})
 
     function stops() {
@@ -44,9 +44,9 @@ FocusScope {
             return 0;
         if (r.heading)
             return headingHeight;
-        if (r.fix || r.wraps)
+        if (r.fix || r.wraps || r.detail)
             return rowHeight + (fixHeights[i] !== undefined ? fixHeights[i] : detailLine);
-        return rowHeight + (r.detail ? detailLine : 0);
+        return rowHeight;
     }
 
     function measured(i, h) {
@@ -618,15 +618,25 @@ FocusScope {
                     }
 
                     Label {
-                        visible: row.hasDetail && !row.explains
+                        readonly property bool shown: row.hasDetail && !row.explains
+
+                        // Each line past the first adds its height to the detail's band.
+                        function report() {
+                            if (shown && lineCount > 0)
+                                rows.measured(index, rows.detailLine + contentHeight * (lineCount - 1) / lineCount);
+                        }
+
+                        visible: shown
                         x: rows.inset
                         y: rows.rowHeight + Theme.dp(16)
                         width: parent.width - rows.inset * 2
-                        height: rows.detailLine - Theme.dp(16)
-                        verticalAlignment: Text.AlignTop
                         text: row.entry.detail || ""
                         color: Theme.textSecondary
-                        elide: Text.ElideRight
+                        wrapMode: Text.Wrap
+                        lineHeight: 1.15
+
+                        onContentHeightChanged: report()
+                        Component.onCompleted: report()
                     }
 
                     Column {

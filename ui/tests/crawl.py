@@ -24,23 +24,11 @@ KNOWN = {
         ("focus-unseen", "artworkPage"),
     },
     "switch2": {
-        # Settings' sidebar cuts its sections' second lines at 1280×720.
-        ("truncated", "Headphones, speakers and keyboards"),
-        ("truncated", "Saves, prefixes and every folder Universe writes to"),
-        ("truncated", "Every setting, by name, purpose or value"),
-        ("truncated", "Checks that the internet answers through this connection."),
-        ("truncated", "The PS5 home screen"),
-        # Help lines, a store's install and a setting's value too long for their rows at 1280×720.
-        ("truncated", "Hold its pairing button until the lights blink"),
-        ("truncated", "Look again for a controller Universe does not show"),
-        ("truncated", "A press this long is a hold"),
+        # A store's install and a setting's value too long for their rows at 1280×720.
         ("truncated", "Add a SteamGridDB key for more art"),
-        ("truncated", "Records every session of this game"),
-        ("truncated", "Auto takes the best the GPU encodes"),
         ("truncated", "The Witcher 3: Wild Hunt"),
         ("truncated", "Paused · "),
         ("truncated", "476.8 MB to download"),
-        ("truncated", "DP-1 2560×1440 @ 144 Hz"),
         ("truncated", "Type a value…"),
         # The setup opened from Settings asks "Skip setup?" on B, and B on the question keeps going: only A on Skip leaves.
         ("b-never-home", "onboardingPage"),
