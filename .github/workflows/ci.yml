@@ -58,8 +58,31 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: tools/ci-deps
-      - run: chown -R ci .
-      - run: runuser -u ci -- env HOME=/home/ci tools/distro-check
+      - id: rustc
+        run: echo "version=$(runuser -u ci -- env HOME=/home/ci rustc -V | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+      # After ci-deps made the ci user: useradd leaves a home that already exists to root
+      - id: cargo-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            /home/ci/.cargo/registry
+            /home/ci/.cargo/git
+            target
+            !target/distro-check
+          key: cargo-${{ matrix.image }}-${{ steps.rustc.outputs.version }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-${{ matrix.image }}-${{ steps.rustc.outputs.version }}-
+      - run: chown -R ci . /home/ci
+      # No debug info or incremental state: most of a debug target dir, which each run would upload and download
+      - run: runuser -u ci -- env HOME=/home/ci CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 tools/distro-check
+      - if: always() && steps.cargo-cache.outcome == 'success' && steps.cargo-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            /home/ci/.cargo/registry
+            /home/ci/.cargo/git
+            target
+            !target/distro-check
+          key: cargo-${{ matrix.image }}-${{ steps.rustc.outputs.version }}-${{ hashFiles('Cargo.lock') }}
   # Each desktop profile started without a GPU: windows, cursor, OSD and shots
   desktops:
     runs-on: ubuntu-latest
