@@ -151,14 +151,13 @@ impl Nest {
 
     pub fn set_card(&self, window: u32, name: &str, value: u32) -> Result<()> {
         let atom = self.atom(name)?;
-        self.conn.change_property32(PropMode::REPLACE, window, atom, AtomEnum::CARDINAL, &[value]).map_err(x)?;
-        self.conn.flush().map_err(x)
+        // Checked, not flushed: a process that exits right after (session-end) leaves gamescope holding the change.
+        self.conn.change_property32(PropMode::REPLACE, window, atom, AtomEnum::CARDINAL, &[value]).map_err(x)?.check().map_err(x)
     }
 
     fn delete_card(&self, window: u32, name: &str) -> Result<()> {
         let atom = self.atom(name)?;
-        self.conn.delete_property(window, atom).map_err(x)?;
-        self.conn.flush().map_err(x)
+        self.conn.delete_property(window, atom).map_err(x)?.check().map_err(x)
     }
 
     pub fn windows(&self) -> Result<Vec<Focusable>> {
