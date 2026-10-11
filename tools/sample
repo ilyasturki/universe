@@ -9,8 +9,9 @@ usage: tools/sample [install|remove]
             dev profile (UNIVERSE_DATA_HOME's parent); safe to rerun
   remove    trash the game's tree, its library entry, hours and recordings
 
-The game takes `--delay S` (2) before its window opens and `--length S` (0,
-until quit) after: `just cli set sample-game args='"--length","30"'`.
+The game takes `--delay S` (2) before its window opens, `--length S` (0,
+until quit) after and `--title T` for its window: `just cli set sample-game
+args='--length 30'`.
 Needs mpv and magick on PATH; mpv's path is baked in at install.
 USAGE
 }
@@ -45,11 +46,13 @@ GAME
 delay=2
 length=0
 grab=""
+title="Sample Game"
 while [ $# -gt 0 ]; do
     case "$1" in
         --delay)  delay="$2"; shift 2 ;;
         --length) length="$2"; shift 2 ;;
         --grab)   grab="$2"; shift 2 ;;
+        --title)  title="$2"; shift 2 ;;
         *) echo "sample-game: unknown option $1" >&2; exit 2 ;;
     esac
 done
@@ -82,7 +85,7 @@ sleep "$delay"
 # Vulkan, not mpv's default: MangoHud's layer sees the frames only there.
 exec "$mpv" --no-config --no-terminal --really-quiet --ao=null \
     --vo=gpu-next --gpu-api=vulkan \
-    --fs --title="Sample Game" --cursor-autohide=always --osc=no --osd-level=0 \
+    --fs --title="$title" --cursor-autohide=always --osc=no --osd-level=0 \
     "av://lavfi:$graph"
 GAME
     chmod +x "$lib/sample-game"
@@ -126,7 +129,7 @@ GAME
         "$universe" set "$id" journal.enabled=false \
             metadata.developers='["Universe"]' metadata.genres='["Test"]' \
             metadata.summary='A stand-in for a real game.' \
-            metadata.description='Sleeps like a game loading, then holds a fullscreen Vulkan window until the launcher quits it — or sooner on Q or Escape. Installed by tools/sample; --delay and --length go on its Arguments.'
+            metadata.description='Sleeps like a game loading, then holds a fullscreen Vulkan window until the launcher quits it — or sooner on Q or Escape. Installed by tools/sample; --delay, --length and --title go on its Arguments.'
     fi
     # The default art layer, never a pick.
     mkdir -p "$game_dir/media"
