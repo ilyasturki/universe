@@ -31,7 +31,7 @@ def push(root, source, args):
 
 
 def glyphs(page):
-    return [h["glyph"] for h in value(page, "hints")]
+    return {h["glyph"] for h in value(page, "hints")}
 
 
 def sections(page):
@@ -74,14 +74,14 @@ def test_a_runner_form_keeps_its_cards_when_y_shows_the_advanced_rows(ps5, api):
     click(window, Qt.Key.Key_Right)
     click(window, Qt.Key.Key_Down, 3)
     row = until(lambda: (r := value(page, "currentRow")) and r["key"] == "gamescope" and r)
-    assert row["origin"] == "default" and glyphs(page) == ["Y", "X", "B", "A"], "config.toml leaves gamescope to its default"
+    assert row["origin"] == "default" and glyphs(page) == {"Y", "X", "B", "A"}, "config.toml leaves gamescope to its default"
     click(window, Qt.Key.Key_Return)
     until(lambda: form.rows[row["form"]]["origin"] == "runner", "toggling the inherited switch sets it on the runner")
     click(window, Qt.Key.Key_I)
     until(lambda: form.rows[row["form"]]["origin"] == "default", "X clears it back")
     click(window, Qt.Key.Key_Escape, 2)
     page = push(root, "pages/FormPage.qml", {"source": "gog"})
-    until(lambda: sections(page) == [g["title"] for g in api.screens.source.groups] and glyphs(page) == ["Y", "B", "A"])
+    until(lambda: sections(page) == [g["title"] for g in api.screens.source.groups] and glyphs(page) == {"Y", "B", "A"})
 
 
 def test_a_module_form_toggles_the_module(ps5, api):

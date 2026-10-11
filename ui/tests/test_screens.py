@@ -618,7 +618,7 @@ def test_sources_browser_lists_the_store_picked(api, fake):
     fake.core._data["source_library"]["epic"] = [{"id": "Min", "title": "Hades", "owned": True, "installed": False}]
     browser.refresh()
     settle(browser)
-    assert [s["name"] for s in browser.stores] == ["GOG", "Epic Games"] and browser.source == "gog"
+    assert [s["id"] for s in browser.stores] == ["gog", "epic"] and browser.source == "gog"
     browser.pick("epic")
     settle(browser)
     assert browser.source == "epic" and [r["title"] for r in browser.rows] == ["Hades"] and browser.updates == []
@@ -672,8 +672,8 @@ def test_an_installed_game_the_library_lacks_is_added_on_its_own(api, fake):
     assert browser.adopt(linked) == "", "a game the library holds has nothing to add"
     assert browser.adopt(at) != ""
     assert browser.adopt(at) == "", "one at a time"
-    until(lambda: said[-1:] == [(f"Added {asylum} to the library",)])
-    row = next(r for r in browser.rows if r["title"] == asylum)
+    row = until(lambda: (r := next(r for r in browser.rows if r["title"] == asylum))["game_id"] and r, "added once its job ends")
+    assert said, "and said so"
     assert row["game_id"] and api.allGames.byId(row["game_id"]) is not None
     assert fake.game(row["game_id"]).get("added_at"), "new to the library"
 

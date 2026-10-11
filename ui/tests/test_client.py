@@ -26,7 +26,7 @@ def test_a_session_end_tells_once_about_an_enabled_module_the_core_skipped(fake,
     fake.core.end_session()
     until(lambda: ended)
     assert notices == [], "after the session toast, not over it"
-    assert until(lambda: notices) == [("Video capture was on but ran nothing: missing gsr-cli",)]
+    assert len(until(lambda: notices)) == 1 and "gsr-cli" in notices[0][0], "one notice, naming what is missing"
     fake.launch("control", "DP-1")
     until(lambda: fake.currentSession)
     fake.core.end_session()

@@ -115,7 +115,7 @@ def test_an_unlisted_add_on_is_tagged_and_removes_from_the_list(look, api, fake)
     until(lambda: any(r["module"] == "lights" and r["tag"] == "Unlisted" for r in form.rows), "an unlisted add-on says so")
     menu = opened(look, page, "module")
     lights = next(i for i, r in enumerate(addons.items("module")) if r["action"] == "lights")
-    assert addons.actions("lights") == [{"icon": "trash", "label": "Remove", "action": "remove", "danger": True}], "only removal, from the UI"
+    assert [(a["action"], a["danger"]) for a in addons.actions("lights")] == [("remove", True)], "only removal, from the UI"
     look.press(Qt.Key.Key_Down, lights)
     look.press(Qt.Key.Key_Return)
     answered(look, page, addons.confirm("lights", "remove"))

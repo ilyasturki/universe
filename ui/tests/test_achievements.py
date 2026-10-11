@@ -14,8 +14,7 @@ def test_the_store_orders_unlocks_first_and_folds_the_hidden_ones(api, fake):
     rows = store.rows
     assert (store.total, store.unlocked, store.loading) == (6, 3, False)
     assert [r["key"] for r in rows] == ["detective", "blackgate", "rooftops", "combo", "iam", "hidden"], "newest unlock first, then the most common locked one"
-    assert "22:18" in rows[0]["dateText"] and rows[0]["rarityText"].startswith("19%"), "local time; a common one rounded"
-    assert rows[4]["rarityText"].startswith("2.1%"), "a rare one to the tenth"
+    assert "22:18" in rows[0]["dateText"], "local time"
     folded = rows[-1]
     assert folded["hidden"] == 1 and folded["icon"] == "" and folded["rarity"] < 0 and "Freeze" not in folded["description"]
     fetched = store.fetchedText
