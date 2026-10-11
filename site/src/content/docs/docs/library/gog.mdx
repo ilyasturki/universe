@@ -8,58 +8,43 @@ sidebar:
 import Shot from '../../../../components/Shot.astro';
 import Clip from '../../../../components/Clip.astro';
 
-GOG is the only store Universe turns on out of the box. It installs and updates the games of your GOG account through gogdl, which Universe fetches the first time it needs it, and it runs comet beside a game so the game can unlock its GOG achievements. Steam, Epic Games and itch.io stay off until you turn them on.
+GOG is the only store on out of the box. Universe installs and updates your GOG games through gogdl, which it fetches the first time it needs it.
 
-Every store installs from the same place, Settings › **Downloads**. The sections below on installing, updates and uninstalling hold for all four stores, and the [Steam](/docs/library/steam/), [Epic Games](/docs/library/epic/) and [itch.io](/docs/library/itch/) pages say what each does differently. The Settings pages [Stores](/docs/settings/stores/) and [Downloads](/docs/settings/downloads/) go through both sections row by row.
+Every store installs from Settings › **Downloads**, so the sections below on installing, updates and uninstalling hold for all four. The [Steam](/docs/library/steam/), [Epic Games](/docs/library/epic/) and [itch.io](/docs/library/itch/) pages say what each does differently, and [Stores](/docs/settings/stores/) and [Downloads](/docs/settings/downloads/) go through every row.
 
 ## Stores and signing in
 
-Settings › **Stores** lists the stores. A row reads **On**, **Off**, **Set it up** or **Unavailable**, the last when a program the store needs is missing, and the stores that are off sit in a card of their own. **Y** turns the store under the cursor on or off. **A** opens its page.
+In Settings › **Stores**, **Y** turns the store under the cursor on or off, and **A** opens its page.
 
 <Shot name="settings-stores" />
 
-A store's page starts with its **Enabled** switch. Once the store is on, the page adds its settings, a **Game defaults** card for the ones each game can override, and a **Sign-in** card. To sign in to GOG:
+To sign in to GOG:
 
-1. On Settings › Stores › **GOG**, pick **Get a sign-in link** in the Sign-in card. Universe shows the link as a QR code and as an address.
+1. On Settings › Stores › **GOG**, pick **Get a sign-in link** in the **Sign-in** card. It shows the link as a QR code and as an address.
 2. Open it on your phone or on a computer, and sign in to GOG.
-3. The page you land on has an address ending in `code=…`. Back in Universe, pick **Enter the code** and enter what follows `code=`, or the whole address.
+3. You land on an address ending in `code=…`. Pick **Enter the code** and enter what follows `code=`, or the whole address.
 
-**Signed in** then shows your GOG user name. The first run's **Your stores** step has the same link and code rows ([First run](/docs/getting-started/first-run/)).
+**Signed in** then shows your GOG user name. The first run's **Your stores** step has the same rows ([First run](/docs/getting-started/first-run/)).
 
-From a terminal, [`universe login gog`](/docs/reference/cli/login/) prints the link and asks for the code, and `universe login gog <code>` takes it at once. The token is kept in gogdl's own file, `~/.config/gogdl/auth.json`. There is no way to sign out, in the app or the CLI.
+[`universe login gog`](/docs/reference/cli/login/) prints the link and asks for the code, and `universe login gog <code>` takes it at once. The token is kept in `~/.config/gogdl/auth.json`. There is no way to sign out, in the app or the CLI.
 
 ## Your GOG games
 
-GOG lists every game your account owns, and that listing adds nothing to your library. A game joins it when you install it, when you add an install already on this PC, or when a scan finds one. Until then it waits in Settings › Downloads, among the games not installed.
+Owning a game doesn't add it to your library. It joins when you install it, add an install already on this PC, or a scan finds one. Until then it waits in Settings › Downloads under **Not installed**.
 
 ## Installing from the store
 
-Settings › Downloads shows one store at a time. With two stores or more on, its first card, **Store**, picks which one. The other cards:
-
-- **Installing**: the download running now, and the ones you paused.
-- **Updates**, when some are pending, with one row, **Update everything**.
-- **On this PC**: the store's games installed here, their total size and the folders Universe looks in.
-- **Not installed**: everything else your account owns.
+Settings › Downloads shows one store at a time, picked in its **Store** card when two or more are on. **A** on a game opens what you can do with it, such as **Install**, **Update**, **Add to library** ([below](/docs/library/gog/#games-already-on-this-pc)) or **Uninstall…**.
 
 <Shot name="settings-downloads" />
 
-An installed row reads **In your library** when a game of your library stands for that install. It reads **Not in your library** when none does, and its detail then names the folder it was found in. **A** on a row opens what you can do with it:
+**Install** asks first, with the download size, the size on disk and the free space. There is no queue: one install or update runs at a time, and a second is refused until the first ends or you cancel it. Cancelling keeps the files, the row turns to **Paused**, and **Resume** picks the download up. Closing Universe stops the download too.
 
-- **Install** on a game that isn't installed, or **Resume** on a paused download. Install asks first, with the download size, the size on disk and the free space in the install folder.
-- **Update**, when the game has an update pending.
-- **Add to library** and **Delete files…** on an install no library game uses ([below](/docs/library/gog/#games-already-on-this-pc)).
-- **Play**, **Details**, **Game settings**, **Uninstall…** and **Remove from library…** on a game of your library.
-- **Cancel install** or **Cancel update** while it runs.
-
-There is no queue. Universe runs one install or update at a time and refuses a second until the first ends or you cancel it. Cancelling keeps the files. The row turns to **Paused** with what was kept, and Resume picks the download up over the same folder. Since the download runs inside the app, closing Universe stops it as well.
-
-While a game downloads, it's the first tile of Home's row, and pressing that tile opens Settings › Downloads. Its art is fetched once it's installed.
-
-The listing is the one Universe last fetched from the store, and the Not installed card says how old it is. **X** (**Refresh**) fetches it again, so a game you bought since shows up.
+**X** (**Refresh**) fetches the store's listing again, so a game you bought since shows up.
 
 ### Where games install
 
-Each store but Steam installs into its own **Install folder** setting. Left empty, as it is by default, it points to the library's games folder, which is Settings › **Game defaults** › **Folders** › **Games**, shown with **Y** (**Show advanced**). That folder defaults to your `XDG_GAMES_DIR` user folder, else `~/Games`. The first run's **Where games install** step sets it too, and offers the folders Heroic and Lutris install into. Changing it moves nothing already installed.
+Each store but Steam installs into its own **Install folder** setting. Empty by default, it points to the library's games folder, Settings › **Game defaults** › **Folders** › **Games**, shown with **Y** (**Show advanced**). That folder defaults to your `XDG_GAMES_DIR` user folder, else `~/Games`, and the first run's **Where games install** step sets it too. Changing it moves nothing already installed.
 
 ```sh
 universe config set paths.games_root ~/Games
@@ -68,49 +53,46 @@ universe source set gog games_dir=/mnt/games/gog
 
 ## Games already on this PC
 
-GOG finds an install by its `goggame-<id>.info` file, up to four folders deep under the Install folder and the **Scanned folders**. Hidden folders and unfinished downloads are skipped.
+GOG finds an install by its `goggame-<id>.info` file, up to four folders deep under the Install folder and the **Scanned folders**, skipping hidden folders and unfinished downloads.
 
-Such an install shows under On this PC. When no library game stands for it, it reads Not in your library, and Add to library brings that one game in, with its art, as long as GOG lists it as yours. Add to library also brings back a game you removed from the library, hours and all.
+Such an install shows under **On this PC**. While no library game stands for it, it reads **Not in your library**, and **Add to library** brings it in with its art, as long as GOG lists it as yours. That also brings back a game you removed from the library, hours and all.
 
-Universe Big Screen has no button that adds every install at once. The first run's **Heroic · GOG** row does that, when Heroic is on the machine. So does [`universe scan gog`](/docs/reference/cli/scan/), and **Find Installed Games** in the menu of Universe Desktop's Store page. `universe scan gog --only <id>` adds one game by GOG's id for it, which [`universe library gog`](/docs/reference/cli/library/) lists. A scan finds a game you removed, but leaves it removed.
+Universe Big Screen has no button that adds every install at once. The first run's **Heroic · GOG** row does, when Heroic is on the machine, as do [`universe scan gog`](/docs/reference/cli/scan/) and **Find Installed Games** in the menu of Universe Desktop's Store page. `universe scan gog --only <id>` adds one game by its GOG id, which [`universe library gog`](/docs/reference/cli/library/) lists. A scan finds a game you removed, but leaves it removed.
 
-Heroic keeps its GOG games in folders of its own. The first run adds them to Scanned folders, as [Lutris and Heroic](/docs/library/lutris-heroic/#heroic) explains.
-
-Delete files… removes an install no library game uses. GOG has no uninstaller of its own, so its folder goes to the trash.
+The first run adds Heroic's GOG folders to Scanned folders ([Lutris and Heroic](/docs/library/lutris-heroic/#heroic)).
 
 ## Updates
 
-Universe never updates a game by itself. When you open Settings, it compares each installed game's build with the latest one GOG has for the depot platform, and lists the games behind. Their rows read **Update available**, and the Updates card and a badge on Downloads in the sidebar count them. Update in a row's menu updates that game, and Update everything updates them one after another.
+Universe never updates a game by itself. When you open Settings, it compares each installed game's build with GOG's latest for the depot platform. A game behind reads **Update available**, counted on the **Updates** card and on Downloads in the sidebar. **Update** updates one, **Update everything** all of them in turn.
 
 [`universe update`](/docs/reference/cli/update/) lists the pending updates of every store that's on, then asks before downloading them. `universe update <name>` updates one game.
 
 ## Uninstalling
 
-Uninstall is in Settings › Downloads, in the menu of a library game's row, and not in the game menu. Two actions there look alike:
+Uninstall is in the menu of a library game's row in Settings › Downloads, not in the game menu. **Uninstall…** deletes the files and keeps the game in your library, to install again from Not installed. **Remove from library…** keeps the files. [Disk space](/docs/library/disk-space/#uninstall-or-remove) says what each leaves behind.
 
-- Uninstall… deletes the game's files and keeps it in your library, not installed, with its hours, journal and recordings. A GOG game's folder goes to the trash. Install it again from Not installed.
-- Remove from library… takes the game out of your library and leaves its files where they are. The install then reads Not in your library, ready for Delete files… or Add to library.
+GOG has no uninstaller of its own, so Uninstall… and **Delete files…** move the game's folder to the trash.
 
-From a terminal, [`universe uninstall`](/docs/reference/cli/uninstall/) uninstalls a game by its name, and with `--source gog` deletes an install no library game uses, by its GOG id. [`universe rm`](/docs/reference/cli/rm/) removes a game from the library. [Disk space](/docs/library/disk-space/) covers what each one leaves behind.
+[`universe uninstall`](/docs/reference/cli/uninstall/) uninstalls a game by its name, and with `--source gog` deletes an install no library game uses, by its GOG id. [`universe rm`](/docs/reference/cli/rm/) removes a game from the library.
 
 ## Cloud saves and achievements
 
-Two settings act per game. The Game defaults card of GOG's page sets them for every GOG game, and a game's Game settings › **GOG** card for that one:
+The **Game defaults** card of GOG's page sets two settings for every GOG game, and a game's Game settings › **GOG** card for that one:
 
 - **Achievements**, on by default. comet stands in for GOG Galaxy while the game runs, so a game built with Galaxy's SDK unlocks its achievements. comet has to be installed; when it isn't, Settings › System check flags **GOG achievements (comet)**.
-- **Cloud saves**, off by default. Saves come down from GOG before a session and go up after it, as [Saves and cloud saves](/docs/library/saves/#cloud-saves) explains.
+- **Cloud saves**, off by default ([Saves and cloud saves](/docs/library/saves/#cloud-saves)).
 
 ## GOG's settings
 
-The **Settings** card of Settings › Stores › GOG holds the Install folder ([above](/docs/library/gog/#where-games-install)) and two more:
+The **Settings** card of Settings › Stores › GOG holds the Install folder ([above](/docs/library/gog/#where-games-install)) and:
 
-- **Depot platform**, the build gogdl downloads: **Windows**, the default, or **Linux**. A Windows build runs through Proton. GOG sets no runner for a game, and a game without one runs through Proton, so give a Linux build the Linux runner in its Game settings › **Launch** › **Runner**.
-- **Install owned DLCs**, on by default, which brings the DLCs you own along with the game.
+- **Depot platform**, the build gogdl downloads: **Windows**, the default, or **Linux**. GOG sets no runner, and a game without one runs through Proton, so give a Linux build the Linux runner in its Game settings › **Launch** › **Runner**.
+- **Install owned DLCs**, on by default.
 
-**Y** shows three more. Scanned folders takes a comma-separated list, and empty scans the install folder. **gogdl token file** is where the sign-in is kept. **Install time limit** stops an install or update that runs longer than 7200 seconds.
+**Y** shows **Scanned folders**, a comma-separated list where empty scans the install folder, **gogdl token file**, where the sign-in is kept, and **Install time limit**, which stops an install or update that runs longer than 7200 seconds.
 
-They're written under `[sources.gog]` in [config.toml](/docs/reference/config/), and a game's own values in its `game.toml`. [`universe source set`](/docs/reference/cli/source/) changes them from a terminal, with `--game <name>` for one game.
+They're written under `[sources.gog]` in [config.toml](/docs/reference/config/), and a game's own values in its `game.toml`. [`universe source set`](/docs/reference/cli/source/) changes them, with `--game <name>` for one game.
 
 ## In the other looks
 
-The Switch 2 look installs from the **Install** page of its HOME bar, which has a **Store** and a **Manage** tab, and lists updates in System Settings › **Updates**. The PS5 look's **Store** page groups **Ready to install**, **Updates** and **On this PC**. Both write **Add to Library** and **Delete Files…**, and both turn a store on or off with **X**.
+The Switch 2 look installs from the **Install** page of its HOME bar, with a **Store** and a **Manage** tab, and lists updates in System Settings › **Updates**. The PS5 look's **Store** page groups **Ready to install**, **Updates** and **On this PC**. Both turn a store on or off with **X**.

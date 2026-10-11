@@ -7,18 +7,18 @@ sidebar:
 
 import Shot from '../../../../components/Shot.astro';
 
-Settings › **Emulators & Proton** lists the runners, the programs your games start through (Proton, Wine, native Linux and the emulators), with the builds and tools Universe can download for them. The sidebar entry counts the updates and the installs Universe proposes.
+Settings › **Emulators & Proton** lists the runners your games start through (Proton, Wine, native Linux and the emulators), with the builds and tools Universe can download for them. The sidebar entry counts the updates and installs on offer.
 
 <Shot name="settings-emulators-proton" />
 
 ## Cards
 
-1. A card with no title: the runners found on this machine, the one with the most games first, then by hours played. The value counts its games ("3 games"). The detail names the build in use and where it comes from (Universe, Nix, system, Lutris, Steam, Heroic, umu, your proton folder, config.toml), and adds "Universe can install … beside it" when a newer build is on offer.
-2. **Not installed** ("Universe downloads and updates these"): the runners Universe can download, a runner a game waits on first.
-3. **No download**, dimmed ("Install these from your distribution: upstream ships no build Universe can fetch"). It reads **Not found** until the catalogue has loaded.
-4. **Tools**: gogdl, legendary, comet, butler and ludusavi, and from your system gamescope, MangoHud and gpu-screen-recorder. The card's line counts the ones installed.
+1. A card with no title: the runners found on this machine, the one with the most games first, then by hours played. The value counts its games. The detail names the build in use and where it comes from (Universe, Nix, system, Lutris, Steam, Heroic, umu, your proton folder, config.toml), and says when Universe can install a newer one beside it.
+2. **Not installed**: the runners Universe can download, the ones a game waits on first.
+3. **No download**, dimmed: runners to install from your distribution, since upstream ships no build Universe can fetch. They read **Not found** until the catalogue has loaded.
+4. **Tools**: gogdl, legendary, comet, butler and ludusavi, and from your system gamescope, MangoHud and gpu-screen-recorder.
 
-A row can carry a tag with the download's size: **Installing…**, **Update …**, **Install …** (a newer build beside the one found), **Needed** (a game waits on it) or **Updated**. When the catalogue can't be reached, the first card warns "The catalogue could not be reached · listing from …".
+A row can carry a tag with the download's size: **Installing…**, **Update …**, **Install …** (a newer build beside the one found), **Needed** (a game waits on it) or **Updated**. When the catalogue can't be reached, the first card warns and lists what it had.
 
 ## A on a row
 
@@ -26,20 +26,20 @@ A row can carry a tag with the download's size: **Installing…**, **Update …*
 
 - **Update to …**, **Install …** or **Install … and use it**;
 - on a runner's build, **Use …** to switch to another build found, and **Follow the newest …**;
-- **Install another version…**, which lists the other versions on offer;
+- **Install another version…**;
 - **Roll back …**, which removes that version and skips it until the next one;
 - **Remove …** for one build, **Uninstall** for every build Universe installed;
 - on a tool from your system, only **Install from the distribution**, which asks for your password outside the Universe session.
 
-An install, a removal and a rollback ask first. An install's question gives the download's size and the free space.
+An install, a removal and a rollback ask first; an install gives the download's size and the free space.
 
-While `[components] auto_update` is on, as it is by default, Universe keeps the builds it installed up to date on its own. It checks 90 seconds after it starts, then once a day, and never while a game runs.
+While `[components] auto_update` is on, as it is by default, Universe keeps the builds it installed up to date. It checks 90 seconds after it starts, then once a day, and never while a game runs.
 
 ## A runner's page
 
-The header reads RUNNER over the name, then the platforms and the program found, or "not found" in red. Its cards:
+The header gives the runner's platforms and the program found, or "not found" in red. Its cards:
 
-- **Runner**: **Program**, whose detail says where it was found ("Found on PATH", "Installed by Universe (…)"); on Proton, the umu-run row under it; **Arguments**; **Gamescope**, on or off for this runner's games.
+- **Runner**: **Program**, whose detail says where it was found; on Proton, the umu-run row under it; **Arguments**; **Gamescope**, on or off for this runner's games.
 - **Builds**: on Proton, **Proton build** (`launch.proton`, `proton-ge` by default) and one row per build family Universe installs; on another runner, its own builds.
 - On Proton, the **Proton** card: **Wayland**, **HDR** and **PlayStation controller**, with **Sync**, **Upscaling** and **Logs** behind **Y**. Wine's sync and log rows fold into its Runner card the same way.
 - **Options**: the runner's own options, kept in `[runners.<id>]`.
@@ -61,4 +61,4 @@ A row this page sets is tagged **CHANGED**, and one it inherits names where its 
 
 ## In the other looks
 
-The Switch 2 look (System Settings › **Emulators & Proton**) and the PS5 look (Settings › **Emulators & Proton**) have the same cards. There **Y** refreshes and **X** hides the progress. Universe Desktop has it in Preferences › **Emulators & Proton**.
+The Switch 2 look (System Settings › **Emulators & Proton**) and the PS5 look (Settings › **Emulators & Proton**) have the same cards, but **Y** refreshes and **X** hides the progress. Universe Desktop has it in Preferences › **Emulators & Proton**.

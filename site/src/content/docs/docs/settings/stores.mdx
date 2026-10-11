@@ -7,43 +7,41 @@ sidebar:
 
 import Shot from '../../../../components/Shot.astro';
 
-Settings › **Stores** lists the stores Universe installs games from. Four come with Universe (Epic Games, GOG, itch.io and Steam), and a store add-on joins them once you install it. Each store has a page of its own for its settings and its sign-in.
+Settings › **Stores** lists the stores Universe installs games from: Epic Games, GOG, itch.io and Steam, and any store add-on you install. Each store has a page for its settings and its sign-in.
 
 <Shot name="settings-stores" />
 
 ## The list
 
-The stores that are on come first, in a card with no title. The ones that are off follow in the **Off** card, and **Get more…** sits alone at the bottom.
+The stores that are on come first, in a card with no title, then the **Off** card, then **Get more…**.
 
 Each row reads its state on the right:
 
 - **On** or **Off**.
-- **Set it up**: the store is on, but a setting it can't guess is still empty. The detail line names it ("On, waiting on …").
-- **Unavailable**: a program the store needs is missing. The detail line reads "Cannot be enabled: missing …", or "On, but its hooks are skipped: missing …" when the store was already on.
+- **Set it up**: the store is on, but a setting it can't guess is still empty. The detail line names it.
+- **Unavailable**: a program the store needs is missing, and the detail line names it. A store that was already on stays on, but its hooks are skipped.
 
-Otherwise the detail line is the store's description. An add-on installed from outside the index is tagged **Unlisted**.
+An add-on installed from outside the index is tagged **Unlisted**.
 
 A new configuration has GOG on and the other three off (`[sources] enabled = ["gog"]` in config.toml).
 
-**Get more…** ("Add-ons: stores others made") opens the **Add-ons** menu, which lists the stores in the add-on index. [Installing add-ons](/docs/add-ons/installing/) covers what it offers.
+**Get more…** opens the **Add-ons** menu, which lists the stores in the add-on index. [Installing add-ons](/docs/add-ons/installing/) covers what it offers.
 
 ## Keys
 
 - **A** opens the focused store's page.
-- **Y** (**Enable** or **Disable**) turns the store on or off without opening it. The row moves to its new card and the cursor goes with it. Y is dimmed on a store that is off and unavailable.
+- **Y** (**Enable** or **Disable**) turns the store on or off without opening it, and the cursor follows it to its new card. Y is dimmed on a store that is off and unavailable.
 - **Start** opens **More**, with the same Enable or Disable.
 
 ## A store's page
 
-The header reads SOURCE over the store's name. Under it come an add-on's version and origin ("v1.2.0 · from the index") or a warning in red, then the store's description. The page's cards are listed down its left side:
+The header gives an add-on's version and origin ("v1.2.0 · from the index"), or a warning in red, then the store's description. The cards:
 
-- **Settings** starts with **Enabled**. While the store is off, that switch is the only row, and it's greyed out when the store can't be turned on. Once the store is on, its own settings follow, the advanced ones hidden until you press **Y** (or **Start** › **Show advanced**). Turning on a store that waits on a setting puts the cursor on that setting.
-- **Game defaults** sets the store's per-game settings for all of its games at once, until a game sets its own in its Game settings. This card is the store's own; the [Game defaults](/docs/settings/game-defaults/) section of Settings is a different page.
-- **Sign-in** holds **Signed in**, whose detail is the account name; **Get a sign-in link**, or **Get an API key** for a store that signs in with a key; and **Enter the code** or **Enter the key**. A sign-in link comes up in a **Sign-in link** card with a QR code to scan from your phone, the address and what to do with it.
+- **Settings** starts with **Enabled**, the only row while the store is off, greyed out when the store can't be turned on. Once it's on, the store's settings follow, the advanced ones behind **Y** (or **Start** › **Show advanced**). Turning on a store that waits on a setting puts the cursor on that setting.
+- **Game defaults** sets the store's per-game settings for all its games, until a game sets its own in its Game settings. It's not the Settings › [Game defaults](/docs/settings/game-defaults/) section.
+- **Sign-in** holds **Signed in**, whose detail is the account name; **Get a sign-in link**, or **Get an API key** for a store that signs in with a key; and **Enter the code** or **Enter the key**. A sign-in link comes with a QR code to scan from your phone.
 
 On these cards, a picker's first choice, "Default · …", puts the store's default back.
-
-The built-in stores' rows:
 
 | Store | Settings | Behind Y | Game defaults | Sign-in |
 | --- | --- | --- | --- | --- |

@@ -3,22 +3,22 @@ title: Settings
 description: How Settings is laid out, how to move through it, and what each of its sections holds.
 ---
 
-Settings is the last tab of the Universe look, after Home, Library and Media. Its sections sit in a sidebar under four groups, and the focused section's cards fill the rest of the screen.
+Settings is the last tab of the Universe look. Its sections sit in a sidebar under four groups, and the focused section's cards fill the rest of the screen.
 
 ## Moving around
 
-- In the sidebar, Up and Down switch the section as you move. **A** or Right goes into its cards, **B** back up to the tab bar.
-- In the cards, **A** acts on the focused row: it flips a switch, runs the row's action or opens a choice. **B** returns to the sidebar.
-- **X** refreshes the sections that read something from the system: Downloads, Emulators & Proton, Controller, Sound, Performance, Storage and System check. On an environment variable in Game defaults, it removes the variable.
+- In the sidebar, Up and Down switch the section. **A** or Right goes into its cards, **B** back up to the tab bar.
+- In the cards, **A** acts on the focused row: it flips a switch, runs an action or opens a choice. **B** returns to the sidebar.
+- **X** refreshes the sections that read from the system: Downloads, Emulators & Proton, Controller, Sound, Performance, Storage and System check. On an environment variable in Game defaults, it removes the variable.
 - **Y** turns the focused store or feature on or off without opening it, and shows or hides the advanced rows of Game defaults.
 - **Start** opens More, a menu of the same actions.
 - **LT** and **RT** step through the sections from anywhere on the page.
 
-The hint bar shows which of these the focused row takes, and the row's description sits under the cards. A number on a sidebar entry counts what waits there: store updates on Downloads, builds to update or install on Emulators & Proton.
+The hint bar shows which keys the focused row takes, and its description sits under the cards. A number on a sidebar entry counts what waits there: store updates on Downloads, builds to update or install on Emulators & Proton.
 
 ## Finding a setting
 
-Search, the magnifier in the tab bar, finds a section by its name or by what it holds, and the rows of Game defaults, Controller, the runners, the stores and the features, down to each game's own settings. Opening a result lands on its row. The sections' former names still work: Launch, Runners, Sources, Install, Modules, Themes, System and Doctor find Game defaults, Emulators & Proton, Stores, Downloads, Features, Appearance, Performance and System check.
+Search, the magnifier in the tab bar, finds a section by its name or what it holds, and the rows of Game defaults, Controller, the runners, the stores and the features, down to each game's own settings. Opening a result lands on its row. The former section names still work: Launch, Runners, Sources, Install, Modules, Themes, System and Doctor find Game defaults, Emulators & Proton, Stores, Downloads, Features, Appearance, Performance and System check.
 
 ## The sections
 
@@ -51,14 +51,11 @@ Universe:
 
 ## Sections that hide
 
-A section shows only when it has something to show:
+Under Steam's Game Mode, Sound, Network, Bluetooth and Performance hide. Elsewhere:
 
-- Sound hides under Steam's Game Mode, where Steam owns the sound.
-- Performance needs a control Universe can set: a screen's backlight, a Steam Deck's refresh rate, an AMD GPU whose power limit or clock Universe can write, or SteamOS's fan curve.
+- Performance needs a control Universe can set; its page lists them.
 - Network needs NetworkManager and a Wi-Fi device. A cable needs nothing set up.
 - Bluetooth needs a Bluetooth adapter.
-
-Under Steam's Game Mode, Network, Bluetooth and Performance hide as well.
 
 ## In the other looks
 

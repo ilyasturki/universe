@@ -8,86 +8,79 @@ sidebar:
 import Shot from '../../../../components/Shot.astro';
 import Clip from '../../../../components/Clip.astro';
 
-Universe Desktop is the GTK app for the mouse and the keyboard. It runs the same core as Big Screen, on the same library and the same `config.toml`, and either app sees a game the other started. Open it as **Universe Desktop** from your app menu. It needs GTK 4.22 and libadwaita 1.9, and [Install](/docs/getting-started/install/) says which packages bring it.
+Universe Desktop is the GTK app for the mouse and the keyboard. It shares Big Screen's library and `config.toml`, and either app sees a game the other started. It needs GTK 4.22 and libadwaita 1.9; [Install](/docs/getting-started/install/) says which packages bring it.
 
 <Shot name="desktop-library" />
 
 ## The window
 
-The sidebar lists **All Games**, **Favourites** once you have one, **Media**, and **Store** with the number of updates waiting. Under them come **Sources** (GOG, Epic Games, itch.io, Steam, Lutris, and Added for the games you added by hand) and **Platforms**. Below 730 px wide the sidebar folds away, and <kbd>F9</kbd> brings it back.
+The sidebar lists **All Games**, **Favourites**, **Media** and **Store**, then **Sources** and **Platforms**. Below 730 px wide it folds away, and <kbd>F9</kbd> brings it back.
 
-The library has a search field (<kbd>Ctrl</kbd>+<kbd>F</kbd>) and a sort menu, which sorts by last played, by title either way, by the date you added the game (**Newest**, **Oldest**) or by **Most Played**. The same menu's **Show Hidden Games** (<kbd>Ctrl</kbd>+<kbd>H</kbd>) shows the hidden games, and only them, so you can unhide one.
+The library has a search field (<kbd>Ctrl</kbd>+<kbd>F</kbd>) and a sort menu (last played, title, **Newest**, **Oldest**, **Most Played**). The same menu's **Show Hidden Games** (<kbd>Ctrl</kbd>+<kbd>H</kbd>) shows the hidden games, and only them, so you can unhide one.
 
-A game's card shows **Play** and a ⋮ menu when the pointer or the focus is on it, and a **Playing** badge while the game runs. A click opens the game's page. An empty library offers **Add Games…** and **Get Started**.
+A click on a game's card opens its page. An empty library offers **Add Games…** and **Get Started**.
 
 ## A game's page
 
-The main button reads **Play** or **Continue**, **Starting…** while the game starts and **Not Installed** when there's nothing to start. It becomes **Quit** while the game runs. Beside it are the favourite button, **Game Settings** and **More**.
+The main button reads **Play** or **Continue**, **Quit** while the game runs, and **Not Installed** when there's nothing to start. Beside it are the favourite button, **Game Settings** and **More**.
 
 Below, the page groups:
 
-- **Your Play**, with **Achievements**, **Screenshots**, **Recordings**, **Journal** and **Sessions and Logs**, each opening its own page;
+- **Your Play**, with **Achievements**, **Screenshots**, **Recordings**, **Journal** and **Sessions and Logs**;
 - **Saves and Storage**, with cloud saves, **Back Up**, the backups to restore or export, and the Wine prefix's tools;
 - **About**;
-- **Gallery**, up to 12 of the store's pictures.
+- **Gallery**, the store's pictures.
 
 **More** holds **Artwork**, **Open Install Folder**, **Hide** or **Unhide**, **Update**, **Uninstall…**, **Remove From Library** and **Remove With Wine Prefix…**.
 
-A right click, a long press or ⋮ on a card opens the game menu, with **Play**, **Details**, **Game Settings**, **Artwork**, **Add to Favourites** or **Remove From Favourites**, **Hide** or **Unhide**, **Update**, **Uninstall…**, **Remove From Library** and **Remove With Wine Prefix…**, minus what doesn't apply. The same menu opens on a media card and on a row of the Store page. <kbd>Delete</kbd> removes the game whose page is open.
+A right click, a long press or ⋮ on a card opens the game menu, with **Play**, **Details**, **Game Settings**, the favourite and the actions of **More**, minus what doesn't apply. <kbd>Delete</kbd> removes the game whose page is open.
 
-Hiding, unhiding and favourites show a message with **Undo**. A removal (of a game, a screenshot, a recording or a journal entry) waits until its message goes, so **Undo** or <kbd>Ctrl</kbd>+<kbd>Z</kbd> cancels it. **Uninstall…** and **Remove With Wine Prefix…** ask first instead.
+Hiding, favourites and removals (of a game, a screenshot, a recording or a journal entry) show a message with **Undo**, and <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes them too. **Uninstall…** and **Remove With Wine Prefix…** ask first instead.
 
 ## Playing
 
-**Play** starts the game on the window's monitor, in a gamescope of its own while the **Gamescope** setting is on, as it is by default. There's no poster, so the game's window stays black until the game draws. One game runs at a time, so **Play** on another asks whether to quit the first, with **Quit and Start**.
+**Play** starts the game on the window's monitor, in a gamescope of its own while the **Gamescope** setting is on, as it is by default. There's no poster, so the game's window stays black until the game draws. **Play** on another game asks whether to quit the first, with **Quit and Start**.
 
-While a game runs, **Now Playing** sits at the foot of the sidebar, or in a bar under the page, with the cover, the title, the time played and **REC** while the session is recorded. Its popover has **Show Game**, **Screenshot**, **MangoHud**, **Frame Rate Limit** (**Match the Display**, **No Limit** or a number) and **Quit Game**. MangoHud and the limit change this session alone, as in Big Screen's dock.
+While a game runs, **Now Playing** sits at the foot of the sidebar. Its popover has **Show Game**, **Screenshot**, **MangoHud**, **Frame Rate Limit** (**Match the Display**, **No Limit** or a number) and **Quit Game**. MangoHud and the limit change this session alone.
 
-Universe Desktop has no dock, no Pause on HOME and no volume or output controls. The pad's macros still work while the game runs. When a session ends you get its length; after a crash, a notification points to **Sessions and Logs** on the game's page.
+There's no dock, no Pause on HOME and no volume or output control, but the pad's macros work while the game runs. After a crash, a notification points to **Sessions and Logs** on the game's page.
 
-Closing the window while a game runs asks first, with **Keep Playing** and **Quit Game**, since the game closes with the app.
+Closing the window while a game runs asks first, since the game closes with the app.
 
 ## Media and the Store
 
-**Media** shows your screenshots, recordings and journal entries, with **All**, **Screenshots**, **Recordings** and **Journal** to narrow them. The viewer has **Previous**, **Next**, **Delete** and **Open With…**. The player has **Delete** and **Open With…**, plus **Journal Entry** when the session has one. [Media](/docs/using/media/) explains where they come from.
+**Media** shows your screenshots, recordings and journal entries, with **All**, **Screenshots**, **Recordings** and **Journal** to narrow them, and **Delete** and **Open With…** on each ([Media](/docs/using/media/)).
 
 **Store** groups your store games under **In Progress**, **Updates** (with **Update All**), **On This PC**, **Not Installed** and **In the Store**. One job runs at a time. With no store signed in, it offers **Set Up Stores**.
 
 ## The main menu
 
-The main menu (<kbd>F10</kbd>) is the same on the library, **Media** and **Store** pages:
+The main menu (<kbd>F10</kbd>) has **Rescan Library**, **Library Artwork…**, **Open Big Screen**, **System Check**, **Storage**, **Preferences**, **Keyboard Shortcuts**, **What's New** and **About Universe Desktop**. The Store page adds **Find Installed Games**. <kbd>Ctrl</kbd>+<kbd>Q</kbd> quits.
 
-- **Rescan Library** and **Library Artwork…**;
-- **Open Big Screen**;
-- **System Check** and **Storage**;
-- **Preferences**, **Keyboard Shortcuts**, **What's New** and **About Universe Desktop**.
-
-The Store page adds **Find Installed Games** on top. The menu has no Quit item; <kbd>Ctrl</kbd>+<kbd>Q</kbd> quits.
-
-**Open Big Screen** shows when Big Screen is installed. It's greyed out while a game runs or while the Big Screen it opened is still up, and it leaves the desktop window open.
+**Open Big Screen** is greyed out while a game runs or while the Big Screen it opened is still up.
 
 ## Preferences
 
-**Preferences** (<kbd>Ctrl</kbd>+<kbd>,</kbd>) has a search field over its pages, **Stores**, **Controller**, **Game Defaults**, **Emulators & Proton** and **Features**, plus **Performance** on a Steam Deck. They hold the same settings as Big Screen's sections of those names, which [Settings](/docs/settings/) describes.
+**Preferences** (<kbd>Ctrl</kbd>+<kbd>,</kbd>) has **Stores**, **Controller**, **Game Defaults**, **Emulators & Proton** and **Features**, plus **Performance** on a Steam Deck, under a search field. They hold the same settings as Big Screen's sections of those names ([Settings](/docs/settings/)).
 
-- Each setting says where its value comes from, whether this game, its runner, your global value, Universe's default or a value Universe found.
+- Each setting says where its value comes from: this game, its runner, your global value, Universe's default or a value Universe found.
 - **Stores** and **Features** end with **Get more…**, for add-ons others made. Themes are Big Screen's alone.
-- **Controller** has **Test the Buttons**, **Set Up the Buttons**, **Nintendo Games** while a pad is connected, **Hold Length** and **Volume Step**, and **HOME Opens Universe**, which brings Big Screen to the front from another app. While Big Screen is reading the controllers, the test and the setup wait until it closes.
+- **Controller** has **Test the Buttons**, **Set Up the Buttons**, **Nintendo Games** while a pad is connected, **Hold Length**, **Volume Step** and **HOME Opens Universe**. While Big Screen is reading the controllers, the test and the setup wait until it closes.
 
 ## First run and What's New
 
-On the first start with an empty library, the [first-run setup](/docs/getting-started/first-run/) opens in a dialog that walks through **Welcome to Universe**, **Your Stores**, **Where Games Install**, **Where Game Data Goes** and **Controller and Screen**. It's Big Screen's setup without the Wi-Fi step. The two apps share it, so it runs once, in whichever you open first. **First-Run Setup…**, in **Add Games** (<kbd>Ctrl</kbd>+<kbd>N</kbd>), runs it again.
+On the first start with an empty library, the [first-run setup](/docs/getting-started/first-run/) opens in a dialog, without the Wi-Fi step. The two apps share it, so it runs once, in whichever you open first. **First-Run Setup…**, in **Add Games** (<kbd>Ctrl</kbd>+<kbd>N</kbd>), runs it again.
 
-**What's New** opens by itself on the first start after an update, never over the first run. From the main menu it lists the changes of each release, from this version down. **About Universe Desktop** holds the same list, and a troubleshooting section that saves a `universe-desktop-debug.txt` report. **Show what's new after an update**, in Preferences › Game Defaults, turns the automatic opening off.
+**What's New** opens by itself on the first start after an update; **Show what's new after an update**, in Preferences › Game Defaults, turns that off. **About Universe Desktop** has a troubleshooting section that saves a `universe-desktop-debug.txt` report.
 
 ## GNOME search
 
-On GNOME, the Shell's search lists your games, matched by title, developer, publisher or platform. Titles that start with what you typed come first. Each result shows the cover, the title, the platform and your hours. Picking one opens its page in Universe Desktop and starts the game if it's installed. Hidden games stay out.
+On GNOME, the Shell's search finds your games by title, developer, publisher or platform, hidden ones aside. Picking one opens its page in Universe Desktop and starts the game if it's installed.
 
-The Arch, Fedora and Nix packages install the search provider. GNOME doesn't look for one in `~/.local/share`, where the installer script puts it, so after `install.sh` the Shell's search lists no games; the installer says so as it finishes.
+The Arch, Fedora and Nix packages install the search provider. After `install.sh` the Shell's search lists no games, since GNOME doesn't look in `~/.local/share`, where the installer script puts it.
 
 ## The GNOME Shell extension
 
-The Universe extension for GNOME Shell (versions 45 to 51) lets Universe list and focus game windows, record a single window or take its screenshot, show the volume level and messages, and hide the cursor while you play. Without it, a window recording falls back to the whole screen and the cursor stays on screen in game.
+The Universe extension for GNOME Shell (versions 45 to 51) lets Universe list and focus game windows, record a single window or take its screenshot, show the volume level and messages, and hide the cursor while you play. Without it, a window recording falls back to the whole screen.
 
-[`universe setup`](/docs/reference/cli/setup/) installs it and turns it on, and it loads at your next login ([After installing](/docs/getting-started/install/#after-installing)). Universe Desktop has the same step under **System Check** › **System Setup** › **Set Up**. System Check also says when the extension is missing, turned off, or not loaded yet.
+[`universe setup`](/docs/reference/cli/setup/) installs it and turns it on, and it loads at your next login ([After installing](/docs/getting-started/install/#after-installing)). Universe Desktop has the same step under **System Check** › **System Setup** › **Set Up**, and System Check says when the extension is missing, turned off or not loaded yet.

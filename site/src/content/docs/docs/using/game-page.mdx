@@ -8,7 +8,7 @@ sidebar:
 import Shot from '../../../../components/Shot.astro';
 import Clip from '../../../../components/Clip.astro';
 
-**X** on a game opens its page, and so does **Game page** on the hero. The game's art and logo fill the top, over a row of buttons; its stats, its description and the store's screenshots follow.
+**X** on a game opens its page, and so does **Game page** on the hero.
 
 <Shot name="game-page" />
 
@@ -16,45 +16,43 @@ import Clip from '../../../../components/Clip.astro';
 
 - The play button reads **Play**, **Continue**, **Resume** or **Manage install**, as on the home row.
 - The heart adds the game to your favourites or takes it out.
-- **Game settings** holds everything the game launches with, which [Launch settings](/docs/running/launch-settings/) goes through.
-- **Media** shows once you have a screenshot, a recording or a journal entry of the game. With one kind, it opens that page; with more, a menu beside the button lists them.
+- **Game settings** holds everything the game launches with ([Launch settings](/docs/running/launch-settings/)).
+- **Media** shows once you have a screenshot, a recording or a journal entry of the game. With one kind, it opens that page; with more, a menu lists them.
 - **Achievements** shows when the game's store lists achievements for it.
 - **···** opens the game menu.
 
-Left and Right move along the buttons, and Down goes to the description, then to the screenshots. **Y** toggles the favourite from anywhere on the page, **Start** opens the game menu and **B** closes the page.
+**Y** toggles the favourite from anywhere on the page.
 
 ## Stats, description and screenshots
 
-Under the buttons sit three stats, **PLAY TIME** (42 min, then hours such as 12.5 h), **LAST PLAYED** (Today, Yesterday, 3 days ago, Last month…) and **SESSIONS**. A stat with nothing to count is left out, so a game you never played shows none.
-
-The description and the screenshots come from the store. **A** on a screenshot shows it full screen, the d-pad steps to the previous or the next, and **B** closes it. Your own screenshots are under **Media**.
+The stats are **PLAY TIME**, **LAST PLAYED** and **SESSIONS**, and a game you never played shows none. The description and the screenshots come from the store; **A** on a screenshot shows it full screen. Your own screenshots are under **Media**.
 
 ## The game menu
 
-The game menu opens on any game that has the focus, on Home, in Library, in search or on its page. **Start** opens it, and so do **A** held (except on the game's page), the **···** button and, while no game is running, **HOME**. **Start** on the running game's badge in the tab bar opens it too. A game still installing has no menu.
+**Start** on any game opens its menu, on Home, in Library, in search or on its page. So do **A** held (except on the game's page), the **···** button, **Start** on the running game's badge in the tab bar and, while no game is running, **HOME**. A game still installing has no menu.
 
 <Shot name="game-menu" />
 
 - **Play**, or **Continue** for a game you've played. On the running game, **Resume** and **Quit** with its title (**Quit Dead Cells**) take their place. That Quit closes the game at once, without asking.
-- **Details**, the game's page. It's left out when the page is already open.
+- **Details**, the game's page.
 - **Add to favourites** or **Remove from favourites**.
 - **Achievements**, when the game lists any.
-- **Media ›**: **Screenshots**, **Recordings** and **Journal**, each one only when it holds something. [Media](/docs/using/media/) describes them.
+- **Media ›**: **Screenshots**, **Recordings** and **Journal**, each one only when it holds something ([Media](/docs/using/media/)).
 - **Manage ›**: **Game settings**, **Artwork**, **Sessions and logs**, **Data and saves**, then **Remove from library…**.
 
-**Artwork** shows the game's pictures and lets you pick others ([Artwork](/docs/library/artwork/)). **Sessions and logs** lists every session with its date, its length and how it ended (Quit, Stopped, Crashed with the exit code, Killed), and opens each one's log. [Troubleshooting](/docs/running/troubleshooting/) explains what to look for in them.
+**Artwork** picks the game's pictures ([Artwork](/docs/library/artwork/)). **Sessions and logs** lists every session with how it ended (Quit, Stopped, Crashed with the exit code, Killed) and opens its log ([Troubleshooting](/docs/running/troubleshooting/)).
 
 ## Achievements
 
-**Achievements** lists what the game's store reports. The header shows how many you've unlocked out of the total, beside a bar. The unlocked ones come first, newest on top, each with its date. The locked ones follow, from the most common to the rarest, each with the share of players who have it. Locked hidden achievements fold into one last row (**3 hidden achievements**: "Keep playing to find out."). **X** asks the store again, and its hint says when the list was last updated.
+**Achievements** lists what the game's store reports: the unlocked ones first, newest on top, then the locked ones from the most common to the rarest, with the hidden ones folded into one last row. **X** asks the store again.
 
-GOG games unlock theirs while you play, through Comet, which stands in for GOG Galaxy. Steam and Epic achievements are read from the store after each session.
+GOG games unlock theirs while you play, through Comet ([GOG](/docs/library/gog/#cloud-saves-and-achievements)). Steam and Epic achievements are read from the store after each session.
 
 ## Data and saves
 
-Manage › **Data and saves** shows what the game keeps on disk, with the total in its header, in four cards:
+Manage › **Data and saves** shows what the game keeps on disk, in four cards:
 
-- **Saves**: where the saves are, **Back Up Now** (with the date of the last backup), **Restore the Latest Backup**, **Export the Backups** (one zip in your home folder), and, for a GOG or Epic game, **Cloud Saves**. When the cloud and this machine disagree, it offers **Keep the Saves on This Device** or **Keep the Cloud's Saves**.
+- **Saves**: where the saves are, **Back Up Now**, **Restore the Latest Backup**, **Export the Backups** (one zip in your home folder), and, for a GOG or Epic game, **Cloud Saves**. When the cloud and this machine disagree, it offers **Keep the Saves on This Device** or **Keep the Cloud's Saves**.
 - **Backups**: one row per backup, and **A** restores it.
 - **Wine Prefix**, for a Windows game: **Move into Universe's Prefixes**, **Wine Configuration**, **Winetricks**, **Run a Program in the Prefix…**, **Stop the Prefix's Programs** and **Reset the Prefix…**, which backs up the saves first.
 - **Storage**: the size of the **Install folder**, **Universe's files**, the **Recordings** and the **Logs**.
@@ -63,12 +61,12 @@ Manage › **Data and saves** shows what the game keeps on disk, with the total 
 
 ## Removing a game
 
-Manage › **Remove from library…** asks first, with **Keep it** and **Remove from the library**. A removed game leaves every list, and its install folder, its hours and its journal stay on disk. Its recordings move to an archive folder, listed in Settings › Storage as **Archived recordings**. Install the game again from its store and it comes back.
+Manage › **Remove from library…** asks first. The game leaves every list, and its install folder, its hours and its journal stay on disk. Its recordings move to **Archived recordings**, in Settings › Storage. Install the game again from its store and it comes back.
 
-Removing doesn't uninstall. To uninstall, go to Settings › **Downloads**, where **A** (**Options**) on the game's row opens a menu, and its **Uninstall…** asks first. Where the store removes its own files, the answer reads **Uninstall through** and the store's name; elsewhere it's **Trash the install folder**. The game stays in the library with its hours, as not installed. A runner's page in Settings › Emulators & Proton offers the same for the games that use it. [Downloads](/docs/settings/downloads/) has the details.
+Removing doesn't uninstall. To uninstall, press **A** (**Options**) on the game's row in Settings › **Downloads** and pick **Uninstall…** ([Downloads](/docs/settings/downloads/)); a runner's page in Settings › Emulators & Proton offers the same. The game stays in the library with its hours, as not installed.
 
 ## In the other looks
 
-In the Switch 2 look, **Start** on a game, or a long press on its tile, opens **Software Options**: **Start** or **Continue** (**Resume** and **Close Software** while it plays), **Software Information**, **Add to Favourites**, **Achievements**, **Game Settings**, **Recordings**, **Journal**, **Play Log**, **Data Management**, **Artwork** and **Remove from Library…**. Its left side shows the tile, when you last played, for how long and over how many sessions.
+In the Switch 2 look, **Start** on a game, or a long press on its tile, opens **Software Options**: **Start** or **Continue** (**Resume** and **Close Software** while it plays), **Software Information**, **Add to Favourites**, **Achievements**, **Game Settings**, **Recordings**, **Journal**, **Play Log**, **Data Management**, **Artwork** and **Remove from Library…**.
 
 The PS5 look shows the game's hero under the Games row, and further down its **Game Hub**, with **Continue where you left off**, **Trophies**, **Captures**, **Journal**, **About** and **Manage**. **Start** opens its **…** menu, with **Information**, **Trophies**, **Game Settings**, **Media Gallery**, **Journal**, **Play Log**, **Saved Data and Storage**, **Artwork**, **Favourite** and **Remove from Library…**. Achievements are trophies there, graded from Common to Ultra rare.

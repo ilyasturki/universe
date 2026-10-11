@@ -31,7 +31,7 @@ A cancelled download resumes where it stopped. Updates are what butler calls dir
 
 ## The itch app's games
 
-Each time Universe looks for itch.io installs on disk, it takes over the install folders the itch app's database lists, and finds the games installed in them, where they are. The database is the one **Adopt installs from** names, `~/.config/itch/db/butler.db` by default. Those games then show under **On this PC**, ready for **Add to library**. The first run's **itch** row adds them all at once.
+Each time Universe looks for itch.io installs on disk, it finds the games in the install folders the itch app's database lists, and leaves them where they are. The database is the one **Adopt installs from** names, `~/.config/itch/db/butler.db` by default. Those games then show under **On this PC**, ready for **Add to library**. The first run's **itch** row adds them all at once.
 
 ## No achievements or cloud saves
 

@@ -21,8 +21,6 @@ To add a file:
 2. Pick the **Runner** it starts through.
 3. Keep or change the **Title of the game**, which Universe proposes from the file's name.
 
-The toast names the runner the game was added through.
-
 A runner's page has a row of its own at the end of its **Games** card. Settings › Emulators & Proton › a runner › **Add a game…** asks for the file and the title, and skips the runner question.
 
 ## Which runner a file gets
@@ -42,7 +40,7 @@ universe add ~/Games/Celeste/Celeste.exe --runner proton --title Celeste --media
 
 ## Its artwork
 
-A game you add by hand gets no art by itself, in Universe Big Screen as in Universe Desktop. To fetch it:
+A game you add by hand gets no art by itself. To fetch it:
 
 - open the game menu (**Start** on the game) › **Manage** › **Artwork**, then **Start** › **Fetch missing art**;
 - or Settings › **Artwork** › Fetch missing art, for every game missing some;

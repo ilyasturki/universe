@@ -7,19 +7,13 @@ sidebar:
 
 import Shot from '../../../../components/Shot.astro';
 
-Settings › **Features** lists the modules, the programs Universe runs around each game session, such as video capture or the play journal. None of them is on until you turn it on.
+Settings › **Features** turns on and sets up the modules, the programs Universe runs around each game session, such as video capture or the play journal. Each one starts off.
 
 <Shot name="settings-features" />
 
 ## The list
 
-It's laid out like [Stores](/docs/settings/stores/). The features that are on come first, in a card with no title, then the **Off** card, then **Get more…** ("Add-ons: features others made"), which opens the **Add-ons** menu of the add-on index.
-
-Each row reads its state on the right:
-
-- **On** or **Off**.
-- **Set it up**: on, but waiting on a setting it can't guess. The Play journal reads "On, waiting on writing model" until you pick its **Writing model**.
-- **Unavailable**: a program it needs is missing, and the detail line names it.
+It's laid out like [Stores](/docs/settings/stores/), with the same states on the right: the features that are on in a card with no title, then the **Off** card, then **Get more…**, which opens the **Add-ons** menu of the add-on index. The Play journal reads **Set it up** until you pick its **Writing model**.
 
 The built-in features are **Video capture**, **Emulator controls**, **Play journal**, **Virtual pads** and **Screenshots**.
 
@@ -33,12 +27,10 @@ Y writes `[modules] enabled` in config.toml, an empty list by default.
 
 ## A feature's page
 
-The header reads MODULE over the name. Its cards:
-
-- **Settings** starts with **Enabled**, the same switch as Y, and while the feature is off it is the only row. Once it's on, the feature's settings follow, the advanced ones behind **Y** (or **Start** › **Show advanced**). Turning on a feature that waits on a setting puts the cursor on that setting.
+- **Settings** starts with **Enabled**, the same switch as Y, and the only row while the feature is off. Once it's on, the feature's settings follow, the advanced ones behind **Y** (or **Start** › **Show advanced**). Turning on a feature that waits on a setting puts the cursor on it.
 - **Game defaults** sets the feature's per-game settings for every game, until a game sets its own.
 
-A feature's switch for one game, such as **Record the session**, isn't on this page. It's in that game's Game settings, in a card named after the feature, on the games the feature applies to.
+A feature's switch for one game, such as **Record the session**, is in that game's Game settings, in a card named after the feature.
 
 | Feature | Settings | Behind Y | Game defaults | One game only |
 | --- | --- | --- | --- | --- |

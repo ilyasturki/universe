@@ -57,4 +57,4 @@ Universe Big Screen doesn't watch the folders, and has no rescan button. After y
 
 libretro's thumbnails give an emulated game its box front and its logo. They're matched by the ROM's file name and the game's platform, on these platforms: Game Boy, Game Boy Color and Game Boy Advance, SNES, Nintendo 64, DS, 3DS, GameCube, Wii, Wii U, PlayStation 1 to 4, PSP, Vita, Dreamcast, Xbox, Xbox 360, ScummVM, MS-DOS and arcade games. The Switch has none.
 
-GOG GamesDB is searched by title, preferring a release on the game's platform. A game still titled after its file takes GamesDB's name when the match is sure. With no square from anyone, Universe makes one from the box front. The rest works as for any game, as [Artwork](/docs/library/artwork/) describes.
+GOG GamesDB is searched by title, preferring a release on the game's platform. A game still titled after its file takes GamesDB's name when the match is sure. The rest works as for any game ([Artwork](/docs/library/artwork/)).

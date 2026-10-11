@@ -7,14 +7,12 @@ sidebar:
 
 import Shot from '../../../../components/Shot.astro';
 
-The Universe session is an entry on your login screen, next to GNOME or Plasma. Log in to it and Universe Big Screen takes the whole screen inside its own gamescope, with no desktop behind it, the way SteamOS runs Steam in Game Mode. It fits a PC under the TV that you only ever drive with a controller.
-
-It needs gamescope. On a desktop, Universe Big Screen runs without it when it's missing; the session can't.
+The Universe session is an entry on your login screen, next to GNOME or Plasma. Log in to it and Universe Big Screen takes the whole screen inside its own gamescope, with no desktop behind it, the way SteamOS runs Steam in Game Mode. It needs gamescope.
 
 ## Adding it to the login screen
 
 - The Arch and Fedora packages install it.
-- The [installer](/docs/getting-started/install/#steamos-bazzite-and-other-distributions) adds it with your password, through sudo, as `/usr/share/wayland-sessions/universe.desktop`. Where `/usr` is read-only, as on SteamOS and Bazzite, it goes under `/usr/local/share/wayland-sessions` instead, which GDM and SDDM read and LightDM doesn't. Without sudo, the installer prints the command to run as root.
+- The [installer](/docs/getting-started/install/#steamos-bazzite-and-other-distributions) adds it through sudo, as `/usr/share/wayland-sessions/universe.desktop`. Where `/usr` is read-only, as on SteamOS and Bazzite, it goes under `/usr/local/share/wayland-sessions` instead, which GDM and SDDM read and LightDM doesn't. Without sudo, the installer prints the command to run as root.
 - On NixOS, set `programs.universe.session.enable`. It needs `programs.universe.enable`, which brings the session's gamescope.
 
 Then pick **Universe** in the login screen's session menu. To boot straight into it on NixOS, make it the default session and log in automatically:
@@ -26,7 +24,7 @@ services.displayManager.defaultSession = "universe";
 services.displayManager.autoLogin.user = "alice"; # your user name
 ```
 
-The session's gamescope follows your global gamescope settings, HDR included. [Gamescope, HDR and frame rate](/docs/running/gamescope/) has them.
+The session's gamescope follows your global gamescope settings, HDR included ([Gamescope, HDR and frame rate](/docs/running/gamescope/)).
 
 ## Inside the session
 
@@ -42,21 +40,21 @@ There's no lock screen. Waking the machine from suspend lands on the launcher, a
 
 ### Network and Bluetooth
 
-Settings › [Network](/docs/settings/network/) joins Wi-Fi networks through NetworkManager. A cable needs nothing set up. Settings › [Bluetooth](/docs/settings/bluetooth/) pairs controllers, keyboards and headphones.
+Settings › [Network](/docs/settings/network/) joins Wi-Fi networks, and Settings › [Bluetooth](/docs/settings/bluetooth/) pairs controllers, keyboards and headphones.
 
 :::note
-Universe doesn't set up WEP or WPA Enterprise networks. Join one of those once from a desktop session; after that, NetworkManager has it saved and the session can connect to it.
+Universe doesn't set up WEP or WPA Enterprise networks. Join one of those once from a desktop session, and the session can connect to it from then on.
 :::
 
-Your first controller comes by USB cable, or use a keyboard, since pairing over Bluetooth needs something to drive Settings with. Plug in a DualSense or a DualShock 4 and Universe offers to pair it there and then. Choose **Pair**, and from then on it connects without the cable. If a game is on screen at that moment, a notice tells you to plug the controller in again from **HOME** instead.
+Your first controller comes by USB cable, or use a keyboard, since pairing over Bluetooth needs something to drive Settings with. A DualSense or DualShock 4 plugged in by cable [pairs there and then](/docs/controllers/bluetooth/#pairing-a-dualsense-or-dualshock-4-by-cable).
 
 ### System tools
 
-Nothing in the session can ask for a password. The system tools Universe uses (gamescope, MangoHud and gpu-screen-recorder) still install from inside it without a prompt, from Settings › Emulators & Proton › **Tools** or from a System check row. The packages and the installer put a helper in place for those three programs and nothing else, and it installs them through PackageKit. If the installer ran without sudo, the helper is missing and those rows can't install. Where PackageKit can't install one, as on NixOS, on an image-based system, or where the distribution doesn't package it, the rows show the fix to apply yourself instead; on NixOS that's a module option or a package to add to your configuration.
+Nothing in the session can ask for a password. gamescope, MangoHud and gpu-screen-recorder still install from inside it, from Settings › Emulators & Proton › **Tools** or a System check row, through a helper the packages and the installer put in place for those three programs alone. If the installer ran without sudo, the helper is missing and those rows can't install. The helper goes through PackageKit, so where PackageKit can't install one (on NixOS, on an image-based system, or where the distribution doesn't package it), the rows show the fix to apply yourself.
 
 ## When it can't start
 
-There's no desktop to fall back to, so the login screen comes back:
+The login screen comes back:
 
 - at once when gamescope isn't installed;
 - when gamescope quits before the launcher comes up, or shows nothing for 30 seconds;

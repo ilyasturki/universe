@@ -5,15 +5,15 @@ sidebar:
   order: 3
 ---
 
-Video capture (`capture`) records each session with gpu-screen-recorder, from the moment the game starts until it ends, and files the video under `~/Videos/universe`. The [Play journal](/docs/add-ons/play-journal/) takes its frames from that recording. It starts off, like every module, until you turn it on in Settings › **Features** › **Video capture**.
+Video capture (`capture`) records each session with gpu-screen-recorder, from the moment the game starts until it ends. The [Play journal](/docs/add-ons/play-journal/) takes its frames from that recording. Turn it on in Settings › **Features** › **Video capture**.
 
 ## What it needs
 
-- gpu-screen-recorder 6.1 or newer, installed natively. Universe pauses and stops it through `gsr-cli` and its control socket, which need 6.1 or newer, and the Flatpak can't be driven from outside.
+- gpu-screen-recorder 6.1 or newer with its `gsr-cli`, installed natively. The Flatpak can't be driven from outside.
 - ffmpeg, ffprobe and `trash`.
 - gpu-screen-recorder's KMS helper, `gsr-kms-server`, with the `cap_sys_admin` capability. Without it, each recording asks for your password.
 
-A missing gpu-screen-recorder, `gsr-cli`, ffmpeg, ffprobe or `trash` makes the module Unavailable. While the module is on, [System check](/docs/settings/system-check/) has a line each for gpu-screen-recorder, `gsr-cli` and `gsr-kms-server`, with the fix for your system:
+Without gpu-screen-recorder, `gsr-cli`, ffmpeg, ffprobe or `trash`, the module is Unavailable. While the module is on, [System check](/docs/settings/system-check/) has a line each for gpu-screen-recorder, `gsr-cli` and `gsr-kms-server`, with the fix for your system:
 
 - On Arch, install the `gpu-screen-recorder` package, which gives the helper its capability. With PackageKit installed, Settings › **Emulators & Proton** offers to install it.
 - Fedora and Debian don't package it. Install gpu-screen-recorder from its project, then give the helper its capability:
@@ -22,19 +22,19 @@ A missing gpu-screen-recorder, `gsr-cli`, ffmpeg, ffprobe or `trash` makes the m
   sudo setcap cap_sys_admin+ep "$(command -v gsr-kms-server)"
   ```
 
-- On NixOS, the NixOS module sets up gpu-screen-recorder and its helper at matching versions through `programs.universe.capture.enable`, which is on by default ([Nix options](/docs/reference/nix/)).
+- On NixOS, `programs.universe.capture.enable`, on by default, sets up gpu-screen-recorder and its helper at matching versions ([Nix options](/docs/reference/nix/)).
 
 ## What it records
 
-It records every session of a game whose **Record the session** is on. The recorder starts with the game and records the whole screen the game runs on, unless the game is set to record its window alone. The file grows in `~/.local/share/universe/modules/capture/pending/` while you play. When the session ends it's filed in the recordings folder as `<game id>/<session>.mkv`, or goes to the trash if it's shorter than **Shortest recording kept** (240 seconds).
+It records every session of a game whose **Record the session** is on. It takes the whole screen the game runs on, or the game's window alone with **Capture** set to **One window**. The file grows in `~/.local/share/universe/modules/capture/pending/` while you play. When the session ends it's filed in the recordings folder, or goes to the trash if it's shorter than **Shortest recording kept**.
 
-When gpu-screen-recorder can't start (a screen it won't take, no encoder), an on-screen message says "Recording failed" and the session has no recording. The journal then writes from your screenshots alone.
+When gpu-screen-recorder can't start (a screen it won't take, no encoder), a message says "Recording failed" and the session has no recording.
 
-If the screen being recorded goes dark or is unplugged, the recording moves to the screen that's still lit, and a message names it. The parts are joined into one file at the end. If they can't be joined, the longest part is kept.
+If the screen being recorded goes dark or is unplugged, the recording moves to the screen that's still lit. The parts are joined into one file at the end, or the longest is kept if they can't be.
 
 ## Pausing under HOME
 
-With **Pause on HOME** on (the default), the game freezes while the dock or the launcher covers it, and the recording pauses with it. The paused stretches are cut from the file rather than held as a still frame, so **Shortest recording kept** measures play. With Pause on HOME off, the game plays on behind the launcher, and so does the recording. [Playing](/docs/using/playing/) covers Pause on HOME.
+With **Pause on HOME** on (the default), the recording pauses while the dock or the launcher covers the game, and the paused stretches are cut from the file, so **Shortest recording kept** measures play. With it off, the game and the recording go on behind the launcher. [Playing](/docs/using/playing/) covers Pause on HOME.
 
 ## Where recordings land
 
@@ -48,11 +48,11 @@ The [Media](/docs/using/media/) tab, a game's Recordings page and [`universe rec
 
 ## One window, on GNOME
 
-Set **Capture** to **One window** to record the game's window instead of the screen. For that, Universe has to see the desktop's windows, which on GNOME takes the Universe Shell extension. Run [`universe setup`](/docs/reference/cli/setup/), then log out and back in ([Install](/docs/getting-started/install/#after-installing)).
+To record the game's window alone, Universe has to see the desktop's windows, which on GNOME takes the Universe Shell extension. Run [`universe setup`](/docs/reference/cli/setup/), then log out and back in ([Install](/docs/getting-started/install/#after-installing)).
 
-At the game's first launch, GNOME's window picker opens. Pick the game's window, which is on screen by then. The pick is kept for that game, and GNOME finds the window again by its app id and title, so later launches record without asking. Cancel the picker and that session isn't recorded.
+At the game's first launch, GNOME's window picker opens. Pick the game's window. GNOME finds it again by its app id and title, so later launches record without asking. Cancel the picker and that session isn't recorded.
 
-Universe waits up to **Window wait** (60 seconds) for the game's window. When none shows in time, or when it can't list the desktop's windows, it records the whole screen, and a message says "Recording the screen".
+When the game's window doesn't show within **Window wait**, or Universe can't list the desktop's windows, it records the whole screen and says "Recording the screen".
 
 ## Settings
 

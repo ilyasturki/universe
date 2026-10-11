@@ -7,7 +7,7 @@ sidebar:
 
 import Shot from '../../../../components/Shot.astro';
 
-Settings › **Game defaults** holds the values every game takes until its own Game settings change them. Four cards show at first (**Display**, **Overlay**, **Saves** and **Updates**), and **Y** adds the advanced ones. Every row writes `~/.config/universe/config.toml`.
+Settings › **Game defaults** holds the values every game takes until its own Game settings change them. It shows **Display**, **Overlay**, **Saves** and **Updates**, and **Y** adds the advanced cards. Every row writes `~/.config/universe/config.toml`.
 
 <Shot name="settings-game-defaults" />
 
@@ -42,7 +42,7 @@ Behind **Y**, under an **Advanced · Scaling** rule:
 | Hide the cursor while playing | The desktop cursor hides during a game | `desktop.hide_cursor` | on |
 | Keep the screen awake | No blanking or automatic suspend during a game | `desktop.keep_awake` | on |
 
-Under Steam's Game Mode, Show MangoHud, Frame rate limit and Pause on HOME are left out. Steam's Quick Access menu has the HUD and the limit there, and HOME doesn't reach a game to pause it.
+Under Steam's Game Mode, Show MangoHud, Frame rate limit and Pause on HOME are left out: Steam's Quick Access menu has the HUD and the limit.
 
 ## Saves
 
@@ -53,11 +53,11 @@ Under Steam's Game Mode, Show MangoHud, Frame rate limit and Pause on HOME are l
 
 ## Updates
 
-**Show what's new after an update** (`desktop.whats_new`, on) opens the changes once, on the first start after an update. Settings › [About](/docs/settings/about/) has the same switch.
+Its one row, **Show what's new after an update** (`desktop.whats_new`, on), is the same switch as in Settings › [About](/docs/settings/about/).
 
 ## Behind Y
 
-**Y** (**Show advanced** or **Hide advanced**) adds six cards after the four above. The section always opens with them hidden, and **Start** › **More** has the same toggle.
+**Y** (**Show advanced** or **Hide advanced**, also in **Start** › **More**) adds six cards, hidden each time the section opens.
 
 - **Environment**: one row per variable of `launch.env`, then **Add a variable…**, a sheet with **Variable** and **Value**. **X** (**Remove**) deletes the focused variable.
 - **Programs**: **Gamescope program** (`launch.gamescope_bin`, `gamescope`) and **umu-run program** (`launch.umu_run`, `umu-run`), each a name on your PATH or a path.
@@ -68,9 +68,9 @@ Under Steam's Game Mode, Show MangoHud, Frame rate limit and Pause on HOME are l
 
 ## Values and editing
 
-A row's value shows what the setting comes to, such as "auto · 60" for a refresh rate left on auto or "default · linear" for a filter nobody set. **A** toggles a switch; on any other row it opens a picker, the keyboard or a folder sheet. A picker's first choice, "Default · …", removes the key so the default applies again.
+A row's value shows what the setting comes to, such as "auto · 60" for a refresh rate left on auto. **A** flips a switch, or opens a picker, the keyboard or a folder sheet. A picker's first choice, "Default · …", removes the key so the default applies again.
 
-Proton build, Wayland, HDR, PlayStation controller, the sync modes, the upscaler upgrades and Debug log depend on the runner, so they're on the runner's page in Settings › [Emulators & Proton](/docs/settings/emulators-proton/).
+Proton build, Wayland, HDR, PlayStation controller, the sync modes, the upscaler upgrades and Debug log are on the runner's page in Settings › [Emulators & Proton](/docs/settings/emulators-proton/).
 
 ## From the command line
 
@@ -82,4 +82,4 @@ Proton build, Wayland, HDR, PlayStation controller, the sync modes, the upscaler
 
 ## In the other looks
 
-The Switch 2 look has the same rows in one column under System Settings › **Game defaults**. The PS5 look calls it Settings › **Game Defaults** and gives each card a part of its own. Both show the advanced rows with **Y**. Universe Desktop has it in Preferences › **Game Defaults**, with the advanced cards on a page behind an **Advanced** row.
+The Switch 2 look has the same rows in one column under System Settings › **Game defaults**, and the PS5 look under Settings › **Game Defaults**, a part per card. Both show the advanced rows with **Y**. Universe Desktop has it in Preferences › **Game Defaults**, with the advanced cards on a page behind an **Advanced** row.

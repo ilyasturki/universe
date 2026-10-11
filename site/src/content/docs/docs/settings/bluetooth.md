@@ -9,35 +9,29 @@ Settings › **Bluetooth** pairs and connects controllers, headphones, keyboards
 
 ## Bluetooth
 
-**Bluetooth** turns the adapter on or off. Its detail line reads "Plug a controller in by USB to use it at once; pair it here to go without the cable."
+**Bluetooth** turns the adapter on or off. A controller plugged in by USB works at once; pair it here to go without the cable.
 
 ## Paired
 
-This card lists the devices paired with this machine, each with an icon for its kind (controller, headphones, keyboard, mouse). The value reads **Connected** or **Not connected**, and the detail gives the battery level when the device reports one.
+The devices paired with this machine, each reading **Connected** or **Not connected**, with its battery level when the device reports one.
 
 **A** (**Options**) offers **Connect** or **Disconnect**, and **Forget**.
 
 ## Found
 
-This card lists the devices nearby that are in pairing mode. Its line reads **Searching** while the adapter looks, and the adapter searches for as long as the section is open. With nothing found yet, a **Searching…** row says to hold the device's pairing button until its light blinks.
+The devices nearby in pairing mode. The adapter searches for as long as the section is open. To show up, a device needs its pairing button held until its light blinks.
 
-**A** (**Pair**) pairs a device, and its value reads **Pairing…** meanwhile.
+**A** (**Pair**) pairs a device.
 
 ## Pairing questions
 
-Some devices ask a question while they pair, and it comes up over whatever page is open:
-
-- "Pair …?" to check that the device shows the same code, or to let it connect.
-- A sheet to type a code the device shows, or its PIN (often 0000 or 1234).
-- A code to type on the device itself, then <kbd>Enter</kbd>.
-
-A controller plugged in by cable can ask too, and once you say yes it connects without the cable. While a game holds the screen, Universe answers no, and a notice says to pair the device, or plug it in, again from HOME.
+Some devices ask a question while they pair, such as a code to confirm, or a PIN to type (often 0000 or 1234). It comes up over whatever page is open. While a game holds the screen, Universe answers no, and a notice says to pair the device, or plug it in, again from HOME.
 
 ## From the command line
 
 [`universe bluetooth`](/docs/reference/cli/bluetooth/) lists the paired and found devices. `scan`, `pair <addr>`, `connect <addr>`, `disconnect <addr>`, `remove <addr>` (which forgets), `power on` or `power off`, and `watch` do the rest.
 
-[Bluetooth pairing](/docs/controllers/bluetooth/) covers pairing a controller.
+[Bluetooth pairing](/docs/controllers/bluetooth/) lists every [pairing question](/docs/controllers/bluetooth/#pairing-questions), and covers pairing a controller, a Sony pad over its cable included.
 
 ## In the other looks
 

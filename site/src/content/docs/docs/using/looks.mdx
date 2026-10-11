@@ -8,56 +8,50 @@ sidebar:
 import Shot from '../../../../components/Shot.astro';
 import Clip from '../../../../components/Clip.astro';
 
-Universe Big Screen comes with three looks: **Universe**, the default, then **Switch 2** and **PS5**. They share your library and your settings, and differ in how the screens are laid out and how you move through them.
+Universe Big Screen comes with three looks: **Universe**, the default, then **Switch 2** and **PS5**. They share your library and your settings.
 
 ## Universe
 
 <Shot name="look-universe" />
 
-The look describes itself as "Dark, cinematic: the game's art behind everything." Tabs run along the top (Home, Library, Media, Settings), a hint bar along the bottom names every button you can press, and the dock opens over a running game. It's set in Archivo. The rest of these pages describe this look.
+Dark, with the game's art behind everything: tabs along the top, a hint bar along the bottom and the dock over a running game. The rest of these pages describe this look.
 
 ## Switch 2
 
 <Shot name="look-switch2" />
 
-Its description is "The Switch 2 HOME menu." It's a light look, with a row of games on HOME, a bar of round buttons under it and pages that stack on top. Settings is **System Settings**, the media lives in **Album** and **News**, and the hints sit at the right. **HOME** over a game flips to the HOME menu instead of opening a dock. It's set in BIZ UDPGothic, and **Font file** in its Appearance takes a .ttf of your own, the Switch's own font for one.
+A light look after the Switch 2 HOME menu, with a row of games over a bar of round buttons. Settings is **System Settings**, the media lives in **Album** and **News**, and **HOME** over a game flips to the HOME menu instead of opening a dock. **Font file** in its Appearance replaces its BIZ UDPGothic with a .ttf of your own, the Switch's own font for one.
 
 ## PS5
 
 <Shot name="look-ps5" />
 
-In its own words, "The PS5 home screen: the game's world behind a row of tiles." It has two tabs, Games and Media, a row of tiles with the focused game's hero under it and its Game Hub further down, and the Control Center over a running game. Most screens carry no button hints, and until Universe has seen a controller the few that do show a DualSense's buttons. It's set in Source Sans 3, which **Font file** replaces.
+After the PS5 home screen: two tabs, Games and Media, a row of tiles over the focused game's hero and Game Hub, and the Control Center over a running game. Most screens carry no button hints, and until Universe has seen a controller the few that do show a DualSense's buttons. **Font file** replaces its Source Sans 3.
 
 ## Switching looks
 
-Settings › **Appearance** › **Theme** lists the three built-in looks, then the themes you installed, tagged **Add-on**; one that can't run here reads **Can't be used**. The switch is live, with no restart, and the new look opens on its own Appearance page. In the Switch 2 and PS5 looks, Appearance shows the looks as rows to pick, each with its colours or a screenshot.
+Settings › **Appearance** › **Theme** lists the three looks, then the themes you installed. The switch is live, with no restart. In the Switch 2 and PS5 looks, Appearance shows each look as a row to pick.
 
 <Shot name="settings-appearance" />
 
 Universe remembers the look for the next start, in `~/.local/state/universe/ui-memory.json`. `universe-ui --theme switch2` (or `ps5`, or `universe`) uses one for a single run.
 
-Appearance also holds:
-
-- **Sound folder**, a folder of WAVs that replace the look's own sounds of the same name (`tick.wav`, `enter.wav`, `launch.wav` and the rest);
-- **Font file**, in the Switch 2 and PS5 looks;
-- **Get more…**, the themes others made;
-- **Startup animation**;
-- the trademark note.
+[Appearance](/docs/settings/appearance/) also holds **Sound folder**, **Font file** (Switch 2 and PS5), **Get more…** and **Startup animation**.
 
 ## The startup animation
 
-A full-screen start opens on the Universe mark, for about two seconds. Thin lines stream toward you, faster and faster, and stop; the mark lands and sends out a ring, then a circle opens from the middle onto the look's home. A quiet chime plays with it unless the sound is muted. Any button skips it.
+A full-screen start opens on the Universe mark for about two seconds, with a chime unless the sound is muted. Any button skips it.
 
-It plays only when Big Screen starts full screen with no game running. It doesn't play under [Steam's Game Mode](/docs/getting-started/steam-deck/#steams-game-mode), or when Universe starts again after a crash. Settings › Appearance › **Startup animation** turns it off in every look. `universe-ui --no-boot` skips it for one run and `--boot` forces it, but the switch in Appearance wins.
+It doesn't play with a game running, under [Steam's Game Mode](/docs/getting-started/steam-deck/#steams-game-mode), or when Universe starts again after a crash. Settings › Appearance › **Startup animation** turns it off in every look. `universe-ui --no-boot` skips it for one run and `--boot` forces it, but the switch in Appearance wins.
 
 ## What's new
 
-After an update, the first start opens **What's new**, with what changed in each release since the version you last ran, newest first. It never opens on the first run. **Show what's new after an update**, in Settings › About and in Game defaults › **Updates**, turns that off. Settings › About › **What's new** opens it whenever you like, and so does **A** on **Version**. **B** closes it.
+The first start after an update opens **What's new**, with the changes of each release since the one you last ran. Settings › [About](/docs/settings/about/) › **What's new** opens it whenever you like, and **Show what's new after an update** there stops it opening by itself ([What's new](/docs/getting-started/update-uninstall/#whats-new)).
 
 ## Themes others made
 
-A theme is a look someone else made, installed from **Get more…** in Appearance or with [`universe extension install`](/docs/reference/cli/extension/) and its id. It joins the Theme list tagged **Add-on**. An installed theme draws in Universe's main window alone, so it has no dock over a running game (holding **HOME** brings Universe back instead), a plain volume level and a black background. One that fails to load puts the Universe look back and says so, and if one loads but leaves you no way out, holding **HOME** on the pad for 5 s does the same. [Themes](/docs/add-ons/themes/) covers installing, updating and making one.
+A theme is a look someone else made, installed from **Get more…** in Appearance or with [`universe extension install`](/docs/reference/cli/extension/). It has no dock over a running game; holding **HOME** brings Universe back instead. If a theme leaves you no way out, hold **HOME** on the pad for 5 s to get the Universe look back. [Themes](/docs/add-ons/themes/) covers installing, updating and making one.
 
 ## Trademarks
 
-The Switch 2 and PS5 looks follow those consoles' home screens. Universe is not affiliated with Nintendo or Sony. Nintendo Switch is a trademark of Nintendo; PlayStation and PS5 are trademarks of Sony Interactive Entertainment. Every look's Appearance page carries the same note.
+The Switch 2 and PS5 looks follow those consoles' home screens. Universe is not affiliated with Nintendo or Sony. Nintendo Switch is a trademark of Nintendo; PlayStation and PS5 are trademarks of Sony Interactive Entertainment.

@@ -7,7 +7,7 @@ sidebar:
 
 Universe works with any pad Linux reads as a gamepad. Nine models, which the app calls families, get their own button names, glyphs and extra buttons. Every other pad is a plain **Controller** with the standard buttons.
 
-The menus read your pad through SDL. HOME, macros, button setup and the button test come from Universe's controller watcher, which reads the pad's `/dev/input` node without taking it from the game, so the game sees every press too.
+The menus read your pad through SDL. HOME, macros, button setup and the button test read the pad's `/dev/input` node, without taking it from the game.
 
 ## Controller families
 
@@ -24,13 +24,13 @@ The menus read your pad through SDL. HOME, macros, button setup and the button t
 | 8BitDo Pro 3 | `8bitdo-pro-3` | `2dc8:6009` | L4 `paddle_l4`, R4 `paddle_r4`, PL `paddle_pl`, PR `paddle_pr`, Star `star` |
 | Controller | `generic` | Any other pad | none |
 
-The [`universe controller`](/docs/reference/cli/controller/) commands take these ids. Every family also has 17 standard buttons. The face buttons are `south`, `east`, `north` and `west`, by position, and the others are `lb`, `rb`, `lt`, `rt`, `select`, `start`, `guide` (HOME), `ls` and `rs` (the stick clicks), and `dpad_up`, `dpad_down`, `dpad_left` and `dpad_right`. Each family labels them as its pad prints them, so a DualSense has Cross, Circle, L1 and Options, and a Switch Pro has B at the bottom and ZL.
+The [`universe controller`](/docs/reference/cli/controller/) commands take these ids. Every family also has 17 standard buttons: the face buttons `south`, `east`, `north` and `west`, by position, then `lb`, `rb`, `lt`, `rt`, `select`, `start`, `guide` (HOME), `ls` and `rs` (the stick clicks), and `dpad_up`, `dpad_down`, `dpad_left` and `dpad_right`. Each family labels them as its pad prints them.
 
 Some extra buttons depend on the driver:
 
 - The DualSense Edge's four extra buttons reach Linux from kernel 7.2.
 - The Elite's paddles come as grip buttons under xpadneo or xone, and under other codes with older drivers. Universe takes whichever the pad reports.
-- The 8BitDo Pro 3's Star has never reached Linux in any mode seen so far, so its row stays **Unbound**.
+- The 8BitDo Pro 3's Star has reached Linux in no mode seen so far, so its row stays **Unbound**.
 
 A button that sends no code on the pad's current connection reads **Unbound** in Settings › **Controller**. If the pad does have it, [learn it](/docs/controllers/button-setup/#learn-one-button).
 
@@ -44,7 +44,7 @@ Universe tries, in order:
 4. the name alone, whatever the vendor;
 5. the generic Controller.
 
-xpadneo presents an Elite as a plain Xbox Wireless Controller, so Universe takes any Xbox pad that reports grip or paddle buttons for an Xbox Elite Series 2. The 8BitDo Pro 3 is the only 8BitDo with a family of its own. In X-input mode it passes for an Xbox 360 pad and gets the Xbox family, and in Switch mode it reads as a Switch Pro.
+The 8BitDo Pro 3 is the only 8BitDo with a family of its own. In X-input mode it gets the Xbox family, and in Switch mode it reads as a Switch Pro.
 
 Learned buttons, macros and the **Nintendo games** choice belong to the family, so every pad of that model follows them.
 
@@ -61,25 +61,25 @@ The hint bar names buttons the Xbox way and draws them the way your pad prints t
 | 8BitDo Pro 3 | B A X Y | L1 R1 L2 R2 | Minus, Plus, Home | L3 R3 |
 | Steam Deck | A B X Y | L1 R1 L2 R2 | View, Menu, Steam | L3 R3 |
 
-A Nintendo-style pad (Switch Pro, Switch 2 Pro, 8BitDo Pro 3) has B at the bottom and A on the right. A hint that names a letter lands on the button printed with it. The menus go by the print too, so the A on the right confirms and the B at the bottom goes back.
+On a Nintendo-style pad (Switch Pro, Switch 2 Pro, 8BitDo Pro 3), a hint that names a letter lands on the button printed with it, and the menus go by the print too, so the A on the right confirms and the B at the bottom goes back.
 
-Until a pad is seen, the hints follow the last family Universe saw, else the Xbox one (the Steam Deck's on a Deck). The first-run setup's **Buttons and glyphs** row picks the family shown until a pad is plugged in. Under a keyboard or a mouse, the hints show key caps instead. The PS5 look draws DualSense glyphs until it sees a pad.
+Until a pad is seen, the hints follow the last family Universe saw, else the Xbox one (the Steam Deck's on a Deck). The first-run setup's **Buttons and glyphs** row picks the family shown until a pad is plugged in. The PS5 look draws DualSense glyphs until it sees a pad. Under a keyboard or a mouse, the hints show key caps instead.
 
 ## Steam Deck and Steam Input
 
-The Deck's controls are the Steam Deck family whether Universe reads them from the kernel's driver or, under Steam, from Steam Input's virtual pad (`28de:11ff`), which counts as the built-in controls on Deck hardware. Its back buttons L4, L5, R4 and R5 ship with no macros, ready for [yours](/docs/controllers/macros/).
+The Deck's controls are the Steam Deck family whether Universe reads them from the kernel's driver or, under Steam, from Steam Input's virtual pad (`28de:11ff`). Its back buttons L4, L5, R4 and R5 ship with no macros, ready for [yours](/docs/controllers/macros/).
 
-Off a Deck, Steam Input's virtual pad is a copy of a real one. Universe hides it while the real pad is connected, and you see the real pad with its own family and extra buttons.
+Off a Deck, Universe hides Steam Input's virtual pad while the real pad it copies is connected.
 
 With neither Steam nor InputPlumber running, the kernel starts the Deck's controls in mouse-and-keyboard mode. Hold **Menu** for about half a second to switch them to a gamepad.
 
-In Steam's Game Mode, Steam owns the volume, MangoHud and screenshots, and Universe's macros for them do nothing. [Steam's Game Mode](/docs/getting-started/steam-deck/#steams-game-mode) lists what else changes.
+[Steam's Game Mode](/docs/getting-started/steam-deck/#steams-game-mode) lists what changes under Steam, macros included.
 
 ## Switch 2 Pro Controller
 
-Universe has the Switch 2 Pro in its family table, with its buttons as printed (B at the bottom, A on the right, L, R, ZL, ZR, Minus, Plus, Home), its extras GL, GR, C and Capture, the Nintendo glyphs, and a shipped macro that takes a screenshot on Capture. Linux can't read the pad yet. hid-nintendo's Switch 2 driver isn't merged, so the pad gets no input node and Universe has nothing to read. Until the driver lands, the menus don't move with it, and HOME, macros, button setup, the button test and its battery level don't work.
+Linux can't read the Switch 2 Pro yet. hid-nintendo's Switch 2 driver isn't merged, so the pad gets no input node. Until the driver lands, the menus don't move with it, and HOME, macros, button setup, the button test and its battery level don't work. Emulators still read it over USB, through SDL.
 
-While one is plugged in by USB, Settings › **System check** shows a failing **Switch 2 Pro Controller** entry, which reads "plugged in, but Linux has no driver for it yet: emulators read it over USB through SDL, Universe's menus cannot". Its advice is to play it in emulators over USB, and to wait for hid-nintendo's Switch 2 driver for the menus. That entry also makes [`universe doctor`](/docs/reference/cli/doctor/) exit with status 1 while the pad is plugged in.
+While one is plugged in by USB, Settings › **System check** shows a failing **Switch 2 Pro Controller** entry, and [`universe doctor`](/docs/reference/cli/doctor/) exits with status 1.
 
 ## System setup
 
@@ -98,7 +98,7 @@ A udev rule, `70-universe.rules`, and a module load, `universe.conf`, cover all 
 | install.sh | Asks for your password to put them under `/etc/udev/rules.d` and `/etc/modules-load.d`, reloads udev and loads uhid. It skips this when a distribution package already installed the rule. Without sudo, it prints the commands to run as root, then a reboot. |
 | NixOS | `programs.universe.controller.enable`, on by default, turns on uinput, adds the rule and `game-devices-udev-rules` to udev, and loads uhid at boot. It renumbers those rules so they open your pads to your session: added to `services.udev.packages` as shipped, they run too late to. |
 
-A pad's hidraw nodes carry its gyro, its touchpad and some of its extra buttons. Emulators read them through SDL, and need them open to your session. Universe's menus and macros work without them.
+A pad's hidraw nodes carry its gyro, its touchpad and some of its extra buttons. Emulators read them through SDL and need them open to your session. Universe's menus and macros work without them.
 
 - `game-devices-udev` opens Sony and Nintendo pads, so a DualShock 4, a DualSense or a Switch Pro needs nothing from Steam. On NixOS, `programs.universe.controller.enable` brings it.
 - It opens no hidraw node for an Xbox Series pad on Bluetooth or an 8BitDo Pro 3 in D-input mode. `steam-devices` opens the Xbox pad's (`hardware.steam-hardware.enable` on NixOS). Without a rule that opens it, SDL reads the pad from its `/dev/input` node instead: the emulator still gets it, and an 8BitDo loses its gyro and rumble.
@@ -107,49 +107,33 @@ A pad's hidraw nodes carry its gyro, its touchpad and some of its extra buttons.
 
 With `controller.enabled` on in `config.toml` (the default), [Settings › System check](/docs/settings/system-check/) lists these entries under **Controller**, or under **Needs attention** when they fail. `universe doctor` prints the same.
 
-- **Key macros (uinput)** fails when `/dev/uinput` isn't writable, and key macros then do nothing. Its fix is game-devices-udev on Arch or steam-devices on Fedora and Debian, then a reboot; on NixOS, `hardware.uinput.enable` and the `uinput` group; elsewhere, a udev rule that gives your session `/dev/uinput`.
-- **Controllers** lists the pads Universe reads, each with its family and connection, or "no pad connected". It never fails.
-- **Controller buttons** fails when a pad's button sends no code on this connection, and names them after "not seen on this connection". The fix is to learn them in Settings › Controller. A button the pad never sends, like the 8BitDo Pro 3's Star, shows up here too.
-- **Controller extras (hidraw)** appears when a connected pad has hidraw nodes, and fails when one isn't readable, since emulators then lose the gyro, the touchpad and the extra buttons. The fix is game-devices-udev on Arch or steam-devices on Fedora and Debian, then replugging the pad. On NixOS, `programs.universe.controller.enable` already opens Sony and Nintendo pads, so the fix is `hardware.steam-hardware.enable` for the others.
-- **Switch 2 Pro Controller** appears only while one is on USB, and always fails, as described above.
+- **Key macros (uinput)** fails when `/dev/uinput` isn't writable. Its fix is game-devices-udev on Arch or steam-devices on Fedora and Debian, then a reboot; on NixOS, `hardware.uinput.enable` and the `uinput` group; elsewhere, a udev rule that gives your session `/dev/uinput`.
+- **Controllers** lists the pads Universe reads, with their family and connection. It never fails.
+- **Controller buttons** fails when a pad's button sends no code on this connection, and names it. Learn it in Settings › Controller. A button the pad never sends, like the 8BitDo Pro 3's Star, fails here too.
+- **Controller extras (hidraw)** appears when a connected pad has hidraw nodes, and fails when one isn't readable. The fix is game-devices-udev on Arch or steam-devices on Fedora and Debian, then replugging the pad. On NixOS, where Sony and Nintendo pads are already open, it is `hardware.steam-hardware.enable` for the others.
+- **Switch 2 Pro Controller** appears only while one is on USB, and always fails.
 
 No entry checks `/dev/uhid` or SDL3. When Virtual pads can't use them, the game gets your physical pads and the module logs why.
 
 ## Record your pad
 
-`universe controller dump` prints a pad as Universe reads it: its family, connection and kernel driver, the codes its `/dev/input` node reports, and its HID report descriptor. Emulator controls adds SDL3's view of the pad, the one emulators get, whether the module is on or off. Pass the pad's id from `universe controller ls`:
+`universe controller dump` prints a pad as Universe reads it: its family, connection and kernel driver, the codes its `/dev/input` node reports, its HID report descriptor, and SDL3's view of it, the one emulators get. Pass the pad's id from `universe controller ls`:
 
 ```sh
 universe controller ls
 universe controller dump <id> --walk --json > my-pad.json
 ```
 
-`--walk` asks you to press each button, then to move each stick and pull each trigger, and adds what the pad sent for each. The project's pad tests replay recordings like this one, one per model and connection ([Controllers by model](/docs/developers/api/#controllers-by-model) lists them), so a pad Universe reads wrong is worth reporting with its file attached. The [`universe controller`](/docs/reference/cli/controller/) reference has every option.
+`--walk` asks you to press each button, move each stick and pull each trigger, and records what the pad sent for each. The project's pad tests replay recordings like this one, one per model and connection ([Controllers by model](/docs/developers/api/#controllers-by-model) lists them), so report a pad Universe reads wrong with its file attached. The [`universe controller`](/docs/reference/cli/controller/) reference has every option.
 
 ## Battery levels
 
-In the Universe look, the batteries sit next to the clock, the machine's own when it has one and one per pad whose charge Universe can read. The pad Settings › Controller shows is green, one at 15% or less and not charging is red, and a charging one carries a bolt. With more than one pad, each also gets a number, the player its own lights show or else the lowest one free. That number is the pad's own. Emulators don't follow it ([Emulator controls](/docs/controllers/emulator-controls/#player-order) sets their player order).
+In the Universe look, the batteries sit next to the clock: the machine's own when it has one, and one per pad whose charge Universe can read. The pad Settings › Controller shows is green, one at 15% or less and not charging is red, and a charging one carries a bolt. With more than one pad, each also gets a number, the player its own lights show or else the lowest one free. Emulators don't follow it ([Emulator controls](/docs/controllers/emulator-controls/#player-order) sets their player order).
 
-The charge comes from the kernel when the pad's driver reports one. Otherwise Universe reads it from the pad's own reports on an 8BitDo, or from BlueZ for a Bluetooth pad such as an Xbox pad on Bluetooth LE, which reports no charging state. Over a game, the dock's **Controllers** button shows the charge too, for an 8BitDo or a Bluetooth pad whose battery BlueZ reads.
+The charge comes from the kernel when the pad's driver reports one. Otherwise Universe reads it from the pad's own reports on an 8BitDo, or from BlueZ for a Bluetooth pad such as an Xbox pad on Bluetooth LE, which reports no charging state. Over a game, the dock's **Controllers** button shows the charge of an 8BitDo or a Bluetooth pad whose battery BlueZ reads.
 
 The PS5 look draws the same badges. The Switch 2 look puts the machine's battery by its clock and each pad's charge on its Controllers page.
 
 ## Keyboard, mouse and touch
 
-Every look takes a keyboard:
-
-| Key | Button |
-|---|---|
-| <kbd>Enter</kbd> | **A** |
-| <kbd>Esc</kbd>, <kbd>Backspace</kbd> | **B** |
-| <kbd>I</kbd> | **X** |
-| <kbd>F</kbd> | **Y** |
-| <kbd>Q</kbd>, <kbd>E</kbd> | **LB**, **RB** |
-| <kbd>Page Up</kbd>, <kbd>Page Down</kbd> | **LT**, **RT** |
-| <kbd>F1</kbd> | **Start** |
-| <kbd>[</kbd>, <kbd>]</kbd> | Right stick up, down |
-| Arrows | D-pad |
-
-<kbd>Home</kbd> and <kbd>End</kbd> jump to the ends of a list. HOME has no key.
-
-The Universe look also takes a mouse and a touchscreen. A click or a tap picks what's under it, and a second one on the picked item is **A**. Held past 180 ms, it is **A** held. Buttons, menu rows and settings rows act on the first tap. A right click is **B**, the wheel scrolls, and a drag scrolls and flings. [Getting around](/docs/using/getting-around/) has what each button does in the menus.
+Every look takes a keyboard, and the Universe look also a mouse and a touchscreen. [Getting around](/docs/using/getting-around/) has the key for each button, and what a click, a tap or a drag does.

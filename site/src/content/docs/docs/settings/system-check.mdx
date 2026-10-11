@@ -7,27 +7,27 @@ sidebar:
 
 import Shot from '../../../../components/Shot.astro';
 
-Settings › **System check** runs Universe's checks on this machine and says what fails and how to fix it. It checks the core, the runners, the media tools and the controller, and each feature and store that is on.
+Settings › **System check** runs Universe's checks on this machine and says how to fix what fails. It checks the core, the runners, the media tools, the controller, and each feature and store that is on.
 
 <Shot name="settings-system-check" />
 
 ## The tally
 
-Above the cards, two counts give the checks that pass, in green, and the ones that need attention, in red.
+Above the cards, two counts: the checks that pass, in green, and the ones that need attention, in red.
 
 ## Needs attention
 
-This card comes first when a check fails, and its line counts them ("2 of 31 checks fail"). Each row reads its area, then the check ("Core › Gamescope"), with what is wrong and a "To fix:" line under it.
+This card comes first when a check fails. Each row names the area and the check ("Core › Gamescope"), with what is wrong and a "To fix:" line under it.
 
 A failing check that an install fixes shows **A** **Install**. It asks "Install …?", then installs the build or tool as Settings › [Emulators & Proton](/docs/settings/emulators-proton/) would.
 
 ## The areas
 
-One card per area, **Core** first, then **Runners**, **Media**, **Controller** and the features and stores that are on. Each line counts its checks ("12 of 12 checks pass"), and each card lists only the ones that pass.
+One card per area, **Core** first, then **Runners**, **Media**, **Controller** and the features and stores that are on. Each card lists only the checks that pass.
 
 ## Keys
 
-**X** (**Refresh**) runs the checks again, after you've fixed something.
+**X** (**Refresh**) runs the checks again.
 
 ## From the command line
 

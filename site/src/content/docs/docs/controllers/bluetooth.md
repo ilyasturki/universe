@@ -5,31 +5,27 @@ sidebar:
   order: 5
 ---
 
-Settings › **Bluetooth** pairs pads, headphones and keyboards through BlueZ. It shows when the machine has a Bluetooth adapter, and not in Steam's Game Mode, where Steam's own settings handle Bluetooth.
+Settings › **Bluetooth** pairs pads, headphones and keyboards through BlueZ. It shows only when the machine has a Bluetooth adapter, and never in Steam's Game Mode, where Steam handles Bluetooth.
 
 ## Settings › Bluetooth
 
-- **Bluetooth** turns the adapter on or off. Its detail reads "Plug a controller in by USB to use it at once; pair it here to go without the cable."
+- **Bluetooth** turns the adapter on or off.
 - **Paired** lists the devices paired with this machine.
-- **Found** lists what a search found. Universe searches as long as the page is open, and the card's header reads "Searching" meanwhile. With nothing found yet, it shows "Searching…" and "Put the device in pairing mode: hold its pairing button until its light blinks."
+- **Found** lists what a search found. Universe searches as long as the page is open.
 
-Each row has the device's name, an icon for its kind (pad, headphones, keyboard, mouse), its state (**Pairing…**, **Connected** or **Not connected**) and its charge ("Battery 80%") when BlueZ knows it.
-
-Nothing pairs by itself. A pad in pairing mode nearby only shows under Found until you pick it.
+Each row shows the device's kind, its state (**Pairing…**, **Connected** or **Not connected**) and its charge when BlueZ knows it. Nothing pairs until you pick it under Found.
 
 ## Pair a controller
 
 1. With no pad connected yet, plug one in by USB to get around the page.
-2. Put the pad you're pairing in pairing mode by holding its pairing button until its light blinks (SYNC on a Switch Pro, PS and Create together on a DualSense, the pair button on an Xbox pad).
+2. Hold the pairing button of the pad you're pairing until its light blinks: SYNC on a Switch Pro, PS and Create together on a DualSense, the pair button on an Xbox pad.
 3. Open Settings › Bluetooth and wait for the pad under **Found**.
-4. Press **A** on it (its action reads **Pair**). Universe pairs it, trusts it so it reconnects by itself later, and connects it.
-5. If the pad asks something, answer it ([Pairing questions](/docs/controllers/bluetooth/#pairing-questions)).
+4. Press **A** on it (**Pair**). Universe pairs it, trusts it so it reconnects by itself later, and connects it.
+5. Answer any question the pad asks ([Pairing questions](/docs/controllers/bluetooth/#pairing-questions)).
 
-**A** on a paired device (its action reads **Options**) offers **Connect** or **Disconnect**, and **Forget**, which unpairs it and drops it from the list. A pairing or connection that fails shows a notice with BlueZ's reason.
+**A** on a paired device (**Options**) offers **Connect** or **Disconnect**, and **Forget**, which unpairs it. A failed pairing or connection shows a notice with BlueZ's reason.
 
 ## Pairing questions
-
-Some devices ask a question while they pair:
 
 | The device | Universe shows | You |
 |---|---|---|
@@ -43,13 +39,13 @@ A question left unanswered for 60 seconds is refused. One that comes while a gam
 
 ## Pairing a DualSense or DualShock 4 by cable
 
-In the [Universe session](/docs/getting-started/universe-session/), a DualSense or DualShock 4 plugged in by USB can pair over the cable. Universe asks `Pair <name>?` with "It is plugged in by cable: after this it connects without one." Pick **Pair**, and from then on the pad connects without the cable.
+In the [Universe session](/docs/getting-started/universe-session/), a DualSense or DualShock 4 plugged in by USB can pair over the cable. Universe asks `Pair <name>?`, and after **Pair** the pad connects without the cable. On a desktop, the desktop's own Bluetooth agent asks instead.
 
-This works only in the Universe session, where Universe answers BlueZ's questions for the whole machine. On a desktop, the desktop's own Bluetooth agent asks instead. If a game holds the screen when you plug the pad in, Universe refuses and says `Plug <name> in again from HOME`. Press HOME, then plug it in again.
+If a game holds the screen when you plug the pad in, Universe refuses with `Plug <name> in again from HOME`. Press HOME, then plug it in again.
 
 ## In the other looks
 
-The Switch 2 look pairs pads from **Controllers** › **Pair New Controller**, which lists pads alone, under Paired Controllers and Controllers Found. Headphones, speakers and keyboards go through System Settings › **Bluetooth**. The PS5 look calls the section Settings › **Accessories**, and its Controllers page has **Pair a Controller** ("Hold its pairing button until the light blinks: PS and Create together on a DualSense.").
+The Switch 2 look pairs pads from **Controllers** › **Pair New Controller**, which lists pads alone, under Paired Controllers and Controllers Found. Headphones, speakers and keyboards go through System Settings › **Bluetooth**. The PS5 look calls the section Settings › **Accessories**, and its Controllers page has **Pair a Controller**.
 
 ## From the command line
 
@@ -61,8 +57,8 @@ universe bluetooth pair AA:BB:CC:DD:EE:FF
 universe bluetooth remove AA:BB:CC:DD:EE:FF
 ```
 
-`scan` searches for 10 seconds unless told otherwise, then lists what it found. `pair` pairs, trusts and connects the device, asking any question on the terminal. `connect`, `disconnect`, `remove` (unpair and forget) and `power on` or `power off` do the rest. With no adapter, or BlueZ not running, it says "no Bluetooth adapter, or BlueZ is not running".
+`scan` searches for 10 seconds by default, then lists what it found. `pair` pairs, trusts and connects the device, asking any question on the terminal. `connect`, `disconnect`, `remove` (unpair and forget) and `power on` or `power off` do the rest.
 
 ## A pad that misbehaves
 
-When a paired pad stops answering during a game, press **HOME**, pick the dock's **Controllers** button, and press **A** on the pad. Universe drops its Bluetooth link and brings it back. If the pad switched itself off, the notice says so, and its PS or HOME button wakes it. [Emulator controls](/docs/controllers/emulator-controls/#when-a-pad-stops-answering) has the details, and `universe controller reconnect` does the same from a terminal.
+When a paired pad stops answering during a game, press **HOME**, pick the dock's **Controllers** button, and press **A** on the pad. Universe drops its Bluetooth link and brings it back. `universe controller reconnect` does the same from a terminal, and [Emulator controls](/docs/controllers/emulator-controls/#when-a-pad-stops-answering) has the details.

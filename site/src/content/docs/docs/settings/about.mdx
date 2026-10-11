@@ -7,21 +7,21 @@ sidebar:
 
 import Shot from '../../../../components/Shot.astro';
 
-Settings › **About** says which Universe this is and what changed in each release. It's also where you run the first-run setup again and open the Power menu.
+Settings › **About** gives the version and each release's changes, runs the first-run setup again and opens the Power menu.
 
 <Shot name="settings-about" />
 
 ## Universe
 
-The section's one card holds these rows, in order:
+The section's one card holds:
 
-- **Version**: the version number, with its git revision in parentheses when the build has one. **A** (**What's new**) opens the same page as the next row.
-- **What's new**: the newest release's version. **A** (**Open**) opens the **What's new** page, every version's changes, newest first; **B** goes back.
-- **Show what's new after an update**: that page opens by itself, once, on the first start after an update. It's `desktop.whats_new` in config.toml, on by default, and the same switch as Settings › [Game defaults](/docs/settings/game-defaults/) › Updates.
-- **First-run setup** (A: **Run again**): the setup Universe opens on with an empty library, which goes through what other launchers hold, your stores and a few choices. See [First run](/docs/getting-started/first-run/).
-- **Power** (A: **Open**): the **Power** menu, the same one that holding **B** opens. It lists **Quit Universe** (**Log out** in the Universe session), then **Suspend**, **Reboot** and **Power off** where the system allows them, and **Stay**. Under Steam's Game Mode only Quit Universe and Stay are there, since Steam's own menu has the power options.
+- **Version**: the version number, with its git revision in parentheses when the build has one. **A** (**What's new**) opens the What's new page.
+- **What's new**: the newest release's version. **A** (**Open**) opens the **What's new** page, every version's changes, newest first.
+- **Show what's new after an update**: opens that page once, on the first start after an update. It's `desktop.whats_new` in config.toml, on by default, and the same switch as Settings › [Game defaults](/docs/settings/game-defaults/) › Updates.
+- **First-run setup** (A: **Run again**): the setup Universe opens with on an empty library. See [First run](/docs/getting-started/first-run/).
+- **Power** (A: **Open**): the **Power** menu, which holding **B** also opens. [Getting around](/docs/using/getting-around/#power) lists what it holds.
 
-[Getting around](/docs/using/getting-around/) has the rest of the Power menu. Every release's notes are also in the [changelog](/docs/changelog/).
+Every release's notes are also in the [changelog](/docs/changelog/).
 
 ## From the command line
 
@@ -29,4 +29,4 @@ The section's one card holds these rows, in order:
 
 ## In the other looks
 
-The Switch 2 look has System Settings › **About**, with **Universe**, **Look** and **Library** rows but no Power row. Its power options are the HOME bar's **Power** icon, or **B** held. The PS5 look's Settings › **About** splits into **System Information** and **Setup and Power**, the latter with **First-run setup** and **Power**. Universe Desktop has **About Universe Desktop** and **What's New** in its main menu, and the setup under Add Games › **First-Run Setup…**.
+The Switch 2 look has System Settings › **About**, with **Universe**, **Look** and **Library** rows and no Power row: its power options are the HOME bar's **Power** icon, or **B** held. The PS5 look's Settings › **About** splits into **System Information** and **Setup and Power**, the latter with **First-run setup** and **Power**. Universe Desktop has **About Universe Desktop** and **What's New** in its main menu, and the setup under Add Games › **First-Run Setup…**.

@@ -5,27 +5,25 @@ sidebar:
   order: 5
 ---
 
-Universe never checks for updates to itself. You update it the way you installed it, with that tool's usual command. Your library and settings live in your home folder, apart from the program, and an update leaves them alone.
+Universe never checks for updates to itself. Update it the way you installed it. Your library and settings live in your home folder, and an update leaves them alone.
 
 ## Updating
 
 ### Arch Linux
 
-Each release reaches `universe` and `universe-bin` on the AUR, Universe Desktop's packages included, and your AUR helper's upgrade picks them up:
+Your AUR helper's upgrade picks up each release of `universe` and `universe-bin`, Universe Desktop's packages included:
 
 ```sh
 paru -Syu
 ```
 
-`universe-git` builds `main`, which has no release number to compare. Ask paru to check development packages and it rebuilds whenever `main` has moved:
+For `universe-git`, which builds `main`, have paru check development packages:
 
 ```sh
 paru -Syu --devel
 ```
 
 ### Fedora
-
-COPR builds `universe` and `universe-desktop` from each release:
 
 ```sh
 sudo dnf upgrade
@@ -39,7 +37,7 @@ Run it again:
 curl -fsSL https://github.com/ilyasturki/universe/releases/latest/download/install.sh | sh
 ```
 
-It replaces the previous install with the latest release, or with the one `--version` names, and reuses the Python environment it made the first time. Pass the same `--prefix` if you used one. It asks for your password only when one of its files outside your home folder is missing or changed. It ends with `universe setup`, which on GNOME refreshes the Shell extension; GNOME loads the new one at your next login.
+It replaces the previous install with the latest release, or with the one `--version` names. Pass the same `--prefix` if you used one. It asks for your password only when one of its files outside your home folder is missing or changed. On GNOME, the refreshed Shell extension loads at your next login.
 
 From a checkout, pull and run it again:
 
@@ -73,9 +71,9 @@ Add-ons update separately, with [`universe extension update`](/docs/reference/cl
 
 ## What's new
 
-The first time you open Universe after an update, **What's new** opens by itself with what changed in every release since the one you last ran. Whichever app you open first shows it, and the other then doesn't. The notes are built into the app, so they need no network. They don't open on a first start, or after going back to an older version.
+The first time you open Universe after an update, **What's new** opens by itself once, in whichever app you open first, with what changed in every release since the one you last ran. It doesn't open on a first start, or after going back to an older version.
 
-Settings › About › **What's new** reopens them any time, every release newest first, and so does **Version**, the row above it. Turning off **Show what's new after an update**, in About and in Game defaults › Updates, keeps the page from opening by itself. Universe still notes each version you start, so turning the switch back on later shows only the releases that come after. Universe Desktop shows the same notes in a dialog, and its main menu has **What's New**.
+Settings › [About](/docs/settings/about/) reopens it, and its **Show what's new after an update** keeps it from opening by itself. Universe still notes each version you start, so turning the switch back on later shows only the releases that come after.
 
 ## Uninstalling
 
@@ -100,13 +98,13 @@ With the installer, run it with `--uninstall`, and the same `--prefix` if you us
 curl -fsSL https://github.com/ilyasturki/universe/releases/latest/download/install.sh | sh -s -- --uninstall
 ```
 
-It removes `~/.local/lib/universe` with its Python environment, and the commands, app entries and man pages it put under `~/.local`. Through sudo, it also removes the controller rules, its login session entry and the system tools helper with its policy. Without sudo, it names each of those files that stays for you to remove as root.
+It removes `~/.local/lib/universe` and the commands, app entries and man pages it put under `~/.local`. Through sudo, it also removes the controller rules, its login session entry and the system tools helper with its policy. Without sudo, it names each of those files that stays for you to remove as root.
 
 On Nix, delete the `programs.universe` lines, the module imports and the `universe` input, then rebuild. If you set `programs.universe.settings`, the config.toml that Home Manager wrote goes with them.
 
 ## What stays
 
-Whatever the path, Universe's own folders stay where they are:
+Whatever the path, these folders stay:
 
 | Folder | What it holds |
 | --- | --- |

@@ -7,41 +7,41 @@ sidebar:
 
 import Shot from '../../../../components/Shot.astro';
 
-Settings › **Controller** is where Universe learns a controller's buttons and where you bind actions to them, the macros. Macros don't fire while this section has the focus, so the buttons you press there only move through the menu.
+Settings › **Controller** learns a controller's buttons and binds actions to them, the macros. Macros don't fire while this section has the focus.
 
 <Shot name="settings-controller" />
 
 ## The controller's card
 
-The card is titled with the controller's model, such as DualSense or Xbox. Its rows, in order:
+The card is titled with the controller's model, such as DualSense or Xbox. Its rows:
 
-- A note, when there is one: **No controller connected**, **Controller macros stopped** (Universe restarts them), or **Macros are running in the game session** while a game's session holds the pads.
+- A note when something is off, such as **No controller connected**, or **Macros are running in the game session** while a game's session holds the pads.
 - **Controller**, with two pads or more, picks the one the card shows.
-- **Test the buttons** (A: **Start**): the pad's picture fills the section and lights each button you press. Hold **B** for a second, or press **Start** and **Select** together, to finish.
-- **Set up the buttons** (A: **Start**): Universe asks for each button in turn, the model's extra ones after the standard ones, then the sticks, 8 seconds a step. A model whose buttons were never set up gets this offered once, with a "Set up the buttons of …?" question.
-- **Nintendo games**: where A sits in Nintendo games on every pad of this model. **As printed** (the default) follows the letters on the pad, and the detail line says where that puts A on yours; **A on the right** and **A at the bottom** override it. It writes `controller.layout.<family>` in config.toml, and As printed removes that key. Only the Emulator controls feature reads it, and that feature stays off until you turn it on in [Features](/docs/settings/features/).
-- One row per button, the extras first (paddles, Fn and the like), then the standard ones. The value names the button's macros, such as "Press · Screenshot / Hold · Mute" for a press and a hold. **Unbound** means Universe has no code for that button yet. The HOME row reads "HOME · press for the menu, hold to go home".
-- **Advanced** (A: **Show** or **Hide**) opens the two cards below. The section always opens with them closed.
+- **Test the buttons** (A: **Start**) lights each button you press on the pad's picture. Hold **B** for a second, or press **Start** and **Select** together, to finish.
+- **Set up the buttons** (A: **Start**) asks for each button in turn, then the sticks, 8 seconds a step. A model never set up gets this offered once.
+- **Nintendo games**: where A sits in Nintendo games on every pad of this model. **As printed** (the default) follows the letters on the pad, and the detail line says where that puts A; **A on the right** and **A at the bottom** override it. It writes `controller.layout.<family>` in config.toml, and As printed removes that key. Only the Emulator controls feature reads it, and that feature is off until you turn it on in [Features](/docs/settings/features/).
+- One row per button, the extras first (paddles, Fn and the like). The value names the button's macros, such as "Press · Screenshot / Hold · Mute". **Unbound** means Universe has no code for that button yet. HOME opens the menu on a press and goes home on a hold.
+- **Advanced** (A: **Show** or **Hide**) opens the two cards below, closed each time the section opens.
 
-Test the buttons and Set up the buttons are missing while a game's session holds the pads; the Nintendo games row stays.
+While a game's session holds the pads, Test the buttons and Set up the buttons are gone; the Nintendo games row stays.
 
 ## A on a button
 
-**A** (**Configure**) opens a menu named after the button:
+**A** (**Configure**) opens the button's menu:
 
-- **Learn the button**, or **Learn the button again** once it has a code. The row reads "Press the button on the pad…" until you do, and <kbd>Esc</kbd> stops learning.
+- **Learn the button**, or **Learn the button again** once it has a code: press it on the pad. <kbd>Esc</kbd> stops learning.
 - **On press…** and **On hold…** pick the action: **Volume up**, **Volume down**, **Mute**, **Screenshot**, **Toggle MangoHud**, **Stop the game** (on hold only), **Key combo…** or **Command…**.
 - **Clear press** and **Clear hold**, when the button has one.
 
-HOME only offers learning, since its press and its hold are Universe's own.
+HOME only offers learning: its press and its hold are Universe's own.
 
 ## Advanced
 
 - **Timing**:
-  - **Hold length (ms)**: a press this long counts as a hold, and a hold macro fires then. 400, 600, 800 or 1000; `controller.hold_ms`, 600 by default.
+  - **Hold length (ms)**: how long a press lasts before it counts as a hold and fires a hold macro. 400, 600, 800 or 1000; `controller.hold_ms`, 600 by default.
   - **Volume step (%)**: how far a volume macro moves the volume each press. 1, 2, 5 or 10; `controller.volume_step`, 2 by default.
 - **HOME**:
-  - **HOME opens Universe**: HOME pressed in another app brings Universe to the front. With it off, HOME does nothing there. `controller.home_summons`, on by default.
+  - **HOME opens Universe**: HOME pressed in another app brings Universe to the front; off, HOME does nothing there. `controller.home_summons`, on by default.
 
 ## Keys
 
@@ -55,10 +55,10 @@ In config.toml, `[controller]` holds the three settings above, with the learned 
 - `universe controller bind`, `unbind` and `learn` do what the button menu does.
 - [`universe config set`](/docs/reference/cli/config/) `controller.hold_ms 800` changes a timing.
 
-The test and the walk through the buttons have no command.
+Testing and setting up the buttons have no command.
 
-[Button setup](/docs/controllers/button-setup/) explains testing and setting up a pad, [Macros and paddles](/docs/controllers/macros/) what each action does, and [Emulator controls](/docs/controllers/emulator-controls/) the Nintendo layout. Reconnecting a pad, or looking for one Universe missed, happens over a game, from the dock's **Controllers** button, which [Playing](/docs/using/playing/) describes.
+[Button setup](/docs/controllers/button-setup/) covers testing and setting up a pad, [Macros and paddles](/docs/controllers/macros/) each action, and [Emulator controls](/docs/controllers/emulator-controls/) the Nintendo layout. To reconnect a pad, or find one Universe missed, use the dock's **Controllers** button over a game ([Playing](/docs/using/playing/)).
 
 ## In the other looks
 
-The Switch 2 and PS5 looks call it **Controllers**. On Switch 2 it opens from System Settings or the HOME bar, with **Pair New Controller** at the top; after Nintendo games come a **Reconnect** row for each pad and **Find Controllers**. On PS5 it is in Settings, with **Pair a Controller** after Nintendo games. Universe Desktop has it in Preferences › **Controller**.
+The Switch 2 and PS5 looks call it **Controllers**. On Switch 2 it opens from System Settings or the HOME bar, with **Pair New Controller** at the top, and a **Reconnect** row for each pad and **Find Controllers** after Nintendo games. On PS5 it is in Settings, with **Pair a Controller** after Nintendo games. Universe Desktop has it in Preferences › **Controller**.

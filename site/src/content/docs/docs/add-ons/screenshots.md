@@ -10,14 +10,12 @@ The Screenshots module (`screenshot`) takes the screenshots you ask for, from th
 ## Taking one
 
 - In the dock over a game, the **Screenshot** button, or **X** anywhere in the dock. In the PS5 look's Control Center, **Screenshot**, or **X** anywhere in it. The Switch 2 look has no menu over the game, so use a pad button there.
-- A pad button with the **Screenshot** macro. Several pads come with one bound, such as the DualSense Edge's **Left Fn**, the Xbox Elite's **P3 (left upper)**, an Xbox pad's **Share** and the Switch Pro's **Capture**. Give the macro to another button in Settings › **Controller** ([Macros and paddles](/docs/controllers/macros/)).
+- A pad button with the **Screenshot** macro, such as an Xbox pad's **Share** or the Switch Pro's **Capture**. Give the macro to another button in Settings › **Controller** ([Macros and paddles](/docs/controllers/macros/)).
 - [`universe screenshot`](/docs/reference/cli/screenshot/), with or without a game running.
-
-When Big Screen takes the shot, a shutter sounds and, over a game inside its own gamescope, the screen flashes white. The dock fades out before the shot and the shutter and flash come after it, so none of them ends up in the picture.
 
 ## Which tool takes it
 
-The module asks whatever draws the screen:
+Whatever draws the screen takes it:
 
 - Inside Universe Big Screen's own gamescope (the launcher full screen, or the Universe session), gamescope itself, whatever the desktop.
 - On GNOME, the Universe Shell extension, which [`universe setup`](/docs/reference/cli/setup/) installs ([Install](/docs/getting-started/install/#after-installing)).

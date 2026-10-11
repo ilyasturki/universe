@@ -27,29 +27,29 @@ The rows and menus of Settings › Downloads work as for every store ([Installin
 
 - **Install** downloads the Windows build into the **Install folder**, with the DLCs you own while **Install owned DLCs** is on. A cancelled download resumes where it stopped.
 - legendary tells which installed games are behind, and **Update** runs its update.
-- **Uninstall…** and **Delete files…** go through legendary, and the confirmation reads **Uninstall through Epic Games**. The files and legendary's record of the install go together.
+- **Uninstall…** and **Delete files…** go through legendary (**Uninstall through Epic Games**), which removes the files and its record of the install.
 
 ## Heroic's Epic games
 
-Heroic installs Epic games with a legendary of its own. Each time Universe looks for Epic installs on disk (opening Settings › Downloads on Epic Games, a scan, the first run's **Heroic · Epic Games** row), it first imports Heroic's into its own legendary, from the folder **Adopt installs from** names, Heroic's by default. They then show under **On this PC**, where **Add to library** takes each one in.
+Heroic installs Epic games with a legendary of its own. Each time Universe looks for Epic installs on disk (opening Settings › Downloads on Epic Games, a scan, the first run's **Heroic · Epic Games** row), it imports Heroic's into its own legendary from the folder **Adopt installs from** names, Heroic's by default. They then show under **On this PC**, ready for **Add to library**.
 
-The import needs you signed in to Epic, and an import that fails is tried again an hour later. Such a game gets a prefix of Universe's own, as [Lutris and Heroic](/docs/library/lutris-heroic/#heroic) explains.
+The import needs you signed in to Epic; a failed one is tried again an hour later. Such a game gets a prefix of Universe's own ([Lutris and Heroic](/docs/library/lutris-heroic/#heroic)).
 
 ## Launching an Epic game
 
-Before each launch, Universe asks legendary for the game's launch arguments, which carry a one-time sign-in to Epic. Offline, it asks for the offline ones, so a game that plays offline still starts.
+Before each launch, Universe gets the game's launch arguments from legendary, with a one-time sign-in to Epic, or the offline ones when offline, so a game that plays offline still starts.
 
 For a game that ships Easy Anti-Cheat or BattlEye, **Anti-cheat runtimes** fetches the runtime Proton needs from Lutris.
 
 ## Cloud saves and achievements
 
-The **Game defaults** card of Epic's page holds two settings for every Epic game, and a game's Game settings › **Epic Games** card holds them for that one:
+The **Game defaults** card of Epic's page sets two settings for every Epic game, and a game's Game settings › **Epic Games** card for that one:
 
 - **Achievements**, on by default. They're fetched from Epic after each session, so an unlock shows once the session has ended.
-- **Cloud saves**, off by default. Saves come down from Epic before a session and go up after it ([Saves and cloud saves](/docs/library/saves/#cloud-saves)).
+- **Cloud saves**, off by default ([Saves and cloud saves](/docs/library/saves/#cloud-saves)).
 
 ## Epic's settings
 
 The **Settings** card of Settings › Stores › Epic Games holds the Install folder, where empty installs into the library's games folder, and Install owned DLCs, on by default.
 
-**Y** shows the rest. Anti-cheat runtimes is on. legendary's folder, where legendary keeps its sign-in and its installs, is `~/.config/legendary`. Adopt installs from names the other legendary whose installs Universe takes over, Heroic's `~/.config/heroic/legendaryConfig/legendary`. **Install time limit** stops an install or update that runs longer than 7200 seconds.
+**Y** shows the rest: Anti-cheat runtimes, on; legendary's folder, `~/.config/legendary`; Adopt installs from, Heroic's `~/.config/heroic/legendaryConfig/legendary`; and **Install time limit**, which stops an install or update that runs longer than 7200 seconds.

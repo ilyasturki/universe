@@ -7,25 +7,25 @@ sidebar:
 
 import Shot from '../../../../components/Shot.astro';
 
-Settings › **Sound** picks the output that the games, Universe and the desktop all play through. It's hidden under [Steam's Game Mode](/docs/getting-started/steam-deck/#steams-game-mode), where the output is Steam's.
+Settings › **Sound** picks the output the games, Universe and the desktop play through. It's hidden under [Steam's Game Mode](/docs/getting-started/steam-deck/#steams-game-mode), where the output is Steam's.
 
 <Shot name="settings-sound" />
 
 ## Output
 
-One row per output PipeWire lists. The label is the route, such as speakers, headphones or HDMI, and the value is the sound card it belongs to. The output in use is tagged **In use**.
+One row per output PipeWire lists: the route, such as speakers, headphones or HDMI, with its sound card as the value. The one in use is tagged **In use**, and the card reads "No output found" when there is none.
 
-**A** (**Use**) on another output makes it the system's default, the one the desktop's own sound settings would set, and switches the card's profile when that output needs it. With no output at all, the card reads "No output found".
+**A** (**Use**) on another output makes it the system's default, as the desktop's sound settings would, and switches the card's profile when that output needs it.
 
 ## Keys
 
-**X** (**Refresh**) lists the outputs again, after you plug in headphones or a TV for instance.
+**X** (**Refresh**) lists the outputs again, after you plug in headphones or a TV.
 
 ## From the command line
 
 [`universe output`](/docs/reference/cli/output/) lists the outputs, and `universe output <id>` plays through one. Under Game Mode it refuses with "The sound output belongs to Steam in Game Mode".
 
-Over a game, the dock's **Sound** button has the volume and the same output choice, as [Playing](/docs/using/playing/) describes.
+Over a game, the dock's **Sound** button has the volume and the same output choice ([Playing](/docs/using/playing/)).
 
 ## In the other looks
 

@@ -5,11 +5,11 @@ sidebar:
   order: 12
 ---
 
-Settings › **Performance** sets the machine's own controls, such as the screen's brightness and the APU's power limit. It shows only when the machine has at least one control Universe can set, and never under [Steam's Game Mode](/docs/getting-started/steam-deck/#steams-game-mode).
+Settings › **Performance** sets the machine's own controls, such as the brightness and the APU's power limit. It shows only when the machine has a control Universe can set, and never under [Steam's Game Mode](/docs/getting-started/steam-deck/#steams-game-mode).
 
 ## Performance and display
 
-One card, whose line reads **Steam Deck** or **Steam Deck OLED** on a Deck. Each row is there only when the machine has the control:
+One card, whose line reads **Steam Deck** or **Steam Deck OLED** on a Deck. Each row shows only when the machine has the control:
 
 | Row | What it sets | Values | When it shows |
 | --- | --- | --- | --- |
@@ -19,7 +19,7 @@ One card, whose line reads **Steam Deck** or **Steam Deck OLED** on a Deck. Each
 | GPU clock | Auto lets the driver choose; a fixed clock trades power for steady frame times | Auto, or steps of 100 MHz | An AMD GPU whose overdrive Universe can write |
 | SteamOS fan curve | Off leaves the fan to the firmware | on or off | SteamOS |
 
-**A** toggles the fan curve and opens a picker on the others. The change applies at once, and a refusal comes back as a notice.
+**A** toggles the fan curve and opens a picker on the others. A change applies at once; a refusal comes back as a notice.
 
 ## Keys
 
@@ -27,9 +27,9 @@ One card, whose line reads **Steam Deck** or **Steam Deck OLED** on a Deck. Each
 
 ## Where it's kept
 
-The system keeps the brightness itself. The other four go to `[system]` in config.toml (`refresh`, `tdp`, `gpu`, `fan`), and the launcher sets them again each time it starts outside Game Mode, since the power limit and the clocks don't outlive a reboot. If the running game has its own value for a control, a change here waits for the game's session to end.
+The system keeps the brightness. The other four go to `[system]` in config.toml (`refresh`, `tdp`, `gpu`, `fan`), and the launcher sets them again each time it starts outside Game Mode. If the running game has its own value for a control, a change here waits for the game's session to end.
 
-Over a game, the dock's **System** button holds the same controls, and a change made there belongs to that game. [Playing](/docs/using/playing/) covers the dock.
+Over a game, the dock's **System** button holds the same controls, for that game alone ([Playing](/docs/using/playing/)).
 
 ## In the other looks
 

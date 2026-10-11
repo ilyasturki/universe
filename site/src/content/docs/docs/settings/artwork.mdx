@@ -7,25 +7,25 @@ sidebar:
 
 import Shot from '../../../../components/Shot.astro';
 
-Settings › **Artwork** lays out the art of your whole library in one grid, so you can see what's missing and fetch it. Unlike the other sections, it has no cards.
+Settings › **Artwork** shows your whole library's art in one grid, to spot what's missing and fetch it. It has no cards.
 
 <Shot name="settings-artwork" />
 
 ## The grid
 
-One row per game, A to Z, leaving out hidden and removed games. One column per slot: **Box front**, **Square**, **Banner**, **Background** and **Logo**. An empty cell reads "missing", and art you picked yourself carries a **Pick** badge.
+One row per game, A to Z, without hidden and removed games, and one column per slot: **Box front**, **Square**, **Banner**, **Background** and **Logo**. An empty cell reads "missing", and art you picked carries a **Pick** badge.
 
-**A** on a cell (the hint reads **Open** and the slot, such as "Open banner") opens that game's artwork browser on that slot.
+**A** on a cell opens that game's artwork browser on that slot.
 
 ## Fetch missing art
 
-Up from the first row lands on the button above the titles. It reads **Fetch missing art**, or **Nothing missing**, dimmed, when every game has all five.
+The button above the titles, Up from the first row, reads **Fetch missing art**, or **Nothing missing** when every game has all five.
 
-**A** asks first ("Fetch the missing art of 12 games?"), then fetches from the stores, GOG GamesDB and libretro, and from SteamGridDB once you've added a key. The art goes into each game's media folder, and your picks stay on top. While the fetch runs the button reads "Stop · 3/12"; **A** stops it after the game in hand, and what was fetched stays.
+**A** asks first, then fetches from the stores, GOG GamesDB, libretro and, with a key, SteamGridDB. The art goes into each game's media folder, and your picks stay on top. While it runs the button reads "Stop · 3/12": **A** stops it after the game in hand, and what was fetched stays.
 
 ## Keys
 
-**B** (**Sections**) goes back to the sidebar, and so does Left from the first column. X, Y and **Start** do nothing here.
+**B** (**Sections**) or Left from the first column goes back to the sidebar. X, Y and **Start** do nothing here.
 
 ## SteamGridDB
 
@@ -40,4 +40,4 @@ A SteamGridDB key adds that site's art to the fetch and to each slot's choices. 
 
 ## In the other looks
 
-The Switch 2 look has no Artwork section; there you set art one game at a time, from Software Options › **Artwork**. The PS5 look has Settings › **Artwork**, with a **Library Artwork** part that holds the fetch, then **Missing Art** and **Every Game**. Universe Desktop has it in its main menu, as **Library Artwork…**.
+The Switch 2 look has no Artwork section: set art one game at a time, from Software Options › **Artwork**. The PS5 look has Settings › **Artwork**, with a **Library Artwork** part that holds the fetch, then **Missing Art** and **Every Game**. Universe Desktop has it in its main menu, as **Library Artwork…**.
