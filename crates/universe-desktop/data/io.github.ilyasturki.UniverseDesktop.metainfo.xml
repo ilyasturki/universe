@@ -44,6 +44,57 @@
     <color type="primary" scheme_preference="dark">#c64600</color>
   </branding>
   <releases>
+    <release version="0.0.12" date="2026-10-11">
+      <description>
+        <p>Breaking</p>
+        <ul>
+          <li>An all-games <code>layout = "xbox"</code> for Nintendo games is dropped once, the first time the core opens a config from before this release; set it per pad model in Settings › Controller's Nintendo games row instead. A game's own value stays.</li>
+        </ul>
+        <p>Added</p>
+        <ul>
+          <li>A guide at universe.ilyasturki.com/docs: install, first run, controllers, every settings section, and a reference of the CLI, the launch settings and config.toml.</li>
+          <li>Reconnect and find controllers from the dock in every look, or with <code>universe controller reconnect</code>: a Bluetooth pad reconnects through BlueZ and gets back the player it held.</li>
+          <li>Each pad has its own Nintendo games layout, from its print or set per model in a Nintendo games row on its card, in every look and in Universe Desktop.</li>
+          <li>Switch 2 Pro controllers, with their glyphs and art; <code>universe doctor</code> checks each pad's hidraw access.</li>
+          <li>A PlayStation controller setting for Proton games on GE-Proton 11-4 and later: native, as a DualShock 4 or as an Xbox pad, chosen by default from what the game's Steam page lists.</li>
+          <li>A GOG game or an import with a Steam app id gets its Steam twin's protonfixes.</li>
+          <li>A store's install that no library game uses can have its files deleted from the store page.</li>
+          <li>A Proton crash report files the session as crashed.</li>
+          <li>The Universe look's top bar has a library tab and a labelled power button, and a game's tools sit on its page and the hero.</li>
+          <li>The startup animation streaks hairlines, brakes and opens home, each look's chime landing with it.</li>
+        </ul>
+        <p>Changed</p>
+        <ul>
+          <li>Reprise is now called the Universe look, and Wine prefixes are Windows game folders in setup and storage.</li>
+          <li>Settings sections are grouped under Games, Extras and System headers with plainer names: Stores, Downloads, Game defaults, Emulators &amp; Proton, Features, Appearance, Performance.</li>
+          <li>What's new opens after an update by default, and Settings › About and the menus open it.</li>
+          <li>A game's arguments are split as a shell splits words, not on commas: <code>-windowed -nolauncher</code> is two arguments, <code>'My Save'</code> one.</li>
+          <li>Add to library on a store page brings in only that game, and the store page says whether each install is in your library and where it is.</li>
+          <li>A store install found in a library game's folder is linked to that game.</li>
+          <li>A module's hooks run only for the games its <code>applies</code> names.</li>
+          <li>Quitting a game lands on its tile's cover, and home tiles crossfade between pictures.</li>
+          <li>Stopping a game kills what is left 5 s after the last SIGTERM, and a crash in its shutdown leaves no core dump to wait for.</li>
+          <li>Settings show module and store state as text, and the Universe look hints X and Y in settings, the library and media.</li>
+        </ul>
+        <p>Fixed</p>
+        <ul>
+          <li>A Nintendo pad's A and B are no longer swapped by sdl2-compat, an Xbox pad's triggers bind by their pull, and a DualShock 4's select button reads Share.</li>
+          <li>NixOS: the game-devices udev rules apply their access, and <code>universe doctor</code> names the rules that open a pad's hidraw node.</li>
+          <li>Long game titles wrap on home, the game page, search, headers and artwork, and the Switch 2 and PS5 looks' captions and settings rows take two lines.</li>
+          <li>The screenshot shutter and flash come when the shot is grabbed, and a desktop grab that fails after the shutter no longer takes a later shot through gpu-screen-recorder.</li>
+          <li>A frozen game is thawed before it is stopped, Universe's helper processes die with the one that spawned them, and a hook's stderr is read within its timeout again.</li>
+          <li>Deleting a store install's files goes through a store that uninstalls its own games, never while the game is in the library.</li>
+          <li>An old Lutris import of a GOG game uninstalls its whole folder, and its GOG manifest is found above the exe's folder.</li>
+          <li>Steam's gamescope keeps the game's own scaling filter.</li>
+          <li>A setup run again closes on B without asking to skip, and a keyboard closed after its folders leaves no hidden focus.</li>
+          <li>Dozens of focus, menu and list fixes across the Universe, Switch 2 and PS5 looks.</li>
+        </ul>
+        <p>Performance</p>
+        <ul>
+          <li>A screenshot is taken inside gamescope with no relay.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.0.11" date="2026-10-07">
       <description>
         <p>Added</p>

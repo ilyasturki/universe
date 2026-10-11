@@ -1,5 +1,54 @@
 # Changelog
 
+## [0.0.12] - 2026-10-11
+
+### Breaking
+
+- An all-games `layout = "xbox"` for Nintendo games is dropped once, the first time the core opens a config from before this release; set it per pad model in Settings › Controller's Nintendo games row instead. A game's own value stays.
+
+### Added
+
+- A guide at universe.ilyasturki.com/docs: install, first run, controllers, every settings section, and a reference of the CLI, the launch settings and config.toml.
+- Reconnect and find controllers from the dock in every look, or with `universe controller reconnect`: a Bluetooth pad reconnects through BlueZ and gets back the player it held.
+- Each pad has its own Nintendo games layout, from its print or set per model in a Nintendo games row on its card, in every look and in Universe Desktop.
+- Switch 2 Pro controllers, with their glyphs and art; `universe doctor` checks each pad's hidraw access.
+- A PlayStation controller setting for Proton games on GE-Proton 11-4 and later: native, as a DualShock 4 or as an Xbox pad, chosen by default from what the game's Steam page lists.
+- A GOG game or an import with a Steam app id gets its Steam twin's protonfixes.
+- A store's install that no library game uses can have its files deleted from the store page.
+- A Proton crash report files the session as crashed.
+- The Universe look's top bar has a library tab and a labelled power button, and a game's tools sit on its page and the hero.
+- The startup animation streaks hairlines, brakes and opens home, each look's chime landing with it.
+
+### Changed
+
+- Reprise is now called the Universe look, and Wine prefixes are Windows game folders in setup and storage.
+- Settings sections are grouped under Games, Extras and System headers with plainer names: Stores, Downloads, Game defaults, Emulators & Proton, Features, Appearance, Performance.
+- What's new opens after an update by default, and Settings › About and the menus open it.
+- A game's arguments are split as a shell splits words, not on commas: `-windowed -nolauncher` is two arguments, `'My Save'` one.
+- Add to library on a store page brings in only that game, and the store page says whether each install is in your library and where it is.
+- A store install found in a library game's folder is linked to that game.
+- A module's hooks run only for the games its `applies` names.
+- Quitting a game lands on its tile's cover, and home tiles crossfade between pictures.
+- Stopping a game kills what is left 5 s after the last SIGTERM, and a crash in its shutdown leaves no core dump to wait for.
+- Settings show module and store state as text, and the Universe look hints X and Y in settings, the library and media.
+
+### Fixed
+
+- A Nintendo pad's A and B are no longer swapped by sdl2-compat, an Xbox pad's triggers bind by their pull, and a DualShock 4's select button reads Share.
+- NixOS: the game-devices udev rules apply their access, and `universe doctor` names the rules that open a pad's hidraw node.
+- Long game titles wrap on home, the game page, search, headers and artwork, and the Switch 2 and PS5 looks' captions and settings rows take two lines.
+- The screenshot shutter and flash come when the shot is grabbed, and a desktop grab that fails after the shutter no longer takes a later shot through gpu-screen-recorder.
+- A frozen game is thawed before it is stopped, Universe's helper processes die with the one that spawned them, and a hook's stderr is read within its timeout again.
+- Deleting a store install's files goes through a store that uninstalls its own games, never while the game is in the library.
+- An old Lutris import of a GOG game uninstalls its whole folder, and its GOG manifest is found above the exe's folder.
+- Steam's gamescope keeps the game's own scaling filter.
+- A setup run again closes on B without asking to skip, and a keyboard closed after its folders leaves no hidden focus.
+- Dozens of focus, menu and list fixes across the Universe, Switch 2 and PS5 looks.
+
+### Performance
+
+- A screenshot is taken inside gamescope with no relay.
+
 ## [0.0.11] - 2026-10-07
 
 ### Added
@@ -295,6 +344,7 @@
 
 - The search row on the Reprise look's store page.
 
+[0.0.12]: https://github.com/ilyasturki/universe/compare/v0.0.11...v0.0.12
 [0.0.11]: https://github.com/ilyasturki/universe/compare/v0.0.10...v0.0.11
 [0.0.10]: https://github.com/ilyasturki/universe/compare/v0.0.9...v0.0.10
 [0.0.9]: https://github.com/ilyasturki/universe/compare/v0.0.8...v0.0.9

@@ -224,15 +224,6 @@ alt = "Settings, Appearance: the look, its sounds and the startup animation"
 fake = true
 
 [[take]]
-name = "settings-sound"
-look = "reprise"
-size = "1920x1080"
-kind = "still"
-keys = "Wait:4 Up Wait:1 Up Wait:1 Left Wait:1 Left Wait:2 Expect: Return Wait:3 Type:sound Wait:3 Expect: Return Wait:2 Expect: Return Wait:6 Shot:"
-alt = "Settings, Sound: the outputs the sound can play through"
-fake = true
-
-[[take]]
 name = "settings-storage"
 look = "reprise"
 size = "1920x1080"

@@ -36,7 +36,7 @@ Not affiliated with Nintendo or Sony. Nintendo Switch is a trademark of Nintendo
 
 ## HOME over a running game
 
-HOME opens over the game and pauses it. From there, take a screenshot, show MangoHud, cap the frame rate, change the volume or quit.
+HOME opens over the game and pauses it. From there, take a screenshot, show MangoHud, cap the frame rate, change the volume, reconnect a controller or quit.
 
 ![HOME over Dead Cells: the dock, MangoHud turned on, then the volume level](docs/images/home-over-game.avif)
 
