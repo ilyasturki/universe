@@ -16,6 +16,10 @@ GAMES = {
     "xenoblade": ("Xenoblade Chronicles.wbfs", "dolphin", "Nintendo Wii", ("wiimote=classic",)),
     "double-dash": ("Mario Kart Double Dash.rvz", "dolphin", "Nintendo GameCube", ()),
     "mk8": ("Mario Kart 8 Deluxe.nsp", "eden", "", ()),
+    "demons-souls": ("Demons Souls.pkg", "rpcs3", "", ()),
+    "bloodborne": ("Bloodborne.pkg", "shadps4", "", ()),
+    "halo-3": ("Halo 3.iso", "xenia", "", ()),
+    "hades": ("Hades.exe", "proton", "", ()),
 }
 # The printed letter of each face button: A on the right, B at the bottom, X at the top, Y on the left.
 PRINTED = {"`Button E`": "A", "`Button S`": "B", "`Button N`": "X", "`Button W`": "Y"}
@@ -76,7 +80,7 @@ def launch(universe, tmp_path):
     state = Path(universe.env["UNIVERSE_STATE_HOME"])
     state.mkdir(exist_ok=True)
 
-    def run(game, pads, devices=()):
+    def run(game, pads, devices=(), mapped=True, **extra):
         info = universe.games[game]
         g = json.loads(info)
         env_file = state / f"env-{SESSION}"
@@ -101,15 +105,20 @@ def launch(universe, tmp_path):
             "PYTHONPATH": str(Path(__file__).resolve().parent / "launch"),
             "CONTROLS_PADS": ",".join(pads),
             "CONTROLS_DEVICES": json.dumps(list(devices)),
+            "CONTROLS_HINTS": str(tmp_path / "hints.json"),
+            **extra,
         }
         out = subprocess.run([MODULE / "bin" / "pre"], cwd=MODULE, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=10, check=False)
         assert out.returncode == 0, out.stderr
-        assert env_file.read_text() == f"SDL_GAMECONTROLLERCONFIG_FILE={tmp_path / 'run' / 'universe' / f'controls-{SESSION}.txt'}\n"
+        if mapped:
+            assert env_file.read_text() == f"SDL_GAMECONTROLLERCONFIG_FILE={run.mapping}\n"
+        return env_file.read_text()
 
     def ini(*path):
         return (config / Path(*path)).read_text()
 
-    run.ini, run.runtime = ini, tmp_path / "run" / "universe"
+    run.ini, run.runtime, run.config = ini, tmp_path / "run" / "universe", config
+    run.mapping, run.hints = run.runtime / f"controls-{SESSION}.txt", tmp_path / "hints.json"
     return run
 
 
@@ -213,3 +222,59 @@ def test_the_pads_hook_prints_sdls_view_as_the_recorded_pads_keep_it():
     assert [line["sdl"] for line in lines] == [
         json.loads((CORPUS / f"{name}.json").read_text())["sdl"] for name in ("dualsense-edge-bt", "8bitdo-pro-3-dinput-bt")
     ]
+
+
+def test_a_config_is_written_through_its_symlink_and_backed_up_once(launch, tmp_path):
+    own = '[Controls]\nplayer_0_button_a="engine:keyboard,code:67,toggle:0"\n'
+    kept = tmp_path / "dotfiles" / "qt-config.ini"
+    kept.parent.mkdir()
+    kept.write_text(own)
+    ini = launch.config / "eden" / "qt-config.ini"
+    ini.unlink()
+    ini.symlink_to(kept)
+    launch("mk8", ["EDGE"])
+    assert ini.is_symlink() and "player_0_connected=true" in kept.read_text(), "the dotfiles' copy is written, the link kept"
+    launch("mk8", ["PRO3_DINPUT"])
+    assert kept.with_name("qt-config.ini.before-universe").read_text() == own, "the user's own file, backed up the first time only"
+
+
+def test_an_emulator_with_nothing_to_write_still_gets_the_pads_without_universes_buttons(launch):
+    launch("bloodborne", ["EDGE"])
+    line = launch.mapping.read_text().strip()
+    assert line.startswith(EDGE.guid.hex()) and "guide" not in line and "paddle1" not in line
+
+
+def test_an_emulators_own_pad_database_goes_to_sdl_and_under_the_mapping(launch):
+    db = launch.config / "rpcs3" / "input_configs" / "gamecontrollerdb.txt"
+    db.parent.mkdir(parents=True)
+    db.write_text("# rpcs3\n")
+    launch("demons-souls", ["EDGE"])
+    assert json.loads(launch.hints.read_text()) == {"SDL_GAMECONTROLLERCONFIG_FILE": str(db), "SDL_JOYSTICK_HIDAPI_PS3": "1"}
+    assert launch.mapping.read_text().startswith("# rpcs3\n")
+
+
+@pytest.mark.parametrize("game", ["hades", "halo-3"], ids=["proton", "xenia-through-proton"])
+def test_the_hook_leaves_a_game_alone_where_it_does_not_apply(launch, game):
+    assert launch(game, ["EDGE"], mapped=False) == ""
+    assert not launch.mapping.exists() and launch.ini("eden", "qt-config.ini") == "[Controls]\n"
+
+
+def test_the_hook_stands_down_without_pads_and_for_the_pads_module(universe, launch, tmp_path):
+    assert launch("mk8", [], mapped=False) == "" and launch.ini("eden", "qt-config.ini") == "[Controls]\n", "no pad held"
+    shims = tmp_path / "bin"
+    shims.mkdir()
+    for tool in ("systemd-run", "systemctl"):
+        (shims / tool).write_text("#!/bin/sh\n")
+        (shims / tool).chmod(0o755)
+    uhid = tmp_path / "uhid"
+    uhid.touch()
+    universe("module", "enable", "pads")
+    try:
+        env = {"PATH": f"{shims}{os.pathsep}{os.environ['PATH']}", "UNIVERSE_UHID": str(uhid)}
+        assert launch("mk8", ["EDGE"], mapped=False, **env) == "", "the pads module hands the emulator its own pads"
+        assert launch.ini("eden", "qt-config.ini") == "[Controls]\n"
+        universe("module", "set", "pads", "enabled=false", "--game", json.loads(universe.games["mk8"])["id"])
+        launch("mk8", ["EDGE"], **env)
+        assert "player_0_connected=true" in launch.ini("eden", "qt-config.ini"), "turned off for the game: the controls are written"
+    finally:
+        universe("module", "disable", "pads")

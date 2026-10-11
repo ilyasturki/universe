@@ -35,6 +35,7 @@ WRITERS = (
 HINTS = {"vita3k": {"SDL_JOYSTICK_ENHANCED_REPORTS": "1", "SDL_JOYSTICK_HIDAPI_SWITCH": "1", "SDL_JOYSTICK_HIDAPI_JOY_CONS": "1"}}
 PROTON_RUNNERS = ("xenia",)
 BACKUP_SUFFIX = ".before-universe"
+UHID = os.environ.get("UNIVERSE_UHID") or "/dev/uhid"
 
 
 def log(msg):
@@ -51,7 +52,7 @@ def pads_module_runs(game_id):
     entry = next((m for m in _cli("--json", "module", "ls") or [] if m.get("id") == "pads"), None)
     if not entry or not entry.get("enabled") or not entry.get("available"):
         return False
-    if not os.access("/dev/uhid", os.R_OK | os.W_OK):
+    if not os.access(UHID, os.R_OK | os.W_OK):
         return False
     settings = _cli("module", "settings", "pads", game_id)
     if settings is None:
