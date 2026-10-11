@@ -5,12 +5,27 @@ on:
 permissions:
   contents: write
 jobs:
+  # The push of main beside the tag starts ci on this commit: its run is awaited, not repeated
   ci:
-    uses: ./.github/workflows/ci.yml
+    runs-on: ubuntu-latest
     permissions:
-      contents: read
+      actions: read
+    steps:
+      - name: Wait for the ci run of main's push on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          id=
+          for _ in $(seq 60); do
+            id="$(gh run list --workflow ci --commit "$GITHUB_SHA" --event push --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+            [ -n "$id" ] && break
+            sleep 10
+          done
+          [ -n "$id" ] || { echo "::error::no ci run on ${GITHUB_SHA::7}: push main with the tag (git push --follow-tags origin main)"; exit 1; }
+          gh run watch "$id" --exit-status --interval 30
   notes:
-    needs: ci
+    needs: [ci, smoke]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -33,7 +48,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
   # GTK 4.22 and libadwaita 1.9 are no older distro's: Universe Desktop is built on Arch, for the systems that have them
   desktop:
-    needs: notes
     runs-on: ubuntu-latest
     container: archlinux:latest
     steps:
@@ -46,7 +60,7 @@ jobs:
           path: target/release/universe-desktop
   # Outside Nix, whose outputs are not relocatable; 22.04's glibc 2.35 is the oldest the binary then asks for, in a container since its runner image is being retired
   dist:
-    needs: [notes, desktop]
+    needs: desktop
     runs-on: ubuntu-latest
     container: ubuntu:22.04
     # a container's default shell is sh, dash on ubuntu
@@ -103,7 +117,7 @@ jobs:
           if-no-files-found: ignore
   # gh is not in the 22.04 container
   upload:
-    needs: [dist, smoke]
+    needs: notes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -114,7 +128,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
   aur:
-    needs: [notes, smoke]
+    needs: notes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -131,7 +145,7 @@ jobs:
           force_push: true
   # The COPR project builds with the network on (cargo fetches the crates), for Fedora 44 and newer: older ones ship a PySide6 under 6.11
   copr:
-    needs: [notes, smoke]
+    needs: notes
     runs-on: ubuntu-latest
     container: fedora:latest
     steps:
