@@ -84,7 +84,8 @@ FocusScope {
     readonly property real gridW: parent ? parent.width - gridX - Theme.dp(Theme.edgeMargin) - Theme.dp(40) : 0
     readonly property real gap: Theme.dp(24)
     readonly property real cellW: (gridW - gap * (columns - 1)) / columns
-    readonly property real cellH: cellW + Theme.dp(Theme.ringRoom + 76)
+    // Under the tile, two lines of title and two of status.
+    readonly property real cellH: cellW + Theme.dp(Theme.ringRoom + 128)
     readonly property real headingH: Theme.dp(80)
     readonly property real lineH: Theme.dp(123)
     readonly property real room: Theme.dp(Theme.ringRoom)
@@ -568,24 +569,31 @@ FocusScope {
                         }
                     }
 
-                    Label {
+                    Column {
                         anchors.top: art.bottom
                         anchors.topMargin: Theme.dp(Theme.ringRoom + 6)
                         width: art.width
-                        text: g ? g.title : ""
-                        color: cell.focused ? Theme.accent : Theme.text
-                        elide: Text.ElideRight
-                        font.pixelSize: Theme.dp(Theme.fontSmall)
-                    }
+                        spacing: Theme.dp(2)
 
-                    Label {
-                        anchors.top: art.bottom
-                        anchors.topMargin: Theme.dp(Theme.ringRoom + 36)
-                        width: art.width
-                        text: !g ? "" : inProgress ? g.status : g.sizeText ? g.sizeText + " to download" : g.status
-                        color: g && (g.pending || g.busy) ? Theme.accent : Theme.textSecondary
-                        elide: Text.ElideRight
-                        font.pixelSize: Theme.dp(Theme.fontTiny)
+                        Label {
+                            width: parent.width
+                            text: g ? g.title : ""
+                            color: cell.focused ? Theme.accent : Theme.text
+                            wrapMode: Text.WordWrap
+                            maximumLineCount: 2
+                            elide: Text.ElideRight
+                            font.pixelSize: Theme.dp(Theme.fontSmall)
+                        }
+
+                        Label {
+                            width: parent.width
+                            text: !g ? "" : inProgress ? g.status : g.sizeText ? g.sizeText + " to download" : g.status
+                            color: g && (g.pending || g.busy) ? Theme.accent : Theme.textSecondary
+                            wrapMode: Text.WordWrap
+                            maximumLineCount: 2
+                            elide: Text.ElideRight
+                            font.pixelSize: Theme.dp(Theme.fontTiny)
+                        }
                     }
                 }
             }

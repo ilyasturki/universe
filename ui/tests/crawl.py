@@ -24,11 +24,8 @@ KNOWN = {
         ("focus-unseen", "artworkPage"),
     },
     "switch2": {
-        # A store's install and a setting's value too long for their rows at 1280×720.
+        # A setting's value too long for their rows at 1280×720.
         ("truncated", "Add a SteamGridDB key for more art"),
-        ("truncated", "The Witcher 3: Wild Hunt"),
-        ("truncated", "Paused · "),
-        ("truncated", "476.8 MB to download"),
         ("truncated", "Type a value…"),
         # The setup opened from Settings asks "Skip setup?" on B, and B on the question keeps going: only A on Skip leaves.
         ("b-never-home", "onboardingPage"),
