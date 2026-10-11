@@ -152,6 +152,7 @@ class Look:
         self.api = api
         self.name = name
         self._root = None
+        self._homed = None
         api.theme.set(name)
         api.theme.takeLanding()
         self.engine, self.window = render(api, width, height, activate)
@@ -190,7 +191,15 @@ class Look:
         return self.page(page_name(source))
 
     def home(self):
-        return self.page("homePage") if not self.stacked else self.find("homePage")
+        """The home page; the first time a look's root asks, once its cursor is on a game, unless the library has none."""
+        def home():
+            return self.page("homePage") if not self.stacked else self.find("homePage")
+
+        if self._homed is not self.root:
+            if self.api.allGames.rowCount():
+                until(lambda: home().property("currentGame") is not None, "the home has no game under its cursor")
+            self._homed = self.root
+        return home()
 
     def launch(self, game_id):
         game = self.api.allGames.byId(game_id)
