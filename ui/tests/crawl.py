@@ -19,10 +19,7 @@ BUDGET_S = float(os.environ.get("UNIVERSE_CRAWL_BUDGET_S", "3600"))
 KNOWN = {
     "reprise": set(),
     "switch2": set(),
-    "ps5": {
-        # The PS5 look opens its setup on a first start with an empty library only.
-        ("unreached", "onboardingPage"),
-    },
+    "ps5": set(),
 }
 
 
