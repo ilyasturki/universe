@@ -17,10 +17,7 @@ BUDGET_S = float(os.environ.get("UNIVERSE_CRAWL_BUDGET_S", "3600"))
 # What the crawl found and its owners have yet to settle, each (kind, page or the detail's start): a finding not listed
 # here fails the crawl. Take a line out once its fix lands. A page the walk's presses ran out before is told, not failed.
 KNOWN = {
-    "reprise": {
-        # Seen once: Artwork's keyboard sheet closed and kept the focus, hidden; not reproduced by hand yet.
-        ("focus-unseen", "artworkPage"),
-    },
+    "reprise": set(),
     "switch2": set(),
     "ps5": {
         # The PS5 look opens its setup on a first start with an empty library only.

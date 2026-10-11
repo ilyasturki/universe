@@ -133,10 +133,10 @@ Sheet {
         revealed = !revealed;
     }
 
+    // Closing drops the focus through Sheet's `focus: open`: writing `focus` here would break that binding for good.
     function browse() {
         Sound.panel();
         open = false;
-        focus = false;
         browseRequested(text);
     }
 

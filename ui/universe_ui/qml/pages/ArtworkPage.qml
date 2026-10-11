@@ -864,6 +864,7 @@ FocusScope {
 
     PathSheet {
         id: paths
+        objectName: "pathSheet"
 
         anchors.fill: parent
         z: 4
@@ -890,6 +891,7 @@ FocusScope {
 
     KeyboardSheet {
         id: keyboard
+        objectName: "textSheet"
         anchors.fill: parent
         z: 5
 

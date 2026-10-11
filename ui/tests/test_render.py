@@ -1118,6 +1118,21 @@ def test_a_path_row_is_typed_first_under_a_keyboard(look, api, fake):
     assert warnings == []
 
 
+@reprise
+def test_artworks_keyboard_closed_after_the_folders_leaves_no_focus_behind(look, fake):
+    page = look.open("pages/ArtworkPage.qml", look.game("the-technomancer"))
+    settle(look.window)
+    invoke(page, "typePath", "/mnt/games")
+    until(lambda: sheet_open(page, "textSheet"))
+    look.press(Qt.Key.Key_F1)
+    until(lambda: sheet_open(page, "pathSheet") and not sheet_open(page, "textSheet"), "Start: the folders")
+    look.press(Qt.Key.Key_F)
+    until(lambda: sheet_open(page, "textSheet") and not sheet_open(page, "pathSheet"), "Y: back to typing")
+    look.press(Qt.Key.Key_Return)
+    until(lambda: not sheet_open(page, "textSheet"))
+    until(lambda: "textSheet" not in focus_names(look.window), "the closed keyboard keeps no focus, hidden")
+
+
 def test_the_sheets_type_the_physical_keyboards_letters(fake, tmp_path, monkeypatch):
     from PySide6.QtCore import QCoreApplication
 
