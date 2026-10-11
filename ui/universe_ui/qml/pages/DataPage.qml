@@ -52,8 +52,18 @@ FocusScope {
 
     readonly property var row: body.currentRow
     readonly property bool inRows: body.inRows
+    readonly property bool failed: store.count === 0 && !store.loading && store.error !== ""
 
-    readonly property var hints: editor.open ? editor.hints : dialog.open ? dialog.hints : [
+    readonly property var hints: editor.open ? editor.hints : dialog.open ? dialog.hints : failed ? [
+        {
+            glyph: "A",
+            label: "Try again"
+        },
+        {
+            glyph: "B",
+            label: "Back"
+        }
+    ] : [
         {
             glyph: "A",
             label: inRows ? "Select" : "Open",
@@ -142,20 +152,60 @@ FocusScope {
         label: page.store.total !== "" ? "DATA · " + page.store.total : "DATA"
     }
 
-    Text {
+    Column {
         anchors.centerIn: parent
+        width: parent.width - page.sideMargin * 2
+        spacing: Theme.dp(32)
         visible: page.store.count === 0
-        text: page.store.loading ? "Reading the game's folders…" : page.store.error
-        color: Theme.textMuted
-        font.family: Theme.sans
-        font.pixelSize: Theme.dp(26)
+
+        Text {
+            width: parent.width
+            horizontalAlignment: Text.AlignHCenter
+            text: page.store.loading ? "Reading the game's folders…" : page.store.error
+            color: Theme.textMuted
+            font.family: Theme.sans
+            font.pixelSize: Theme.dp(26)
+            wrapMode: Text.WordWrap
+        }
+
+        FocusScope {
+            id: retry
+            objectName: "retry"
+
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: retryButton.width
+            height: retryButton.height
+            visible: page.failed
+            focus: page.failed
+
+            PillButton {
+                id: retryButton
+                ghost: true
+                icon: "refresh"
+                label: "Try again"
+                focused: retry.activeFocus
+                onPicked: page.store.reload()
+            }
+
+            Keys.onPressed: function (event) {
+                if (api.keys.isAccept(event)) {
+                    event.accepted = true;
+                    Sound.enter();
+                    page.store.reload();
+                } else if (api.keys.isCancel(event)) {
+                    event.accepted = true;
+                    Sound.cancel();
+                    page.closeRequested();
+                }
+            }
+        }
     }
 
     CardSections {
         id: body
 
         anchors.fill: parent
-        focus: true
+        focus: !page.failed
         visible: page.store.count > 0
         columnsTop: header.y + header.height + Theme.dp(32)
         floor: hintBar.y

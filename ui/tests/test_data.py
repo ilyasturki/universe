@@ -1,9 +1,12 @@
 from pathlib import Path
 
-from looks import call
-from PySide6.QtCore import QUrl
+import pytest
+from looks import call, focus_names
+from PySide6.QtCore import Qt, QUrl
 from PySide6.QtQml import QQmlComponent, QQmlEngine
 from uitest import record, until
+
+from universe_ui.errors import UniverseError
 
 
 def keys(store):
@@ -120,3 +123,18 @@ def test_every_look_opens_a_games_data_page_and_the_storage_view(api, fake, look
     else:
         look.settings("storage")
     until(lambda: "root:games" in keys(api.screens.storage), "the Storage view walks every root")
+
+
+@pytest.mark.parametrize("look", ["reprise"], indirect=True)
+def test_a_data_page_that_cannot_load_holds_the_focus_on_its_retry(api, fake, look, monkeypatch):
+    def unreadable(ident):
+        raise UniverseError("Io", "the game's folders could not be read")
+
+    readable = fake.core.game_data
+    monkeypatch.setattr(fake.core, "game_data", unreadable)
+    look.open("pages/DataPage.qml", look.game("the-technomancer"))
+    until(lambda: "retry" in focus_names(look.window), "the failure's one action takes the focus, not the hidden lists")
+    monkeypatch.setattr(fake.core, "game_data", readable)
+    look.press(Qt.Key.Key_Return)
+    until(lambda: "backup" in keys(api.screens.gameData), "A reads the folders again")
+    until(lambda: "retry" not in focus_names(look.window) and "dataPage" in focus_names(look.window), "the rows take the focus back")
