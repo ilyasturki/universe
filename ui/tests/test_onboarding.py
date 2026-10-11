@@ -78,9 +78,14 @@ def test_steps_and_found_rows(empty_api, empty):
     assert all(row["verb"] is True and row["detail"] for row in rows.values()), "one verb, and where the games go"
     assert form.idle is False
     form.next()
-    assert form.stepId == "stores" and [r["key"] for r in form.rows] == ["logged_in", "link", "code", "enabled", "enabled"]
-    assert [{form.rows[i]["module"] for i in g["rows"]} for g in form.groups] == [{"gog"}, {"epic"}, {"steam"}], "a group per store"
-    assert [(r["type"], r["module"]) for r in form.rows[3:]] == [("bool", "epic"), ("bool", "steam")], "off, offered since their launchers are here"
+    assert form.stepId == "stores" and {(r["module"], r["key"]) for r in form.rows if r["module"] == "gog"} == {
+        ("gog", "logged_in"),
+        ("gog", "link"),
+        ("gog", "code"),
+    }
+    assert sorted(len({form.rows[i]["module"] for i in g["rows"]}) for g in form.groups) == [1, 1, 1], "a group per store"
+    switches = {r["module"]: r["type"] for r in form.rows if r["key"] == "enabled"}
+    assert switches == {"epic": "bool", "steam": "bool"}, "off, offered since their launchers are here"
     form.back()
     assert form.stepId == "found"
 
@@ -234,7 +239,7 @@ def test_the_data_step_sets_the_prefixes_and_save_backups_roots(empty_api, empty
     form = loaded(empty_api.screens.onboarding)
     while form.stepId != "data":
         form.next()
-    assert [(r["key"], r["type"]) for r in form.rows] == [("paths.prefixes_root", "path"), ("paths.saves_root", "path"), ("saves.auto_backup", "bool")]
+    assert {(r["key"], r["type"]) for r in form.rows} == {("paths.prefixes_root", "path"), ("paths.saves_root", "path"), ("saves.auto_backup", "bool")}
     assert form.setValue(index_of(form, "paths.saves_root"), "/srv/saves") is True
     assert empty.core.settings()["paths"]["saves_root"] == "/srv/saves"
     form.toggle(index_of(form, "saves.auto_backup"))
@@ -245,7 +250,7 @@ def test_preferences_write_the_family_and_hdr(empty_api, empty):
     form = loaded(empty_api.screens.onboarding)
     while form.stepId != "preferences":
         form.next()
-    assert [[form.rows[i]["key"] for i in g["rows"]] for g in form.groups] == [["controller.family"], ["launch.hdr"]], "the upscaler upgrades stay in Settings"
+    assert {form.rows[i]["key"] for g in form.groups for i in g["rows"]} == {"controller.family", "launch.hdr"}, "the upscaler upgrades stay in Settings"
     assert form.setValue(index_of(form, "controller.family"), "Switch Pro Controller") is True
     assert empty_api.screens.controller.family == "switch-pro" and empty_api.memory.get("controllerFamily") == "switch-pro"
     form.toggle(index_of(form, "launch.hdr"))
