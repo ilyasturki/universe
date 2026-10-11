@@ -905,7 +905,7 @@ impl Application {
             .application_name(gettext("Universe Desktop"))
             .application_icon(config::APP_ID)
             .developer_name("Ilyas Turki")
-            .version(universe::BUILD)
+            .version(universe::build())
             .license_type(gtk::License::MitX11)
             .website("https://github.com/ilyasturki/universe")
             .issue_url("https://github.com/ilyasturki/universe/issues")
@@ -953,7 +953,7 @@ fn debug_facts() -> Vec<(&'static str, String)> {
         .map(|v| v.trim_matches('"').to_string())
         .unwrap_or_default();
     vec![
-        ("Universe Desktop", universe::BUILD.to_string()),
+        ("Universe Desktop", universe::build().to_string()),
         ("GTK", format!("{}.{}.{}", gtk::major_version(), gtk::minor_version(), gtk::micro_version())),
         ("libadwaita", format!("{}.{}.{}", adw::major_version(), adw::minor_version(), adw::micro_version())),
         ("Distribution", distro),

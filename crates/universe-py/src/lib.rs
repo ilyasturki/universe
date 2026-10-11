@@ -93,7 +93,7 @@ impl Core {
     }
 
     fn version(&self) -> &'static str {
-        universe::BUILD
+        universe::build()
     }
     fn data_home(&self) -> String {
         universe::paths::data_home().to_string_lossy().to_string()

@@ -10,8 +10,9 @@
       pkgs = nixpkgs.legacyPackages.${system};
       lib = pkgs.lib;
       version = (fromTOML (builtins.readFile ./Cargo.toml)).workspace.package.version;
-      # What build.rs puts behind the version: the flake's source has no .git to ask.
+      # What `universe --version` puts behind the version, set by the wrappers alone: in a Rust build it would rebuild every crate on each commit.
       gitRev = self.shortRev or self.dirtyShortRev or "";
+      revArgs = lib.optionalString (gitRev != "") "--set UNIVERSE_GIT_REV ${gitRev}";
 
       relOf = path: lib.removePrefix (toString ./. + "/") (toString path);
       junk = [
@@ -129,7 +130,6 @@
           "-p"
           "universe"
         ];
-        env.UNIVERSE_GIT_REV = gitRev;
         # chrono ignores TZDIR, so the zone is given as a file; a shared builder's load holds the speed budgets to their loose limits
         preCheck = "export TZ=${pkgs.tzdata}/share/zoneinfo/Europe/Paris UNIVERSE_TEST_BUDGET_S=0";
         # reqwest's platform verifier refuses to build a client on an empty CA store; the NetworkManager and BlueZ tests run their own dbus-daemon, the volume keys' test its own PipeWire, the game session's an Xvfb for gamescope
@@ -167,7 +167,6 @@
           pkgs.pkg-config
         ];
         buildAndTestSubdir = "crates/universe-py";
-        env.UNIVERSE_GIT_REV = gitRev;
         pythonImportsCheck = [ "universe_core" ];
       };
 
@@ -353,7 +352,7 @@
             ]
           })
           qtWrapperArgs+=(--set QT_FORCE_STDERR_LOGGING 1)
-          qtWrapperArgs+=(--set UNIVERSE_BIN ${universe}/bin/universe)
+          qtWrapperArgs+=(--set UNIVERSE_BIN ${universe}/bin/universe ${revArgs})
           qtWrapperArgs+=(--set UNIVERSE_MODULES_PATH ${modulesDir})
           qtWrapperArgs+=(--set UNIVERSE_SOURCES_PATH ${sourcesDir})
           qtWrapperArgs+=(--prefix PATH : ${runtimePath})
@@ -369,8 +368,9 @@
         meta.mainProgram = "universe-ui";
       };
 
-      desktop = pkgs.rustPlatform.buildRustPackage {
-        pname = "universe-desktop";
+      # Compiled apart from its wrapper: the wrapper names the CLI, the modules and the rev, which change far more often than this crate.
+      desktopUnwrapped = pkgs.rustPlatform.buildRustPackage {
+        pname = "universe-desktop-unwrapped";
         inherit version;
         src = rustSrc;
         cargoLock.lockFile = ./Cargo.lock;
@@ -382,23 +382,14 @@
           "-p"
           "universe-desktop"
         ];
-        env = {
-          UNIVERSE_GIT_REV = gitRev;
-          UNIVERSE_DESKTOP_LOCALEDIR = "${placeholder "out"}/share/locale";
-        };
-        nativeBuildInputs = desktopTools ++ [
-          pkgs.wrapGAppsHook4
-          pkgs.scdoc
-        ];
+        env.UNIVERSE_DESKTOP_LOCALEDIR = "${placeholder "out"}/share/locale";
+        nativeBuildInputs = desktopTools ++ [ pkgs.scdoc ];
         buildInputs = desktopLibs ++ gstPlugins;
-        # D-Bus activation runs the .service's Exec with the bus's environment: it has to be the wrapper, by its path.
         postInstall = ''
           data=crates/universe-desktop/data
           id=io.github.ilyasturki.UniverseDesktop
           install -Dm644 $data/$id.desktop -t $out/share/applications
           install -Dm644 $data/$id.service -t $out/share/dbus-1/services
-          substituteInPlace $out/share/applications/$id.desktop $out/share/dbus-1/services/$id.service \
-            --replace-fail 'Exec=universe-desktop' "Exec=$out/bin/universe-desktop"
           install -Dm644 $data/$id.search-provider.ini -t $out/share/gnome-shell/search-providers
           install -Dm644 $data/$id.metainfo.xml -t $out/share/metainfo
           install -Dm644 $data/icons/apps/$id.svg -t $out/share/icons/hicolor/scalable/apps
@@ -408,12 +399,33 @@
           desktop-file-validate $out/share/applications/$id.desktop
           appstreamcli validate --no-net $out/share/metainfo/$id.metainfo.xml
         '';
+      };
+
+      desktop = pkgs.stdenvNoCC.mkDerivation {
+        pname = "universe-desktop";
+        inherit version;
+        dontUnpack = true;
+        dontWrapGApps = true;
+        nativeBuildInputs = [
+          pkgs.wrapGAppsHook4
+          pkgs.makeWrapper
+        ];
+        buildInputs = desktopLibs ++ gstPlugins;
+        # D-Bus activation runs the .service's Exec with the bus's environment: it has to be the wrapper, by its path.
+        installPhase = ''
+          mkdir $out
+          cp -r --no-preserve=mode ${desktopUnwrapped}/share $out/share
+          id=io.github.ilyasturki.UniverseDesktop
+          substituteInPlace $out/share/applications/$id.desktop $out/share/dbus-1/services/$id.service \
+            --replace-fail 'Exec=universe-desktop' "Exec=$out/bin/universe-desktop"
+        '';
         # The hooks and systemd's ExecStopPost call the CLI back; the games run the runtime tools off PATH.
-        preFixup = ''
-          gappsWrapperArgs+=(--set UNIVERSE_BIN ${universe}/bin/universe)
-          gappsWrapperArgs+=(--set UNIVERSE_MODULES_PATH ${modulesDir})
-          gappsWrapperArgs+=(--set UNIVERSE_SOURCES_PATH ${sourcesDir})
-          gappsWrapperArgs+=(--prefix PATH : ${runtimePath})
+        postFixup = ''
+          makeWrapper ${desktopUnwrapped}/bin/universe-desktop $out/bin/universe-desktop --inherit-argv0 "''${gappsWrapperArgs[@]}" \
+            --set UNIVERSE_BIN ${universe}/bin/universe ${revArgs} \
+            --set UNIVERSE_MODULES_PATH ${modulesDir} \
+            --set UNIVERSE_SOURCES_PATH ${sourcesDir} \
+            --prefix PATH : ${runtimePath}
         '';
         meta.mainProgram = "universe-desktop";
       };
@@ -427,7 +439,7 @@
         ];
         nativeBuildInputs = [ pkgs.makeWrapper ];
         postBuild = ''
-          wrapProgram $out/bin/universe --set UNIVERSE_MODULES_PATH "${modulesDir}" --set UNIVERSE_SOURCES_PATH "${sourcesDir}" --prefix PATH : "${runtimePath}"
+          wrapProgram $out/bin/universe ${revArgs} --set UNIVERSE_MODULES_PATH "${modulesDir}" --set UNIVERSE_SOURCES_PATH "${sourcesDir}" --prefix PATH : "${runtimePath}"
         '';
         meta.mainProgram = "universe";
       };

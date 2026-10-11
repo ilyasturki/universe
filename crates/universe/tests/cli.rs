@@ -51,6 +51,28 @@ fn colour_reaches_a_terminal_only() {
 }
 
 #[test]
+fn version_shows_the_rev_baked_in_else_the_one_handed_over_at_run_time() {
+    let dir = tempfile::tempdir().unwrap();
+    let version = |rev: Option<&str>| {
+        let mut cmd = command(&dir, &["--version"], &[]);
+        match rev {
+            Some(rev) => cmd.env("UNIVERSE_GIT_REV", rev),
+            None => cmd.env_remove("UNIVERSE_GIT_REV"),
+        };
+        text(&cmd.output().unwrap().stdout).trim().to_string()
+    };
+    let bare = version(None);
+    let handed = version(Some("abc1234"));
+    if bare == format!("universe {}", universe::VERSION) {
+        assert_eq!(handed, format!("universe {} (abc1234)", universe::VERSION));
+    } else {
+        assert!(bare.starts_with(&format!("universe {} (", universe::VERSION)), "{bare}");
+        assert_eq!(handed, bare, "a rev baked in wins over the run time's");
+    }
+    assert_eq!(version(Some("")), bare);
+}
+
+#[test]
 fn doctor_needs_journalctl_not_the_systemd_clients() {
     let dir = tempfile::tempdir().unwrap();
     let out = universe(&dir, &["doctor", "--json"], &[]);

@@ -55,8 +55,19 @@ pub mod tools;
 mod testbus;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
-// The version with the short git rev behind it (build.rs), `-dirty` when the tree was.
-pub const BUILD: &str = env!("UNIVERSE_BUILD");
+
+/// The version with the short git rev behind it, `-dirty` when the tree was: baked in by build.rs, else `UNIVERSE_GIT_REV` at run time, which the flake's wrappers set so a new commit leaves its Rust builds cached.
+pub fn build() -> &'static str {
+    static AT_RUN: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    const BAKED: &str = env!("UNIVERSE_BUILD");
+    if BAKED != VERSION {
+        return BAKED;
+    }
+    AT_RUN.get_or_init(|| match std::env::var("UNIVERSE_GIT_REV") {
+        Ok(rev) if !rev.is_empty() => format!("{VERSION} ({rev})"),
+        _ => VERSION.to_string(),
+    })
+}
 
 /// Warnings and each screenshot's timings to stderr (`RUST_LOG` overrides); the CLI and the Python binding both call it, a second call is a no-op.
 pub fn init_tracing() {
