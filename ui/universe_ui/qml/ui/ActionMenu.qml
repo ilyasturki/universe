@@ -313,8 +313,8 @@ FocusScope {
                 font.family: Theme.sans
                 font.weight: menu.centered ? Font.DemiBold : Font.Medium
                 font.pixelSize: Theme.dp(menu.centered ? 28 : 21)
-                wrapMode: menu.centered ? Text.WordWrap : Text.NoWrap
-                maximumLineCount: 3
+                wrapMode: Text.WordWrap
+                maximumLineCount: menu.centered ? 3 : 2
                 elide: Text.ElideRight
             }
 

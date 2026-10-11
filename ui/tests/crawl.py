@@ -18,8 +18,6 @@ BUDGET_S = float(os.environ.get("UNIVERSE_CRAWL_BUDGET_S", "3600"))
 # here fails the crawl. Take a line out once its fix lands. A page the walk's presses ran out before is told, not failed.
 KNOWN = {
     "reprise": {
-        # A 46-letter title: the game menu's heading, the media pages' headers and the search's two lines elide it.
-        ("truncated", "Batman: Arkham Asylum Game of the Year Edition"),
         # Seen once: Artwork's keyboard sheet closed and kept the focus, hidden; not reproduced by hand yet.
         ("focus-unseen", "artworkPage"),
     },

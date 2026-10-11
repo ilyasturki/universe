@@ -20,6 +20,8 @@ Column {
         font.family: Theme.sans
         font.weight: Font.Bold
         font.pixelSize: Theme.dp(46)
+        wrapMode: Text.WordWrap
+        maximumLineCount: 2
         elide: Text.ElideRight
     }
 }

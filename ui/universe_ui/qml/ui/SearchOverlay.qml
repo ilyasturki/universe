@@ -342,7 +342,7 @@ FocusScope {
                             onPicked: overlay.pointToResult(index)
                         }
 
-                        // Two lines' room under every cover, so a long title wraps and the covers stay in a row.
+                        // Two lines' room under every cover, so a long title wraps, smaller past two lines, and the covers stay in a row.
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
                             width: overlay.cardWidth
@@ -354,8 +354,9 @@ FocusScope {
                             font.family: Theme.sans
                             font.weight: card.selected ? Font.DemiBold : Font.Medium
                             font.pixelSize: Theme.dp(23)
+                            fontSizeMode: Text.Fit
+                            minimumPixelSize: Theme.dp(17)
                             wrapMode: Text.WordWrap
-                            maximumLineCount: 2
                             elide: Text.ElideRight
                         }
                     }

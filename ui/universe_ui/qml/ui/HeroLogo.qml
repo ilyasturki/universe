@@ -41,6 +41,8 @@ Item {
         font.family: Theme.sans
         font.weight: Font.Bold
         font.pixelSize: Theme.dp(58)
+        wrapMode: Text.WordWrap
+        maximumLineCount: 2
         elide: Text.ElideRight
         opacity: root.titleMode ? 1.0 : 0.0
 
