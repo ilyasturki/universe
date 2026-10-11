@@ -156,9 +156,13 @@ jobs:
       - run: rpmbuild -bs --define "_sourcedir $PWD" --define "_srcrpmdir $PWD" packaging/rpm/universe.spec
       # COPR_CONFIG is the ~/.config/copr that copr.fedorainfracloud.org/api hands out; its token lasts 180 days
       # the project keeps an unbuilt rawhide chroot only so "Follow Fedora branching" forks each new Fedora from it
+      # COPR's queue and build take about 50 min: the run hands over the build's page instead of waiting on it
       - run: |
           printf '%s\n' "$COPR_CONFIG" > "$RUNNER_TEMP/copr"
-          copr-cli --config "$RUNNER_TEMP/copr" build --exclude-chroot fedora-rawhide-x86_64 universe universe-*.src.rpm
+          copr-cli --config "$RUNNER_TEMP/copr" build --nowait --exclude-chroot fedora-rawhide-x86_64 universe universe-*.src.rpm > "$RUNNER_TEMP/copr.out"
+          cat "$RUNNER_TEMP/copr.out"
+          build="$(sed -n 's/^Created builds: //p' "$RUNNER_TEMP/copr.out")"
+          echo "::notice title=COPR build ${build}::https://copr.fedorainfracloud.org/coprs/build/${build}"
         env:
           COPR_CONFIG: ${{ secrets.COPR_CONFIG }}
   aur-bin:
