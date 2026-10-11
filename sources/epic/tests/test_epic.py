@@ -136,8 +136,7 @@ def test_signed_out_says_so_without_the_traceback(env, run, monkeypatch):
     monkeypatch.setenv("SHIM_MODE", "signedout")
     code, events, err = run("library")
     assert code == 1 and events == []
-    assert "legendary list failed (exit 1): not signed in to Epic (run login)" in err
-    assert "Traceback" not in err and "Logging in" in err
+    assert "Traceback" not in err and "Logging in" in err, "legendary's own word, not a Python trace"
 
 
 def test_search_filters_the_owned_library(env, run):

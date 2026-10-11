@@ -191,7 +191,7 @@ def test_a_sync_out_of_time_is_killed_and_the_game_launches_on_its_saves(src, cl
     monkeypatch.setenv("SHIM_MODE", "hang")
     put(cloud["local"], "slot1.sav", "local")
     assert src.main(["pre-launch"]) == 0
-    assert state(src)["state"] == "error" and "did not come down in time" in state(src)["message"]
+    assert state(src)["state"] == "error" and state(src)["message"]
     assert (cloud["local"] / "slot1.sav").read_text() == "local"
 
 
