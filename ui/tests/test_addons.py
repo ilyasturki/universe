@@ -95,6 +95,7 @@ def test_an_open_add_ons_list_takes_the_index_in_place_when_it_lands(look, api, 
     assert menu.property("open") is True, "in place, without reopening"
     if lands == "listing":
         look.press(Qt.Key.Key_Down)
+        until(lambda: lit_rows(menu) == [1], "the cursor settles on the second row")
         monkeypatch.setattr(fake.core, "extensions", lambda: {"index": {"url": "", "error": "offline"}, "extensions": []})
         trace = FocusTrace(look.window, menu)
         addons._listing = None

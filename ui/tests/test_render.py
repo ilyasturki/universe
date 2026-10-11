@@ -917,6 +917,7 @@ def test_the_reprise_game_menu_hides_the_media_a_game_has_none_of(look, api, fak
     assert items["media"]["more"] is True and items["manage"]["more"] is True
     media = actions().index("media")
     look.press(Qt.Key.Key_Down, media)
+    until(lambda: lit_rows(menu) == [media], "the cursor settles on Media")
     trace = FocusTrace(look.window, menu)
     look.press(Qt.Key.Key_Return)
     assert depth() == 1 and lit_rows(menu) == [0], "the list pushed is built lit on its cursor alone"
