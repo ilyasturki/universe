@@ -24,9 +24,7 @@ KNOWN = {
         ("focus-unseen", "artworkPage"),
     },
     "switch2": {
-        # A setting's value too long for their rows at 1280×720.
         ("truncated", "Add a SteamGridDB key for more art"),
-        ("truncated", "Type a value…"),
         # The setup opened from Settings asks "Skip setup?" on B, and B on the question keeps going: only A on Skip leaves.
         ("b-never-home", "onboardingPage"),
         ("b-never-home", "dialog"),

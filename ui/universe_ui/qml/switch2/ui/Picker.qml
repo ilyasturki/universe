@@ -69,9 +69,10 @@ Modal {
 
     scrimColor: anchored ? "transparent" : Theme.scrim
     card.anchors.centerIn: anchored ? undefined : picker
-    card.x: anchored ? anchor.x + anchor.width / 2 : 0
+    card.x: anchored ? anchor.x + anchor.width + Theme.dp(14) - card.width : 0
     card.y: anchored ? Math.max(Theme.dp(Theme.headerHeight), Math.min(anchor.y - Theme.dp(12), picker.height - Theme.dp(Theme.hintBarHeight) - card.height - Theme.dp(12))) : 0
-    card.width: anchored ? anchor.width / 2 + Theme.dp(14) : Theme.dp(1000)
+    // Over the row's right half, or wider for a choice that would not fit there.
+    card.width: anchored ? Math.min(anchor.width + Theme.dp(14), Math.max(anchor.width / 2 + Theme.dp(14), longest.implicitWidth + inset * 2 + Theme.dp(130) + (hasIcons ? Theme.dp(70) : 0))) : Theme.dp(1000)
     card.height: list.height - picker.room * 2 + (anchored ? picker.pad * 2 : heading.height + Theme.dp(60))
     card.radius: anchored ? Theme.dp(22) : Theme.dp(16)
     card.color: anchored ? "#f4f4f2" : Theme.dialog
@@ -108,6 +109,14 @@ Modal {
             radius: picker.card.radius + Theme.dp(3 + index * 4)
             color: Qt.rgba(0, 0, 0, 0.035)
         }
+    }
+
+    Label {
+        id: longest
+        visible: false
+        text: picker.choices.reduce(function (a, c) {
+            return String(c).length > a.length ? String(c) : a;
+        }, "")
     }
 
     Label {
