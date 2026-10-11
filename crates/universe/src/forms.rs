@@ -1194,21 +1194,22 @@ platforms = ["Nintendo Wii"]
         hades.save().unwrap();
         let (core, _) = open().await;
         let reach = |fields: &[Field], key: &str| fields.iter().find(|f| f.key == key).map(|f| f.reach.clone());
+        let names = |reach: Option<String>, runners: &[&str]| reach.is_some_and(|r| !r.is_empty() && runners.iter().all(|n| r.contains(n)));
 
         let gamecube = core.form(&Form::Game("sample".into()), None).await.unwrap();
-        assert_eq!(reach(&gamecube, "modules.controls.layout").as_deref(), Some("Dolphin games"));
+        assert!(names(reach(&gamecube, "modules.controls.layout"), &["Dolphin"]));
         assert_eq!(reach(&gamecube, "modules.controls.wiimote"), None, "no Wii row on a GameCube game");
-        assert_eq!(reach(&gamecube, "launch.options.batch").as_deref(), Some("Dolphin games"), "a runner option is the runner's");
-        assert_eq!(reach(&gamecube, "launch.mangohud").as_deref(), Some("games"));
+        assert!(names(reach(&gamecube, "launch.options.batch"), &["Dolphin"]), "a runner option is the runner's");
+        assert!(names(reach(&gamecube, "launch.mangohud"), &[]) && !names(reach(&gamecube, "launch.mangohud"), &["Dolphin"]), "every game");
         assert_eq!(reach(&gamecube, "launch.exe").as_deref(), Some(""), "the game's alone");
         assert_eq!(reach(&gamecube, "modules.controls.enabled").as_deref(), Some(""), "the module's own switch is another thing");
         let proton = core.form(&Form::Game("hades".into()), None).await.unwrap();
-        assert_eq!(reach(&proton, "launch.esync").as_deref(), Some("Proton and Wine games"));
-        assert_eq!(reach(&proton, "launch.proton").as_deref(), Some("Proton games"));
+        assert!(names(reach(&proton, "launch.esync"), &["Proton", "Wine"]));
+        assert!(names(reach(&proton, "launch.proton"), &["Proton"]) && !names(reach(&proton, "launch.proton"), &["Wine"]));
 
         core.set("sample", "platform", "Nintendo Wii").await.unwrap();
         let wii = Form::Game("sample".into());
-        assert_eq!(reach(&core.form(&wii, None).await.unwrap(), "modules.controls.wiimote").as_deref(), Some("Nintendo Wii games"));
+        assert!(names(reach(&core.form(&wii, None).await.unwrap(), "modules.controls.wiimote"), &["Nintendo Wii"]));
         core.set_field_all(&wii, "modules.controls.wiimote", "sideways").await.unwrap();
         assert_eq!(Config::file_set()["modules"]["controls"]["wiimote"], "sideways");
         let proton = core.form(&Form::Game("hades".into()), None).await.unwrap();

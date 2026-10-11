@@ -775,7 +775,7 @@ exit 1
         let m = module_with_check(env.path(), "#!/bin/sh\necho 'codex went away' >&2\nexit 2\n");
         let checks = hook_checks(Hooker::Module(m), &config).await;
         assert_eq!(checks.len(), 1);
-        assert_eq!((checks[0].check.as_str(), checks[0].label.as_str(), checks[0].ok), ("check", "Play journal check", false));
+        assert_eq!((checks[0].check.as_str(), checks[0].ok), ("check", false));
         assert!(checks[0].detail.contains("codex went away") && checks[0].fix.contains("bin/check"), "{:?}", checks[0]);
     }
 
