@@ -298,7 +298,9 @@ def test_arguments_set_on_the_games_page_reach_it_on_every_launch_after_a_restar
     look = journey.start()
     form = journey.api.screens.gameSettings
     form.load(game)
-    assert next(r for r in form.rows if r["key"] == "launch.args")["value"] == "--delay 0 --title 'Sample Run'", "the page shows them after a restart, quoted as typed"
+    assert next(r for r in form.rows if r["key"] == "launch.args")["value"] == "--delay 0 --title 'Sample Run'", (
+        "the page shows them after a restart, quoted as typed"
+    )
     until(lambda: look.root.property("returnLaunches") == game)
     look.press(Qt.Key.Key_Return)
     quit_game(look, journey.client)

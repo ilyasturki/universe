@@ -700,9 +700,7 @@ impl Build<'_> {
                 continue;
             }
             let own = match own_value.as_array() {
-                Some(words) if launch_keys::find(row.key).is_some_and(|k| k.kind == launch_keys::Kind::Words) => {
-                    shell_words::join(words.iter().map(render))
-                }
+                Some(words) if launch_keys::find(row.key).is_some_and(|k| k.kind == launch_keys::Kind::Words) => shell_words::join(words.iter().map(render)),
                 _ => as_kind(row.kind, render(own_value)),
             };
             if row.scope == "both" {

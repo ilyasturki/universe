@@ -192,6 +192,7 @@ class Look:
 
     def home(self):
         """The home page; the first time a look's root asks, once its cursor is on a game, unless the library has none."""
+
         def home():
             return self.page("homePage") if not self.stacked else self.find("homePage")
 
