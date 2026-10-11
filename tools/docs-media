@@ -8,13 +8,18 @@ record [--version X.Y.Z] [NAME…]  every take, or the ones named, on a copy of 
                                   1920 wide to AVIF and WebP in site/src/assets/media, clips to AV1 and H.264 MP4 with a
                                   WebP poster in site/public/media, both listed in site/src/assets/media/manifest.json;
                                   target/docs-media/contact.png tiles them all. The version defaults to CHANGELOG.md's
-                                  newest heading, which /release writes before it records.
+                                  newest heading, which /release writes before it records. A take whose `release` is
+                                  another version is left out. Each take an image of the version's CHANGELOG.md section
+                                  names is also encoded into target/docs-media/release, the assets its GitHub release
+                                  uploads: a still's NAME.webp, a clip's animated NAME.avif and H.264 NAME.mp4.
 check [--strict VERSION]          the takes are well formed and every <Shot name=…>/<Clip name=…> in site/src is one;
-                                  --strict: every take recorded from its current keys, at VERSION.
+                                  --strict: every take recorded from its current keys, at VERSION, and every image of
+                                  VERSION's CHANGELOG.md section a take with its release assets recorded at VERSION.
 dry-run                           every fake = true take offscreen on the fake core, failing on a missed Expect:,
                                   an unknown key, a missing shot or mark. No window, no GPU.
 publish VERSION [--branch NAME]   the recorded media as the single commit of the orphan site-media branch (or NAME),
-                                  replaced in a worktree under target/docs-media. Pushing is left to the caller.
+                                  replaced in a worktree under target/docs-media, the release assets in its release/
+                                  folder. Pushing is left to the caller.
 fetch [REF]                       the media of REF (default: origin's site-media) into site/src/assets/media and
                                   site/public/media.
 
@@ -29,6 +34,7 @@ import hashlib
 import json
 import os
 import re
+import runpy
 import shlex
 import shutil
 import subprocess
@@ -44,11 +50,12 @@ REPO = Path(__file__).resolve().parent.parent
 LOOKS = ("reprise", "switch2", "ps5", "desktop")
 SIZES = ("1920x1080", "1280x800")
 KINDS = ("still", "clip", "gamescope-clip")
-FIELDS = {"name", "look", "size", "kind", "keys", "segments", "alt", "fake"}
+FIELDS = {"name", "look", "size", "kind", "keys", "segments", "alt", "fake", "release"}
 NAME = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 SEGMENT = re.compile(r"(?P<start>[^.\s]+)\.\.(?:\+(?P<seconds>\d+(?:\.\d+)?)|(?P<end>[^.\s+][^.\s]*))")
 USE = re.compile(r'<(Shot|Clip)\s+name="([a-z0-9-]+)"')
 VERSION = re.compile(r"^## \[(\d+\.\d+\.\d+)\]", re.MULTILINE)
+SEMVER = re.compile(r"\d+\.\d+\.\d+")
 # Wait:N counts gaps of this many ms; the takes are written against it.
 GAP_MS = 400
 SETTLE_WAITS = 3
@@ -76,6 +83,7 @@ class Take:
     alt: str
     fake: bool
     segments: tuple[str, ...]
+    release: str = ""
 
     @property
     def w(self) -> int:
@@ -89,6 +97,13 @@ class Take:
     def hash(self) -> str:
         what = {"look": self.look, "size": self.size, "kind": self.kind, "keys": self.keys, "segments": self.segments, "alt": self.alt}
         return hashlib.sha256(json.dumps(what, sort_keys=True).encode()).hexdigest()[:12]
+
+    def live(self, version: str) -> bool:
+        return self.release in ("", version)
+
+    @property
+    def release_files(self) -> list[str]:
+        return [f"{self.name}.webp"] if self.kind == "still" else [f"{self.name}.avif", f"{self.name}.mp4"]
 
     @property
     def files(self) -> dict[str, str]:
@@ -116,6 +131,9 @@ class Site:
         self.clips = root / "site/public/media"
         self.manifest = self.stills / "manifest.json"
         self.work = root / "target/docs-media"
+        self.release = self.work / "release"
+        self.release_manifest = self.release / "manifest.json"
+        self.changelog = root / "CHANGELOG.md"
 
     def dir_of(self, kind: str) -> Path:
         return self.stills if kind == "still" else self.clips
@@ -124,6 +142,18 @@ class Site:
         if not self.manifest.is_file():
             return None
         return json.loads(self.manifest.read_text())
+
+    def read_release(self) -> dict:
+        if not self.release_manifest.is_file():
+            return {"version": None, "takes": {}}
+        return json.loads(self.release_manifest.read_text())
+
+    def highlights(self, version: str) -> list[tuple[str, str]]:
+        if not self.changelog.is_file():
+            return []
+        parse = runpy.run_path(str(REPO / "tools/changelog"), run_name="changelog")["parse"]
+        found = next((r for r in parse(self.changelog.read_text()) if r.version == version), None)
+        return found.highlights() if found else []
 
 
 def problems_of(entry: dict, seen: set[str]) -> list[str]:
@@ -149,6 +179,8 @@ def problems_of(entry: dict, seen: set[str]) -> list[str]:
         errors.append("alt says what it shows")
     if not isinstance(entry.get("fake", False), bool):
         errors.append("fake is true or false")
+    if "release" in entry and not (isinstance(entry["release"], str) and SEMVER.fullmatch(entry["release"])):
+        errors.append("release is the X.Y.Z whose notes show it")
     keys = entry["keys"].split()
     marks = {k.removeprefix("Mark:") for k in keys if k.startswith("Mark:")}
     if look == "desktop":
@@ -215,6 +247,7 @@ def load_takes(site: Site) -> tuple[list[Take], list[str]]:
                     entry["alt"].strip(),
                     entry.get("fake", False),
                     tuple(entry.get("segments", [])),
+                    entry.get("release", ""),
                 )
             )
     return takes, errors
@@ -250,7 +283,7 @@ def check(site: Site, strict: str | None) -> int:
             elif (component == "Shot") != (take.kind == "still"):
                 errors.append(f'{page}: <{component} name="{name}"> names a {take.kind}')
     if pages:
-        warnings += [f"take {t.name}: no page shows it" for t in takes if t.name not in used]
+        warnings += [f"take {t.name}: no page shows it" for t in takes if t.name not in used and not t.release]
     manifest = site.read_manifest()
     entries = (manifest or {}).get("takes", {})
     if manifest is None:
@@ -258,7 +291,7 @@ def check(site: Site, strict: str | None) -> int:
     else:
         if strict and manifest.get("version") != strict:
             errors.append(f"the manifest is version {manifest.get('version')}, not {strict}")
-        for take in takes:
+        for take in (t for t in takes if not t.release):
             entry = entries.get(take.name)
             stale = errors if strict else warnings
             if entry is None:
@@ -276,6 +309,9 @@ def check(site: Site, strict: str | None) -> int:
         for folder in (site.stills, site.clips):
             if folder.is_dir():
                 warnings += [f"{p.relative_to(site.root)}: in no manifest entry" for p in sorted(folder.iterdir()) if p not in listed and p != site.manifest]
+    version = strict or changelog_version(site)
+    if version:
+        release_problems(site, takes, version, errors, errors if strict else warnings, warnings)
     for line in warnings:
         print(f"warning: {line}")
     for line in errors:
@@ -283,6 +319,27 @@ def check(site: Site, strict: str | None) -> int:
     recorded = sum(1 for t in takes if t.name in entries)
     print(f"docs-media check: {len(takes)} takes, {recorded} recorded, {len(used)} named in pages, {len(errors)} errors")
     return 1 if errors else 0
+
+
+def release_problems(site: Site, takes: list[Take], version: str, errors: list[str], stale: list[str], warnings: list[str]) -> None:
+    by_name = {t.name: t for t in takes}
+    highlights = site.highlights(version)
+    release = site.read_release()
+    for name, kind in highlights:
+        take = by_name.get(name)
+        where = f"CHANGELOG.md's {version} image {name}"
+        if take is None or not take.live(version):
+            errors.append(f"{where}: no take {name}" + (f" (its release is {take.release})" if take else ""))
+        elif kind != ("still" if take.kind == "still" else "clip"):
+            errors.append(f"{where}: a {kind} names the {take.kind} {name}" + (": a still is NAME.webp" if take.kind == "still" else ": a clip is NAME.avif"))
+        elif release.get("version") != version or name not in release["takes"]:
+            stale.append(f"{where}: its release assets are not recorded at {version}")
+        elif release["takes"][name].get("hash") != take.hash:
+            stale.append(f"{where}: take {name} changed since its release assets were recorded")
+        else:
+            errors += [f"{where}: no {site.release.relative_to(site.root)}/{f}" for f in take.release_files if not (site.release / f).is_file()]
+    shown = {name for name, _ in highlights}
+    warnings += [f"take {t.name}: no image of CHANGELOG.md's {version} shows it" for t in takes if t.release == version and t.name not in shown]
 
 
 def batches(takes: list[Take]) -> list[list[Take]]:
@@ -348,11 +405,9 @@ def dry_run(site: Site) -> int:
     return 1 if failed else 0
 
 
-def changelog_version() -> str:
-    m = VERSION.search((REPO / "CHANGELOG.md").read_text())
-    if not m:
-        raise SystemExit(fail("CHANGELOG.md has no ## [X.Y.Z] heading: pass --version"))
-    return m[1]
+def changelog_version(site: Site) -> str | None:
+    m = VERSION.search(site.changelog.read_text()) if site.changelog.is_file() else None
+    return m[1] if m else None
 
 
 def stage_profile(src: Path, dest: Path) -> None:
@@ -423,6 +478,23 @@ def encode_clip(cut: Path, site: Site, take: Take) -> None:
     ffmpeg("-i", cut, *shlex.split("-frames:v 1 -c:v libwebp -quality 85"), site.clips / take.files["poster"])
 
 
+def encode_release(master: Path, site: Site, take: Take) -> None:
+    if take.kind == "still":
+        ffmpeg(
+            "-i",
+            master,
+            "-vf",
+            f"scale={STILL_WIDTH}:-2:flags=lanczos",
+            *shlex.split("-c:v libwebp -quality 88 -compression_level 6"),
+            site.release / f"{take.name}.webp",
+        )
+        return
+    common = shlex.split("-pix_fmt yuv420p -colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv -an")
+    ffmpeg("-i", master, *shlex.split("-c:v libx264 -preset slow -crf 22 -profile:v high -movflags +faststart"), *common, site.release / f"{take.name}.mp4")
+    av1 = "-c:v libsvtav1 -crf 30 -preset 4 -svtav1-params tune=0:color-primaries=1:transfer-characteristics=1:matrix-coefficients=1:color-range=0"
+    ffmpeg("-i", master, "-vf", "fps=30", *shlex.split(av1), *common, "-loop", "0", site.release / f"{take.name}.avif")
+
+
 def read_marks(path: Path) -> dict[str, float]:
     if not path.is_file():
         return {}
@@ -455,15 +527,21 @@ def desktop_still(take: Take, master: Path, env: dict[str, str]) -> None:
 
 def contact_sheet(site: Site, takes: list[Take], manifest: dict, out: Path) -> None:
     cells = []
+    released = site.read_release()["takes"]
     with tempfile.TemporaryDirectory(prefix="docs-media-sheet-") as tmp:
         for take in takes:
-            entry = manifest["takes"].get(take.name)
-            if entry is None:
+            if take.release:
+                if take.name not in released:
+                    continue
+                shown = site.release / take.release_files[-1]
+            elif take.name in manifest["takes"]:
+                shown = site.stills / take.files["webp"] if take.kind == "still" else site.clips / take.files["h264"]
+            else:
                 continue
             if take.kind == "still":
-                frames = [(site.stills / take.files["webp"], None, take.name)]
+                frames = [(shown, None, take.name)]
             else:
-                video = site.clips / take.files["h264"]
+                video = shown
                 length = duration(video)
                 frames = [(video, at, f"{take.name} {at:.1f}s") for at in (0.0, length / 2, max(length - 0.1, 0.0))]
             for source, at, label in frames:
@@ -489,14 +567,21 @@ def record(site: Site, names: list[str], version: str | None) -> int:
     takes, errors = load_takes(site)
     if errors:
         return check(site, None)
-    unknown = sorted(set(names) - {t.name for t in takes})
+    version = version or changelog_version(site)
+    if not version:
+        return fail("CHANGELOG.md has no ## [X.Y.Z] heading: pass --version")
+    unknown = sorted(set(names) - {t.name for t in takes if t.live(version)})
     if unknown:
-        return fail(f"no such take: {', '.join(unknown)}")
-    chosen = [t for t in takes if not names or t.name in names]
-    version = version or changelog_version()
+        return fail(f"no take of {version}: {', '.join(unknown)}")
+    chosen = [t for t in takes if t.live(version) and (not names or t.name in names)]
+    highlighted = {name for name, _ in site.highlights(version)}
     scratch = site.work / "profile" / ".dev-showcase"
     masters = site.work / "masters"
-    for folder in (masters, site.stills, site.clips):
+    release = site.read_release()
+    if release.get("version") != version:
+        shutil.rmtree(site.release, ignore_errors=True)
+        release = {"version": version, "takes": {}}
+    for folder in (masters, site.stills, site.clips, site.release):
         folder.mkdir(parents=True, exist_ok=True)
     print(f"docs-media: {len(chosen)} takes from {profile} at {version}", file=sys.stderr)
     stage_profile(profile, scratch)
@@ -506,6 +591,14 @@ def record(site: Site, names: list[str], version: str | None) -> int:
     ui_record = str(REPO / "tools/ui-record")
     done: list[Take] = []
     failed: list[str] = []
+
+    def encoded(take: Take, master: Path) -> None:
+        if not take.release:
+            (encode_still if take.kind == "still" else encode_clip)(master, site, take)
+        if take.name in highlighted:
+            encode_release(master, site, take)
+            release["takes"][take.name] = {"hash": take.hash, "files": take.release_files}
+        done.append(take)
 
     for batch in batches(chosen):
         for take in batch:
@@ -517,8 +610,7 @@ def record(site: Site, names: list[str], version: str | None) -> int:
         for take in batch:
             master = masters / f"{take.name}.png"
             if master.is_file():
-                encode_still(master, site, take)
-                done.append(take)
+                encoded(take, master)
             else:
                 failed.append(f"{take.name}: saved no shot (an Expect: or unknown key above says why)")
 
@@ -527,8 +619,7 @@ def record(site: Site, names: list[str], version: str | None) -> int:
         master.unlink(missing_ok=True)
         desktop_still(take, master, env)
         if master.is_file():
-            encode_still(master, site, take)
-            done.append(take)
+            encoded(take, master)
         else:
             failed.append(f"{take.name}: the desktop saved no shot")
 
@@ -547,13 +638,12 @@ def record(site: Site, names: list[str], version: str | None) -> int:
             continue
         cut = masters / f"{take.name}.mp4"
         cut_clip(raw, marks, take, cut)
-        encode_clip(cut, site, take)
-        done.append(take)
+        encoded(take, cut)
 
+    docs = [t for t in takes if not t.release]
     manifest = site.read_manifest() or {"version": version, "takes": {}}
-    names_now = {t.name for t in takes}
-    manifest["takes"] = {k: v for k, v in manifest.get("takes", {}).items() if k in names_now}
-    for take in done:
+    manifest["takes"] = {k: v for k, v in manifest.get("takes", {}).items() if k in {t.name for t in docs}}
+    for take in (t for t in done if not t.release):
         w, h = take.encoded
         manifest["takes"][take.name] = {
             "name": take.name,
@@ -566,16 +656,22 @@ def record(site: Site, names: list[str], version: str | None) -> int:
             "hash": take.hash,
         }
     manifest["version"] = version
-    manifest["takes"] = {t.name: manifest["takes"][t.name] for t in takes if t.name in manifest["takes"]}
+    manifest["takes"] = {t.name: manifest["takes"][t.name] for t in docs if t.name in manifest["takes"]}
     site.manifest.write_text(json.dumps(manifest, indent=2) + "\n")
     listed = {site.dir_of(e["kind"]) / f for e in manifest["takes"].values() for f in e["files"].values()}
     for folder in (site.stills, site.clips):
         for path in folder.iterdir():
             if path.is_file() and path not in listed and path != site.manifest:
                 path.unlink()
+    release["takes"] = {k: v for k, v in release["takes"].items() if k in highlighted}
+    site.release_manifest.write_text(json.dumps(release, indent=2) + "\n")
+    kept = {site.release / f for e in release["takes"].values() for f in e["files"]}
+    for path in site.release.iterdir():
+        if path not in kept and path != site.release_manifest:
+            path.unlink()
     sheet = site.work / "contact.png"
-    contact_sheet(site, takes, manifest, sheet)
-    print(f"docs-media: {len(done)} recorded, {len(failed)} failed; contact sheet {sheet}")
+    contact_sheet(site, [t for t in takes if t.live(version)], manifest, sheet)
+    print(f"docs-media: {len(done)} recorded, {len(release['takes'])} with release assets, {len(failed)} failed; contact sheet {sheet}")
     for line in failed:
         print(f"  {line}", file=sys.stderr)
     return 1 if failed else 0
@@ -603,6 +699,8 @@ def publish(site: Site, version: str, branch: str) -> int:
         git("rm", "-r", "-q", "--ignore-unmatch", ".", cwd=tree)
         shutil.copytree(site.stills, tree / "src/assets/media")
         shutil.copytree(site.clips, tree / "public/media")
+        if site.read_release().get("version") == version:
+            shutil.copytree(site.release, tree / "release")
         git("add", "-A", ".", cwd=tree)
         commit = git("commit-tree", git("write-tree", cwd=tree, capture=True), "-m", f"media: v{version}", cwd=tree, capture=True)
         git("update-ref", "HEAD", commit, cwd=tree)

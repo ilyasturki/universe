@@ -13,6 +13,9 @@
 #          the whole take when left out
 # alt      what the picture shows, for a reader who can't see it
 # fake     true when the keys work on the fake core's fixture library too: `docs-media dry-run` plays it there
+# release  X.Y.Z for a take shown by that release's notes alone, recorded only while X.Y.Z is the version recorded.
+#          A changelog image names a take, this kind or a page's: under its entry,
+#          `  ![alt](https://github.com/ilyasturki/universe/releases/download/vX.Y.Z/NAME.webp)` for a still, NAME.avif for a clip.
 
 [[take]]
 name = "home"

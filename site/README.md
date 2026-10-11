@@ -14,7 +14,7 @@ just docs-media fetch   # the screenshots and clips, from the site-media branch 
 - `src/pages/index.astro`: the landing page.
 - `src/content/docs/docs/<section>/<page>.md`: the docs, one folder per sidebar group. `.mdx` only for a page that shows a screenshot or a clip.
 - `src/content/docs/docs/reference/`, `developers/` and `changelog.md` are generated at build time and gitignored: `scripts/generate.ts` writes them from `universe __generate --markdown`, `universe --json launch-keys`, `universe --json runner ls`, the config.toml block of `docs/api.md`, the Nix modules, `docs/*.md` and `CHANGELOG.md`. Change those sources, never the pages.
-- `media/takes.toml`: every screenshot and clip a page shows, recorded by `just docs-media record` at each release.
+- `media/takes.toml`: every screenshot and clip a page shows, recorded by `just docs-media record` at each release, and the ones a release's notes show (`release = "X.Y.Z"`).
 
 ## Rules the build checks
 

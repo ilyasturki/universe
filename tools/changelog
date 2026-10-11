@@ -10,6 +10,10 @@ ROOT = Path(__file__).resolve().parent.parent
 HEADING = re.compile(r"^## \[(?P<version>\d+\.\d+\.\d+)\](?: - (?P<date>\d{4}-\d{2}-\d{2}))?$")
 LINK = re.compile(r"^\[(?P<version>\d+\.\d+\.\d+)\]: (?P<url>\S+)$")
 COMPARE = re.compile(r"/compare/(?P<prev>[^/.]\S*)\.\.\.(?P<tag>\S+)$")
+RELEASES = "https://github.com/ilyasturki/universe/releases/download/"
+IMAGE = re.compile(r"^  !\[(?P<alt>[^\]]+)\]\((?P<url>[^)\s]+)\)$")
+# A still's WebP; a clip's animated AVIF for the Markdown and its H.264 MP4 for the apps.
+ASSET = re.compile(r"^(?P<name>[a-z0-9]+(?:-[a-z0-9]+)*)\.(?P<ext>webp|avif)$")
 INLINE = re.compile(r"`(?P<code>[^`]+)`|\*\*(?P<strong>.+?)\*\*|\*(?P<em>[^*]+)\*|\[(?P<text>[^\]]+)\]\([^)]+\)")
 FOOTER = """\
 ---
@@ -40,9 +44,24 @@ class Release:
                 out.append((line[4:].strip(), []))
             elif line.startswith("- ") and out:
                 out[-1][1].append(line[2:].strip())
+            elif IMAGE.match(line):
+                continue
             elif line.startswith("  ") and out and out[-1][1]:
                 out[-1][1][-1] += " " + line.strip()
         return out
+
+    def images(self) -> list[tuple[str, str]]:
+        return [(m["alt"], m["url"]) for line in self.body if (m := IMAGE.match(line))]
+
+    def highlights(self) -> list[tuple[str, str]]:
+        out = []
+        for _, url in self.images():
+            if m := ASSET.match(url.removeprefix(f"{RELEASES}v{self.version}/")):
+                out.append((m["name"], "still" if m["ext"] == "webp" else "clip"))
+        return out
+
+    def media(self) -> list[str]:
+        return [f for name, kind in self.highlights() for f in ([f"{name}.webp"] if kind == "still" else [f"{name}.avif", f"{name}.mp4"])]
 
 
 def parse(text: str) -> list[Release]:
@@ -73,6 +92,13 @@ def problems(r: Release) -> list[str]:
         out.append(f"'## [{r.version}]' has no date: '## [{r.version}] - YYYY-MM-DD'")
     if not any(items for _, items in r.sections()):
         out.append(f"'## [{r.version}]' has no entries")
+    for line in r.body:
+        if line.lstrip().startswith("![") and not IMAGE.match(line):
+            out.append(f"'{line.strip()}': an image is '  ![alt](url)' on the line under its entry")
+    for _, url in r.images():
+        file = url.removeprefix(f"{RELEASES}v{r.version}/")
+        if file == url or not ASSET.match(file):
+            out.append(f"{url}: an image is {RELEASES}v{r.version}/NAME.webp (a still) or NAME.avif (a clip)")
     if not COMPARE.search(r.link):
         out.append(f"no '[{r.version}]: https://github.com/ilyasturki/universe/compare/vPREV...v{r.version}' link at the bottom")
     return out
@@ -135,7 +161,8 @@ def main() -> None:
     parser.add_argument("--file", type=Path, default=ROOT / "CHANGELOG.md")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("notes", help="the GitHub release body: the section, its compare link and the install footer").add_argument("version")
-    sub.add_parser("check", help="fail unless the version has a dated section with entries and a compare link").add_argument("version")
+    sub.add_parser("check", help="fail unless the version has a dated section with entries, its own images and a compare link").add_argument("version")
+    sub.add_parser("media", help="the asset files the version's images need on its GitHub release, one per line").add_argument("version")
     meta = sub.add_parser("metainfo", help="the AppStream <release> element; with FILE, written into it in place of that version's")
     meta.add_argument("version")
     meta.add_argument("metainfo", nargs="?", type=Path)
@@ -151,6 +178,8 @@ def main() -> None:
             sys.exit("\n".join(f"changelog: {e}" for e in errors))
     elif args.command == "notes":
         sys.stdout.write(notes(release))
+    elif args.command == "media":
+        print(*release.media(), sep="\n")
     elif args.metainfo:
         write_metainfo(release, args.metainfo)
     else:

@@ -52,12 +52,21 @@ def site(root, takes=TAKES, page=""):
         (root / "site/src/pages/index.mdx").write_text(page)
 
 
-def recorded(root, version):
+def recorded(root, version, release=()):
     module = tool()
     takes, errors = module.load_takes(module.Site(root))
     assert not errors
     entries = {}
-    for take in takes:
+    if release:
+        folder = root / "target/docs-media/release"
+        folder.mkdir(parents=True, exist_ok=True)
+        chosen = {t.name: t for t in takes if t.name in release}
+        for take in chosen.values():
+            for file in take.release_files:
+                (folder / file).write_bytes(b"media")
+        manifest = {"version": version, "takes": {n: {"hash": t.hash, "files": t.release_files} for n, t in chosen.items()}}
+        (folder / "manifest.json").write_text(json.dumps(manifest))
+    for take in (t for t in takes if not t.release):
         folder = root / ("site/src/assets/media" if take.kind == "still" else "site/public/media")
         folder.mkdir(parents=True, exist_ok=True)
         for file in take.files.values():
@@ -115,6 +124,60 @@ def test_check_holds_pages_to_the_takes_and_strict_to_a_recording_of_them_at_tha
     assert '<Clip name="ghost"> is no take' in out
 
 
+RELEASE_TAKE = """
+[[take]]
+name = "reconnect"
+look = "reprise"
+size = "1920x1080"
+kind = "clip"
+keys = "Mark:a Guide Wait:3 Mark:b"
+segments = ["a..b"]
+alt = "Reconnecting a pad from the dock"
+release = "0.0.12"
+"""
+
+
+def changelog(version, *images):
+    lines = "".join(f"- An entry.\n  ![x](https://github.com/ilyasturki/universe/releases/download/v{v}/{f})\n" for v, f in images)
+    return f"# Changelog\n\n## [{version}] - 2026-10-10\n\n### Added\n\n- A fix.\n{lines}\n[{version}]: https://github.com/ilyasturki/universe/compare/v0.0.11...v{version}\n"
+
+
+def test_the_changelog_s_images_are_takes_of_their_release_held_to_their_assets(tmp_path):
+    site(
+        tmp_path,
+        TAKES + RELEASE_TAKE + RELEASE_TAKE.replace('"reconnect"', '"older"').replace('"0.0.12"', '"0.0.11"'),
+        page='<Shot name="library" />\n<Clip name="browse" />\n',
+    )
+    (tmp_path / "CHANGELOG.md").write_text(changelog("0.0.12", ("0.0.12", "reconnect.avif"), ("0.0.12", "library.webp"), ("0.0.12", "older.webp")))
+    recorded(tmp_path, "0.0.12")
+    code, out = docs_media(tmp_path, "check", "--strict", "0.0.12")
+    assert code == 1
+    assert "image reconnect: its release assets are not recorded at 0.0.12" in out
+    assert "image older: no take older (its release is 0.0.11)" in out, "an older release's take is no longer recorded"
+    assert "no page shows it" not in out, "a release take is shown by the notes, not a page"
+
+    (tmp_path / "CHANGELOG.md").write_text(changelog("0.0.12", ("0.0.12", "reconnect.avif"), ("0.0.12", "library.webp")))
+    recorded(tmp_path, "0.0.12", release=("reconnect", "library"))
+    code, out = docs_media(tmp_path, "check", "--strict", "0.0.12")
+    assert code == 0, out
+    (tmp_path / "target/docs-media/release/reconnect.mp4").unlink()
+    code, out = docs_media(tmp_path, "check", "--strict", "0.0.12")
+    assert code == 1 and "no target/docs-media/release/reconnect.mp4" in out, "a clip plays its MP4 in the apps"
+    (tmp_path / "CHANGELOG.md").write_text(changelog("0.0.12", ("0.0.12", "reconnect.webp")))
+    code, out = docs_media(tmp_path, "check", "--strict", "0.0.12")
+    assert code == 1 and "a still names the clip reconnect" in out
+
+    notes = tmp_path / "notes.md"
+    notes.write_text(changelog("0.0.12", ("0.0.12", "reconnect.avif"), ("0.0.12", "library.webp")))
+    cl = lambda *a: subprocess.run([sys.executable, str(REPO / "tools/changelog"), "--file", str(notes), *a], capture_output=True, text=True, check=False)
+    assert cl("media", "0.0.12").stdout.split() == ["reconnect.avif", "reconnect.mp4", "library.webp"]
+    assert "![" not in cl("metainfo", "0.0.12").stdout, "AppStream holds no image"
+    assert "releases/download/v0.0.12/reconnect.avif" in cl("notes", "0.0.12").stdout, "the GitHub release shows them"
+    notes.write_text(changelog("0.0.12", ("0.0.11", "older.webp")))
+    done = cl("check", "0.0.12")
+    assert done.returncode == 1 and "v0.0.11/older.webp: an image is" in done.stderr, "an image copied from the last release's entry"
+
+
 def test_publish_leaves_the_media_branch_one_commit_that_fetch_lands_in_the_site(tmp_path):
     git = ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "init.defaultBranch=main"]
     subprocess.run([*git, "init", "-q", str(tmp_path)], check=True)
@@ -122,8 +185,9 @@ def test_publish_leaves_the_media_branch_one_commit_that_fetch_lands_in_the_site
     main = subprocess.run(["git", "-C", str(tmp_path), "rev-parse", "main"], capture_output=True, text=True, check=True).stdout
     site(tmp_path, page='<Shot name="library" />\n')
     env = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+    (tmp_path / "CHANGELOG.md").write_text(changelog("0.0.13", ("0.0.13", "library.webp")))
     for version in ("0.0.12", "0.0.13"):
-        recorded(tmp_path, version)
+        recorded(tmp_path, version, release=("library",) if version == "0.0.13" else ())
         done = subprocess.run(
             [sys.executable, str(TOOL), "--root", str(tmp_path), "publish", version, "--branch", "throwaway"],
             capture_output=True,
@@ -141,6 +205,8 @@ def test_publish_leaves_the_media_branch_one_commit_that_fetch_lands_in_the_site
     manifest = json.loads((tmp_path / "site/src/assets/media/manifest.json").read_text())
     assert manifest["version"] == "0.0.13", "fetch lands the last published media where the site reads them"
     assert (tmp_path / "site/src/assets/media/library.avif").is_file() and (tmp_path / "site/public/media/browse.av1.mp4").is_file()
+    listed = subprocess.run(["git", "-C", str(tmp_path), "ls-tree", "-r", "--name-only", "throwaway", "release"], capture_output=True, text=True, check=True)
+    assert listed.stdout.split() == ["release/library.webp", "release/manifest.json"], "the release workflow uploads release/ from it"
     assert subprocess.run(["git", "-C", str(tmp_path), "rev-parse", "main"], capture_output=True, text=True, check=True).stdout == main
 
 
@@ -182,3 +248,11 @@ def test_bump_holds_a_release_to_its_recorded_media_and_lets_its_pages_ride_alon
     code, out = bump()
     assert code == 1 and "not clean" in out
     assert subprocess.run([*git, "tag"], capture_output=True, text=True, check=True).stdout == "", "a dry run tags nothing"
+    subprocess.run(["git", "-C", str(tmp_path), "checkout", "-q", "--", "Cargo.toml"], check=True)
+    (tmp_path / "CHANGELOG.md").write_text(changelog("0.0.12", ("0.0.12", "library.webp")))
+    code, out = bump()
+    assert code == 1 and "release's images are not recorded" in out, out
+    code, out = bump(BUMP_SKIP_MEDIA="1")
+    assert code == 1 and "has images" in out, "a hotfix ships no images it never recorded"
+    recorded(tmp_path, "0.0.12", release=("library",))
+    assert bump()[0] == 0
