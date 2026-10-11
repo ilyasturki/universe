@@ -1,7 +1,7 @@
 import os
 
 import pytest
-from looks import LOOKS, MENU, FocusTrace, Look, call, content_rows, current_row, invoke, lit_fraction, lit_rows, read, render, settle
+from looks import LOOKS, MENU, FocusTrace, Look, call, content_rows, current_row, focus_names, invoke, lit_fraction, lit_rows, read, render, settle
 from PySide6.QtCore import QCoreApplication, QEvent, QObject, Qt
 from PySide6.QtGui import QKeyEvent
 from PySide6.QtQuick import QQuickItem
@@ -1262,6 +1262,9 @@ def test_a_module_row_toggles_on_its_hinted_button_and_draws_no_switch(look, api
     until(lambda: capture() is False, f"{glyph} turns it off")
     look.press(key)
     until(lambda: capture() is True, "the cursor went with it to the Off card: the same button turns it back on")
+    if not look.stacked:
+        look.press(Qt.Key.Key_Left)
+        until(lambda: "settingsSections" in focus_names(look.window), "Left from the cards goes back to the sections")
 
 
 @pytest.fixture

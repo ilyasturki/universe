@@ -2,10 +2,9 @@ import json
 from pathlib import Path
 
 import pytest
-from looks import invoke, read
-from PySide6.QtCore import QCoreApplication, QEvent, QObject, Qt, QUrl
+from looks import read
+from PySide6.QtCore import QCoreApplication, QEvent, Qt, QUrl
 from PySide6.QtQml import QQmlComponent, QQmlEngine
-from uitest import record, until
 
 from universe_ui import gamepad, host
 
@@ -113,44 +112,3 @@ def test_hint_glyphs_follow_the_pad(engine, fake):
     assert pair.property("names").toVariant() == ["Start", "Select"] and pair.property("chord") is False
     chord = create(engine, "ButtonGlyph.qml", glyph="Start+Select")
     assert chord.property("names").toVariant() == ["Start", "Select"] and chord.property("chord") is True
-
-
-def test_live_view_names_a_pulled_trigger(engine, fake):
-    art = create(engine, "ControllerArt.qml", family="dualsense-edge", connected=True, width=1200, height=800)
-    pad = art.findChild(QObject, "padArt")
-    before = until(pad.height)
-    invoke(art, "axis", "rt", 0.4)
-    assert art.property("lastSlot") == "", "a trigger logs once it passes half"
-    invoke(art, "axis", "rt", 0.6)
-    assert art.property("lastSlot") == "rt" and abs(art.property("lastPull") - 0.6) < 1e-6
-    invoke(art, "axis", "rt", 0.9)
-    invoke(art, "press", "south", True)
-    invoke(art, "press", "south", False)
-    for name, value in [("ly", -0.4), ("lx", 0.7), ("lx", 0), ("ly", 0), ("ly", 0.6), ("lx", -0.6)]:
-        invoke(art, "axis", name, value)
-    entries = read(art, "entries")
-    assert [e["slot"] for e in entries] == ["ls", "ls", "south", "rt"], "newest first; a release and a held axis log nothing new"
-    assert entries[0]["label"].endswith("down-left") and entries[1]["label"].endswith("up-right"), "an entry follows its push's peak"
-    assert entries[3]["label"].endswith("90 %")
-    assert entries[3]["dt"] is None and all(e["dt"] is not None for e in entries[:3])
-    assert art.property("lastSlot") == "ls" and art.property("lastPull") == 0
-    assert pad.height() == before, "the history column has its own room: a press does not resize the pad"
-    invoke(art, "clear")
-    assert art.property("lastSlot") == "" and read(art, "entries") == []
-
-
-def test_cards_land_on_the_first_row_and_leave_left(engine, fake):
-    rows = [
-        {"type": "action", "label": "A game", "display": "Installed"},
-        {"type": "action", "label": "Another", "display": "Owned"},
-    ]
-    groups = [{"title": "Installed", "rows": [0]}, {"title": "Owned", "rows": [1]}]
-    cards = create(engine, "SettingsCards.qml", rows=rows, groups=groups, columns=1, width=1200, height=800)
-    invoke(cards, "reset")
-    assert cards.property("index") == 0
-    assert {c["col"] for c in read(cards, "layout")["cards"]} == {0}, "one column: every card in it"
-    left = record(cards.escapedLeft)
-    invoke(cards, "cross", -1)
-    assert left == [()]
-    invoke(cards, "step", 1)
-    assert cards.property("index") == 1

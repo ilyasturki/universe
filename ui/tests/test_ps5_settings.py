@@ -247,5 +247,16 @@ def test_the_controllers_page_names_an_unknown_button_and_b_leaves_the_test_on_i
     until(lambda: (focused_row(page) or {}).get("key") == "test")
     click(window, Qt.Key.Key_Return)
     until(lambda: screen.testing and page.property("testing") is True)
+    watcher.axis("rt", 0.4)
+    assert value(page, "inputs") == [], "a trigger logs once it passes half"
+    watcher.axis("rt", 0.6)
+    watcher.axis("rt", 0.9)
+    watcher.press("south", True)
+    watcher.press("south", False)
+    for name, pushed in [("ly", -0.4), ("lx", 0.7), ("lx", 0), ("ly", 0), ("ly", 0.6), ("lx", -0.6)]:
+        watcher.axis(name, pushed)
+    inputs = value(page, "inputs")
+    assert [e["slot"] for e in inputs] == ["ls", "ls", "south", "rt"], "newest first; a release, a held pull and a push back to rest log nothing new"
+    assert inputs[3]["dt"] is None and all(e["dt"] is not None for e in inputs[:3])
     click(window, Qt.Key.Key_Escape)
     until(lambda: not screen.testing and (focused_row(page) or {}).get("key") == "test", "B leaves the test on its row")

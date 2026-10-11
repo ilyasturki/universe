@@ -1672,6 +1672,7 @@ FocusScope {
     SectionList {
         id: side
 
+        objectName: "settingsSections"
         x: page.sideMargin
         y: page.mainTop
         width: page.sideWidth
