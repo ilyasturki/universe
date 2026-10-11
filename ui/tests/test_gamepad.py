@@ -1,7 +1,8 @@
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtCore import QCoreApplication, Qt
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, Qt
+from PySide6.QtGui import QGuiApplication, QWindow
 from uitest import record, until
 
 from universe_ui import gamepad
@@ -103,10 +104,38 @@ def test_covering_centers_a_stick_held_off_centre():
     assert m.stick(gamepad.AXIS_RIGHTX, 32767) == ("rightX", 1.0)
 
 
+class KeyLog(QObject):
+    def __init__(self):
+        super().__init__()
+        self.keys = []
+
+    def eventFilter(self, obj, event):
+        if event.type() in (QEvent.Type.KeyPress, QEvent.Type.KeyRelease):
+            self.keys.append((Qt.Key(event.key()), event.type() == QEvent.Type.KeyPress))
+        return False
+
+
+@pytest.fixture
+def received(app):
+    window = QWindow()
+    window.resize(64, 64)
+    window.show()
+    window.requestActivate()
+    until(lambda: QGuiApplication.focusWindow() is window, "the window never took the focus")
+    log = KeyLog()
+    window.installEventFilter(log)
+
+    def keys():
+        QCoreApplication.sendPostedEvents()
+        return log.keys
+
+    yield keys
+    window.removeEventFilter(log)
+    window.close()
+
+
 # Another app took the focus: a press is dropped with its release, the release of a key pressed before still goes out.
-def test_a_covered_pad_drops_a_press_with_its_release(app, monkeypatch):
-    posted = []
-    monkeypatch.setattr(gamepad, "post_key", lambda key, pressed, autorepeat=False, window=None: posted.append((key, pressed)))
+def test_a_covered_pad_drops_a_press_with_its_release(received):
     thread = gamepad.GamepadThread()
     thread._post(int(Qt.Key.Key_Return), True, False)
     thread.setCovered(True)
@@ -116,14 +145,12 @@ def test_a_covered_pad_drops_a_press_with_its_release(app, monkeypatch):
     thread.setCovered(False)
     thread._post(int(Qt.Key.Key_Escape), False, False)
     thread._post(int(Qt.Key.Key_Down), False, False)
-    assert posted == [(Qt.Key.Key_Return, True), (Qt.Key.Key_Return, False), (Qt.Key.Key_Down, False)], "a dropped repeat does not take its key's release"
+    assert received() == [(Qt.Key.Key_Return, True), (Qt.Key.Key_Return, False), (Qt.Key.Key_Down, False)], "a dropped repeat does not take its key's release"
 
 
 @pytest.fixture
-def pad(app, monkeypatch):
+def pad(received):
     sdl2 = pytest.importorskip("sdl2")
-    posted = []
-    monkeypatch.setattr(gamepad, "post_key", lambda key, pressed, autorepeat=False, window=None: posted.append((int(key), pressed)))
     thread = gamepad.GamepadThread()
     sdl = SimpleNamespace(mappings=[], closed=[], **{name: getattr(sdl2, name) for name in dir(sdl2) if name.startswith("SDL_CONTROLLER")})
     sdl.__dict__.update(
@@ -156,7 +183,7 @@ def pad(app, monkeypatch):
             thread._handle(sdl, event, controllers)
         QCoreApplication.sendPostedEvents(thread)
 
-    return SimpleNamespace(thread=thread, sdl=sdl, controllers=controllers, posted=posted, moved=moved, feed=feed)
+    return SimpleNamespace(thread=thread, sdl=sdl, controllers=controllers, received=received, moved=moved, feed=feed)
 
 
 RETURN, DOWN, PAGE_UP = int(Qt.Key.Key_Return), int(Qt.Key.Key_Down), int(Qt.Key.Key_PageUp)
@@ -176,21 +203,21 @@ RETURN, DOWN, PAGE_UP = int(Qt.Key.Key_Return), int(Qt.Key.Key_Down), int(Qt.Key
 )
 def test_a_pad_event_posts_its_key(pad, events, posted, moved):
     pad.feed(*events)
-    assert (pad.posted, pad.moved) == (posted, moved)
+    assert (pad.received(), pad.moved) == (posted, moved)
 
 
 def test_a_covered_pad_reads_no_input_but_tracks_its_devices(pad):
     pad.thread.setMapping(0x0F0D, 0x0186, "a:b1,b:b0")
     pad.thread.setCovered(True)
     pad.feed(("added", 0), ("down", gamepad.BTN_A), ("axis", gamepad.AXIS_RIGHTX, 32767))
-    assert (pad.posted, pad.moved) == ([], [])
+    assert (pad.received(), pad.moved) == ([], [])
     assert pad.controllers == {7: "pad0"}
     assert pad.sdl.mappings == ["03000000f0d0000086010000,Pro 3  D-input,a:b1,b:b0,"], "a comma would end the name in SDL's line"
     pad.feed(("removed", 7))
     assert pad.controllers == {} and pad.sdl.closed == ["pad0"]
     pad.thread.setCovered(False)
     pad.feed(("down", gamepad.BTN_A))
-    assert pad.posted == [(RETURN, True)]
+    assert pad.received() == [(RETURN, True)]
 
 
 def test_post_key_needs_a_focus_window(app):
@@ -198,11 +225,9 @@ def test_post_key_needs_a_focus_window(app):
 
 
 # A press from before the mute still gets its release; a press dropped by it drops its release too, or a section would step on it.
-def test_a_muted_pad_drops_a_press_with_its_release(app, monkeypatch):
+def test_a_muted_pad_drops_a_press_with_its_release(received):
     from universe_ui.api import Pad
 
-    posted = []
-    monkeypatch.setattr(gamepad, "post_key", lambda key, pressed, autorepeat=False, window=None: posted.append((key, pressed)))
     pad = Pad()
     thread = gamepad.GamepadThread(pad=pad)
     thread._post(int(Qt.Key.Key_Return), True, False)
@@ -213,7 +238,7 @@ def test_a_muted_pad_drops_a_press_with_its_release(app, monkeypatch):
     thread._post(int(Qt.Key.Key_PageUp), False, False)
     thread._post(int(Qt.Key.Key_PageUp), True, False)
     thread._post(int(Qt.Key.Key_PageUp), False, False)
-    assert posted == [(Qt.Key.Key_Return, True), (Qt.Key.Key_Return, False), (Qt.Key.Key_PageUp, True), (Qt.Key.Key_PageUp, False)]
+    assert received() == [(Qt.Key.Key_Return, True), (Qt.Key.Key_Return, False), (Qt.Key.Key_PageUp, True), (Qt.Key.Key_PageUp, False)]
 
 
 def test_key_script_plays_a_fake_pad(app):
@@ -275,19 +300,3 @@ def test_a_mark_logs_its_name_with_the_time(app, caplog, monkeypatch):
     with caplog.at_level("INFO", logger="universe.gamepad"):
         gamepad.KeyScript("Mark:launch", 1, None)._step()
     assert "mark launch 1234.500" in caplog.messages
-
-
-def test_return_in_homes_dock_launches_nothing_and_another_window_is_unknown(monkeypatch):
-    focused = SimpleNamespace(objectName=lambda: "homeOverlay")
-    monkeypatch.setattr(gamepad, "QGuiApplication", SimpleNamespace(focusWindow=lambda: focused))
-    assert gamepad.launch_target(object()) == ""
-    focused.objectName = lambda: "dialog"
-    assert gamepad.launch_target(object()) is None
-
-
-def test_a_volume_phase_takes_up_down_or_mute_alone(app):
-    played = []
-    script = gamepad.KeyScript("Volume:set Volume:up Volume:mute", 1, None, home=SimpleNamespace(volumeMacro=played.append))
-    for _ in range(3):
-        script._step()
-    assert played == ["up", "mute"]

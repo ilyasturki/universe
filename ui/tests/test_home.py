@@ -7,7 +7,7 @@ from PySide6.QtCore import QObject, Qt, QTimer
 from PySide6.QtTest import QTest
 from uitest import descendant, record, until
 
-from universe_ui import host
+from universe_ui import gamepad, host
 from universe_ui.screens.controller import FakeWatcher
 
 
@@ -98,7 +98,6 @@ def test_a_volume_macro_shows_its_level_on_the_overlay_for_a_moment(api, fake, m
 
 
 def test_a_key_scripts_volume_phase_plays_a_pad_macro(api, fake, monkeypatch):
-    from universe_ui import gamepad
     from universe_ui import home as home_module
 
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
@@ -106,9 +105,13 @@ def test_a_key_scripts_volume_phase_plays_a_pad_macro(api, fake, monkeypatch):
     monkeypatch.setattr(fake.core, "nest_overlay", lambda window, input, opacity: None)
     home.attachOverlay(Overlay())
     before = fake.core.level
-    gamepad.KeyScript("Volume:up", 1, None, home=home)._step()
+    script = gamepad.KeyScript("Volume:set Volume:up Volume:mute", 1, None, home=home)
+    script._step()
+    script._step()
     until(lambda: home.osd, "the overlay shows the level as it does a pad's")
-    assert home.volumePercent == fake.core.level > before
+    assert home.volumePercent == fake.core.level > before, "up alone: a set is no pad's macro"
+    script._step()
+    until(lambda: home.muted, "then the mute")
 
 
 def test_home_flips_between_the_game_and_the_launcher(api, fake, monkeypatch):
@@ -550,6 +553,7 @@ def test_the_dock_renders_over_a_running_game(api, fake, reprise, tmp_path):
     fake.launch("mirrors-edge", "")
     until(lambda: api.home.shown == "game")
     dock = open_dock(api, overlay)
+    assert gamepad.launch_target(look.window) == "", "Return in the dock launches nothing"
     band_up(overlay)
     settle(overlay)
     image = overlay.grabWindow()
