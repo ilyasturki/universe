@@ -63,9 +63,11 @@ def gamescope(tmp_path):
         return lines
 
     def run(mode, *argv, **extra):
-        code = subprocess.run([str(LAUNCHER), *argv], env={**env, "FAKE_GAMESCOPE": mode, **extra}, capture_output=True, timeout=30, check=False).returncode
+        done = subprocess.run([str(LAUNCHER), *argv], env={**env, "FAKE_GAMESCOPE": mode, **extra}, capture_output=True, text=True, timeout=30, check=False)
         gamescopes = [dict(zip(("session", "own", "wayland", "x11", "desktop"), row.split(), strict=True)) for row in lines("gamescopes")]
-        return SimpleNamespace(code=code, gamescopes=gamescopes, launchers=[row.split() for row in lines("launchers")], libraries=lines("libraries"))
+        return SimpleNamespace(
+            code=done.returncode, stderr=done.stderr, gamescopes=gamescopes, launchers=[row.split() for row in lines("launchers")], libraries=lines("libraries")
+        )
 
     if not LAUNCHER.exists():
         pytest.skip("needs the installed universe-ui")
@@ -82,8 +84,9 @@ def test_fullscreen_hands_the_screen_to_gamescope_or_falls_back_to_the_desktop(g
     run = gamescope("quits")
     assert run.code == 3, "gamescope exits 0 whatever the launcher quit with"
     assert run.gamescopes[0]["own"] == "drm" and run.gamescopes[0]["session"] == "0", "straight on the screen, yet no session"
-    run = gamescope("dies", "--no-gamepad", "--quit-after", "200")
+    run = gamescope("dies", "--quit-after", "100")
     assert (run.code, len(run.gamescopes)) == (0, 1), "the launcher opened on the desktop and quit there"
+    assert "QThread" not in run.stderr, "a quit before the pad thread is up stops it: " + run.stderr
 
 
 def test_a_session_takes_the_screen_restarts_a_dead_launcher_without_the_intro_and_ends_a_crash_loop(gamescope):

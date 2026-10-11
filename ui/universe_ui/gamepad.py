@@ -195,7 +195,6 @@ class GamepadThread(QThread):
 
     def __init__(self, parent=None, pad=None):
         super().__init__(parent)
-        self._running = False
         self._covered = False
         self._pad = pad
         self._swallowed = set()
@@ -261,8 +260,8 @@ class GamepadThread(QThread):
         self._covered = bool(covered)
 
     def stop(self):
-        self._running = False
-        self.wait(2000)
+        self.requestInterruption()
+        self.wait()
 
     def run(self):
         import sdl2
@@ -276,10 +275,9 @@ class GamepadThread(QThread):
             log.warning("no gamepad support: %s", sdl2.SDL_GetError())
             return
         controllers = {}
-        self._running = True
         event = sdl2.SDL_Event()
         try:
-            while self._running:
+            while not self.isInterruptionRequested():
                 if self._rescan:
                     self._rescan = False
                     self._restart(sdl2, controllers)
