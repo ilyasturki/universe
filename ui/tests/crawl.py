@@ -25,8 +25,6 @@ KNOWN = {
     },
     "switch2": set(),
     "ps5": {
-        ("truncated", "Add a SteamGridDB key for more art"),
-        ("truncated", "News cards, info pane; backdrops without a background"),
         # The PS5 look opens its setup on a first start with an empty library only.
         ("unreached", "onboardingPage"),
     },

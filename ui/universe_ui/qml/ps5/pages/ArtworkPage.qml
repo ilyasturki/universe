@@ -138,7 +138,8 @@ FocusScope {
         model: page.slots
         columns: 3
         cellWidth: page.cellWidth
-        cellHeight: page.artHeight + Theme.dp(100)
+        // The slot's name, then two lines of what it is used for.
+        cellHeight: page.artHeight + Theme.dp(124)
         gap: page.gap
 
         onEscapedLeft: Sound.play("edge")
@@ -236,6 +237,8 @@ FocusScope {
                 width: parent.width
                 text: entry.use
                 color: Theme.textMuted
+                wrapMode: Text.WordWrap
+                maximumLineCount: 2
                 elide: Text.ElideRight
                 font.pixelSize: Theme.dp(Theme.fontTiny)
             }

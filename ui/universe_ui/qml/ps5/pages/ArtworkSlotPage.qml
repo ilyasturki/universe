@@ -88,7 +88,8 @@ FocusScope {
 
     readonly property int columns: aspect > 1.5 ? 4 : aspect > 0.9 ? 6 : 7
     readonly property real gap: Theme.dp(24)
-    readonly property real captionHeight: Theme.dp(46)
+    // Two lines of caption: the key cell's says what a key brings.
+    readonly property real captionHeight: Theme.dp(72)
     readonly property real cellWidth: Math.floor((width - Theme.dp(Theme.edge + Theme.columnRight) - gap * (columns - 1)) / columns)
     readonly property real artHeight: Math.round(cellWidth / aspect)
 
@@ -276,6 +277,8 @@ FocusScope {
                 text: entry.caption
                 color: entry.kind === "now" && page.picked ? Theme.accent : Theme.textSecondary
                 font.pixelSize: Theme.dp(Theme.fontTiny)
+                wrapMode: Text.WordWrap
+                maximumLineCount: 2
                 elide: Text.ElideRight
             }
         }
