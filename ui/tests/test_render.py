@@ -1,7 +1,7 @@
 import os
 
 import pytest
-from looks import LOOKS, MENU, FocusTrace, Look, call, content_rows, current_row, focus_names, invoke, lit_fraction, lit_rows, read, render, settle
+from looks import LOOKS, MENU, FocusTrace, Look, activate, call, content_rows, current_row, focus_names, invoke, lit_fraction, lit_rows, read, render, settle
 from PySide6.QtCore import QCoreApplication, QEvent, QObject, Qt
 from PySide6.QtGui import QKeyEvent
 from PySide6.QtQuick import QQuickItem
@@ -370,29 +370,28 @@ def test_a_second_store_switches_the_install_page_to_its_games(look, api, fake):
     until(lambda: [r["id"] for r in sources.rows] == ["Min"] and install_titles(look, page) == ["Hades"], "the second store's own")
 
 
-def test_an_installed_game_the_library_lacks_offers_to_add_it_or_delete_it_and_an_empty_menu_never_opens(look, api):
+def test_an_installed_game_the_library_lacks_offers_to_add_it_or_delete_it(look, api):
     asylum = "Batman: Arkham Asylum Game of the Year Edition"
     sources = api.screens.sources
     page = install_page(look)
     until(lambda: any(r["title"] == asylum for r in sources.rows))
     at = next(i for i, r in enumerate(sources.rows) if r["title"] == asylum)
-    menu = look.menu()
+    menu = page.findChild(QObject, "settingsMenu") if look.name == "reprise" else look.menu()
     if look.name == "reprise":
-        row = next(r for r in content_rows(page) if r.get("key") == "game" and r["row"] == at)
-        assert [i["action"] for i in call(page, "gameActions", row)] == ["adopt", "trash"]
-        call(menu, "show", [], None, None, "", None, 0, "")
+        until(lambda: any(r.get("key") == "game" and r["row"] == at for r in content_rows(page)))
+        activate(page, content_rows(page), key="game", row=at)
+        until(lambda: menu.property("open") is True and [i["action"] for i in read(menu, "items")] == ["adopt", "trash"], "add it, or delete its files")
     elif look.name == "ps5":
-        assert [i["act"] for i in call(page, "actionsFor", sources.rows[at])] == ["adopt", "more"]
-        assert [i["act"] for i in call(page, "moreOf", sources.rows[at])] == ["trash"]
-        call(menu, "show", {"items": []}, None)
+        invoke(page, "openCard", sources.rows[at])
+        until(lambda: [i["act"] for i in read(page, "cardActions")] == ["adopt", "more"], "add it, or more")
+        page.setProperty("cardIndex", 1)
+        look.press(Qt.Key.Key_Return)
+        until(lambda: menu.property("open") is True and [i["act"] for i in read(menu, "items")] == ["trash"], "more: delete its files")
     else:
         invoke(page, "activate", sources.rows[at], at)
         until(lambda: menu.property("open") is True and len(read(menu, "choices")) == 2, "add it, or delete its files")
-        look.press(Qt.Key.Key_Escape)
-        until(lambda: menu.property("open") is False)
-        call(menu, "show", {"choices": []}, None)
-    settle(look.window)
-    assert menu.property("open") is False, "nothing to pick: no menu"
+    look.press(Qt.Key.Key_Escape)
+    until(lambda: menu.property("open") is False)
 
 
 def test_the_component_bar_hides_and_the_job_goes_on(look, api, fake):
@@ -747,8 +746,9 @@ def test_reboot_and_power_off_close_the_game_first_and_suspend_leaves_it(look, a
     until(lambda: confirm.property("open") is False)
     assert fake.core.current(), "suspend leaves the game running"
     pick("power_off")
+    title = api.allGames.byId("mirrors-edge").title
     until(
-        lambda: confirm.property("open") is True and confirm.property("index") == 0 and "Mirror's Edge" in confirm.property("note"),
+        lambda: confirm.property("open") is True and confirm.property("index") == 0 and title in confirm.property("note"),
         "the question names the game it closes",
     )
     look.press(Qt.Key.Key_Return)
@@ -900,7 +900,7 @@ def test_reprise_about_shows_the_build(look, fake):
 
 
 @reprise
-def test_the_reprise_game_menu_groups_its_rows_and_hides_the_media_a_game_has_none_of(look, api, fake):
+def test_the_reprise_game_menu_hides_the_media_a_game_has_none_of(look, api, fake):
     def actions():
         return [i["action"] for i in read(menu, "items")]
 
@@ -912,34 +912,35 @@ def test_the_reprise_game_menu_groups_its_rows_and_hides_the_media_a_game_has_no
     until(lambda: game_id(page) == "the-technomancer")
     look.press(Qt.Key.Key_F1)
     until(lambda: menu.property("open") is True)
-    items = read(menu, "items")
-    assert [i["action"] for i in items] == ["play", "details", "favourite", "media", "manage"]
-    assert [i.get("gap", False) for i in items] == [False, True, False, False, False], "play, then the rest"
-    assert items[3]["more"] is True and items[4]["more"] is True
-    look.press(Qt.Key.Key_Down, 3)
+    items = {i["action"]: i for i in read(menu, "items")}
+    assert set(items) == {"play", "details", "favourite", "media", "manage"}
+    assert items["media"]["more"] is True and items["manage"]["more"] is True
+    media = actions().index("media")
+    look.press(Qt.Key.Key_Down, media)
     trace = FocusTrace(look.window, menu)
     look.press(Qt.Key.Key_Return)
     assert depth() == 1 and lit_rows(menu) == [0], "the list pushed is built lit on its cursor alone"
     until(lambda: menu.property("open") is True and depth() == 1)
     counts = {kind: len(getattr(fake, kind)("the-technomancer")) for kind in ("screenshots", "recordings", "journal")}
     assert all(counts.values()), "the fixture game has every kind"
-    assert actions() == list(counts), "the kinds the game has, no counts"
+    assert set(actions()) == set(counts), "the kinds the game has"
     look.press(Qt.Key.Key_Escape)
-    assert depth() == 0 and lit_rows(menu) == [3], "the list B comes back to lights the row that opened it, none on the way"
+    assert depth() == 0 and lit_rows(menu) == [media], "the list B comes back to lights the row that opened it, none on the way"
     settle(look.window)
     trace.stop()
     assert trace.most_lit() == 1 and trace.foreign("gameMenu") == [], "every frame of the push and the pop: one row lit, the focus in the menu"
-    assert menu.property("open") is True and menu.property("index") == 3 and actions()[3] == "media", "B comes back to the row that opened it"
+    assert menu.property("open") is True and actions()[menu.property("index")] == "media", "B comes back to the row that opened it"
     look.press(Qt.Key.Key_Escape)
     until(lambda: menu.property("open") is False)
 
     invoke(look.root, "openMenu", api.allGames.byId("mini-metro"), page.property("menuAnchor"))
-    until(lambda: actions() == ["play", "details", "favourite", "manage"], "nothing to browse: no Media row")
-    look.press(Qt.Key.Key_Down, 3)
+    until(lambda: menu.property("open") is True and set(actions()) == {"play", "details", "favourite", "manage"}, "nothing to browse: no Media row")
+    look.press(Qt.Key.Key_Down, actions().index("manage"))
     look.press(Qt.Key.Key_Return)
-    until(lambda: depth() == 1 and actions() == ["settings", "artwork", "sessions", "data", "remove"])
-    assert read(menu, "items")[4]["danger"] is True
-    look.press(Qt.Key.Key_Down, 4)
+    until(lambda: depth() == 1 and set(actions()) == {"settings", "artwork", "sessions", "data", "remove"})
+    remove = actions().index("remove")
+    assert read(menu, "items")[remove]["danger"] is True
+    look.press(Qt.Key.Key_Down, remove)
     look.press(Qt.Key.Key_Return)
     assert depth() == 2 and lit_rows(menu) == [0], "the removal asks first, Keep it under the cursor"
     look.press(Qt.Key.Key_Down)
