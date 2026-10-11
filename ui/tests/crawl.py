@@ -24,7 +24,6 @@ KNOWN = {
         ("focus-unseen", "artworkPage"),
     },
     "switch2": {
-        ("truncated", "Add a SteamGridDB key for more art"),
         # The setup opened from Settings asks "Skip setup?" on B, and B on the question keeps going: only A on Skip leaves.
         ("b-never-home", "onboardingPage"),
         ("b-never-home", "dialog"),
