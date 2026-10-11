@@ -1704,7 +1704,7 @@ FocusScope {
         id: artwork
 
         x: page.mainX
-        y: page.mainTop
+        y: cards.y
         width: page.mainWidth
         height: page.height - y
         active: page.sectionId === "artwork"
