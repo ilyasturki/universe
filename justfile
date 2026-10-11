@@ -335,6 +335,15 @@ env:
     EOF
     echo "wrote $cfg"
 
+# Rerun only the failed jobs of HEAD's latest ci run, for a failure that is not the code's (a throttled cache, a flaky runner); a fix is a new push
+ci-retry:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    head="$(git rev-parse HEAD)"
+    id="$(gh run list --workflow ci --commit "$head" --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+    [ -n "$id" ] || { echo "ci-retry: ci never ran on ${head::7}" >&2; exit 1; }
+    gh run rerun "$id" --failed
+
 # Before a release: HEAD is on GitHub with a green ci run, and the secrets the release workflow publishes with are set
 release-ready:
     #!/usr/bin/env bash
