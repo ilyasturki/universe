@@ -461,6 +461,48 @@
       {
        "arch": "x86_64",
        "format": "tar.gz",
+       "sha256": "b2cf4a632a70ec321cdb9904fa396a2a45d4061129f9fdc89d8a27ea5ceeb9d6",
+       "size": 564697280,
+       "url": "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton11-9/GE-Proton11-9-x86_64.tar.gz"
+      },
+      {
+       "arch": "aarch64",
+       "format": "tar.gz",
+       "sha256": "948957ea8929b8a1b444c8b9278f87b7cba0006ccfee51cd551ab69555c34265",
+       "size": 647938895,
+       "url": "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton11-9/GE-Proton11-9-aarch64.tar.gz"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-10-14T00:14:59Z",
+     "version": "GE-Proton11-9"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "tar.gz",
+       "sha256": "dbb2129cbcece65dcd9d926dbdd7d0ffc474f34ffab987ddc6ab8ce52537d976",
+       "size": 564684172,
+       "url": "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton11-8/GE-Proton11-8-x86_64.tar.gz"
+      },
+      {
+       "arch": "aarch64",
+       "format": "tar.gz",
+       "sha256": "195a3e0628668d4132f824f93c19e222c9bb7eb930968be3c6f4d666b5654803",
+       "size": 647948811,
+       "url": "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton11-8/GE-Proton11-8-aarch64.tar.gz"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-10-13T20:46:41Z",
+     "version": "GE-Proton11-8"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "tar.gz",
        "sha256": "c5448b76a230384e2d7bc6beb5ccb97bafb7e2c3b6c527cb03a1a546bbcb00a0",
        "size": 563784602,
        "url": "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton11-7/GE-Proton11-7-x86_64.tar.gz"
@@ -1067,6 +1109,20 @@
       {
        "arch": "x86_64",
        "format": "appimage",
+       "sha256": "cafe55b283b987bc90bc1989707a3c8fc0dfd2d56b3b6ac5e898a33addb7214f",
+       "size": 94090084,
+       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-ffba2bf09ef3980638f9327b25240d81414034ab/rpcs3-v0.0.43-20291-ffba2bf0_linux64.AppImage"
+      }
+     ],
+     "channel": "rolling",
+     "date": "2026-10-14T01:38:06Z",
+     "version": "0.0.43-20291-ffba2bf0"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "appimage",
        "sha256": "c926aa28895db4902f8aec877ff403c317523d60e488e3a6f94eedc537926d6b",
        "size": 94097472,
        "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-6fe3c87fb41c29b21d8796b15eca5c80ad3b36d4/rpcs3-v0.0.43-20286-6fe3c87f_linux64.AppImage"
@@ -1131,20 +1187,6 @@
      "channel": "rolling",
      "date": "2026-10-08T07:26:29Z",
      "version": "0.0.43-20247-222754bf"
-    },
-    {
-     "assets": [
-      {
-       "arch": "x86_64",
-       "format": "appimage",
-       "sha256": "b1e21af266a00d91b52ab0264a612b6a388c7bfef98966ab03270fa1ca6586e8",
-       "size": 94050517,
-       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-479ca74cad11e6450abcae130f5b49b69ffbad65/rpcs3-v0.0.43-20239-479ca74c_linux64.AppImage"
-      }
-     ],
-     "channel": "rolling",
-     "date": "2026-10-07T06:28:42Z",
-     "version": "0.0.43-20239-479ca74c"
     }
    ],
    "homepage": "https://github.com/RPCS3/rpcs3-binaries-linux",
@@ -1377,21 +1419,21 @@
       {
        "arch": "x86_64",
        "format": "appimage",
-       "sha256": "1bd451a25ed1eb160085209353b2d91e0b96c24e5325cced3b8929930a1b29f0",
-       "size": 78628331,
+       "sha256": "a922a06edfb7122a13cd88a7de50abf68137fa8826d37b8fbd148a055c2e0ab7",
+       "size": 78446642,
        "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-x86_64.AppImage"
       },
       {
        "arch": "aarch64",
        "format": "appimage",
-       "sha256": "9e0ebe1fac60ecbed1555fce264999e812c56b1b9da2148690b43e1ff4d87fbb",
-       "size": 78253179,
+       "sha256": "eadfe426f165199bb76be124175603e3e9ddbdbce4cc344ddb3240b96ed2d18f",
+       "size": 78059852,
        "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-aarch64.AppImage"
       }
      ],
      "channel": "rolling",
-     "date": "2026-10-13T05:38:25Z",
-     "version": "2026.10.13"
+     "date": "2026-10-14T00:58:14Z",
+     "version": "2026.10.14"
     }
    ],
    "homepage": "https://github.com/Vita3K/Vita3K",
@@ -1532,6 +1574,6 @@
    "name": "xemu"
   }
  },
- "generated_at": "2026-10-13T12:48:32Z",
+ "generated_at": "2026-10-14T10:21:29Z",
  "schema": 1
 }
