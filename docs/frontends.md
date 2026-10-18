@@ -40,7 +40,11 @@ A `Game` exposes `id`, `title`, `sortTitle`, `favorite` (writable), `hidden`, `p
 `playCount`, `lastPlayed`, `releaseYear`, `developerList`, `publisherList`, `genreList`, `players`,
 `description`, `summary`, `source`, `platform`, `runner`, `runnerName`, `tags`, `extra`, `raw`,
 `collections`, and `assets` (`boxFront`, `square`, `banner`, `background`, `logo`, `screenshotList`), plus
-`launch()`.
+`launch()`. `version` is the core's (`api.md` § Games), `installedVersion` its `installed`, `updateState` how it
+stands in words, and `updateAction` the game page's update action: `update` (its store applies it), `mark-current`
+(updated by hand) or empty. `api.updateGame(id)` runs it: the store's update as Downloads' job, told by a notice
+wherever the player is, or `api.universe.markCurrent(id, title)`. Every look's game page asks
+`api.universe.checkVersions(id)` as it opens, and the host every game's 5 s after the start (not in a `--keys` run).
 
 `api.screens.network` and `api.screens.bluetooth` run on `universe network watch --json` and
 `universe bluetooth watch --json` (`api.md` § Network and Bluetooth), each read once through
@@ -848,8 +852,9 @@ row and the Options menu, with the same menu.
 
 The detail page is the game's logo over its background and a row of its tools (`pills`: Play, the
 heart, Game settings, Media when the game has a screenshot, a recording or a journal entry,
-Achievements when `achievementsTotal` is not 0, and ··· for the game menu), then the play time,
-when it was last played and the sessions (`ui/StatRow.qml`, each left out while zero), the
+Achievements when `achievementsTotal` is not 0, the game's `updateAction` when it names one, and ··· for the game
+menu), then the play time, when it was last played, the sessions, the version and its update state
+(`ui/StatRow.qml`, each left out while zero or empty), the
 description and the store's screenshots (`assets.screenshotList`), nothing else. Game settings and
 Achievements open their page, Media the menu's Media list beside the button (the page itself when
 the game has one kind), ··· and Start the game menu beside ···, its recordings, journal and
