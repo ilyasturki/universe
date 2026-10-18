@@ -39,6 +39,15 @@ beyond() {
     esac
 }
 
+# A desktop that crashes before its checks in a container, every step left to a real session.
+unstartable() {
+    [ "$1" = kde ] || return 0
+    case "$(kwin_wayland --version 2> /dev/null)" in
+        # kwin's qpa: updateEglContext() takes the null primaryDevice() of a machine with no render node
+        "kwin 6.8.0") echo "kwin 6.8.0 crashes at startup without a GPU render node" ;;
+    esac
+}
+
 # In the desktop, as its startup program: the checks, a line each in $dir/result, then the desktop told to quit.
 check() {
     local profile=$1
@@ -132,11 +141,16 @@ for p in "${profiles[@]}"; do
     rm -rf "$dir"
     mkdir -p "$dir/home" "$dir/run"
     chmod 700 "$dir/run"
-    env -u WAYLAND_DISPLAY -u DISPLAY -u SWAYSOCK -u HYPRLAND_INSTANCE_SIGNATURE -u NIRI_SOCKET -u XDG_CURRENT_DESKTOP \
-        -u GAMESCOPE_WAYLAND_DISPLAY -u DBUS_SESSION_BUS_ADDRESS \
-        HOME="$dir/home" XDG_RUNTIME_DIR="$dir/run" XDG_CONFIG_HOME="$dir/home/.config" XDG_CACHE_HOME="$dir/home/.cache" \
-        XDG_DATA_HOME="$dir/home/.local/share" XDG_STATE_HOME="$dir/home/.local/state" SMOKE_DIR="$dir" \
-        timeout "${SMOKE_TIMEOUT:-120}" dbus-run-session -- "$self" --session "$p" || true
+    why="$(unstartable "$p")"
+    if [ -n "$why" ]; then
+        printf 'skip %s: %s\n' live "$why" osd "$why" shot-screen "$why" shot-window "$why" > "$dir/result"
+    else
+        env -u WAYLAND_DISPLAY -u DISPLAY -u SWAYSOCK -u HYPRLAND_INSTANCE_SIGNATURE -u NIRI_SOCKET -u XDG_CURRENT_DESKTOP \
+            -u GAMESCOPE_WAYLAND_DISPLAY -u DBUS_SESSION_BUS_ADDRESS \
+            HOME="$dir/home" XDG_RUNTIME_DIR="$dir/run" XDG_CONFIG_HOME="$dir/home/.config" XDG_CACHE_HOME="$dir/home/.cache" \
+            XDG_DATA_HOME="$dir/home/.local/share" XDG_STATE_HOME="$dir/home/.local/state" SMOKE_DIR="$dir" \
+            timeout "${SMOKE_TIMEOUT:-120}" dbus-run-session -- "$self" --session "$p" || true
+    fi
     [ "$(wc -l < "$dir/result" 2> /dev/null || echo 0)" -eq 4 ] || echo "FAIL desktop: the checks did not all run (compositor.log)" >> "$dir/result"
     echo "── $p"
     cat "$dir/result"
