@@ -29,6 +29,10 @@ BuildRequires:  scdoc
 BuildRequires:  systemd-rpm-macros
 BuildRequires:  tzdata
 BuildRequires:  dbus-daemon
+BuildRequires:  xorg-x11-server-Xvfb
+BuildRequires:  pipewire
+BuildRequires:  pipewire-utils
+BuildRequires:  wireplumber
 BuildRequires:  blueprint-compiler
 BuildRequires:  glib2-devel
 BuildRequires:  pkgconfig(gtk4) >= 4.22
