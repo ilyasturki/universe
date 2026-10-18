@@ -1,98 +1,41 @@
 ---
 title: Runners
-description: What starts each game (Proton, Wine, the game itself or an emulator), and the builds Universe finds, installs and updates.
+description: What starts each game, and the Proton builds and emulators Universe installs.
 sidebar:
   order: 1
 ---
 
 import Shot from '../../../../components/Shot.astro';
-import Clip from '../../../../components/Clip.astro';
 
-A runner is what starts a game: Proton (through umu-run) or Wine for a Windows game, the runner called Linux for a native game, an emulator such as Dolphin or PCSX2 for a console game. The [runner list](/docs/reference/runners/) gives every runner with its platforms, file types and options.
+A runner is what starts a game: Proton or Wine for a Windows game, the runner called Linux for a native game, an emulator such as Dolphin or PCSX2 for a console game. The [runner list](/docs/reference/runners/) has every one.
 
 <Shot name="settings-emulators-proton" />
 
 ## A game's runner
 
-A game with no runner set runs on Proton, and so does a store game, unless the store installed a Linux build. An emulated game found in an emulator's game folders gets that emulator. When you [add a file by hand](/docs/library/add-a-game/), the runner picker puts first the runners that open that kind of file, installed ones before missing ones, and Proton before Wine.
+A store game runs on Proton unless the store installed a Linux build, and a game found in an emulator's folder gets that emulator. To change it, pick another **Runner** in the **Launch** card of the game's **Game settings**. That's also how a native game that landed on Proton goes back to Linux.
 
-To change it, pick another **Runner** in the **Launch** card of the game's **Game settings**; that's also how a native game that landed on Proton goes back to Linux. [`universe set`](/docs/reference/cli/set/) takes the runner's id or one of its aliases (`yuzu` sets Eden):
-
-```sh
-universe set <game> runner=linux
-```
-
-When a game's runner is missing at launch and Universe can download it, **Install and play** installs it first.
+When a game's runner is missing, **Install and play** installs it first.
 
 ## Emulators & Proton
 
-Settings › **Emulators & Proton** lists the runners on this machine with the build each one uses, then the runners Universe downloads, the ones you install from your distribution, and the tools. A tag marks one that wants attention: **Needed**, **Install …**, **Update …** or **Updated** (in the last week). [Emulators & Proton](/docs/settings/emulators-proton/) goes through every card, tag and key.
+Settings › [Emulators & Proton](/docs/settings/emulators-proton/) lists the runners on this machine, then the ones Universe can download, the ones your distribution provides, and the tools. A tag marks one that needs an install or an update.
 
-### A runner's page
+A runner's page has:
 
-- **Program** shows the program Universe found and where from. On an emulator's page you can set your own path, and **Arguments** go to the emulator for every game on it.
-- **Gamescope** decides whether this runner's games get a gamescope of their own, unless a game sets its own ([Gamescope, HDR and frame rate](/docs/running/gamescope/)).
-- **Builds** lists what Universe can install for this runner. The cards after it hold the defaults for this kind of game ([Launch settings](/docs/running/launch-settings/#where-each-one-is-set)), the emulator's **Options**, and **Games**, which ends on **Add a game…** to add a file on this runner.
+- **Program**, the program Universe found. On an emulator's page you can set your own path, such as a Flatpak's, which Universe doesn't look for.
+- **Gamescope**, whether this runner's games get a gamescope of their own ([Gamescope, HDR and frame rate](/docs/running/gamescope/)).
+- **Builds**, what Universe can install for this runner.
+- The defaults for this runner's games ([Launch settings](/docs/running/launch-settings/#where-each-one-is-set)), and **Games**, which ends on **Add a game…**.
 
-On Proton's page, **Proton not found** under the name means no build matches the **Proton build** setting. **Program** there shows the umu-run Universe found, but launches use the one named in **umu-run program**, in Settings › **Game defaults** under Show advanced. When it isn't on the machine, Universe fetches umu-launcher before the first Proton launch.
+## Builds
 
-## Builds Universe installs
+Universe installs Proton builds and emulators itself, and [keeps them up to date](/docs/getting-started/update-uninstall/#what-universe-keeps-current). An emulator on your PATH runs first. **A** on a build's row offers what fits: **Follow the newest …**, **Use …** for one build, **Roll back …** after an update that misbehaves, or **Install another version…**.
 
-Universe installs Proton builds, emulators and tools from its catalogue into `~/.local/share/universe/components/`, one folder per version. **A** on a build's row opens its menu ([A on a row](/docs/settings/emulators-proton/#a-on-a-row)). There **Follow the newest …** always takes the newest build: Universe's newest for an emulator, and for Proton the newest of that family wherever it's installed. **Roll back …** removes Universe's newest build and skips that version; the version after it updates as usual.
-
-An update keeps the newest two builds, plus any build a setting or a game names and the one a running game uses. Updates wait while a game runs. A build that something still names can't be removed until you pick another one for it.
-
-With automatic updates on (`components.auto_update`, the default), Universe looks for updates 90 seconds after it starts, then once a day, never during a game or another install. A notice says what it updated.
-
-Your distribution provides gamescope, MangoHud and gpu-screen-recorder. Where PackageKit can install one, its menu's **Install from the distribution** installs the package and asks for your password, except in [the Universe session](/docs/getting-started/universe-session/). On NixOS, the emulator and Wine builds Universe downloads run inside `universe-fhs`, and System check makes sure it's there.
-
-## Builds already on the machine
-
-Universe lists the builds it finds next to its own. For an emulator or Wine, the runner's build setting decides which one runs:
-
-- by default, the program on your PATH, else Universe's newest build;
-- after **Follow the newest …** (`build = "latest"`), Universe's newest first;
-- after **Use …** on one of Universe's builds, that version.
-
-A **Program** path you set wins over all three. Universe looks on your PATH for the program names the [runner list](/docs/reference/runners/) gives, so it doesn't find an emulator installed as a Flatpak. For one game, the **Launch** card of its Game settings has a program row named after the emulator (**Dolphin program**), and `universe set <game> runner_build=<version>` picks one of Universe's builds.
+gamescope, MangoHud and gpu-screen-recorder come from your distribution. Their **Install from the distribution** installs one where your system allows it.
 
 ## Proton builds
 
-**Proton build** names the build a game runs with, `proton-ge` by default. Universe takes the first match, in this order:
+**Proton build** names the build a game runs with. Its default, `proton-ge`, takes the newest GE-Proton on the machine, whether Universe, Steam, Lutris or Heroic installed it, and downloads one at the first launch when there's none.
 
-1. `~/.local/share/universe/proton/`, your proton folder;
-2. an entry in `[proton]` of config.toml (Settings › Game defaults › **Proton builds**, under Show advanced);
-3. the name itself, when it's a path;
-4. a folder with that name among Universe's builds, Lutris's `runners/wine`, Steam's `compatibilitytools.d` (Flatpak Steam's too), umu's `compatibilitytools` and Heroic's `tools/proton`;
-5. the newest build of that family in any of these folders, so `proton-ge` finds GE-Proton10-12 before GE-Proton9-27.
-
-When nothing matches, the GE family's name (`proton-ge` or `GE-Proton`) makes umu-run download the latest GE-Proton at the first launch. Any other name runs on umu-run's own UMU-Proton, and System check flags it.
-
-The **Proton build** picker lists your `[proton]` names and every build found. Set one game's in the **Proton** card of its Game settings, or from a terminal:
-
-```sh
-universe set <game> proton=GE-Proton10-12
-universe component install ge-proton
-universe component use ge-proton latest
-```
-
-The last line makes `proton-ge`, which follows the newest GE-Proton, the default again.
-
-## From the command line
-
-[`universe runner`](/docs/reference/cli/runner/) lists the runners and sets their keys, and [`universe component`](/docs/reference/cli/component/) handles the builds:
-
-```sh
-universe runner ls
-universe runner options dolphin
-universe runner set dolphin batch=false
-universe runner set eden build=latest
-universe component ls
-universe component update
-universe component rollback eden
-universe component use eden system
-universe component remove eden <version>
-universe component uninstall eden
-```
-
-`runner set` takes `exe`, `args`, `gamescope`, `build` and the runner's options, and an empty value (`exe=`) resets one. `component use` takes `latest`, `system` or a version. `component install` takes a version after the id, and `--yes` accepts a build's notice without asking.
+Set the default on Settings › Emulators & Proton › **Proton**, and one game's in the **Proton** card of its Game settings ([Another Proton build](/docs/running/game-fixes/#another-proton-build)).
