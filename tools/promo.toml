@@ -1,0 +1,116 @@
+# The videos posted outside the repo, filmed by `UNIVERSE_DEV=.dev-showcase just promo record` with their sound and cut
+# by `just promo cut` into target/promo (`tools/promo --help`).
+#
+# [[take]]
+# name   [a-z0-9-], unique
+# look   reprise | switch2 | ps5
+# kind   clip | gamescope-clip (a real launch, HOME over the game)
+# keys   the --keys phases (ui-record); `Mark:NAME` is a cut point, `start` the take's first frame. On the real core
+#        Return launches whatever is focused: put `Expect:<id>` (or `Expect:` for nothing) before a Return on a screen the Universe look answers.
+# args   the UI's flags besides --theme (default --no-gamepad): --boot opens on the startup animation, --fake on the
+#        fixture, whose pads stand in for real ones without --no-gamepad
+# gap    ms between keys (default 400): Wait:N is N of them
+#
+# [[video]]
+# name   [a-z0-9-], unique: target/promo/NAME.mp4
+# cuts   "TAKE:MARK..MARK" or "TAKE:MARK..+SECONDS", played end to end with hard cuts
+
+[[take]]
+name = "boot"
+look = "reprise"
+kind = "clip"
+args = "--no-gamepad --boot"
+gap = 300
+keys = """
+Wait:14 Mark:home
+Right Wait Right Wait Right Wait Right Wait Right Wait:3 Mark:browsed
+Left Wait Left Wait Left Wait Left Wait Left Wait:2
+Up Wait Up Wait:2 Mark:bar
+Right Wait:2 Right Wait:2 Right Wait:2 Right Wait:2 Mark:power Right Wait:4 Mark:bar-end
+"""
+
+[[take]]
+name = "library"
+look = "reprise"
+kind = "clip"
+gap = 300
+keys = """
+Wait:8 Mark:library
+E Wait:4 Right Wait Right Wait Down Wait Down Wait Right Wait:3 Mark:grid
+X Wait:6 Mark:page Down Wait:3 Mark:end
+"""
+
+[[take]]
+name = "launch"
+look = "reprise"
+kind = "gamescope-clip"
+keys = """
+Wait:6
+Up Wait Up Wait Left Wait Left Wait:2 Expect: Return
+Wait:2 Mark:search Type:de Type:ad Type:_c Type:el Type:ls Wait:3
+Mark:pick Up Wait Up Wait:2 Expect:dead-cells Return
+Wait:5 Mark:launched
+Wait:125 Mark:game
+Wait:6 Mark:dock Guide Wait:3 Mark:docked
+Right Right Right Right Right Right Right Wait:2
+Expect: Return Wait:2 Mark:perf Expect: Return Wait:4 Mark:mangohud
+Guide Wait:4 Mark:volume
+Volume:up Wait Volume:up Wait Volume:up Wait:5
+Mark:end
+"""
+
+[[take]]
+name = "data"
+look = "reprise"
+kind = "clip"
+gap = 300
+keys = """
+Wait:8 Mark:page X Wait:6 Mark:stats
+F1 Wait:2 Down Wait Down Wait Right Wait:2 Down Wait Down Wait Down Wait:2 Mark:menu
+Return Wait:12 Mark:data Down Wait:2 Down Wait:2 Down Wait:3 Mark:data-end
+"""
+
+[[take]]
+name = "radios"
+look = "reprise"
+kind = "clip"
+args = "--fake"
+gap = 300
+keys = """
+Wait:8 Esc Wait:3 E Wait E Wait E Wait:3
+Down Down Down Down Down Down Down Down Wait:2 Mark:network
+Right Wait:2 Down Wait Down Wait Down Wait Down Wait:3 Mark:network-end
+Left Wait:2 Down Wait:2 Mark:bluetooth
+Right Wait:2 Down Wait Down Wait Down Wait:3 Mark:bluetooth-end
+Left Wait:2 Up Up Up Up Up Up Up Wait:2 Mark:controller
+Right Wait:3 Down Wait Down Wait:2 Return Wait:3 Down Wait:2 Return Wait:4 Mark:end
+"""
+
+[[video]]
+name = "pitch"
+cuts = [
+  "boot:start..+2.6",
+  "boot:home..+3.2",
+  "library:library..grid",
+  "library:page..+1.5",
+  "launch:search..pick",
+  "launch:launched..+1.6",
+  "launch:game..+2.5",
+  "launch:docked..perf",
+  "launch:mangohud..+1",
+  "launch:volume..end",
+]
+
+[[video]]
+name = "news"
+cuts = [
+  "boot:start..+2.6",
+  "boot:bar..+1.8",
+  "boot:power..bar-end",
+  "data:page..+2.6",
+  "data:menu..+0.5",
+  "data:data..data-end",
+  "radios:network..network-end",
+  "radios:bluetooth..bluetooth-end",
+  "radios:controller..end",
+]

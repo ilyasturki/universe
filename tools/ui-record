@@ -6,8 +6,8 @@ usage() {
 usage: tools/ui-record OUT.mp4 [KEY…]
 
 Plays KEYs to the UI inside a headless sway rendering on the GPU and records it:
-no window on the desktop, no sound. OUT is H.264 yuv420p at 60 fps, the leading
-black trimmed. KEYs are the `--keys` phases (Wait, Wait:N, Right, Return…).
+no window on the desktop, nothing on its speakers. OUT is H.264 yuv420p at 60 fps,
+the leading black trimmed. KEYs are the `--keys` phases (Wait, Wait:N, Right, Return…).
 
   UNIVERSE_UI_ARGS          the UI's flags (default --fake --no-gamepad)
   UNIVERSE_UI_SIZE          the window (default 1920x1080)
@@ -17,8 +17,10 @@ black trimmed. KEYs are the `--keys` phases (Wait, Wait:N, Right, Return…).
   UNIVERSE_RECORD_GAMESCOPE 1: the UI fullscreen in its own gamescope, as on a desktop, so a game
                             it launches runs there and HOME opens over it. The take plays on a copy
                             of the profile, modules off; the game's sound and the volume keys go to
-                            a private PipeWire sink at 50 %. gamescope, pipewire and wpctl come from
-                            the system.
+                            a private PipeWire sink at 50 %. gamescope, pipewire, wireplumber and
+                            wpctl come from the system.
+  UNIVERSE_RECORD_AUDIO     1: the UI's sounds (and a gamescope take's game) play in that private sink,
+                            and OUT carries what it heard as AAC
 
 A game launched in a take stays off the desktop: an X11 one finds no X server
 outside gamescope, and a gamescope take stops the game it launched. Each
@@ -37,6 +39,7 @@ gap=${UNIVERSE_UI_GAP:-500}
 scale=${UNIVERSE_RECORD_SCALE:-2}
 node=${UNIVERSE_RECORD_NODE:-}
 gamescope=${UNIVERSE_RECORD_GAMESCOPE:-}
+audio=${UNIVERSE_RECORD_AUDIO:-}
 if [ -z "$node" ]; then
     for card in /sys/class/drm/card[0-9]*; do
         [ "$(cat "$card/device/boot_vga" 2>/dev/null)" = 1 ] || continue
@@ -69,6 +72,7 @@ tmp=$(mktemp -d "$tmp_root/universe-record.XXXXXX")
 sway_pid=
 rec_pid=
 pw_pid=
+wp_pid=
 # The game the take launched, read from its copy of the profile; systemctl waits for its session's end.
 stop_take() {
     local unit
@@ -82,6 +86,7 @@ cleanup() {
     [ -n "$rec_pid" ] && kill "$rec_pid" 2>/dev/null
     stop_take
     [ -n "$sway_pid" ] && kill "$sway_pid" 2>/dev/null
+    [ -n "$wp_pid" ] && kill "$wp_pid" 2>/dev/null
     [ -n "$pw_pid" ] && kill "$pw_pid" 2>/dev/null
     rm -rf "$tmp"
 }
@@ -101,7 +106,9 @@ if [ -n "$gamescope" ]; then
         export "$var=$profile/$part"
     done
     [ -f "$profile/config/config.toml" ] && sed -i "s|$root/|$profile/|g" "$profile/config/config.toml"
+fi
 
+if [ -n "$gamescope$audio" ]; then
     remote=universe-record-$$
     pulse=unix:$tmp/pulse
     # wpctl reads the default sink only as strict JSON, which PipeWire's relaxed config syntax does not write by itself.
@@ -135,11 +142,32 @@ EOF
     done
     PIPEWIRE_REMOTE=$remote timeout 5 wpctl get-volume @DEFAULT_AUDIO_SINK@ >/dev/null 2>&1 ||
         { echo "ui-record: the private PipeWire never came up" >&2; cat "$tmp/pipewire.log" >&2; exit 1; }
+    # Links each stream to the sink; with no hardware, D-Bus or logind it reaches nothing of the desktop's.
+    mkdir -p "$tmp/wp/config/wireplumber/wireplumber.conf.d"
+    cat >"$tmp/wp/config/wireplumber/wireplumber.conf.d/record.conf" <<'EOF'
+wireplumber.profiles = {
+  main = {
+    hardware.audio = disabled
+    hardware.bluetooth = disabled
+    hardware.video-capture = disabled
+    support.dbus = disabled
+    support.reserve-device = disabled
+    support.logind = disabled
+  }
+}
+EOF
+    env -u LD_LIBRARY_PATH PIPEWIRE_REMOTE="$remote" XDG_CONFIG_HOME="$tmp/wp/config" XDG_STATE_HOME="$tmp/wp/state" \
+        DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent DBUS_SYSTEM_BUS_ADDRESS=unix:path=/nonexistent \
+        wireplumber >"$tmp/wireplumber.log" 2>&1 &
+    wp_pid=$!
 
+    ui_env+=(PIPEWIRE_REMOTE="$remote")
+    [ -n "$audio" ] && ui_env+=(PULSE_SERVER="$pulse")
+fi
+if [ -n "$gamescope" ]; then
     "$UNIVERSE_BIN" config set modules.enabled '[]' >/dev/null
     "$UNIVERSE_BIN" config set launch.env.PIPEWIRE_REMOTE "$remote" >/dev/null
     "$UNIVERSE_BIN" config set launch.env.PULSE_SERVER "$pulse" >/dev/null
-    ui_env+=(PIPEWIRE_REMOTE="$remote")
 fi
 
 cat >"$tmp/sway.cfg" <<EOF
@@ -165,7 +193,10 @@ export WAYLAND_DISPLAY=$display SWAYSOCK=$sock
 # Lossless while recording: x264 at a real encode setting falls behind 60 fps and drops frames.
 # -D: without it wf-recorder only sees SIGINT on the next damaged frame, and a quit UI sends none.
 rec_start=$(date +%s.%N)
-wf-recorder -y -D -o HEADLESS-1 -r 60 -c libx264rgb -x bgr0 -p preset=ultrafast -p qp=0 -f "$tmp/raw.mkv" >"$tmp/rec.log" 2>&1 &
+audio_args=()
+[ -n "$audio" ] && audio_args=(--audio-backend=pulse --audio=record-sink.monitor -C flac)
+PULSE_SERVER=${pulse:-unix:/nonexistent} wf-recorder -y -D -o HEADLESS-1 -r 60 -c libx264rgb -x bgr0 -p preset=ultrafast -p qp=0 \
+    "${audio_args[@]}" -f "$tmp/raw.mkv" >"$tmp/rec.log" 2>&1 &
 rec_pid=$!
 
 status=0
@@ -189,10 +220,12 @@ sway_pid=
 start=$(ffmpeg -hide_banner -i "$tmp/raw.mkv" -t 30 -vf blackdetect=d=0.05:pix_th=0.02 -an -f null - 2>&1 |
     sed -n 's/.*black_start:\([0-9.]*\) black_end:\([0-9.]*\).*/\1 \2/p' |
     awk '(NR == 1 && $1 > 0.5) || (NR > 1 && $1 - end > 0.5) { exit } { end = $2 } END { if (end != "") print end }')
+audio_out=(-an)
+[ -n "$audio" ] && audio_out=(-c:a aac -b:a 192k)
 ffmpeg -hide_banner -loglevel error -y -ss "${start:-0}" -i "$tmp/raw.mkv" \
     -vf "scale=${w}:${h}:flags=lanczos:out_color_matrix=bt709:out_range=tv,format=yuv420p" \
     -c:v libx264 -preset slow -crf 14 -profile:v high -colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv \
-    -movflags +faststart -an "$out"
+    "${audio_out[@]}" -movflags +faststart "$out"
 marks=${out%.*}.marks
 sed -n 's/.*universe\.gamepad: mark \([^ ]*\) \([0-9.]*\)$/\1 \2/p' "$tmp/ui.log" |
     awk -v t0="$rec_start" -v cut="${start:-0}" '{ printf "%s %.3f\n", $1, $2 - t0 - cut }' >"$marks"

@@ -79,13 +79,17 @@ ui-shot dir *keys: build develop env
 showcase *args: build env
     @{{ nix }} tools/showcase-profile "{{ dev }}" "{{ justfile_directory() }}/.dev-showcase" {{ args }}
 
-# The UI recorded to OUT (H.264, 60 fps) in a headless sway on the GPU: no window, no audio. just ui-record OUT.mp4 [keys…] (UNIVERSE_UI_ARGS, UNIVERSE_UI_SIZE and UNIVERSE_UI_GAP as for ui-shot; `tools/ui-record --help`)
+# The UI recorded to OUT (H.264, 60 fps) in a headless sway on the GPU: no window, nothing on the speakers (UNIVERSE_RECORD_AUDIO=1 puts its sound in OUT). just ui-record OUT.mp4 [keys…] (UNIVERSE_UI_ARGS, UNIVERSE_UI_SIZE and UNIVERSE_UI_GAP as for ui-shot; `tools/ui-record --help`)
 ui-record out *keys: build develop env
     @{{ nix }} tools/ui-record "{{ out }}" {{ keys }}
 
 # The docs' screenshots and clips, site/media/takes.toml's: UNIVERSE_DEV=.dev-showcase just docs-media record [name…] films them on the GPU (its gamescope clips launch Dead Cells), then check [--strict X.Y.Z], publish X.Y.Z onto the site-media branch, fetch [ref]; dry-run plays the fake takes offscreen (`tools/docs-media --help`)
 docs-media *args: build develop env
     @{{ nix }} tools/docs-media {{ args }}
+
+# The videos posted outside the repo, tools/promo.toml's: UNIVERSE_DEV=.dev-showcase just promo record [take…] films them with their sound (its gamescope take launches Dead Cells), then cut [video…] into target/promo/NAME.mp4; check (`tools/promo --help`)
+promo *args: build develop env
+    @{{ nix }} tools/promo {{ args }}
 
 # The README's clips: just readme-video [DIR] writes DIR/home.avif and home-over-game.avif (docs/images by default) from the home and home-over-game takes `just docs-media record` cut
 readme-video *args: develop

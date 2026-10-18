@@ -23,7 +23,7 @@ qt_log_ignore = [
 [tool.ruff]
 line-length = 160
 target-version = "py311"
-include = ["*.py", "*.pyi", "**/pyproject.toml", "modules/*/bin/*", "sources/*/bin/*", "tools/release-notes", "tools/catalogue", "tools/frame-gaps", "tools/docs-media"]
+include = ["*.py", "*.pyi", "**/pyproject.toml", "modules/*/bin/*", "sources/*/bin/*", "tools/release-notes", "tools/catalogue", "tools/frame-gaps", "tools/docs-media", "tools/promo"]
 extend-exclude = ["modules/capture/bin/thaw", "modules/pads/bin/thaw"]
 
 [tool.ruff.lint]
@@ -54,6 +54,7 @@ include = [
   "tools/release-notes",
   "tools/catalogue",
   "tools/docs-media",
+  "tools/promo",
 ]
 exclude = ["**/__pycache__"]
 stubPath = "crates/universe-py/typings"

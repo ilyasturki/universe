@@ -1,0 +1,284 @@
+#!/usr/bin/env python3
+"""tools/promo record|cut|check: the videos posted outside the repo, played from tools/promo.toml.
+
+record [TAKE…]   every take, or the ones named, with its sound (tools/ui-record's UNIVERSE_RECORD_AUDIO) on a copy of
+                 .dev-showcase left without its sessions' captures (through `just promo`), into target/promo/takes
+cut [VIDEO…]     every video, or the ones named, from the recorded takes: its cuts end to end, hard, into
+                 target/promo/NAME.mp4 (H.264 and AAC at 1080p60, ready to post)
+check            the takes and videos are well formed
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import re
+import runpy
+import shlex
+import subprocess
+import sys
+import tomllib
+from dataclasses import dataclass
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+LOOKS = ("reprise", "switch2", "ps5")
+KINDS = ("clip", "gamescope-clip")
+TAKE_FIELDS = {"name", "look", "kind", "keys", "args", "gap"}
+VIDEO_FIELDS = {"name", "cuts"}
+START = "start"
+NAME = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+CUT = re.compile(r"(?P<take>[a-z0-9-]+):(?P<start>[^.\s:]+)\.\.(?:\+(?P<seconds>\d+(?:\.\d+)?)|(?P<end>[^.\s+:][^.\s:]*))")
+GAP_MS = 400
+DEFAULT_ARGS = "--no-gamepad"
+# Long enough to hide the click of a cut mid-sound, short enough to keep a chime's attack.
+FADE_S = 0.02
+# What X plays in a post.
+LONGEST_S = 140
+
+
+def fail(message: str) -> int:
+    print(f"promo: {message}", file=sys.stderr)
+    return 1
+
+
+@dataclass(frozen=True)
+class Take:
+    name: str
+    look: str
+    kind: str
+    keys: tuple[str, ...]
+    args: tuple[str, ...]
+    gap: int
+
+
+@dataclass(frozen=True)
+class Cut:
+    take: str
+    start: str
+    end: str
+    seconds: float | None
+
+    def span(self, marks: dict[str, float]) -> tuple[float, float]:
+        start = marks[self.start]
+        return start, start + self.seconds if self.seconds is not None else marks[self.end]
+
+
+@dataclass(frozen=True)
+class Video:
+    name: str
+    cuts: tuple[Cut, ...]
+
+
+class Promo:
+    def __init__(self, root: Path):
+        self.root = root
+        self.list = root / "tools/promo.toml"
+        self.work = root / "target/promo"
+        self.takes = self.work / "takes"
+
+    def take_file(self, name: str) -> Path:
+        return self.takes / f"{name}.mp4"
+
+
+def load(promo: Promo) -> tuple[list[Take], list[Video], list[str]]:
+    try:
+        data = tomllib.loads(promo.list.read_text())
+    except (OSError, tomllib.TOMLDecodeError) as e:
+        return [], [], [f"{promo.list}: {e}"]
+    errors = [f"{promo.list}: [[take]] and [[video]] tables alone" for key in data if key not in ("take", "video")]
+    takes: list[Take] = []
+    marks: dict[str, set[str]] = {}
+    for entry in data.get("take", []):
+        name = entry.get("name")
+        if not isinstance(name, str) or not NAME.fullmatch(name):
+            errors.append(f"take {name!r}: a name is [a-z0-9-]")
+            continue
+        found = [f"unknown field {f}" for f in sorted(set(entry) - TAKE_FIELDS)]
+        if name in marks:
+            found.append("named twice")
+        if entry.get("look") not in LOOKS:
+            found.append(f"look is one of {', '.join(LOOKS)}")
+        if entry.get("kind") not in KINDS:
+            found.append(f"kind is one of {', '.join(KINDS)}")
+        if not isinstance(entry.get("keys"), str) or not entry["keys"].split():
+            found.append("keys is a string of key phases")
+        if not isinstance(entry.get("args", ""), str):
+            found.append("args is a string of the UI's flags")
+        if not isinstance(entry.get("gap", GAP_MS), int) or entry.get("gap", GAP_MS) <= 0:
+            found.append("gap is the ms between keys")
+        args = str(entry.get("args", DEFAULT_ARGS)).split()
+        if entry.get("kind") == "gamescope-clip" and "--fake" in args:
+            found.append("a gamescope-clip launches a real game: never --fake")
+        errors += [f"take {name}: {e}" for e in found]
+        keys = tuple(str(entry.get("keys", "")).split())
+        marks[name] = {START, *(k.removeprefix("Mark:") for k in keys if k.startswith("Mark:"))}
+        if not found:
+            takes.append(Take(name, entry["look"], entry["kind"], keys, tuple(args), entry.get("gap", GAP_MS)))
+    videos: list[Video] = []
+    seen: set[str] = set()
+    for entry in data.get("video", []):
+        name = entry.get("name")
+        if not isinstance(name, str) or not NAME.fullmatch(name):
+            errors.append(f"video {name!r}: a name is [a-z0-9-]")
+            continue
+        found = [f"unknown field {f}" for f in sorted(set(entry) - VIDEO_FIELDS)]
+        if name in seen:
+            found.append("named twice")
+        seen.add(name)
+        cuts = []
+        listed = entry.get("cuts")
+        if not isinstance(listed, list) or not listed or not all(isinstance(c, str) for c in listed):
+            found.append("cuts is a list of TAKE:MARK..MARK or TAKE:MARK..+SECONDS")
+            listed = []
+        for text in listed:
+            m = CUT.fullmatch(text)
+            if not m:
+                found.append(f"cut {text!r} is TAKE:MARK..MARK or TAKE:MARK..+SECONDS")
+                continue
+            if m["take"] not in marks:
+                found.append(f"cut {text!r}: no take {m['take']}")
+                continue
+            found += [f"cut {text!r}: no Mark:{mark} in {m['take']}'s keys" for mark in (m["start"], m["end"]) if mark and mark not in marks[m["take"]]]
+            cuts.append(Cut(m["take"], m["start"], m["end"] or "", float(m["seconds"]) if m["seconds"] else None))
+        errors += [f"video {name}: {e}" for e in found]
+        if not found:
+            videos.append(Video(name, tuple(cuts)))
+    return takes, videos, errors
+
+
+def docs_media() -> dict:
+    return runpy.run_path(str(REPO / "tools/docs-media"), run_name="docs_media")
+
+
+def ffmpeg(*args: str | Path) -> None:
+    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *map(str, args)], check=True)
+
+
+def duration(video: Path) -> float:
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(video)], check=True, capture_output=True, text=True
+    )
+    return float(out.stdout)
+
+
+def read_marks(path: Path) -> dict[str, float]:
+    if not path.is_file():
+        return {}
+    return {START: 0.0, **{name: float(at) for name, at in (line.split() for line in path.read_text().splitlines() if line.strip())}}
+
+
+def record(promo: Promo, names: list[str]) -> int:
+    config_home = os.environ.get("UNIVERSE_CONFIG_HOME")
+    if not config_home:
+        return fail("record runs through just: UNIVERSE_DEV=.dev-showcase just promo record")
+    profile = Path(config_home).parent
+    if profile.name != ".dev-showcase":
+        return fail(f"footage comes from .dev-showcase (UNIVERSE_DEV=.dev-showcase), not {profile}")
+    takes, _, errors = load(promo)
+    if errors:
+        return check(promo)
+    unknown = sorted(set(names) - {t.name for t in takes})
+    if unknown:
+        return fail(f"no take {', '.join(unknown)}")
+    chosen = [t for t in takes if not names or t.name in names]
+    scratch = promo.work / "profile" / ".dev-showcase"
+    promo.takes.mkdir(parents=True, exist_ok=True)
+    print(f"promo: {len(chosen)} takes from {profile}", file=sys.stderr)
+    docs_media()["stage_profile"](profile, scratch)
+    env = {**os.environ, "UNIVERSE_RECORD_AUDIO": "1"}
+    for part in ("data", "config", "state", "cache"):
+        env[f"UNIVERSE_{part.upper()}_HOME"] = str(scratch / part)
+    failed = []
+    for take in chosen:
+        out = promo.take_file(take.name)
+        out.with_suffix(".marks").unlink(missing_ok=True)
+        shown = {**env, "UNIVERSE_UI_ARGS": " ".join([*take.args, "--theme", take.look]), "UNIVERSE_UI_GAP": str(take.gap)}
+        if take.kind == "gamescope-clip":
+            shown["UNIVERSE_RECORD_GAMESCOPE"] = "1"
+        subprocess.run([str(REPO / "tools/ui-record"), out, *take.keys], env=shown, check=False)
+        marks = read_marks(out.with_suffix(".marks"))
+        missing = [k.removeprefix("Mark:") for k in take.keys if k.startswith("Mark:") and k.removeprefix("Mark:") not in marks]
+        if not out.is_file() or missing:
+            failed.append(f"{take.name}: the take stopped before Mark:{(missing or ['?'])[0]} (an Expect: above says why)")
+    print(f"promo: {len(chosen) - len(failed)} recorded, {len(failed)} failed")
+    for line in failed:
+        print(f"  {line}", file=sys.stderr)
+    return 1 if failed else 0
+
+
+def cut_video(promo: Promo, video: Video) -> Path:
+    inputs: list[str | Path] = []
+    parts, joined = [], []
+    for i, cut in enumerate(video.cuts):
+        source = promo.take_file(cut.take)
+        a, b = cut.span(read_marks(source.with_suffix(".marks")))
+        inputs += ["-i", source]
+        parts.append(f"[{i}:v]trim=start={a:.3f}:end={b:.3f},setpts=PTS-STARTPTS,fps=60[v{i}]")
+        fade = f"afade=t=in:d={FADE_S},afade=t=out:st={b - a - FADE_S:.3f}:d={FADE_S}"
+        parts.append(f"[{i}:a]atrim=start={a:.3f}:end={b:.3f},asetpts=PTS-STARTPTS,aresample=48000,{fade}[a{i}]")
+        joined.append(f"[v{i}][a{i}]")
+    parts.append(f"{''.join(joined)}concat=n={len(video.cuts)}:v=1:a=1[v][a]")
+    out = promo.work / f"{video.name}.mp4"
+    video_codec = shlex.split("-c:v libx264 -preset slow -crf 18 -profile:v high -pix_fmt yuv420p")
+    color = shlex.split("-colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv")
+    audio_codec = shlex.split("-c:a aac -b:a 192k -ar 48000 -movflags +faststart")
+    ffmpeg(*inputs, "-filter_complex", ";".join(parts), "-map", "[v]", "-map", "[a]", *video_codec, *color, *audio_codec, out)
+    return out
+
+
+def cut(promo: Promo, names: list[str]) -> int:
+    _, videos, errors = load(promo)
+    if errors:
+        return check(promo)
+    unknown = sorted(set(names) - {v.name for v in videos})
+    if unknown:
+        return fail(f"no video {', '.join(unknown)}")
+    failed = 0
+    for video in (v for v in videos if not names or v.name in names):
+        missing = []
+        for c in video.cuts:
+            source = promo.take_file(c.take)
+            marks = read_marks(source.with_suffix(".marks"))
+            if not source.is_file():
+                missing.append(f"no {source.relative_to(promo.root)}: just promo record {c.take}")
+            else:
+                missing += [f"{c.take} was recorded without Mark:{m}" for m in (c.start, c.end) if m and m not in marks]
+        if missing:
+            failed += 1
+            print(f"promo: video {video.name}:", *sorted(set(missing)), sep="\n  ", file=sys.stderr)
+            continue
+        out = cut_video(promo, video)
+        length = duration(out)
+        print(f"{out.relative_to(promo.root)}: {length:.1f} s")
+        if length > LONGEST_S:
+            print(f"promo: video {video.name} runs {length:.0f} s, past the {LONGEST_S} s a post plays", file=sys.stderr)
+    return 1 if failed else 0
+
+
+def check(promo: Promo) -> int:
+    takes, videos, errors = load(promo)
+    for e in errors:
+        print(f"promo: {e}", file=sys.stderr)
+    print(f"promo check: {len(takes)} takes, {len(videos)} videos, {len(errors)} errors")
+    return 1 if errors else 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(prog="tools/promo", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--root", type=Path, default=REPO, help=argparse.SUPPRESS)
+    sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("record").add_argument("names", nargs="*")
+    sub.add_parser("cut").add_argument("names", nargs="*")
+    sub.add_parser("check")
+    args = parser.parse_args()
+    promo = Promo(args.root.resolve())
+    if args.command == "record":
+        return record(promo, args.names)
+    if args.command == "cut":
+        return cut(promo, args.names)
+    return check(promo)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
