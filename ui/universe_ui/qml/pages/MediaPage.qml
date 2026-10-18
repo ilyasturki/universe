@@ -212,8 +212,8 @@ FocusScope {
         var row = current;
         if (row.kind === "shot")
             api.screens.shots.remove(row.gameId, row.name);
-        if (row.kind === "recording" || both)
-            api.screens.recordings.remove(row.gameId, row.session);
+        if ((row.kind === "recording" || both) && !api.screens.recordings.remove(row.gameId, row.session))
+            return;
         if (row.kind === "journal" || both)
             api.screens.journal.remove(row.gameId, row.session);
     }
