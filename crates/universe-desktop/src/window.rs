@@ -688,7 +688,7 @@ impl Window {
             if let Some(app) = weak.upgrade() {
                 app.library().refresh(&[id]).await;
             }
-            result.map_err(|e| e.to_string())
+            result.map_err(|e| gettext("“{}” could not be removed: {}").replacen("{}", &title, 1).replacen("{}", &e.to_string(), 1))
         });
     }
 

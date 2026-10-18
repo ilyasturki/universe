@@ -596,6 +596,7 @@ impl Application {
         for (_, commit) in deferred {
             self.commit(commit).await;
         }
+        self.emit_by_name::<()>("deferred-changed", &[]);
     }
 
     /// A failed delete is told; the item it hid comes back once `deferred-changed` goes out.
