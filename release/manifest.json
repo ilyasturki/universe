@@ -1,0 +1,18 @@
+{
+  "version": "0.0.13",
+  "takes": {
+    "game-page": {
+      "hash": "ce0a6c7f61c6",
+      "files": [
+        "game-page.webp"
+      ]
+    },
+    "right-click-cover": {
+      "hash": "1c4d70b52998",
+      "files": [
+        "right-click-cover.avif",
+        "right-click-cover.mp4"
+      ]
+    }
+  }
+}
