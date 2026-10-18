@@ -5,10 +5,12 @@
 # look     reprise | switch2 | ps5 | desktop
 # size     1920x1080, or 1280x800 for the Steam Deck
 # kind     still | clip | gamescope-clip (a real launch, HOME over the game: never fake)
-# keys     the --keys phases (ui-record), 400 ms apart: Wait:5 is 2 s. Each starts on the look's first screen.
+# keys     the --keys phases (ui-record), `gap` ms apart: Wait:5 is 2 s at 400. Each starts on the look's first screen.
 #          A still has one bare `Shot:` with a settle `Wait:3` or longer right before it, a desktop still one bare `shot:`
 #          among desktop-shot's steps. On the real core Return launches: put `Expect:<id>` (or `Expect:` for nothing)
 #          right before every Return, which only the Universe look answers. Leave the Media tab out (dev sessions).
+#          In a gamescope-clip `Game:KEY` presses an X keysym in the game, `GameHold:KEY`/`GameRelease:KEY` hold it.
+# gap      clips only: ms between keys (default 400)
 # segments clips only: "MARK..MARK" or "MARK..+SECONDS" cut from the take at its `Mark:` keys, crossfaded in order;
 #          the whole take when left out
 # alt      what the picture shows, for a reader who can't see it
@@ -22,39 +24,41 @@ name = "home"
 look = "reprise"
 size = "1920x1080"
 kind = "gamescope-clip"
+gap = 250
 keys = """
-Wait:4 Mark:hero
-Right Wait Right Wait Right Wait:2
-Up Wait Up Wait Left Wait Left Wait:2 Expect: Return
-Wait:3 Type:de Type:ad Type:_c Type:el Type:ls Wait:3
-Up Wait Up Wait:2 Expect:dead-cells Return
-Wait:5 Mark:launched
-Wait:125 Mark:game
-Wait:9 Mark:end
+Wait:6 Mark:home
+Right Wait Right Wait E Wait:2 Right Wait Right Wait Down Wait:2 X Wait:5 Mark:page
+Esc Wait:2 Up Wait Up Wait Left Wait Left Wait Left Wait
+Mark:search Expect: Return Wait:2 Type:de Wait Type:ad Wait:2 Up Up Wait Expect:dead-cells Return
+Wait:3 Mark:launched
+Wait:216 Game:Return Wait:8 Game:Return Wait:6 Game:Return Wait:28
+Mark:game GameHold:Right Wait:4 Game:space Wait:4 GameRelease:Right Wait:2
+Mark:dock Guide Wait:3 Right Wait Right Wait:2 Expect: Return Wait:3 Down Wait:2
+Mark:quit Expect: Return Wait:12 Mark:end
 """
-segments = ["hero..launched", "game..+3"]
-alt = "Browsing the home row with a controller, then searching for Dead Cells and launching it"
+segments = ["home..page", "search..launched", "game..+2", "dock..+1.6", "quit..+1.7"]
+alt = "Moving along the home row, through the library and a game page, searching for Dead Cells, playing it, then quitting from HOME"
 
 [[take]]
 name = "home-over-game"
 look = "reprise"
 size = "1920x1080"
 kind = "gamescope-clip"
+gap = 250
 keys = """
-Wait:4
-Up Wait Up Wait Left Wait Left Wait:2 Expect: Return
-Wait:3 Type:de Type:ad Type:_c Type:el Type:ls Wait:3
-Up Wait Up Wait:2 Expect:dead-cells Return
-Wait:136 Mark:overlay
-Wait:3 Guide Wait:3
+Wait:6
+Up Wait Up Wait Left Wait Left Wait:3 Expect: Return
+Wait:3 Type:dead Wait:3 Up Up Wait:2 Expect:dead-cells Return
+Wait:220 Game:Return Wait:8 Game:Return Wait:6 Game:Return Wait:28
+Mark:play GameHold:Left Wait:4 Game:space Wait:3 GameRelease:Left Wait
+Mark:dock Guide Wait:3
 Right Right Right Right Right Right Right Wait:2
-Expect: Return Wait:2 Expect: Return Wait:4
-Guide Wait:4
-Volume:up Wait Volume:up Wait Volume:up Wait:5
+Expect: Return Wait:3 Expect: Return Wait:3
+Guide Wait:3 Volume:up Wait Volume:up Wait Volume:up Wait:4
 Mark:end
 """
-segments = ["overlay..end"]
-alt = "HOME over Dead Cells: the dock, MangoHud turned on, then the volume level"
+segments = ["play..+2.2", "dock..end"]
+alt = "Dead Cells running, then HOME over it: the dock, MangoHud turned on, back in the game and the volume level"
 
 [[take]]
 name = "library"

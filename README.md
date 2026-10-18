@@ -9,7 +9,7 @@
 
 <p align="center"><a href="#install">Install</a> · <a href="https://universelauncher.com/docs/">Docs</a> · <a href="CHANGELOG.md">Changelog</a></p>
 
-<p align="center"><img src="docs/images/home.avif" alt="Browsing the home row with a controller, then searching for Dead Cells and launching it" width="100%"></p>
+<p align="center"><img src="docs/images/home.avif" alt="Moving along the home row, through the library and a game page, searching for Dead Cells, playing it, then quitting from HOME" width="100%"></p>
 
 > [!WARNING]
 > Early days (0.0.x). I use it every day, but expect rough edges. [Issues](https://github.com/ilyasturki/universe/issues) are welcome.
@@ -71,7 +71,7 @@ Switch live from the settings, or install a theme as an add-on.
 
 HOME pauses the game and opens over it. From there, take a screenshot, turn on MangoHud, cap the frame rate, change the volume, reconnect a controller or quit.
 
-![HOME over Dead Cells: the dock, MangoHud turned on, then the volume level](docs/images/home-over-game.avif)
+![Dead Cells running, then HOME over it: the dock, MangoHud turned on, back in the game and the volume level](docs/images/home-over-game.avif)
 
 ## Couch and Steam Deck
 
