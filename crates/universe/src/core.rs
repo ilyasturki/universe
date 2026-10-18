@@ -1355,7 +1355,7 @@ impl Core {
             trash(&written)?;
         }
         // The frames go with the entry; the player's own shots are theirs, not the entry's.
-        for rel in entry.images.iter().filter(|rel| !crate::screenshots::is_shot_name(rel)) {
+        for rel in entry.images.iter().filter(|rel| !crate::screenshots::is_shot_name(rel.rsplit('/').next().unwrap_or(rel))) {
             if rel.starts_with('/') || rel.split('/').any(|seg| seg == "..") {
                 continue;
             }

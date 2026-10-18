@@ -306,13 +306,20 @@ fn parse_rfc3339(s: &str) -> Option<DateTime<Local>> {
     DateTime::parse_from_rfc3339(s.trim()).ok().map(|t| t.with_timezone(&Local))
 }
 
-/// The player's own shots are named bare and live in `screenshots/`; the rest is relative to the journal.
+/// The player's own shots are named bare and live in `screenshots/`; the rest is relative to the journal, but for an
+/// `attachments/<shot>` that only `screenshots/` holds, as imports before 0.0.4 left them.
 pub fn image_path(journal_dir: &Path, screenshots_dir: &Path, rel: &str) -> PathBuf {
     if crate::screenshots::is_shot_name(rel) {
-        screenshots_dir.join(rel)
-    } else {
-        journal_dir.join(rel)
+        return screenshots_dir.join(rel);
     }
+    let under = journal_dir.join(rel);
+    if let Some(name) = rel.rsplit('/').next().filter(|name| crate::screenshots::is_shot_name(name)) {
+        let shot = screenshots_dir.join(name);
+        if !under.is_file() && shot.is_file() {
+            return shot;
+        }
+    }
+    under
 }
 
 #[cfg(test)]

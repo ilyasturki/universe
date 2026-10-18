@@ -195,9 +195,16 @@ fn journal_add_files_an_entry_the_journal_lists_and_calls_only_a_refusal_invalid
     let game: serde_json::Value = serde_json::from_slice(&added.stdout).unwrap_or_else(|e| panic!("{e}: {}", text(&added.stderr)));
     let id = game["id"].as_str().unwrap();
     let sid = "20261004-120000";
+    let game_dir = dir.path().join("data/games").join(id);
+    let (shot, frame) = (game_dir.join("screenshots/20261004-121500.png"), game_dir.join("journal/attachments/20261004-120000-1.png"));
+    for file in [&shot, &frame] {
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(file, "png").unwrap();
+    }
     let entry = serde_json::json!({
         "session": sid, "game": id, "written_at": "2026-10-04T13:00:00+02:00", "lang": "en", "title": "First steps",
-        "provider": "test", "paragraphs": ["Left the cave."], "next_up": "", "images": [],
+        "provider": "test", "paragraphs": ["Left the cave."], "next_up": "",
+        "images": ["attachments/20261004-121500.png", "attachments/20261004-120000-1.png"],
     });
     let out = universe(&dir, &["journal-add", sid, &entry.to_string()], &[]);
     assert!(out.status.success(), "{}", text(&out.stderr));
@@ -208,6 +215,7 @@ fn journal_add_files_an_entry_the_journal_lists_and_calls_only_a_refusal_invalid
         (&listed[0]["session"], &listed[0]["game"], &listed[0]["state"], &listed[0]["paragraphs"]),
         (&serde_json::json!(sid), &serde_json::json!(id), &serde_json::json!("written"), &entry["paragraphs"])
     );
+    assert_eq!(listed[0]["images"], serde_json::json!([shot, frame]), "an import's attachments/<shot> is the shot screenshots/ holds");
 
     // modules/journal gives up on "invalid:"; on "not found:" it writes the file itself at once, on anything else after retries.
     let escape = "../x";
@@ -227,6 +235,12 @@ fn journal_add_files_an_entry_the_journal_lists_and_calls_only_a_refusal_invalid
     }
     let escaped: Vec<_> = files_under(dir.path()).into_iter().filter(|p| p.file_name().is_some_and(|n| n == "x.json")).collect();
     assert!(escaped.is_empty(), "{escaped:?}");
+
+    let out = universe(&dir, &["journal", id, "--remove", sid, "--yes"], &[]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let listed: serde_json::Value = serde_json::from_slice(&universe(&dir, &["journal", id, "--json"], &[]).stdout).unwrap();
+    assert_eq!(listed, serde_json::json!([]));
+    assert!(shot.is_file() && !frame.exists(), "the entry's frames go with it, the player's shot stays");
 }
 
 #[test]
