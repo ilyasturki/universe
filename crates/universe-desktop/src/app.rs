@@ -455,8 +455,8 @@ impl Application {
         self.imp().updates.borrow().clone()
     }
 
-    /// Asks the signed-in stores what they have newer builds of, unless they were asked within `max_age`; never in a
-    /// scripted run, which stays off the network.
+    /// Asks the signed-in stores what they have newer builds of, and upstream how every game's version stands, unless
+    /// they were asked within `max_age`; never in a scripted run, which stays off the network.
     pub fn check_updates(&self, max_age: Option<Duration>) {
         let imp = self.imp();
         if self.scripted() || imp.checking.get() || imp.updates_at.get().zip(max_age).is_some_and(|(at, age)| at.elapsed() < age) {
@@ -466,22 +466,29 @@ impl Application {
         let app = self.downgrade();
         glib::spawn_future_local(async move {
             let result = backend::pinned(|core| async move {
-                let signed_in = core.sources().await.iter().any(|s| s["enabled"].as_bool() == Some(true) && s["logged_in"].as_bool() == Some(true));
-                if signed_in {
-                    core.source_updates().await
-                } else {
-                    Ok(Vec::new())
+                let listed = async {
+                    let signed_in = core.sources().await.iter().any(|s| s["enabled"].as_bool() == Some(true) && s["logged_in"].as_bool() == Some(true));
+                    if signed_in {
+                        core.source_updates().await
+                    } else {
+                        Ok(Vec::new())
+                    }
+                };
+                let (versions, listed) = tokio::join!(core.check_versions(""), listed);
+                if let Err(e) = versions {
+                    tracing::warn!("versions: {e}");
                 }
+                listed
             })
             .await;
             let Some(app) = app.upgrade() else { return };
+            app.library().refresh(&[]).await;
             let imp = app.imp();
             imp.checking.set(false);
             match result {
                 Ok(updates) => {
                     imp.updates_at.set(Some(Instant::now()));
                     imp.updates.replace(updates);
-                    app.mark_updatable();
                     app.emit_by_name::<()>("updates-changed", &[]);
                 }
                 Err(e) => tracing::warn!("updates: {e}"),
@@ -489,17 +496,21 @@ impl Application {
         });
     }
 
-    fn mark_updatable(&self) {
-        let updates = self.imp().updates.borrow();
-        for game in self.library().games() {
-            let wanted = {
-                let row = game.row();
-                !row.store_id.is_empty() && updates.iter().any(|u| u["source"] == row.source.as_str() && u["id"] == row.store_id.as_str())
-            };
-            if game.updatable() != wanted {
-                game.set_updatable(wanted);
-            }
+    /// Never in a scripted run, which stays off the network.
+    pub fn check_game_version(&self, id: String) {
+        if self.scripted() {
+            return;
         }
+        let app = self.downgrade();
+        glib::spawn_future_local(async move {
+            let asked = id.clone();
+            if let Err(e) = backend::pinned(move |core| async move { core.check_versions(&asked).await }).await {
+                tracing::warn!("versions of {id}: {e}");
+            }
+            if let Some(app) = app.upgrade() {
+                app.library().refresh(&[id]).await;
+            }
+        });
     }
 
     /// The recording's frame `index` when it is cached; asks for the thumbnail frame otherwise, which `frame-landed` announces.
@@ -662,10 +673,6 @@ impl Application {
                     None
                 }
             };
-            let weak = app.downgrade();
-            app.library().connect_updated(move || {
-                weak.upgrade().inspect(|app| app.mark_updatable());
-            });
             app.set_stage(gettext("reading the library"));
             app.library().refresh(&[]).await;
             app.set_stage(gettext("reading the recordings"));

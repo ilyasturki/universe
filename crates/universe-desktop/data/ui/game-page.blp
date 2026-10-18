@@ -19,6 +19,8 @@ template $UniverseGamePage: Adw.NavigationPage {
         byline.justify: center;
         facts.halign: center;
         facts.justify: center;
+        version.halign: center;
+        version.justify: center;
         actions.halign: center;
       }
     }
@@ -96,6 +98,17 @@ template $UniverseGamePage: Adw.NavigationPage {
                     wrap: true;
                     xalign: 0;
                     margin-top: 6;
+
+                    styles [
+                      "dimmed",
+                    ]
+                  }
+
+                  Label version {
+                    halign: start;
+                    wrap: true;
+                    xalign: 0;
+                    visible: false;
 
                     styles [
                       "dimmed",
@@ -385,6 +398,12 @@ menu more_menu {
     item {
       label: _("_Update");
       action: "game.update";
+      hidden-when: "action-disabled";
+    }
+
+    item {
+      label: _("_Mark as Current");
+      action: "game.mark-current";
       hidden-when: "action-disabled";
     }
 

@@ -38,6 +38,8 @@ pub struct Row {
     /// The prefix it names or the one its launch made, on disk, under `prefixes_root` and no other library game's: a store's is not Universe's to trash.
     pub has_prefix: bool,
     pub has_install: bool,
+    pub version: String,
+    pub check: universe::upstream::Check,
 }
 
 /// What `Application::defer` holds a removal from the library under.
@@ -95,8 +97,33 @@ impl Row {
                 && std::path::Path::new(&r.effective.prefix).is_dir()
                 && universe::launcher::prefix_sharer(g, games, config).is_none(),
             has_install: !g.source.dir.is_empty() && universe::paths::expand(&g.source.dir).is_dir(),
+            version: r.installed().0.to_string(),
+            check: r.check.clone(),
         }
     }
+
+    pub fn updatable(&self) -> bool {
+        self.check.status == "update" && self.check.how == "apply"
+    }
+
+    /// Also before any update: upstream's build then gives it a baseline.
+    pub fn markable(&self) -> bool {
+        self.check.markable && !matches!(self.check.status, "current" | "final")
+    }
+}
+
+pub fn version_line(row: &Row) -> String {
+    let state = match (row.check.status, row.check.reason) {
+        ("update", "not-owned") => gettext("Update available, not owned on {}").replace("{}", &crate::library::source_name(&row.check.store)),
+        ("update", _) => gettext("Update available"),
+        ("likely", _) => gettext("Likely out of date"),
+        ("current", _) => gettext("Up to date"),
+        ("unknown", "no-answer") => gettext("Not checked yet"),
+        ("unknown", _) => gettext("Can't tell if it's up to date"),
+        _ => String::new(),
+    };
+    let version = if row.version.is_empty() { String::new() } else { gettext("Version {}").replace("{}", &row.version) };
+    [version, state].into_iter().filter(|s| !s.is_empty()).collect::<Vec<_>>().join(" · ")
 }
 
 mod imp {
@@ -127,9 +154,13 @@ mod imp {
         pub has_prefix: Cell<bool>,
         #[property(get)]
         pub has_install: Cell<bool>,
+        #[property(get)]
+        pub version: RefCell<String>,
         /// Its store has a newer build of it.
-        #[property(get, set)]
+        #[property(get)]
         pub updatable: Cell<bool>,
+        #[property(get)]
+        pub markable: Cell<bool>,
         #[property(get, set)]
         pub playing: Cell<bool>,
         #[property(get, set)]
@@ -206,6 +237,7 @@ impl GameObject {
         text(&imp.platform, &row.platform, "platform");
         text(&imp.source, &row.source, "source");
         text(&imp.cover, &row.cover, "cover");
+        text(&imp.version, &version_line(&row), "version");
         let flag = |cell: &Cell<bool>, value: bool, name: &str| {
             if cell.replace(value) != value {
                 self.notify(name);
@@ -216,6 +248,8 @@ impl GameObject {
         flag(&imp.favorite, row.favorite, "favorite");
         flag(&imp.has_prefix, row.has_prefix, "has-prefix");
         flag(&imp.has_install, row.has_install, "has-install");
+        flag(&imp.updatable, row.updatable(), "updatable");
+        flag(&imp.markable, row.markable(), "markable");
     }
 }
 

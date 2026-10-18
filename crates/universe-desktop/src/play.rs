@@ -55,6 +55,7 @@ impl Window {
 
     /// A game already on the stack is popped back to rather than pushed twice: a page's tag is the game's id.
     pub fn open_game(&self, game: &GameObject) {
+        self.app().check_game_version(game.id());
         let navigation = &self.imp().navigation;
         let tag = format!("game:{}", game.id());
         if let Some(page) = navigation.find_page(&tag) {

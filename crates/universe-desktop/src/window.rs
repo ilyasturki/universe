@@ -659,6 +659,7 @@ impl Window {
             "favorite" => self.set_flag(game, "favorite", true),
             "unfavorite" => self.set_flag(game, "favorite", false),
             "update" => self.update(game),
+            "mark-current" => self.mark_current(game),
             "uninstall" => self.confirm_uninstall(game),
             "remove" => self.remove(game),
             "remove-purge" => self.confirm_purge(game),
@@ -668,12 +669,26 @@ impl Window {
 
     fn update(&self, game: &GameObject) {
         let row = game.row().clone();
-        if self.app().start_job(Kind::Update, &row.source, vec![(row.store_id, row.title.clone())], false) {
+        if self.app().start_job(Kind::Update, &row.check.store, vec![(row.check.store_id, row.title.clone())], false) {
             let toast = adw::Toast::builder().title(gettext("Updating {}").replace("{}", &row.title)).button_label(gettext("_Show")).build();
             toast.set_action_name(Some("win.view"));
             toast.set_action_target_value(Some(&"store".to_variant()));
             self.toast(toast);
         }
+    }
+
+    fn mark_current(&self, game: &GameObject) {
+        let (id, title, win) = (game.id(), game.title(), self.downgrade());
+        glib::spawn_future_local(async move {
+            let target = id.clone();
+            let result = backend::call(move |core| async move { core.mark_current(&target, "").await }).await;
+            let Some(win) = win.upgrade() else { return };
+            win.app().library().refresh(std::slice::from_ref(&id)).await;
+            win.toast(adw::Toast::new(&match result {
+                Ok(_) => gettext("“{}” marked as current").replace("{}", &title),
+                Err(e) => e.to_string(),
+            }));
+        });
     }
 
     /// Out of sight at once; the core removes it once the toast goes, unless Undo brings it back.
