@@ -51,11 +51,13 @@ requires_bins = { codex = ["codex"] }
 [[settings]]
 key = "model"
 type = "string"
-default = ""
+default = "latest"
 label = "Model"
-description = "The model the provider is asked for."
-keywords = ["gpt", "claude", "llm", "ai"]
+description = "The model the provider is asked for. Latest is Codex's newest; the OpenAI-compatible API needs a name."
+keywords = ["gpt", "claude", "llm", "ai", "latest"]
+choice_labels = { latest = "Latest" }
 scope = "global"
+choices = ["latest"]
 choices_exec = "bin/choices"
 
 [[settings]]
@@ -92,13 +94,15 @@ advanced = true
 
 [[settings]]
 key = "effort"
-type = "enum"
+type = "string"
 default = "high"
 label = "Reasoning effort"
-choice_labels = { minimal = "Minimal", low = "Low", medium = "Medium", high = "High" }
+description = "The choices come from the model."
+choice_labels = { low = "Low", medium = "Medium", high = "High", xhigh = "Extra high", max = "Max", ultra = "Ultra" }
 scope = "global"
 advanced = true
-choices = ["minimal", "low", "medium", "high"]
+choices = ["low", "medium", "high", "xhigh", "max", "ultra"]
+choices_exec = "bin/choices"
 
 [[settings]]
 key = "attempts"

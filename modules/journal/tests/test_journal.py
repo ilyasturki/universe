@@ -456,6 +456,11 @@ def test_codex_exec_arguments(tmp_path, monkeypatch):
     assert kw["cwd"] == str(tmp_path) and kw["timeout"] == providers.TIMEOUT_S
     assert json.loads(Path(schema).read_text()) == pr.OUTPUT_SCHEMA
 
+    for latest in ("latest", ""):
+        providers.run_codex(providers.Options(provider="codex", model=latest), pr.system_prompt(), brief, ims, str(tmp_path))
+        args = calls[-1][0]
+        assert not [v for v in values("-c") if v.startswith("model=")], "Latest leaves the model to codex's own default"
+
 
 def test_codex_quota_wall_and_retry(tmp_path, fakebin, monkeypatch):
     monkeypatch.setenv("PATH", f"{fakebin}:{os.environ['PATH']}")
@@ -529,32 +534,51 @@ def test_acceptance_of_model_fields():
     }
 
 
-def run_choices(tmp_path, settings, codex_body):
+def run_choices(tmp_path, settings, codex_body, key="model"):
     bindir = tmp_path / "fakebin"
     bindir.mkdir(exist_ok=True)
     write_shim(bindir / "codex", codex_body)
     env = dict(os.environ)
     env.update({"PATH": f"{bindir}:{env.get('PATH', '')}", "MODULE_SETTINGS_JSON": json.dumps(settings)})
-    return subprocess.run([sys.executable, str(BIN_DIR / "choices"), "model"], env=env, capture_output=True, text=True, check=False)
+    return subprocess.run([sys.executable, str(BIN_DIR / "choices"), key], env=env, capture_output=True, text=True, check=False)
+
+
+def model_list(*rows):
+    """A codex whose `app-server` answers `model/list` with `rows`: (model, efforts, isDefault, hidden)."""
+    data = [
+        {"id": m, "model": m, "isDefault": default, "hidden": hidden, "supportedReasoningEfforts": [{"reasoningEffort": e, "description": ""} for e in efforts]}
+        for m, efforts, default, hidden in rows
+    ]
+    reply = json.dumps({"id": 2, "result": {"data": data, "nextCursor": None}})
+    return f'[ "$1" = app-server ] || exit 2\nread -r _init; echo \'{{"id":1,"result":{{}}}}\'; read -r _initialized; read -r _req\necho \'{reply}\'\nexit 0'
 
 
 def test_choices_lists_the_providers_models(tmp_path):
-    catalog = {
-        "models": [
-            {"slug": "gpt-5.6-sol", "visibility": "list", "priority": 4},
-            {"slug": "gpt-reserve", "visibility": "hide", "priority": 3},
-            {"slug": "gpt-6-astra", "visibility": "list", "priority": 1},
-        ]
-    }
-    res = run_choices(tmp_path, {"provider": "codex"}, f"[ \"$1 $2\" = 'debug models' ] || exit 2\necho '{json.dumps(catalog)}'\nexit 0")
+    codex = model_list(
+        ("gpt-6.1-sol", ["low", "medium", "high", "xhigh", "max", "ultra"], True, False),
+        ("gpt-reserve", ["low"], False, True),
+        ("gpt-5.6-luna", ["low", "medium", "high", "xhigh"], False, False),
+    )
+    res = run_choices(tmp_path, {"provider": "codex"}, codex)
     assert res.returncode == 0, res.stderr
-    assert json.loads(res.stdout) == ["gpt-6-astra", "gpt-5.6-sol"]
+    assert json.loads(res.stdout) == ["latest", "gpt-6.1-sol", "gpt-5.6-luna"], "Latest first, then codex's catalog in its order"
+
+    efforts = {
+        model: json.loads(run_choices(tmp_path, {"provider": "codex", "model": model}, codex, "effort").stdout) for model in ("latest", "", "gpt-5.6-luna")
+    }
+    assert efforts == {
+        "latest": ["low", "medium", "high", "xhigh", "max", "ultra"],
+        "": ["low", "medium", "high", "xhigh", "max", "ultra"],
+        "gpt-5.6-luna": ["low", "medium", "high", "xhigh"],
+    }, "the efforts follow the chosen model, Latest's being codex's default"
 
     res = run_choices(tmp_path, {"provider": "stub"}, "exit 2")
     assert json.loads(res.stdout) == []
 
     res = run_choices(tmp_path, {"provider": "codex"}, "exit 1")
-    assert res.returncode == 0 and json.loads(res.stdout) == [] and "codex debug models failed" in res.stderr
+    assert res.returncode == 0 and json.loads(res.stdout) == ["latest"]
+    res = run_choices(tmp_path, {"provider": "codex", "model": "gpt-5.6-luna"}, "exit 1", "effort")
+    assert res.returncode == 0 and json.loads(res.stdout) == providers.EFFORTS
 
 
 ANSWER = {
@@ -746,6 +770,7 @@ def test_the_endpoints_failures_are_told_apart(tmp_path, endpoint):
     for opts in (
         providers.Options(provider="openai", model="m", base_url=endpoint.url),
         providers.Options(provider="openai", base_url=endpoint.url, api_key="k"),
+        providers.Options(provider="openai", model="latest", base_url=endpoint.url, api_key="k"),
     ):
         with pytest.raises(providers.Permanent):
             providers.run_openai(opts, "S", "B", [], str(tmp_path))
@@ -763,11 +788,12 @@ def test_the_payload_drops_frames_until_the_request_fits(tmp_path, monkeypatch):
     assert urls[0][0].kind == "shot", "the player's own shots are the last to go"
 
 
-def test_the_endpoint_lists_its_models(endpoint):
+def test_the_endpoint_lists_its_models(tmp_path, endpoint):
     endpoint.answer = lambda payload: (200, {"data": [{"id": "gpt-x"}, {"id": "llama-3"}, {"nope": 1}]}, {})
-    assert providers.models(openai_opts(endpoint)) == ["gpt-x", "llama-3"]
+    assert providers.models(openai_opts(endpoint), str(tmp_path)) == ["gpt-x", "llama-3"]
     assert [(s.method, s.path, s.auth) for s in endpoint.seen] == [("GET", "/v1/models", "Bearer sk-test")]
     endpoint.answer = lambda payload: (500, "down", {})
+    assert providers.models(openai_opts(endpoint), str(tmp_path)) == ["gpt-x", "llama-3"], "down, the endpoint's last list stands"
     assert providers.models(openai_opts(endpoint)) == []
     assert providers.models(providers.Options(provider="stub")) == []
 

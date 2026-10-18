@@ -25,10 +25,13 @@ def options(settings):
 
 
 def main(argv):
-    if argv[:1] != ["model"]:
-        log(f"usage: choices model (got {argv})")
+    if argv[:1] == ["model"]:
+        print(json.dumps(providers.models(options(load_settings()), os.environ.get("MODULE_DATA_DIR", ""))))
+    elif argv[:1] == ["effort"]:
+        print(json.dumps(providers.efforts(options(load_settings()))))
+    else:
+        log(f"usage: choices model|effort (got {argv})")
         return 2
-    print(json.dumps(providers.models(options(load_settings()))))
     return 0
 
 

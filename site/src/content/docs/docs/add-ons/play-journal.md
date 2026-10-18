@@ -18,8 +18,8 @@ The model also reads the previous entry and the journal's memory of the game (it
 - A recording or screenshots of the session, from [Video capture](/docs/add-ons/video-capture/), [Screenshots](/docs/add-ons/screenshots/), or both.
 - ffmpeg.
 - A **Writing model**, which has no default:
-  - **Codex** runs the `codex` command, which has to be installed and signed in (`codex login` in a terminal). Without `codex`, the module reads Unavailable. Leave **Model** empty for Codex's own default.
-  - **OpenAI-compatible API** sends the request to **API endpoint**, at `/chat/completions`, with the **API key** or the key in **API key file**. It needs a **Model** that reads images, since the pictures go inline in the request.
+  - **Codex** runs the `codex` command, which has to be installed and signed in (`codex login` in a terminal). Without `codex`, the module reads Unavailable. With **Model** on **Latest**, Codex uses its newest model and moves to each new one when it comes out.
+  - **OpenAI-compatible API** sends the request to **API endpoint**, at `/chat/completions`, with the **API key** or the key in **API key file**. It needs a **Model** chosen by name that reads images, since the pictures go inline in the request. **Latest** works with Codex only.
   - **Stub (no model)** writes a placeholder entry without asking any model, to check that the rest works.
 
 The provider gets the session's pictures, the game's title, when you played and for how long, the previous entry and the memory of the game. With **Let the model look the game up on the web** on, the model is also asked to search the web for the game.
@@ -44,7 +44,7 @@ universe module set journal provider=codex
 | **Write a journal entry after each session** | On | Per game. |
 | **Entry language** | Auto | Auto writes in the game's on-screen language. Or French, English, Spanish, German, Italian, Portuguese, Japanese. |
 | **Writing model** | none | Codex, OpenAI-compatible API, Stub (no model). |
-| **Model** | empty | The model the provider is asked for. The choices come from the provider. |
+| **Model** | Latest | The model the provider is asked for. The choices come from the provider. When the endpoint can't be reached, its last list stays. |
 | **API endpoint** | `https://api.openai.com/v1` | For the OpenAI-compatible API. |
 | **API key** | empty | For the OpenAI-compatible API. |
 | **API key file** | empty | A file read in place of the API key. |
@@ -54,7 +54,7 @@ Behind Advanced:
 | Setting | Default | |
 | --- | --- | --- |
 | **Let the model look the game up on the web** | On | |
-| **Reasoning effort** | High | Minimal, Low, Medium, High. |
+| **Reasoning effort** | High | The choices come from the model. |
 | **Tries per session** | 2 | How many times one run asks the model before the entry is put off. |
 | **Seconds a single try may take** | 900 | |
 | **Maximum images sent to the model** | 40 | |

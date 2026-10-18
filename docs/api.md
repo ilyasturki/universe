@@ -2007,7 +2007,7 @@ label = "Wii controller"
 [[settings]]
 key = "model"
 type = "string"
-default = "gpt-5.6-sol"
+default = "latest"
 choices_exec = "bin/choices"      # `bin/choices model` prints the current choices as a JSON array
 label = "Model"
 

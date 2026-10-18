@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 import images as img
-from _common import journal_lang, log, read_json, remove
+from _common import journal_lang, log, read_json, remove, write_json
 from prompt import OUTPUT_SCHEMA
 
 # A 20-image session measured 159 s; course-based games with one web lookup per level passed 420 s.
@@ -25,6 +25,10 @@ LIMIT_FALLBACK_HOURS = 6
 SIGNED_OUT_RE = re.compile(r"\b401\b|unauthori[sz]ed|authentication required", re.IGNORECASE)
 SIGNED_OUT = "codex is signed out: run codex login"
 PROVIDERS = ("codex", "openai", "stub")
+# The model setting's value for Codex's own default, which follows its new models; an empty one means the same.
+LATEST = "latest"
+# While Codex cannot list a model's own, and for the OpenAI-compatible API, which has no way to say.
+EFFORTS = ["low", "medium", "high"]
 
 
 class QuotaExceeded(Exception):
@@ -87,6 +91,10 @@ def codex_signed_in(timeout_s=APP_SERVER_TIMEOUT_S):
     if SIGNED_OUT_RE.search(message):
         return False, "signed out"
     return None, (message.splitlines() or ["codex gave no answer"])[0][:160]
+
+
+def pinned(model):
+    return "" if model == LATEST else model
 
 
 def app_server(method, timeout_s=APP_SERVER_TIMEOUT_S):
@@ -207,7 +215,7 @@ def codex_args(model, images, schema_path, out_path, prompt, cwd, effort="high",
         "-c",
         "approval_policy=never",
     ]
-    if model:
+    if pinned(model):
         args += ["-c", f"model={model}"]
     args += [
         "-c",
@@ -431,8 +439,8 @@ def parse_entry(text):
 
 
 def run_openai(opts, system, brief, images, work_dir, heartbeat=None):
-    if not opts.model:
-        raise Permanent("no model set: pick one in the journal's settings")
+    if not pinned(opts.model):
+        raise Permanent("no model set: the OpenAI-compatible API needs one named in the journal's settings")
     key = api_key(opts)
     url = endpoint(opts, "/chat/completions")
     urls = inline_images(images, work_dir, opts.image_long_edge)
@@ -477,38 +485,50 @@ def schema_reminder():
     )
 
 
-def openai_models(opts):
-    """The endpoint's model ids for the settings page; an empty list when it cannot say."""
+def openai_models(opts, data_dir=""):
+    """The endpoint's model ids for the settings page: the last list it gave while it cannot say, else none."""
+    cache = os.path.join(data_dir, "models.json") if data_dir else ""
     try:
         req = urllib.request.Request(endpoint(opts, "/models"), headers={"Authorization": f"Bearer {api_key(opts)}", "Accept": "application/json"})
         with urllib.request.urlopen(req, timeout=15) as res:
             data = json.loads(res.read().decode("utf-8"))
     except (Permanent, urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError, ValueError) as e:
         log(f"{getattr(opts, 'base_url', '')}/models failed: {e}")
-        return []
+        kept = read_json(cache) if cache else None
+        return kept if isinstance(kept, list) else []
     rows = data.get("data") if isinstance(data, dict) else data
-    ids = [str(r["id"]) for r in rows or [] if isinstance(r, dict) and r.get("id")]
-    return sorted(ids)
+    ids = sorted(str(r["id"]) for r in rows or [] if isinstance(r, dict) and r.get("id"))
+    if cache and ids:
+        write_json(cache, ids)
+    return ids
 
 
-def codex_models():
-    try:
-        out = subprocess.run(["codex", "debug", "models"], capture_output=True, text=True, check=True, timeout=15).stdout
-        models = json.loads(out).get("models") or []
-    except (OSError, subprocess.SubprocessError, ValueError, AttributeError) as e:
-        log(f"codex debug models failed: {e}")
+def codex_catalog():
+    """codex's listed models, in its order, each with `isDefault` and its `supportedReasoningEfforts`."""
+    reply = app_server("model/list")
+    rows = ((reply or {}).get("result") or {}).get("data")
+    if not isinstance(rows, list):
+        log(f"codex model/list gave no models: {(reply or {}).get('error') or 'no answer'}")
         return []
-    listed = [m for m in models if isinstance(m, dict) and m.get("slug") and m.get("visibility", "list") == "list"]
-    listed.sort(key=lambda m: m["priority"] if isinstance(m.get("priority"), int) else 1 << 30)
-    return [m["slug"] for m in listed]
+    return [r for r in rows if isinstance(r, dict) and r.get("model") and not r.get("hidden")]
 
 
-def models(opts):
+def models(opts, data_dir=""):
     if opts.provider == "codex":
-        return codex_models()
+        return [LATEST] + [r["model"] for r in codex_catalog()]
     if opts.provider == "openai":
-        return openai_models(opts)
+        return openai_models(opts, data_dir)
     return []
+
+
+def efforts(opts):
+    """The chosen model's reasoning efforts, Latest's being those of Codex's default."""
+    if opts.provider != "codex":
+        return EFFORTS
+    model = pinned(opts.model)
+    row = next((r for r in codex_catalog() if (r["model"] == model if model else r.get("isDefault"))), None)
+    listed = [e.get("reasoningEffort") for e in (row or {}).get("supportedReasoningEfforts") or [] if isinstance(e, dict)]
+    return [e for e in listed if e] or EFFORTS
 
 
 def run_stub(title, images, forced_lang=None):
