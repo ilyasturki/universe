@@ -224,6 +224,11 @@ fn load_source_caches(sources: &[Source]) -> BTreeMap<String, Vec<serde_json::Ma
     caches
 }
 
+/// A store's `update` row names an install it checked: one at the published build, or one it would not update, is no update to apply.
+fn pending(u: &serde_json::Map<String, serde_json::Value>) -> bool {
+    u.get("skipped").and_then(|s| s.as_str()).is_none_or(str::is_empty) && u.get("local_build") != u.get("remote_build")
+}
+
 fn runtime_of(c: &Current, seed: Runtime) -> Runtime {
     crate::session::read_marker().filter(|m| m.current.session_id == c.session_id).and_then(|m| m.runtime).unwrap_or(seed)
 }
@@ -2391,8 +2396,10 @@ impl Core {
             };
             for e in events {
                 if let SourceEvent::Update(mut u) = e {
-                    u.insert("source".into(), serde_json::Value::String(m.id().into()));
-                    out.push(serde_json::Value::Object(u));
+                    if pending(&u) {
+                        u.insert("source".into(), serde_json::Value::String(m.id().into()));
+                        out.push(serde_json::Value::Object(u));
+                    }
                 }
             }
         }
@@ -2404,7 +2411,15 @@ impl Core {
         let m = self.source(source).await?;
         let targets: Vec<String> = if game_id.is_empty() {
             let ev = self.run_verb(&m, "update", &[], progress.as_deref_mut()).await?;
-            ev.iter().filter_map(|e| if let SourceEvent::Update(u) = e { u.get("id").and_then(|v| v.as_str()).map(|s| s.to_string()) } else { None }).collect()
+            ev.iter()
+                .filter_map(|e| {
+                    if let SourceEvent::Update(u) = e {
+                        u.get("id").and_then(|v| v.as_str()).filter(|_| pending(u)).map(|s| s.to_string())
+                    } else {
+                        None
+                    }
+                })
+                .collect()
         } else {
             vec![game_id.to_string()]
         };
@@ -3274,7 +3289,7 @@ uninstall) echo '{{"event":"window","class":"steam","title":""}}'; echo "$2" >> 
     async fn a_failing_source_leaves_the_others_scanned_and_listed() {
         let dir = fake_source(
             r#"scan) echo '{"event":"game","id":"1","title":"Old","owned":true,"installed":true,"dir":"/g/Old","exe":"old.exe"}' ;;
-update) echo '{"event":"update","id":"1","title":"Old","local_build":"1","remote_build":"2","version":"2","date":""}' ;;"#,
+update) echo '{"event":"update","id":"1","title":"Old","local_build":"1","remote_build":"2","version":"2","date":""}'; echo '{"event":"update","id":"2","title":"Current","local_build":"2","remote_build":"2","version":"2","date":""}'; echo '{"event":"update","id":"3","title":"Unowned","local_build":"1","remote_build":"2","version":"2","date":"","skipped":"not owned"}' ;;"#,
         );
         let bad = dir.path().join("sources/bad");
         std::fs::create_dir_all(&bad).unwrap();
@@ -3287,7 +3302,11 @@ update) echo '{"event":"update","id":"1","title":"Old","local_build":"1","remote
         assert_eq!(core.source_scan("", None).await.unwrap().len(), 1, "the failing store is skipped");
         assert!(core.source_scan("bad", None).await.unwrap_err().to_string().contains("store down"), "named, its failure is the answer");
         let updates = core.source_updates().await.unwrap();
-        assert_eq!(updates.iter().map(|u| (u["id"].as_str(), u["source"].as_str())).collect::<Vec<_>>(), [(Some("1"), Some("fake"))]);
+        assert_eq!(
+            updates.iter().map(|u| (u["id"].as_str(), u["source"].as_str())).collect::<Vec<_>>(),
+            [(Some("1"), Some("fake"))],
+            "a current or skipped row is none"
+        );
     }
 
     #[tokio::test]

@@ -301,7 +301,7 @@ def test_an_install_gogdl_fails_lands_no_game(env, run, monkeypatch):
     assert code == 1 and [e["event"] for e in events] == ["progress", "progress"]
 
 
-def test_updates_list_the_owned_installs_behind_the_published_build(web, src, env, run, monkeypatch):
+def test_updates_list_every_install_against_the_published_build(web, src, env, run, monkeypatch):
     write_info(env["scan"] / "Current", "2", "2", "Current", build="B2")
     write_info(env["scan"] / "Unowned", "3", "3", "Unowned", build="B0")
     write_info(env["scan"] / "Unknown", "4", "4", "Unknown", build=None)
@@ -309,9 +309,12 @@ def test_updates_list_the_owned_installs_behind_the_published_build(web, src, en
     fake_fetch(web, {"https://content-system.gog.com/products/": BUILDS})
     code, events, _ = run("update")
     assert code == 0
+    latest = {"remote_build": "B2", "version": "1.1", "date": "2025-03-01"}
     assert events == [
-        {"event": "update", "id": "1434554947", "title": "Mini Metro", "local_build": "B1", "remote_build": "B2", "version": "1.1", "date": "2025-03-01"},
-        {"event": "update", "id": "4", "title": "Unknown", "local_build": None, "remote_build": "B2", "version": "1.1", "date": "2025-03-01"},
+        {"event": "update", "id": "2", "title": "Current", "local_build": "B2", **latest, "local_version": "1.1"},
+        {"event": "update", "id": "1434554947", "title": "Mini Metro", "local_build": "B1", **latest, "local_version": "1.0"},
+        {"event": "update", "id": "4", "title": "Unknown", "local_build": None, **latest, "local_version": None},
+        {"event": "update", "id": "3", "title": "Unowned", "local_build": "B0", **latest, "local_version": None, "skipped": "not owned"},
         {"event": "done"},
     ]
     assert calls(env) == []

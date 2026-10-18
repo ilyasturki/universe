@@ -363,7 +363,8 @@ def fetch_build(settings, game_id):
     if not items:
         return None
     last = max(reversed(items), key=lambda b: b.get("date_published") or "")
-    return {"build": str(last.get("build_id")), "version": last.get("version_name") or "?", "date": str(last.get("date_published") or "")[:10]}
+    names = {str(b.get("build_id")): b["version_name"] for b in data.get("items") or [] if b.get("version_name")}
+    return {"build": str(last.get("build_id")), "version": last.get("version_name") or "?", "date": str(last.get("date_published") or "")[:10], "names": names}
 
 
 def fetch_builds(settings, game_ids):
@@ -613,20 +614,18 @@ def cmd_update(settings, args):
             remote = remotes.get(install["id"])
             if remote is None:
                 log(f"{install['title']}: no build published for {settings['platform']}, skipped")
-            elif install["build"] == remote["build"]:
                 continue
-            elif owned_status(install["id"], index) is False:
-                log(f"{install['title']}: {remote['version']} available but not in the library, skipped")
-            else:
-                emit(
-                    "update",
-                    id=install["id"],
-                    title=install["title"],
-                    local_build=install["build"],
-                    remote_build=remote["build"],
-                    version=remote["version"],
-                    date=remote["date"],
-                )
+            emit(
+                "update",
+                id=install["id"],
+                title=install["title"],
+                local_build=install["build"],
+                remote_build=remote["build"],
+                version=remote["version"],
+                date=remote["date"],
+                local_version=remote["names"].get(install["build"]),
+                **({"skipped": "not owned"} if owned_status(install["id"], index) is False else {}),
+            )
         emit("done")
         return
     game_id = require_id(args, "update")

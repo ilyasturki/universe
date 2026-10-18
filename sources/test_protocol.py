@@ -68,6 +68,7 @@ OPTIONAL = {
     "art": dict,
     "steam_appid": (int, str),
 }
+UPDATE_OPTIONAL = {"local_version": (str, NULL), "skipped": str}
 
 OFFLINE = """
 import io, json, os, runpy, sys, urllib.request
@@ -160,6 +161,8 @@ def check_event(event):
     for key, kinds in REQUIRED[name].items():
         assert key in event and fits(event[key], kinds), f"{name}.{key} is {event.get(key)!r}"
     for key, kinds in OPTIONAL.items() if name in ("game", "info") else ():
+        assert key not in event or fits(event[key], kinds), f"{name}.{key} is {event[key]!r}"
+    for key, kinds in UPDATE_OPTIONAL.items() if name == "update" else ():
         assert key not in event or fits(event[key], kinds), f"{name}.{key} is {event[key]!r}"
     if name == "game":
         assert event["id"] and event["title"], "the core drops a game without an id or a title"
