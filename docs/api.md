@@ -1709,6 +1709,14 @@ wins, so the Edge's paddles (`BTN_TRIGGER_HAPPY1…4`, kernel ≥ 7.2) and the E
 xpadneo or xone, `BTN_TRIGGER_HAPPY5…8` on older drivers) resolve without a hardcoded number, and a
 slot with no code present is reported unbound.
 
+A pad's family is the first that matches, in this order: its vendor and product (`28de:1205` the Deck, `054c:0df2` the
+Edge, `054c:0ce6` the DualSense, `054c:05c4`, `09cc` and `0ba0` the DualShock 4, `045e:0b00`, `0b05` and `0b22` the Elite,
+`057e:2069` the Switch 2 Pro, `057e:2009` and `2017` the Switch Pro, `2dc8:6009` the 8BitDo Pro 3); a name that fits a
+family of the same vendor ("elite" on a `045e` pad); the vendor alone, so every other `045e` pad is `xbox`; the name alone,
+whatever the vendor; else `generic`. An `xbox` pad that reports grip or paddle codes is an Elite, since xpadneo presents one
+as a plain `045e:028e`. The 8BitDo Pro 3 is the only 8BitDo with a family of its own: in X-input mode it reads as `xbox`, in
+Switch mode as `switch-pro`.
+
 On a Deck (`deck_model()`, below) Steam Input's virtual pad, `28de:11ff`, is taken for the
 built-in controls: under Steam that is all the watcher sees of them. A frontend with no pad seen
 yet shows the Deck's glyphs there, since SDL's hidraw driver may also take the controls from
