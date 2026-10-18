@@ -7,7 +7,7 @@
 
 <p align="center"><b>A game launcher for Linux you drive with a controller.</b><br>Your GOG, Steam, Epic, itch.io and emulated games in one library, played from the couch or on a Steam Deck.</p>
 
-<p align="center"><a href="#install">Install</a> · <a href="https://universelauncher.com/docs/">Docs</a> · <a href="CHANGELOG.md">Changelog</a></p>
+<p align="center"><a href="#install">Install</a> · <a href="https://universe.ilyasturki.com/docs/">Docs</a> · <a href="CHANGELOG.md">Changelog</a></p>
 
 <p align="center"><img src="docs/images/home.avif" alt="Moving along the home row, through the library and a game page, searching for Dead Cells, playing it, then quitting from HOME" width="100%"></p>
 
@@ -37,7 +37,7 @@ On Nix, import the flake's `nixosModules.default` for the system and `homeModule
 
 On GNOME, run `universe setup` once after the Arch or Fedora package. Then open **Universe Big Screen**, and a short setup finds your games.
 
-More: [every way to install](https://universelauncher.com/docs/getting-started/install/), [updating and uninstalling](https://universelauncher.com/docs/getting-started/update-uninstall/).
+More: [every way to install](https://universe.ilyasturki.com/docs/getting-started/install/), [updating and uninstalling](https://universe.ilyasturki.com/docs/getting-started/update-uninstall/).
 
 ## Your whole library
 
@@ -75,10 +75,10 @@ HOME pauses the game and opens over it. From there, take a screenshot, turn on M
 
 ## Couch and Steam Deck
 
-- DualSense, DualShock 4, Xbox, Switch Pro and 8BitDo [controllers](https://universelauncher.com/docs/controllers/supported/), each with its own glyphs, and a guided setup for any other pad. Emulators get the pads you hold, one per player.
-- On a [Steam Deck](https://universelauncher.com/docs/getting-started/steam-deck/), it fits the 1280×800 screen. Back buttons run macros; refresh rate, power limit and fan curve are in the settings.
-- Added as a non-Steam game, it runs inside [Steam's Game Mode](https://universelauncher.com/docs/getting-started/steam-deck/#steams-game-mode).
-- [The Universe session](https://universelauncher.com/docs/getting-started/universe-session/) is a login session with the launcher on the whole screen and no desktop, like a console.
+- DualSense, DualShock 4, Xbox, Switch Pro and 8BitDo [controllers](https://universe.ilyasturki.com/docs/controllers/supported/), each with its own glyphs, and a guided setup for any other pad. Emulators get the pads you hold, one per player.
+- On a [Steam Deck](https://universe.ilyasturki.com/docs/getting-started/steam-deck/), it fits the 1280×800 screen. Back buttons run macros; refresh rate, power limit and fan curve are in the settings.
+- Added as a non-Steam game, it runs inside [Steam's Game Mode](https://universe.ilyasturki.com/docs/getting-started/steam-deck/#steams-game-mode).
+- [The Universe session](https://universe.ilyasturki.com/docs/getting-started/universe-session/) is a login session with the launcher on the whole screen and no desktop, like a console.
 
 ## Also
 
@@ -106,11 +106,11 @@ universe doctor                     # what this system is missing
 universe status --json              # the running game, for a script
 ```
 
-Every command is in the [CLI reference](https://universelauncher.com/docs/reference/cli/).
+Every command is in the [CLI reference](https://universe.ilyasturki.com/docs/reference/cli/).
 
 ## Docs
 
-[universelauncher.com/docs](https://universelauncher.com/docs/) has the guide: install, first run, controllers, every settings section, and a reference of the CLI, the launch settings and config.toml generated from the app.
+[universe.ilyasturki.com/docs](https://universe.ilyasturki.com/docs/) has the guide: install, first run, controllers, every settings section, and a reference of the CLI, the launch settings and config.toml generated from the app.
 
 For development:
 

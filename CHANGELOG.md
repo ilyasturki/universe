@@ -16,7 +16,6 @@
 
 ### Changed
 
-- The site and its guide moved to universelauncher.com.
 - A game imported from Lutris counts as added by hand, and Universe Desktop lists it under **Added by hand**.
 
 ### Fixed
