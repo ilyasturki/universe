@@ -326,10 +326,15 @@ mod tests {
     }
 
     #[test]
-    fn a_view_round_trips_its_key() {
+    fn a_view_round_trips_its_key_and_an_old_lutris_import_sits_under_added_by_hand() {
         for key in ["all", "favorites", "source:gog", "platform:Nintendo Switch"] {
             assert_eq!(View::parse(key).key(), key);
         }
         assert_eq!(View::parse("nonsense"), View::All);
+        let dir = tempfile::tempdir().unwrap();
+        let toml = dir.path().join("game.toml");
+        std::fs::write(&toml, "id = \"dishonored\"\ntitle = \"Dishonored\"\n[source]\nkind = \"lutris\"\n").unwrap();
+        let row = Row::of(&Resolved { game: universe::game::Game::load(&toml).unwrap(), ..Default::default() }, &[], &universe::config::Config::default());
+        assert!(View::parse("source:manual").holds(&row) && !View::parse("source:lutris").holds(&row), "Lutris is where it came from, not its store");
     }
 }
