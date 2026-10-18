@@ -1,58 +1,32 @@
 ---
 title: Disk space
-description: See what each game takes on disk, find the folders no game uses any more, and free the space with Uninstall, Delete files and the trash.
+description: See what each game takes on disk, and free the space.
 sidebar:
   order: 10
 ---
 
 import Shot from '../../../../components/Shot.astro';
-import Clip from '../../../../components/Clip.astro';
 
 Universe moves none of a game's data by itself, and sends nothing to the trash unless you ask.
 
 ## What one game takes
 
-A game's Data and saves page, from the game menu (**Start** on the game) › **Manage** › **Data and saves**, gives each part with its size: **Saves**, **Backups**, **Wine Prefix**, and under **Storage** the **Install folder**, **Universe's files** (artwork, screenshots and journal), **Recordings** and **Logs**.
+A game's **Data and saves** page, from the game menu (**Start** on the game) › **Manage**, gives the size of its saves, backups, Wine prefix, install folder, recordings and logs.
 
-The prefix row says whose prefix it is (**Universe's prefix**, **Steam's prefix**, **Lutris's prefix**, **Wine's default prefix** or **A prefix of its own**) and which other games share it. Two rows move or reset it:
+The prefix row says whose prefix it is, and two rows act on it:
 
-- **Move into Universe's Prefixes**, for a Lutris prefix or one elsewhere, moves it into **Windows game folders**, and every game on it follows. Across drives it's a copy, which can take a while. The other launcher keeps pointing at the old path.
-- **Reset the Prefix…**, for Universe's own prefix when no other game uses it, backs up the saves, then moves the prefix to the trash. The next launch makes a fresh one.
+- **Move into Universe's Prefixes** moves a prefix another launcher made, such as Lutris, into **Windows game folders**.
+- **Reset the Prefix…** backs up the saves, then moves the prefix to the trash. The next launch makes a fresh one.
 
-[`universe data`](/docs/reference/cli/data/) prints the same parts with their sizes, and its `move-prefix` and `reset-prefix` do the same two things.
+## Every game at once
 
-## Every folder at once
-
-Settings › **Storage** sizes Universe's folders, with the free space on each drive, then every game, biggest first, then the **Leftovers**. **A** on a game opens its Data and saves page, and **X** (**Refresh**) counts again. [Storage](/docs/settings/storage/) goes through each row, and [`universe storage`](/docs/reference/cli/storage/) prints the same three tables.
+Settings › [Storage](/docs/settings/storage/) shows the size of Universe's folders and of every game, biggest first, then the **Leftovers**: prefixes no game uses, a removed game's recordings, logs and folder. **A** on a leftover moves it to the trash, after asking. Trashing a removed game's folder takes its hours with it.
 
 <Shot name="settings-storage" />
 
-## What no game holds any more
-
-A leftover is a folder no game of your library uses:
-
-- **Prefix no game uses**: a folder in Windows game folders that is no game's prefix;
-- **Archived recordings**: a removed game's recordings;
-- **Removed game**: Universe's folder for a removed game, with its settings, art and sessions;
-- **Removed game's logs**.
-
-**A** on one asks first, and **Move to Trash** sends it to the trash. Trashing a Removed game takes that game out of your library for good, its hours with it. `universe storage trash <path>` takes only a path `universe storage` listed.
-
 ## Uninstall or remove
 
-An install folder is never a leftover, and it's often the biggest part. Two actions treat it differently:
+An install folder is often the biggest part, and the two actions treat it differently:
 
-- **Uninstall…** deletes the install and keeps the game in your library with its hours, journal and recordings. A store game has it in its row's menu in Settings › Downloads, and a Windows game you added by hand in Settings › Emulators & Proton › its runner › **Games**.
-- **Remove from library…** leaves the files where they are. A store game's install then shows in Settings › Downloads as **Not in your library**, where **Delete files…** removes it. A game you added by hand isn't listed anywhere after that, so uninstall a Windows one before you remove it.
-
-[`universe rm`](/docs/reference/cli/rm/) with `--purge` also trashes the game's logs and, when it lies in Windows game folders, its prefix, after backing up the saves. It refuses a prefix another game uses.
-
-## An install no library game uses
-
-Under Settings › Downloads › **On this PC**, a store install that no library game stands for reads Not in your library. Delete files… in its menu asks first, then goes through the store's own uninstaller (Steam, Epic Games, itch.io) or moves the folder to the trash (GOG). It refuses a folder a library game holds.
-
-[`universe uninstall`](/docs/reference/cli/uninstall/) does it with `--source` and the store's id for the game, which [`universe library`](/docs/reference/cli/library/) lists.
-
-## In the other looks
-
-The Switch 2 look has the storage view in System Settings › **Data Management**, and a game's data in its Software Options › **Data Management**. The PS5 look opens **Console Storage** from its Welcome hub, and a game's **Saved Data and Storage** from its options.
+- **Uninstall…** deletes the install and keeps the game in your library, with its hours, journal and recordings. A store game has it in its row's menu in Settings › Downloads, and a game you added by hand on its runner's page in Settings › Emulators & Proton.
+- **Remove from library…** leaves the files where they are. A store game's install then shows in Settings › Downloads as **Not in your library**, where **Delete files…** removes it. A game you added by hand isn't listed anywhere after that, so uninstall it first.
