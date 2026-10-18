@@ -91,12 +91,19 @@ impl Resolved {
                 own.extend(part);
             }
         }
-        if !self.check.version_name.is_empty() && self.version.from != "pin" {
-            version["installed"] = serde_json::json!(self.check.version_name);
-            version["from"] = serde_json::json!(self.check.store);
-        }
+        let (installed, from) = self.installed();
+        (version["installed"], version["from"]) = (serde_json::json!(installed), serde_json::json!(from));
         v["version"] = version;
         v
+    }
+
+    /// The installed version and where it was read: the store's name of the build over what the files say, unless pinned.
+    pub fn installed(&self) -> (&str, &str) {
+        if !self.check.version_name.is_empty() && self.version.from != "pin" {
+            (&self.check.version_name, &self.check.store)
+        } else {
+            (&self.version.installed, &self.version.from)
+        }
     }
 }
 

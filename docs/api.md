@@ -125,7 +125,7 @@ comma-separated for lists, shell words for `launch.args` (`--delay 0 'a b'` is t
  "version": {"pin": "", "probe": "@GTA5_Enhanced.exe", "switch_title_id": "", "seen": "24129078", "final": false,
              "installed": "1.0.1158.13", "from": "exe", "channel": "pc", "title_id": "", "build": "", "modified": "2026-08-29",
              "status": "update", "reason": "", "how": "manual", "store": "", "store_id": "", "latest": "24129523",
-             "latest_date": "2026-09-11", "newer": 1},
+             "latest_date": "2026-09-11", "newer": 1, "markable": true},
  "removed": false}
 ```
 
@@ -163,7 +163,7 @@ compare), `dates-rewritten` (the program is dated after Steam's build), `none-li
 `not-owned` (the store would refuse the update). `how` is `apply` when the store updates it (`source_update(store,
 store_id)`), `manual` when it is updated by hand then `mark_current`, empty for a final game. `latest` is upstream's
 newest as it names it (the store's version name, Sony's version, titledb's title version, Steam's build id) and
-`latest_date` its day; `newer` counts upstream's builds past the installed one (titledb's versions above it, else 1).
+`latest_date` its day; `newer` counts upstream's builds past the installed one (titledb's versions above it, else 1). `markable` says `mark_current(id)` takes the game: no store judges it, and it has a Steam app id, or a Switch title id and no title version from its emulator or its ROM's name.
 
 `effective` is what the launch will use: the game's own keys over the global defaults, the runner
 resolved (`runner_path` empty when its program was not found), the platform the runner implies when

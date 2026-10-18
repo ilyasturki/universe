@@ -380,6 +380,8 @@ pub struct Check {
     pub latest_date: String,
     /// Upstream's builds past the installed one: titledb's versions above it; 1 for a newer store, Steam or Sony build.
     pub newer: usize,
+    /// `mark_current` with no build takes it: no store judges it, and Steam or titledb names its newest build.
+    pub markable: bool,
     /// The store's name of the installed build, which `installed` shows over what the files say.
     #[serde(skip)]
     pub version_name: String,
@@ -408,7 +410,21 @@ pub fn check(game: &Game, read: &Installed, up: &Upstream) -> Check {
     if game.version.r#final {
         (c.status, c.reason, c.how) = ("final", "", "");
     }
+    c.markable = mark_refusal(game, read, &c.store).is_none() && if read.channel == "pc" { game.metadata.steam_appid != 0 } else { !read.title_id.is_empty() };
     c
+}
+
+/// Why `mark_current` refuses the game, whatever build it is given.
+pub(crate) fn mark_refusal(game: &Game, read: &Installed, store: &str) -> Option<String> {
+    let id = &game.id;
+    match (store, read.channel) {
+        ("", "switch") if !read.build.is_empty() => Some(format!("{id}'s title version is read from its emulator or its ROM's name")),
+        ("", "pc" | "switch") => None,
+        ("", "ps3") => Some(format!("{id}'s version is read from its PARAM.SFO")),
+        ("", "gog") => Some(format!("{id} is updated by gog: universe update {id}")),
+        ("", _) => Some(format!("{id} takes no update")),
+        (store, _) => Some(format!("{id} is updated by {store}: universe update {id}")),
+    }
 }
 
 fn by_store(game: &Game, read: &Installed, list: &Store, store: &str, id: &str) -> Check {
@@ -432,6 +448,7 @@ fn by_store(game: &Game, read: &Installed, list: &Store, store: &str, id: &str) 
         latest: text("version"),
         latest_date: text("date"),
         newer: usize::from(!current),
+        markable: false,
         version_name: if text("local_build") == local { text("local_version") } else { String::new() },
     }
 }
@@ -559,6 +576,10 @@ mod tests {
         (f("status"), f("reason"), f("how"), f("latest"))
     }
 
+    fn markable(v: &BTreeMap<String, Value>) -> Vec<&str> {
+        v.iter().filter(|(_, v)| v["markable"] == true).map(|(id, _)| id.as_str()).collect()
+    }
+
     #[tokio::test]
     async fn a_pc_game_stands_by_steams_build_its_seen_build_else_its_programs_date() {
         let env = paths::test_env();
@@ -591,6 +612,7 @@ mod tests {
         assert_eq!(of(&v, "rewritten"), ("unknown", "dates-rewritten", "manual", "300"));
         assert_eq!(of(&v, "missing"), ("unknown", "no-baseline", "manual", "300"));
         assert_eq!(of(&v, "silent"), ("unknown", "no-answer", "manual", ""));
+        assert_eq!(markable(&v), ["behind", "current", "held", "likely", "missing", "rewritten", "silent"], "every game Steam can be asked about");
         let urls = [1, 2, 3, 4].map(|id| format!("{STEAM}{id}"));
         assert_eq!(asked(&net), urls, "an app id is asked once");
 
@@ -634,6 +656,7 @@ mod tests {
         assert_eq!(of(&v, "baseline"), ("unknown", "no-baseline", "manual", "65536"));
         assert_eq!(of(&v, "unlisted"), ("current", "none-listed", "manual", ""));
         assert_eq!(of(&v, "untracked"), ("untracked", "", "manual", ""));
+        assert_eq!(markable(&v), ["assumed", "baseline", "unlisted"], "a title id, and no title version from the emulator or the ROM's name");
 
         core.check_versions_with(&net, "").await.unwrap();
         assert_eq!(asked(&net), [TITLEDB], "titledb's list is downloaded once a day");
@@ -671,6 +694,7 @@ mod tests {
         assert_eq!(of(&v, "metal-gear"), ("update", "", "manual", "02.00"));
         assert_eq!(of(&v, "last-of-us"), ("current", "", "manual", "01.11"));
         assert_eq!(of(&v, "simpsons"), ("unknown", "no-answer", "manual", ""));
+        assert!(markable(&v).is_empty(), "a disc's PARAM.SFO says its version");
         assert!(core.mark_current_with(&net, "bolt", "1").await.is_err(), "its files say which update it has");
     }
 
@@ -739,6 +763,7 @@ mod tests {
         assert_eq!(v["mini-metro"]["installed"], "1.0");
         assert_eq!(of(&v, "witcher"), ("current", "", "apply", ""), "its own store lists only what it would update");
         assert_eq!(of(&v, "control"), ("unknown", "no-answer", "manual", ""), "an install the store did not see");
+        assert!(markable(&v).is_empty(), "a store's install is judged by its build");
         assert!(asked(&net).is_empty());
 
         core.source_update("gog", "1434554947", None).await.unwrap();

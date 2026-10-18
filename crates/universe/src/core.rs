@@ -2484,15 +2484,7 @@ impl Core {
 
     pub(crate) async fn mark_current_with(&self, net: &crate::upstream::Net, id: &str, build: &str) -> Result<String> {
         let r = self.get(id).await?;
-        let refused = match (r.check.store.as_str(), r.version.channel) {
-            ("", "switch") if !r.version.build.is_empty() => Some(format!("{id}'s title version is read from its emulator or its ROM's name")),
-            ("", "pc" | "switch") => None,
-            ("", "ps3") => Some(format!("{id}'s version is read from its PARAM.SFO")),
-            ("", "gog") => Some(format!("{id} is updated by gog: universe update {id}")),
-            ("", _) => Some(format!("{id} takes no update")),
-            (store, _) => Some(format!("{id} is updated by {store}: universe update {id}")),
-        };
-        if let Some(why) = refused {
+        if let Some(why) = crate::upstream::mark_refusal(&r.game, &r.version, &r.check.store) {
             return Err(Error::Invalid(why));
         }
         let build = match build.trim() {
