@@ -351,6 +351,46 @@ fn info_reads_the_installed_version_from_the_program_until_set_pins_one() {
 }
 
 #[test]
+fn restore_brings_a_removed_game_back_with_its_recordings_and_overwrites_none() {
+    let dir = no_desktop();
+    let rec = dir.path().join("recordings");
+    std::fs::write(
+        dir.path().join("config/config.toml"),
+        format!("schema = 1\n[desktop]\nprofile = \"none\"\n[paths]\nrecordings_root = \"{}\"\n", rec.display()),
+    )
+    .unwrap();
+    let game = dir.path().join("data/games/dishonored");
+    std::fs::create_dir_all(&game).unwrap();
+    std::fs::write(
+        game.join("game.toml"),
+        "schema = 1\nid = \"dishonored\"\ntitle = \"Dishonored\"\n[source]\nkind = \"lutris\"\n[lutris]\nslug = \"dishonored\"\n",
+    )
+    .unwrap();
+    let (live, archived) = (rec.join("dishonored"), rec.join(".archive/dishonored"));
+    std::fs::create_dir_all(live.join("clips")).unwrap();
+    for (name, text) in [("a.mkv", "archived"), ("b.mkv", "b"), ("clips/c.mkv", "c")] {
+        std::fs::write(live.join(name), text).unwrap();
+    }
+    let listed = |dir: &tempfile::TempDir| -> Vec<serde_json::Value> { serde_json::from_slice(&universe(dir, &["ls", "--json"], &[NO_BUS]).stdout).unwrap() };
+    assert_eq!(listed(&dir)[0]["source"]["kind"], "manual", "a Lutris import from before reads as added by hand");
+
+    assert!(universe(&dir, &["rm", "-y", "dishonored"], &[NO_BUS]).status.success());
+    assert!(archived.join("b.mkv").is_file() && !live.exists(), "rm archives the recordings");
+    std::fs::create_dir_all(&live).unwrap();
+    std::fs::write(live.join("a.mkv"), "recorded since").unwrap();
+    let out = universe(&dir, &["restore", "dishonored"], &[NO_BUS]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert_eq!(std::fs::read_to_string(live.join("a.mkv")).unwrap(), "recorded since", "never over a file already there");
+    assert_eq!(std::fs::read_to_string(archived.join("a.mkv")).unwrap(), "archived", "which stays archived");
+    assert!(text(&out.stderr).contains(&*archived.join("a.mkv").to_string_lossy()), "and is named");
+    assert!(live.join("b.mkv").is_file() && live.join("clips/c.mkv").is_file(), "the rest back in place");
+    assert!(!archived.join("b.mkv").exists() && !archived.join("clips").exists());
+    let games = listed(&dir);
+    assert_eq!((games.len(), games[0]["hidden"].as_bool(), games[0]["removed"].as_bool()), (1, Some(false), Some(false)), "in the library again");
+    assert!(!universe(&dir, &["restore", "dishonored"], &[NO_BUS]).status.success(), "a game in the library has nothing to restore");
+}
+
+#[test]
 fn session_window_without_a_session_fails_at_once_even_told_to_wait() {
     let dir = no_desktop();
     for args in [&["session-window", "--json"][..], &["session-window", "--wait", "60", "--json"]] {

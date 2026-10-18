@@ -107,6 +107,11 @@ pub enum Cmd {
         #[arg(long)]
         purge: bool,
     },
+    /// Bring back a game rm removed: unhides it and moves its recordings back, never over a file already there
+    Restore {
+        /// Game: exact id, then whole word, substring or path
+        name: String,
+    },
     /// Uninstall a game: trashes its install folder, keeps it in the library
     Uninstall {
         /// Game: exact id, then whole word, substring or path; with --source, the store's id of an install no library game uses
@@ -1324,6 +1329,13 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 core.remove(&id, purge).await?;
                 println!("removed {id}");
             }
+        }
+        Cmd::Restore { name } => {
+            let id = pick(&core, &name).await?;
+            for kept in core.restore(&id).await? {
+                eprintln!("{} stays archived: a file of that name is back in place", kept.display());
+            }
+            println!("restored {id}");
         }
         Cmd::Uninstall { name, yes, source: Some(source) } => {
             if yes || confirm(&format!("trash {source}'s install of {name}?")) {

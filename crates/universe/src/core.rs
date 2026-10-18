@@ -32,6 +32,34 @@ fn trash(path: &Path) -> Result<()> {
     trash::delete(path).map_err(|e| Error::Io(format!("trash {}: {}", path.display(), why(e))))
 }
 
+/// `remove`'s archive of the game's recordings back under `root`; returns what stays archived because its path is taken.
+fn unarchive_recordings(root: &Path, id: &str) -> std::io::Result<Vec<PathBuf>> {
+    let mut kept = Vec::new();
+    let from = root.join(".archive").join(id);
+    if from.is_dir() {
+        move_back(&from, &root.join(id), &mut kept)?;
+    }
+    Ok(kept)
+}
+
+/// Merges `from` into `to` entry by entry, never over a path already there: such an entry stays in `from`.
+fn move_back(from: &Path, to: &Path, kept: &mut Vec<PathBuf>) -> std::io::Result<()> {
+    if to.symlink_metadata().is_err() {
+        return std::fs::rename(from, to);
+    }
+    if !(from.symlink_metadata()?.is_dir() && to.symlink_metadata()?.is_dir()) {
+        kept.push(from.to_path_buf());
+        return Ok(());
+    }
+    for entry in std::fs::read_dir(from)? {
+        let name = entry?.file_name();
+        move_back(&from.join(&name), &to.join(&name), kept)?;
+    }
+    // Refused while a kept entry is still in it.
+    let _ = std::fs::remove_dir(from);
+    Ok(())
+}
+
 const PRESENT_POLL: std::time::Duration = std::time::Duration::from_millis(250);
 
 pub fn title_of(path: &Path) -> String {
@@ -528,6 +556,23 @@ impl Core {
         g.removed_at = chrono::Local::now().to_rfc3339();
         g.save()?;
         self.reload_game(id).await
+    }
+
+    /// Undoes `remove`: the recordings come back first, then the game, unhidden. Returns the archived recordings left where
+    /// they are because a file of that name is back in place.
+    pub async fn restore(&self, id: &str) -> Result<Vec<PathBuf>> {
+        let r = self.get(id).await?;
+        if r.game.removed_at.is_empty() {
+            return Err(Error::Invalid(format!("{id} is in the library")));
+        }
+        let root = self.config.read().await.recordings_root();
+        let kept = unarchive_recordings(&root, id)?;
+        let mut g = Game::load(&r.game.toml_path())?;
+        g.removed_at.clear();
+        g.hidden = false;
+        g.save()?;
+        self.reload_game(id).await?;
+        Ok(kept)
     }
 
     /// Whether the first-run setup ran on this machine, in any frontend: one flag for all of them.
@@ -2173,6 +2218,12 @@ impl Core {
             Arrival::Added => !was_in,
         };
         if arriving && lands {
+            if !game.removed_at.is_empty() {
+                match unarchive_recordings(&cfg.recordings_root(), &game.id) {
+                    Ok(kept) => kept.iter().for_each(|p| tracing::warn!("recordings: {} stays archived, its name is taken", p.display())),
+                    Err(e) => tracing::warn!("recordings of {}: {e}", game.id),
+                }
+            }
             game.mark_added();
         }
         if !dir.is_empty() {
@@ -2882,13 +2933,18 @@ install) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":t
         assert!(!first.is_empty(), "an install lands the game as new");
         core.source_install("fake", "2", None).await.unwrap();
         assert_eq!(core.get("new").await.unwrap().to_json()["added_at"], first, "an update keeps the arrival");
+        let recordings = core.config.read().await.recordings_root().join("new");
+        std::fs::create_dir_all(&recordings).unwrap();
+        std::fs::write(recordings.join("a.mkv"), "a").unwrap();
         core.remove("new", false).await.unwrap();
         assert!(core.list().await.iter().all(|g| g["id"] != "new"));
+        assert!(!recordings.exists(), "its recordings archived");
         core.source_install("fake", "2", None).await.unwrap();
         let back = core.get("new").await.unwrap().to_json();
         assert!(core.list().await.iter().any(|g| g["id"] == "new"), "back from the archive");
         assert_eq!((back["removed"].as_bool(), back["hidden"].as_bool()), (Some(false), Some(false)));
         assert!(back["added_at"].as_str().unwrap() >= first.as_str(), "re-stamped");
+        assert!(recordings.join("a.mkv").is_file(), "with its recordings");
     }
 
     #[tokio::test]
