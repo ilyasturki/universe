@@ -395,6 +395,41 @@ fn restore_brings_a_removed_game_back_with_its_recordings_and_overwrites_none() 
 }
 
 #[test]
+fn update_lists_a_game_updated_by_hand_until_it_is_marked_current() {
+    let dir = no_desktop();
+    let exe = dir.path().join("games/GTA V/GTA5_Enhanced.exe");
+    std::fs::create_dir_all(exe.parent().unwrap()).unwrap();
+    testpe::Exe { strings: &[("ProductVersion", "1.0.1158.13")], ..Default::default() }.write(&exe);
+    let game = dir.path().join("data/games/gta");
+    std::fs::create_dir_all(&game).unwrap();
+    let toml = format!(
+        "schema = 1\nid = \"gta\"\ntitle = \"GTA V\"\n[launch]\nrunner = \"proton\"\nexe = \"{}\"\n[metadata]\nsteam_appid = 3240220\n[version]\nseen = \"24129078\"\n",
+        exe.display()
+    );
+    std::fs::write(game.join("game.toml"), toml).unwrap();
+    // Steam's answer kept an hour ago: the check asks nothing.
+    let at = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() - 3600;
+    let kept = format!(r#"{{"steam": {{"3240220": {{"build": "24129523", "date": "2026-09-11", "at": {at}}}}}}}"#);
+    std::fs::create_dir_all(dir.path().join("cache")).unwrap();
+    std::fs::write(dir.path().join("cache/upstream.json"), kept).unwrap();
+    let rows = |args: &[&str]| {
+        let out = universe(&dir, &[&["--json", "update"], args].concat(), &[NO_BUS]);
+        let rows: Vec<serde_json::Value> = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| panic!("{e}: {}", text(&out.stderr)));
+        rows.iter()
+            .map(|r| [&r["id"], &r["status"], &r["how"], &r["latest"], &r["seen"]].map(|v| v.as_str().unwrap_or_default().to_string()))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(rows(&[]), [["gta", "update", "manual", "24129523", "24129078"]]);
+    let one = universe(&dir, &["update", "gta"], &[NO_BUS]);
+    assert!(!one.status.success() && text(&one.stderr).contains("universe update gta --mark-current"), "{}", text(&one.stderr));
+    assert!(!universe(&dir, &["update", "gta", "--mark-current", "v2"], &[NO_BUS]).status.success(), "a build is a number");
+    let marked = universe(&dir, &["update", "gta", "--mark-current", "24129523"], &[NO_BUS]);
+    assert!(marked.status.success(), "{}", text(&marked.stderr));
+    assert!(rows(&[]).is_empty());
+    assert_eq!(rows(&["--all"]), [["gta", "current", "manual", "24129523", "24129523"]]);
+}
+
+#[test]
 fn session_window_without_a_session_fails_at_once_even_told_to_wait() {
     let dir = no_desktop();
     for args in [&["session-window", "--json"][..], &["session-window", "--wait", "60", "--json"]] {

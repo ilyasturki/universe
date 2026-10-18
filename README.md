@@ -100,7 +100,7 @@ universe                            # your library, last played first
 universe play "dead cells"          # by id, a word or part of the title
 universe login gog                  # sign in to a store
 universe search hades --source gog  # then universe install <id> --source gog
-universe update                     # pending updates; name a game to update it
+universe update                     # games behind, of every kind; --all shows each version
 universe saves backup "dead cells"  # also list, restore, export and cloud
 universe doctor                     # what this system is missing
 universe status --json              # the running game, for a script

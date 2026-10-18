@@ -88,10 +88,16 @@ pub enum Cmd {
         #[arg(long)]
         source: Option<String>,
     },
-    /// Pending updates, or update one game
+    /// The games with an update and how each is updated, then the store updates after asking; or update one game
     Update {
         /// Game: exact id, then whole word, substring or path; lists pending updates when omitted
         name: Option<String>,
+        /// Every game: its version, upstream's latest and its status
+        #[arg(long, conflicts_with = "name")]
+        all: bool,
+        /// After updating the game by hand: take upstream's newest build, or BUILD, as the one installed
+        #[arg(long, value_name = "BUILD", num_args = 0..=1, default_missing_value = "", requires = "name")]
+        mark_current: Option<String>,
         /// Do not ask before updating
         #[arg(long, short)]
         yes: bool,
@@ -891,6 +897,68 @@ fn version_line(v: &Value) -> String {
     parts.join(" · ")
 }
 
+/// `universe update`'s JSON row: the game's id and title, then its `version`.
+fn update_row(g: &Value) -> Value {
+    let mut row = serde_json::json!({"id": g["id"], "title": g["title"]});
+    if let (Some(row), Some(v)) = (row.as_object_mut(), g["version"].as_object()) {
+        row.extend(v.clone());
+    }
+    row
+}
+
+/// A Switch title version as the update it counts: the count sits above 16 bits.
+fn switch_update(n: &str) -> Option<String> {
+    let n: u64 = n.parse().ok()?;
+    Some(match n {
+        0 => "base game".into(),
+        n if n % 65536 == 0 => format!("update {}", n / 65536),
+        n => format!("v{n}"),
+    })
+}
+
+fn update_table<'a>(games: impl IntoIterator<Item = &'a Value>) -> Table {
+    let mut t = table(&["Id", "Title", "Version", "Latest", "Status", "How"]);
+    for g in games {
+        let v = &g["version"];
+        let by_switch = s(v, "channel") == "switch" && s(v, "store").is_empty();
+        let mut version = s(v, "installed");
+        if by_switch {
+            let (number, assumed) = if s(v, "build").is_empty() { (s(v, "seen"), ", assumed") } else { (s(v, "build"), "") };
+            if let Some(update) = switch_update(&number) {
+                version = if version.is_empty() { format!("{update}{assumed}") } else { format!("{version} ({update}{assumed})") };
+            }
+        }
+        let mut latest = match s(v, "latest") {
+            l if l.is_empty() => String::new(),
+            l if by_switch => switch_update(&l).unwrap_or(l),
+            l if s(v, "channel") == "pc" && s(v, "store").is_empty() => format!("build {l}"),
+            l => l,
+        };
+        if !latest.is_empty() && !s(v, "latest_date").is_empty() {
+            latest = format!("{latest} ({})", s(v, "latest_date"));
+        }
+        let mut status = match s(v, "status").as_str() {
+            "likely" => "likely outdated".to_string(),
+            "untracked" => "not tracked".to_string(),
+            other => other.to_string(),
+        };
+        let reason = s(v, "reason").replace('-', " ");
+        if !reason.is_empty() {
+            status = format!("{status} ({reason})");
+        } else if s(v, "status") == "final" && v["newer"].as_u64().unwrap_or(0) > 0 {
+            status = format!("final ({} newer)", v["newer"]);
+        }
+        let how = match s(v, "how").as_str() {
+            "apply" => s(v, "store"),
+            "manual" if matches!(s(v, "status").as_str(), "update" | "likely") => "by hand".into(),
+            _ => String::new(),
+        };
+        let dash = |x: String| if x.is_empty() { "-".to_string() } else { x };
+        t.add_row(vec![s(g, "id"), s(g, "title"), dash(version), dash(latest), dash(status), how]);
+    }
+    t
+}
+
 fn hours(v: &Value) -> String {
     let h = v["stats"]["hours"].as_f64().unwrap_or(0.0);
     if h == 0.0 {
@@ -1287,42 +1355,62 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             }
             finish(json, installed);
         }
-        Cmd::Update { name, yes } => match name {
-            Some(n) => {
-                let id = pick(&core, &n).await?;
-                let g = core.get(&id).await?.to_json();
-                let gid = s(&g["source"], "id");
-                if gid.is_empty() {
-                    anyhow::bail!("{id} has no source id");
-                }
+        Cmd::Update { name: Some(n), mark_current: Some(build), .. } => {
+            let id = pick(&core, &n).await?;
+            let seen = core.mark_current(&id, &build).await?;
+            report(json, true, &format!("{id} is current at build {seen}"));
+        }
+        Cmd::Update { name: Some(n), .. } => {
+            let id = pick(&core, &n).await?;
+            core.check_versions(&id).await?;
+            let g = core.get(&id).await?.to_json();
+            let v = &g["version"];
+            if s(v, "how") == "apply" {
                 let mut p = progress_printer(json);
-                finish(json, core.source_update(&s(&g["source"], "kind"), &gid, Some(&mut p)).await.map(|n| format!("{n} updated")));
+                finish(json, core.source_update(&s(v, "store"), &s(v, "store_id"), Some(&mut p)).await.map(|n| format!("{n} updated")));
+                return Ok(());
             }
-            None => {
-                let list = core.source_updates().await?;
-                if json {
-                    return print_json(&list);
-                }
-                if list.is_empty() {
-                    println!("everything is current");
-                    return Ok(());
-                }
-                let mut t = table(&["Id", "Title", "Local", "Remote", "Version", "Date"]);
-                for u in &list {
-                    t.add_row(vec![s(u, "id"), s(u, "title"), s(u, "local_build"), s(u, "remote_build"), s(u, "version"), day(&s(u, "date"), &loc)]);
-                }
-                println!("{t}");
-                if yes || confirm("download?") {
-                    let mut p = progress_printer(json);
-                    for u in &list {
-                        match core.source_update(&s(u, "source"), &s(u, "id"), Some(&mut p)).await {
-                            Ok(_) => report(json, true, &s(u, "title")),
-                            Err(e) => report(json, false, &format!("{}: {e}", s(u, "title"))),
-                        }
+            if json {
+                return print_json(&update_row(&g));
+            }
+            println!("{}", update_table([&g]));
+            if s(v, "how") == "manual" && matches!(s(v, "status").as_str(), "update" | "likely") {
+                anyhow::bail!("update it by hand, then: universe update {id} --mark-current");
+            }
+        }
+        Cmd::Update { name: None, all, yes, .. } => {
+            core.check_versions("").await?;
+            let mut games = core.list().await;
+            games.sort_by_cached_key(|g| s(g, "title").to_lowercase());
+            let shown: Vec<&Value> = games.iter().filter(|g| all || matches!(g["version"]["status"].as_str(), Some("update" | "likely"))).collect();
+            if json {
+                return print_json(&shown.iter().map(|g| update_row(g)).collect::<Vec<_>>());
+            }
+            if shown.is_empty() {
+                println!("everything is current");
+                return Ok(());
+            }
+            println!("{}", update_table(shown.iter().copied()));
+            if all {
+                return Ok(());
+            }
+            let apply: Vec<&&Value> = shown.iter().filter(|g| g["version"]["how"] == "apply" && g["version"]["status"] == "update").collect();
+            if !apply.is_empty()
+                && (yes || confirm(&format!("update {} through {}?", apply.len(), if apply.len() == 1 { "its store" } else { "their stores" })))
+            {
+                let mut p = progress_printer(json);
+                for g in apply {
+                    let v = &g["version"];
+                    match core.source_update(&s(v, "store"), &s(v, "store_id"), Some(&mut p)).await {
+                        Ok(_) => report(json, true, &s(g, "title")),
+                        Err(e) => report(json, false, &format!("{}: {e}", s(g, "title"))),
                     }
                 }
             }
-        },
+            if shown.iter().any(|g| g["version"]["how"] == "manual") {
+                println!("update the others by hand, then: universe update <game> --mark-current");
+            }
+        }
         Cmd::Rm { name, yes, purge } => {
             let id = pick(&core, &name).await?;
             if yes || confirm(&format!("remove {id}{}?", if purge { " and trash its prefix" } else { "" })) {
