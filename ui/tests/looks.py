@@ -1,6 +1,6 @@
 from PySide6.QtCore import Q_ARG, Q_RETURN_ARG, QMetaObject, QObject, Qt, QUrl
 from PySide6.QtGui import QColor
-from PySide6.QtQml import QQmlApplicationEngine
+from PySide6.QtQml import QQmlApplicationEngine, QQmlEngine
 from PySide6.QtQuick import QQuickWindow  # noqa: F401  (rootObjects() down-cast, for grabWindow)
 from PySide6.QtTest import QTest
 from uitest import descendants, until
@@ -102,7 +102,8 @@ def theme_rows(page):
 def lit_rows(menu):
     """The rows of a menu drawn lit right now, mid-fade included: the cursor's alone once a list is swapped in."""
     rows = descendants(menu, "menuRow")
-    return [i for i, row in enumerate(rows) if QColor(row.property("color")).alpha() > 0]
+    # A ListView builds its current row first, so its children come in no model order: each row's own index says which it is.
+    return sorted(QQmlEngine.contextForObject(row).contextProperty("index") for row in rows if QColor(row.property("color")).alpha() > 0)
 
 
 def focus_names(window):
