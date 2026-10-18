@@ -24,4 +24,12 @@ just docs-media fetch   # the screenshots and clips, from the site-media branch 
 
 ## Writing a page
 
-Name things as the app shows them, the Universe look first, and keep each fact to what the code does. A user-facing change updates its page, and its take when the screen changed, in the same commit. The copy follows the writing skill: no em or en dashes, no filler.
+A page tells a player what to press and what happens. It opens with what it's for in one or two sentences, names things as the Universe look shows them, and stays short: about 250 words for a settings page, 500 for the others.
+
+- Leave out what a player doesn't need: timings, file paths, config keys, ids, detection orders, kernel and driver notes, former names, and the commands the CLI reference covers. They belong in the generated reference, the developer docs (`docs/*.md`) or nowhere.
+- The Switch 2 and PS5 looks get one line pointing to Looks (`using/looks.mdx`), which has a short section for each.
+- An edge case stays only when a player would otherwise get stuck.
+- Each fact lives on one page, and the others link to it.
+- Every sentence is true of the code, but a page doesn't cover all the code does. A change adds a sentence where its fact lives, and cuts one when the page grows past its length.
+
+A user-facing change updates its page, and its take when the screen changed, in the same commit. The copy follows the writing skill: no em or en dashes, no filler.
