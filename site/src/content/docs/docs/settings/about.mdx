@@ -11,24 +11,12 @@ Settings › **About** gives the version and each release's changes, runs the fi
 
 <Shot name="settings-about" />
 
-## Universe
-
-The section's one card holds:
-
-- **Version**: the version number, with its git revision in parentheses when the build has one. **A** (**What's new**) opens the What's new page.
-- **What's new**: the newest release's version. **A** (**Open**) opens the **What's new** page, every version's changes, newest first.
-- **Show what's new after an update**: opens that page once, on the first start after an update. It's `desktop.whats_new` in config.toml, on by default, and the same switch as Settings › [Game defaults](/docs/settings/game-defaults/) › Updates.
-- **First-run setup** (A: **Run again**): the setup Universe opens with on an empty library. See [First run](/docs/getting-started/first-run/).
-- **Power** (A: **Open**): the **Power** menu, which holding **B** also opens. [Getting around](/docs/using/getting-around/#power) lists what it holds.
-
-A release's main changes come with a screenshot or a short clip under their entry. Universe downloads it from the release on GitHub the first time the page shows it and keeps it in its cache. Offline, the entry shows as text alone.
+- **Version**: the version number. **A** opens What's new.
+- **What's new**: **A** (**Open**) shows every release's changes, newest first, with a screenshot or a clip for the main ones.
+- **Show what's new after an update**: opens What's new once, the first time you start a new version. On by default.
+- **First-run setup**: **A** (**Run again**) opens the [first-run setup](/docs/getting-started/first-run/).
+- **Power**: **A** (**Open**) opens the [Power](/docs/using/getting-around/#power) menu, as holding **B** does.
 
 Every release's notes are also in the [changelog](/docs/changelog/).
 
-## From the command line
-
-`universe --version` prints the version. [`universe config set`](/docs/reference/cli/config/) `desktop.whats_new false` keeps the What's new page from opening after an update.
-
-## In the other looks
-
-The Switch 2 look has System Settings › **About**, with **Universe**, **Look** and **Library** rows and no Power row: its power options are the HOME bar's **Power** icon, or **B** held. The PS5 look's Settings › **About** splits into **System Information** and **Setup and Power**, the latter with **First-run setup** and **Power**. Universe Desktop has **About Universe Desktop** and **What's New** in its main menu, the screenshots and clips in What's New alone, and the setup under Add Games › **First-Run Setup…**.
+The Switch 2 and PS5 looks lay this section out differently: see [Looks](/docs/using/looks/).

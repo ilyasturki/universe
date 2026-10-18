@@ -7,37 +7,14 @@ sidebar:
 
 import Shot from '../../../../components/Shot.astro';
 
-Settings › **Artwork** shows your whole library's art in one grid, to spot what's missing and fetch it. It has no cards.
+Settings › **Artwork** shows your whole library's art in one grid, to spot what's missing and fetch it.
 
 <Shot name="settings-artwork" />
 
-## The grid
+There's one row per game and one column per picture: **Box front**, **Square**, **Banner**, **Background** and **Logo**. An empty cell reads "missing", and a picture you picked carries a **Pick** badge. **A** on a cell opens that game's art on that picture ([Artwork](/docs/library/artwork/)).
 
-One row per game, A to Z, without hidden and removed games, and one column per slot: **Box front**, **Square**, **Banner**, **Background** and **Logo**. An empty cell reads "missing", and art you picked carries a **Pick** badge.
+**Fetch missing art**, Up from the first row, fills every game's empty pictures and keeps your picks. **A** while it runs stops it after the game in hand. It reads **Nothing missing** when every game has all five.
 
-**A** on a cell opens that game's artwork browser on that slot.
+A [SteamGridDB key](/docs/library/artwork/#steamgriddb) adds that site's art to the fetch.
 
-## Fetch missing art
-
-The button above the titles, Up from the first row, reads **Fetch missing art**, or **Nothing missing** when every game has all five.
-
-**A** asks first, then fetches from the stores, GOG GamesDB, libretro and, with a key, SteamGridDB. The art goes into each game's media folder, and your picks stay on top. While it runs the button reads "Stop · 3/12": **A** stops it after the game in hand, and what was fetched stays.
-
-## Keys
-
-**B** (**Sections**) or Left from the first column goes back to the sidebar. X, Y and **Start** do nothing here.
-
-## SteamGridDB
-
-A SteamGridDB key adds that site's art to the fetch and to each slot's choices. Enter it in Settings › [Game defaults](/docs/settings/game-defaults/) › API keys (behind **Y**), or from the "Add a SteamGridDB key for more art" cell of a game's artwork browser. It's kept as `keys.sgdb` in config.toml.
-
-## From the command line
-
-- [`universe media`](/docs/reference/cli/media/) `all refresh` fetches the missing art of every game; `--force` fetches again even where every slot is filled.
-- `universe media <game> status` lists a game's slots and where each image came from.
-
-[Artwork](/docs/library/artwork/) explains where the art comes from and how to pick your own.
-
-## In the other looks
-
-The Switch 2 look has no Artwork section: set art one game at a time, from Software Options › **Artwork**. The PS5 look has Settings › **Artwork**, with a **Library Artwork** part that holds the fetch, then **Missing Art** and **Every Game**. Universe Desktop has it in its main menu, as **Library Artwork…**.
+The Switch 2 and PS5 looks place this section differently: see [Looks](/docs/using/looks/).

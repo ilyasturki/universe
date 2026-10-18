@@ -7,58 +7,21 @@ sidebar:
 
 import Shot from '../../../../components/Shot.astro';
 
-Settings › **Emulators & Proton** lists the runners your games start through (Proton, Wine, native Linux and the emulators), with the builds and tools Universe can download for them. The sidebar entry counts the updates and installs on offer.
+Settings › **Emulators & Proton** lists the runners your games start through, such as Proton and the emulators, with the builds and tools Universe can download for them. The sidebar entry counts the updates and installs on offer.
 
 <Shot name="settings-emulators-proton" />
 
-## Cards
+Its cards:
 
-1. A card with no title: the runners found on this machine, the one with the most games first, then by hours played. The value counts its games. The detail names the build in use and where it comes from (Universe, Nix, system, Lutris, Steam, Heroic, umu, your proton folder, config.toml), and says when Universe can install a newer one beside it.
+1. The runners on this machine, the one with the most games first, each naming the build it uses.
 2. **Not installed**: the runners Universe can download, the ones a game waits on first.
-3. **No download**, dimmed: runners to install from your distribution, since upstream ships no build Universe can fetch. They read **Not found** until the catalogue has loaded.
-4. **Tools**: gogdl, legendary, comet, butler and ludusavi, and from your system gamescope, MangoHud and gpu-screen-recorder.
+3. **No download**: runners to install from your distribution.
+4. **Tools**: the tools Universe fetches, such as gogdl and ludusavi, and gamescope, MangoHud and gpu-screen-recorder from your system.
 
-A row can carry a tag with the download's size: **Installing…**, **Update …**, **Install …** (a newer build beside the one found), **Needed** (a game waits on it) or **Updated**. When the catalogue can't be reached, the first card warns and lists what it had.
+A tag marks a row that wants attention: **Needed** (a game waits on it), **Install …**, **Update …** or **Updated**.
 
-## A on a row
+**A** (**Open**) on a runner opens its page, with its program, its builds, the defaults for its games and its games ([Runners](/docs/running/runners/)). **A** (**Options**) on a build or a tool offers what applies: **Install …**, **Update to …**, **Use …**, **Follow the newest …**, **Roll back …**, **Install another version…**, **Remove …** or **Uninstall**. An install or a removal asks first.
 
-**A** (**Open**) on a runner opens its page. **A** (**Options**) on a tool, or on a build in a runner's **Builds** card, opens its menu with what applies:
+**X** (**Refresh**) fetches the list of builds again, and **Y** (**Hide progress**) hides an install's progress bar while it goes on.
 
-- **Update to …**, **Install …** or **Install … and use it**;
-- on a runner's build, **Use …** to switch to another build found, and **Follow the newest …**;
-- **Install another version…**;
-- **Roll back …**, which removes that version and skips it until the next one;
-- **Remove …** for one build, **Uninstall** for every build Universe installed;
-- on a tool from your system, only **Install from the distribution**, which asks for your password outside the Universe session.
-
-An install, a removal and a rollback ask first; an install gives the download's size and the free space.
-
-While `[components] auto_update` is on, as it is by default, Universe keeps the builds it installed up to date. It checks 90 seconds after it starts, then once a day, and never while a game runs.
-
-## A runner's page
-
-The header gives the runner's platforms and the program found, or "not found" in red. Its cards:
-
-- **Runner**: **Program**, whose detail says where it was found; on Proton, the umu-run row under it; **Arguments**; **Gamescope**, on or off for this runner's games.
-- **Builds**: on Proton, **Proton build** (`launch.proton`, `proton-ge` by default) and one row per build family Universe installs; on another runner, its own builds.
-- On Proton, the **Proton** card: **Wayland**, **HDR** and **PlayStation controller**, with **Sync**, **Upscaling** and **Logs** behind **Y**. Wine's sync and log rows fold into its Runner card the same way.
-- **Options**: the runner's own options, kept in `[runners.<id>]`.
-- **Games**: the runner's games with their play time. **A** offers **Game settings**, **Uninstall…** and **Remove from library…**. The last row, **Add a game…** (A: **Pick a file**), adds a file and asks for its title.
-
-A row this page sets is tagged **CHANGED**, and one it inherits names where its value comes from: Global, Default or Found. **X** (**Reset**) puts the focused row back, or **Remove** on an entry, and **Y** shows the advanced rows. **Start** › **More** lists both.
-
-## Keys
-
-- **X** (**Refresh**) fetches the catalogue again.
-- **Y** (**Hide progress**) hides the bar of a build or tool being installed. The install goes on.
-
-## From the command line
-
-- [`universe runner`](/docs/reference/cli/runner/) `ls` lists the runners, `options <id>` a runner's options, and `set <id> key=value` sets `exe`, `args`, `gamescope`, `build` or an option.
-- [`universe component`](/docs/reference/cli/component/) `ls`, `install`, `update`, `use`, `rollback`, `remove` and `uninstall` do what the menu does.
-
-[Runners](/docs/running/runners/) explains how a game gets its runner and its build, and the [runners reference](/docs/reference/runners/) lists each runner's options.
-
-## In the other looks
-
-The Switch 2 look (System Settings › **Emulators & Proton**) and the PS5 look (Settings › **Emulators & Proton**) have the same cards, but **Y** refreshes and **X** hides the progress. Universe Desktop has it in Preferences › **Emulators & Proton**.
+The Switch 2 and PS5 looks swap **X** and **Y** here: see [Looks](/docs/using/looks/).

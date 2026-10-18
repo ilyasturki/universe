@@ -11,26 +11,9 @@ Settings › **Appearance** picks the look, its sounds and its startup animation
 
 <Shot name="settings-appearance" />
 
-## Look
+- **Theme**: **A** opens a menu with a screenshot of each look, **Universe**, **Switch 2** and **PS5**, then the themes you installed. A pick switches at once ([Looks](/docs/using/looks/)).
+- **Get more…**: themes others made ([Themes](/docs/add-ons/themes/)).
+- **Sound folder**: a folder of WAV files that replace the Universe look's sounds of the same name, such as `tick.wav` or `launch.wav`.
+- **Startup animation**: the Universe mark when the launcher starts full screen. On by default.
 
-- **Theme**: the look in use. **A** opens the **Theme** menu, with a screenshot of each look: **Universe**, **Switch 2** and **PS5**, then the installed themes, marked **Add-on**, or **Can't be used** when one can't run. A pick switches at once, with no restart.
-- **Get more…** opens the **Add-ons** menu, which lists the themes in the add-on index.
-- **Not affiliated with Nintendo or Sony**, with the trademark notice under it.
-
-## Sounds
-
-**Sound folder** points to a folder of WAV files (tick.wav, enter.wav, launch.wav and so on) that replace the bundled sounds of the same name. It reads **Bundled** when no folder is set. This folder belongs to the Universe look; the other looks keep their own.
-
-## Startup
-
-**Startup animation**, on by default, shows the Universe mark when the launcher starts full screen. Any button skips it.
-
-## Where it's kept
-
-None of this is in config.toml: the look, the sound folder and the startup animation are in `~/.local/state/universe/ui-memory.json`, under `theme`, `repriseSounds` and `bootIntro`. `universe-ui --theme <id>` wears a look for one run, with `reprise` (or `universe`), `switch2` or `ps5`; no command changes the saved one. [`universe extension install`](/docs/reference/cli/extension/) installs a theme add-on, and opening this section picks it up.
-
-[Looks](/docs/using/looks/) shows the three looks side by side, and [Themes](/docs/add-ons/themes/) covers theme add-ons.
-
-## In the other looks
-
-The Switch 2 and PS5 looks call it **Appearance** too. They list each look as a row, and add a **Font** card whose **Font file** row sets the look's font. Universe Desktop has no Appearance page.
+The Switch 2 and PS5 looks list each look as a row, and add a **Font file** row for a font of your own ([Looks](/docs/using/looks/)).

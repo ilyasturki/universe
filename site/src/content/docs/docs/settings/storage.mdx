@@ -7,45 +7,14 @@ sidebar:
 
 import Shot from '../../../../components/Shot.astro';
 
-Settings › **Storage** shows what Universe takes on disk, by folder and by game, and what no game holds any more. Sizes are measured in the background and can take a few seconds.
+Settings › **Storage** shows what Universe takes on disk, by folder and by game, and what no game holds any more. The sizes can take a few seconds to come in.
 
 <Shot name="settings-storage" />
 
-## Folders
+- **Folders**: each folder Universe writes to, with its size and its drive's free space. Settings › [Game defaults](/docs/settings/game-defaults/) › **Folders** moves the games, prefixes, save backups and recordings.
+- **Games**: every game, biggest first. **A** opens its **Data and saves** page.
+- **Leftovers**: prefixes no game uses, the recordings and logs of removed games, and the folders of removed games. **A** asks first, then **Move to Trash** sends one to the trash. Trashing a removed game's folder takes it out of your library for good.
 
-One row per folder Universe writes to, with its size, its drive's free space and its path.
+**X** (**Refresh**) measures again. [Disk space](/docs/library/disk-space/) covers freeing room.
 
-- **Games** (`paths.games_root`), **Windows game folders** (`paths.prefixes_root`), **Save backups** (`paths.saves_root`) and **Recordings** (`paths.recordings_root`), set in Settings › [Game defaults](/docs/settings/game-defaults/) › Folders.
-- **Library data**: the games' own folders under `~/.local/share/universe/games`.
-- **Runners and tools**: the builds Universe installed.
-- **Logs**.
-
-## Games
-
-The games, biggest first, each split into install, prefix, saves and recordings. **A** opens the game's **Data and saves** page.
-
-## Leftovers
-
-What no game holds any more, with their total, or **None**, on the card's line.
-
-- **Prefix no game uses**: a Wine prefix in the Windows game folders that no game runs in.
-- **Archived recordings**: the recordings of a game removed from the library.
-- **Removed game**: the folder of a game removed from the library. Trashing it takes the game out of the library for good.
-- **Removed game's logs**.
-
-**A** asks first, then **Move to Trash** sends it to the desktop's trash, which can give it back until it's emptied. Nothing is trashed unless you ask.
-
-## Keys
-
-**X** (**Refresh**) measures again.
-
-## From the command line
-
-- [`universe storage`](/docs/reference/cli/storage/) prints the same three lists, and `universe storage trash <path>` trashes a leftover.
-- [`universe data`](/docs/reference/cli/data/) `<game>` gives one game's install, prefix, saves, Universe's files, recordings and logs, each with its size.
-
-[Disk space](/docs/library/disk-space/) covers freeing room, and [Saves and cloud saves](/docs/library/saves/) the Data and saves page.
-
-## In the other looks
-
-The Switch 2 look calls it **Data Management**, a row in System Settings that opens a page with the same three groups. The PS5 look has no such section: the **Console Storage** widget of its Welcome hub opens the same page. Universe Desktop has it in its main menu, as **Storage**.
+The Switch 2 look calls this section **Data Management**: see [Looks](/docs/using/looks/).

@@ -11,30 +11,10 @@ Settings › **System check** runs Universe's checks on this machine and says ho
 
 <Shot name="settings-system-check" />
 
-## The tally
+Above the cards, two counts give the checks that pass and the ones that need attention.
 
-Above the cards, two counts: the checks that pass, in green, and the ones that need attention, in red.
+**Needs attention** comes first when a check fails. Each row names the check, says what's wrong and gives a **To fix:** line. When an install fixes it, **A** (**Install**) installs the build or tool, after asking.
 
-## Needs attention
+Then one card per area, **Core**, **Runners**, **Media**, **Controller** and the features and stores that are on, lists the checks that pass.
 
-This card comes first when a check fails. Each row names the area and the check ("Core › Gamescope"), with what is wrong and a "To fix:" line under it.
-
-A failing check that an install fixes shows **A** **Install**. It asks "Install …?", then installs the build or tool as Settings › [Emulators & Proton](/docs/settings/emulators-proton/) would.
-
-## The areas
-
-One card per area, **Core** first, then **Runners**, **Media**, **Controller** and the features and stores that are on. Each card lists only the checks that pass.
-
-## Keys
-
-**X** (**Refresh**) runs the checks again.
-
-## From the command line
-
-[`universe doctor`](/docs/reference/cli/doctor/) runs the same checks and prints each fix. It exits with status 1 when a check fails, and `--json` gives the results to a script. On GNOME, [`universe setup`](/docs/reference/cli/setup/) installs the Universe Shell extension first, then runs them.
-
-[Troubleshooting](/docs/running/troubleshooting/) covers what to do when a check fails or a game won't start.
-
-## In the other looks
-
-The Switch 2 look has System Settings › **System check**, and the PS5 look Settings › **System Check**, both refreshed with **Y**. Universe Desktop has it in its main menu, as **System Check**, with **Check Again**.
+**X** (**Refresh**) runs the checks again. [Troubleshooting](/docs/running/troubleshooting/) covers what to do when a game won't start.

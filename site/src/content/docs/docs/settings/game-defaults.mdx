@@ -7,79 +7,38 @@ sidebar:
 
 import Shot from '../../../../components/Shot.astro';
 
-Settings › **Game defaults** holds the values every game takes until its own Game settings change them. It shows **Display**, **Overlay**, **Saves** and **Updates**, and **Y** adds the advanced cards. Every row writes `~/.config/universe/config.toml`.
+Settings › **Game defaults** holds the values every game takes until its own Game settings change them ([Launch settings](/docs/running/launch-settings/)). **Y** adds the advanced rows and cards.
 
 <Shot name="settings-game-defaults" />
 
 ## Display
 
-The card's line names the screen and its mode, such as `DP-1 3840×2160 @ 60 Hz`.
+- **Gamescope**, on: games run inside gamescope.
+- **Resolution**, **Refresh rate** and **Adaptive sync**, on auto, follow the screen.
+- Behind **Y**: **Scaler**, **Filter**, **Sharpness**, **Gamescope arguments** and **Discrete GPU**.
 
-| Row | What it sets | Key | Default |
-| --- | --- | --- | --- |
-| Gamescope | The game runs inside gamescope | `launch.gamescope` | on |
-| Resolution | What the game renders at | `launch.gamescope_resolution` | auto, the screen's |
-| Refresh rate | The refresh rate the game sees | `launch.gamescope_refresh` | auto |
-| Adaptive sync | Variable refresh: auto, on or off | `launch.gamescope_adaptive_sync` | auto |
-
-Behind **Y**, under an **Advanced · Scaling** rule:
-
-| Row | What it sets | Key | Default |
-| --- | --- | --- | --- |
-| Scaler | How a smaller picture fills the screen: auto, integer, fit, fill, stretch | `launch.gamescope_scaler` | gamescope's, auto |
-| Filter | The upscaling filter: linear, nearest, fsr, nis, pixel | `launch.gamescope_filter` | gamescope's, linear |
-| Sharpness | 0 (sharpest) to 20, for fsr and nis | `launch.gamescope_sharpness` | gamescope's, 2 |
-| Gamescope arguments | Extra gamescope flags, after the ones above | `launch.gamescope_args` | none |
-| Discrete GPU | On a laptop with two GPUs, the game renders on the stronger one | `launch.discrete_gpu` | on |
+[Gamescope, HDR and frame rate](/docs/running/gamescope/) explains each one.
 
 ## Overlay
 
-| Row | What it sets | Key | Default |
-| --- | --- | --- | --- |
-| Show MangoHud | MangoHud drawn over the game from launch | `launch.mangohud` | off |
-| Frame rate limit | MangoHud's limit: auto, none or a number | `launch.fps_limit` | auto |
-| Pause on HOME | The game freezes while the launcher covers it | `launch.pause_on_home` | on |
-| Hide the cursor while playing | The desktop cursor hides during a game | `desktop.hide_cursor` | on |
-| Keep the screen awake | No blanking or automatic suspend during a game | `desktop.keep_awake` | on |
+- **Show MangoHud**, off.
+- **Frame rate limit**, on auto: the refresh rate the game sees.
+- **Pause on HOME**, on: the game freezes while Universe covers it.
+- **Hide the cursor while playing**, on.
+- **Keep the screen awake**, on: no blanking or automatic suspend during a game.
 
-Under Steam's Game Mode, Show MangoHud, Frame rate limit and Pause on HOME are left out: Steam's Quick Access menu has the HUD and the limit.
+## Saves and updates
 
-## Saves
-
-| Row | What it sets | Key | Default |
-| --- | --- | --- | --- |
-| Back up after playing | A backup of the game's saves when each session ends | `saves.auto_backup` | on |
-| Backups kept (behind Y) | How many backups each game keeps, 1 to 255 | `saves.keep` | 5 |
-
-## Updates
-
-Its one row, **Show what's new after an update** (`desktop.whats_new`, on), is the same switch as in Settings › [About](/docs/settings/about/).
+- **Back up after playing**, on, and behind **Y**, **Backups kept**, 5 ([Saves](/docs/library/saves/)).
+- **Show what's new after an update**, on, the same switch as in Settings › About.
 
 ## Behind Y
 
-**Y** (**Show advanced** or **Hide advanced**, also in **Start** › **More**) adds six cards, hidden each time the section opens.
+- **Environment**: the variables every game gets ([Environment variables](/docs/running/environment/)).
+- **Programs**: the gamescope and umu-run programs Universe runs.
+- **Folders**: **Games**, where stores install games, **Windows game folders**, **Save backups** and **Recordings**.
+- **API keys**: the [SteamGridDB key](/docs/library/artwork/#steamgriddb).
+- **Desktop**: the desktop Universe works with, found by itself on auto.
+- **Proton builds**: names for Proton builds in folders of your own.
 
-- **Environment**: one row per variable of `launch.env`, then **Add a variable…**, a sheet with **Variable** and **Value**. **X** (**Remove**) deletes the focused variable.
-- **Programs**: **Gamescope program** (`launch.gamescope_bin`, `gamescope`) and **umu-run program** (`launch.umu_run`, `umu-run`), each a name on your PATH or a path.
-- **Folders**: **Games** (`paths.games_root`), where stores install games; **Windows game folders** (`paths.prefixes_root`), where a Windows game's prefix is made; **Save backups** (`paths.saves_root`); **Recordings** (`paths.recordings_root`).
-- **API keys**: **SteamGridDB key (optional)** (`keys.sgdb`, which reads Set once a key is in), **SteamGridDB key file** (`keys.sgdb_file`) and **Prefer SteamGridDB art** (`keys.prefer_sgdb`).
-- **Desktop**: **Desktop** (`desktop.profile`, one of auto, gnome, kde, cinnamon, sway, hyprland, niri, x11 or none), the desktop Universe focuses windows, shows its on-screen display and takes screenshots on; **Cursor extension** (`desktop.cursor_extension`).
-- **Proton builds**: one row per name in `[proton]`, then **Add an entry…**, whose sheet takes the build's **Name** and, as its **Value**, the folder that holds its `proton` script. Saving an entry empty removes it.
-
-## Values and editing
-
-A row's value shows what the setting comes to, such as "auto · 60" for a refresh rate left on auto. **A** flips a switch, or opens a picker, the keyboard or a folder sheet. A picker's first choice, "Default · …", removes the key so the default applies again.
-
-Proton build, Wayland, HDR, PlayStation controller, the sync modes, the upscaler upgrades and Debug log are on the runner's page in Settings › [Emulators & Proton](/docs/settings/emulators-proton/).
-
-## From the command line
-
-- [`universe config get`](/docs/reference/cli/config/) `[<key>]` reads config.toml; `universe config set <key> <value>` writes a key, and with no value removes it.
-- [`universe launch-keys`](/docs/reference/cli/launch-keys/) lists every launch key with its type, default and scope.
-- [`universe set`](/docs/reference/cli/set/) `<game> key=value` sets one game's own value.
-
-[Launch settings](/docs/running/launch-settings/) explains how a game's own values override these, [Gamescope, HDR and frame rate](/docs/running/gamescope/) the display and overlay rows, and [Environment variables and wrappers](/docs/running/environment/) the Environment card. Every key is in [Launch keys](/docs/reference/launch-keys/) and [config.toml](/docs/reference/config/).
-
-## In the other looks
-
-The Switch 2 look has the same rows in one column under System Settings › **Game defaults**, and the PS5 look under Settings › **Game Defaults**, a part per card. Both show the advanced rows with **Y**. Universe Desktop has it in Preferences › **Game Defaults**, with the advanced cards on a page behind an **Advanced** row.
+A picker's first choice, "Default · …", goes back to the default. The Proton and Wine defaults, such as **Proton build** and **HDR**, are on the runner's page in Settings › [Emulators & Proton](/docs/settings/emulators-proton/).

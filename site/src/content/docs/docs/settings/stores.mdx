@@ -7,59 +7,21 @@ sidebar:
 
 import Shot from '../../../../components/Shot.astro';
 
-Settings › **Stores** lists the stores Universe installs games from: Epic Games, GOG, itch.io and Steam, and any store add-on you install. Each store has a page for its settings and its sign-in.
+Settings › **Stores** lists the stores Universe installs games from, Epic Games, GOG, itch.io and Steam, and any store add-on you install. GOG is the only one on at first.
 
 <Shot name="settings-stores" />
 
-## The list
+The stores that are on come first, then the **Off** card, then **Get more…** for [add-ons](/docs/add-ons/installing/). A row reads **On**, **Off**, **Set it up** when a setting it can't guess is still empty, or **Unavailable** when a program it needs is missing.
 
-The stores that are on come first, in a card with no title, then the **Off** card, then **Get more…**.
+- **A** opens the store's page.
+- **Y** turns the focused store on or off in place.
 
-Each row reads its state on the right:
+A store's page has three cards:
 
-- **On** or **Off**.
-- **Set it up**: the store is on, but a setting it can't guess is still empty. The detail line names it.
-- **Unavailable**: a program the store needs is missing, and the detail line names it. A store that was already on stays on, but its hooks are skipped.
+- **Settings** starts with **Enabled**. Once the store is on, its settings follow, the advanced ones behind **Y**.
+- **Game defaults** sets the store's per-game settings, such as cloud saves, for all its games, until a game sets its own.
+- **Sign-in** shows the account under **Signed in**, with **Get a sign-in link** and **Enter the code**, or **Get an API key** and **Enter the key**.
 
-An add-on installed from outside the index is tagged **Unlisted**.
+The pages for [GOG](/docs/library/gog/), [Steam](/docs/library/steam/), [Epic Games](/docs/library/epic/) and [itch.io](/docs/library/itch/) go through each store's sign-in and settings.
 
-A new configuration has GOG on and the other three off (`[sources] enabled = ["gog"]` in config.toml).
-
-**Get more…** opens the **Add-ons** menu, which lists the stores in the add-on index. [Installing add-ons](/docs/add-ons/installing/) covers what it offers.
-
-## Keys
-
-- **A** opens the focused store's page.
-- **Y** (**Enable** or **Disable**) turns the store on or off without opening it, and the cursor follows it to its new card. Y is dimmed on a store that is off and unavailable.
-- **Start** opens **More**, with the same Enable or Disable.
-
-## A store's page
-
-The header gives an add-on's version and origin ("v1.2.0 · from the index"), or a warning in red, then the store's description. The cards:
-
-- **Settings** starts with **Enabled**, the only row while the store is off, greyed out when the store can't be turned on. Once it's on, the store's settings follow, the advanced ones behind **Y** (or **Start** › **Show advanced**). Turning on a store that waits on a setting puts the cursor on that setting.
-- **Game defaults** sets the store's per-game settings for all its games, until a game sets its own in its Game settings. It's not the Settings › [Game defaults](/docs/settings/game-defaults/) section.
-- **Sign-in** holds **Signed in**, whose detail is the account name; **Get a sign-in link**, or **Get an API key** for a store that signs in with a key; and **Enter the code** or **Enter the key**. A sign-in link comes with a QR code to scan from your phone.
-
-On these cards, a picker's first choice, "Default · …", puts the store's default back.
-
-| Store | Settings | Behind Y | Game defaults | Sign-in |
-| --- | --- | --- | --- | --- |
-| Epic Games | Install folder, Install owned DLCs | Anti-cheat runtimes, legendary's folder, Adopt installs from, Install time limit | Achievements, Cloud saves | a code |
-| GOG | Install folder, Depot platform, Install owned DLCs | Scanned folders, gogdl token file, Install time limit | Achievements, Cloud saves | a code |
-| itch.io | Install folder, Build to install when a game has both | butler's database, Adopt installs from, Install time limit | none | an API key |
-| Steam | Share Steam's prefix | Steam's folder, Install confirm time, Install time limit | Achievements | an API key |
-
-## From the command line
-
-A store's settings live in config.toml under `[sources.<id>]` (the ids are `epic`, `gog`, `itch` and `steam`), and a game's own values in its `game.toml`.
-
-- [`universe source`](/docs/reference/cli/source/) does what this section does with `ls`, `enable <id>`, `disable <id>`, `settings <id>` and `set <id> key=value`, which takes `--game <game>` for one game's value.
-- [`universe sources`](/docs/reference/cli/sources/) prints each store's state and install folder.
-- [`universe login`](/docs/reference/cli/login/) `<store>` prints the sign-in link, then takes the code.
-
-The pages for [GOG](/docs/library/gog/), [Steam](/docs/library/steam/), [Epic Games](/docs/library/epic/) and [itch.io](/docs/library/itch/) explain each store's settings and sign-in.
-
-## In the other looks
-
-The Switch 2 look has the same list under System Settings › **Stores**, and the PS5 look under Settings › **Stores**. Both turn a store on or off with **X**. Universe Desktop has it in Preferences › **Stores**.
+The Switch 2 and PS5 looks turn a store on or off with **X**: see [Looks](/docs/using/looks/).

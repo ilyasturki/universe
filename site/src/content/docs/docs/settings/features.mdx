@@ -7,50 +7,17 @@ sidebar:
 
 import Shot from '../../../../components/Shot.astro';
 
-Settings › **Features** turns on and sets up the modules, the programs Universe runs around each game session, such as video capture or the play journal. Each one starts off.
+Settings › **Features** turns on and sets up the optional features that run around each game session: **Video capture**, **Emulator controls**, **Play journal**, **Virtual pads** and **Screenshots**. Each one starts off.
 
 <Shot name="settings-features" />
 
-## The list
-
-It's laid out like [Stores](/docs/settings/stores/), with the same states on the right: the features that are on in a card with no title, then the **Off** card, then **Get more…**, which opens the **Add-ons** menu of the add-on index. The Play journal reads **Set it up** until you pick its **Writing model**.
-
-The built-in features are **Video capture**, **Emulator controls**, **Play journal**, **Virtual pads** and **Screenshots**.
-
-## Keys
+The features that are on come first, then the **Off** card, then **Get more…** for [add-ons](/docs/add-ons/installing/). Each row reads its state ([Add-ons and modules](/docs/add-ons/)).
 
 - **A** opens the feature's page.
-- **Y** (**Enable** or **Disable**) turns the focused feature on or off in place, and the cursor follows it to its new card. Y is dimmed on a feature that is off and unavailable.
-- **Start** opens **More**, with the same Enable or Disable.
+- **Y** turns the focused feature on or off in place.
 
-Y writes `[modules] enabled` in config.toml, an empty list by default.
+A feature's page starts with **Enabled**. Once it's on, its settings follow, the advanced ones behind **Y**. Its **Game defaults** card sets its per-game settings for every game, until a game sets its own in its **Game settings**.
 
-## A feature's page
+Each feature's own page has its settings: [Video capture](/docs/add-ons/video-capture/), [Emulator controls](/docs/controllers/emulator-controls/), [Play journal](/docs/add-ons/play-journal/), [Virtual pads](/docs/add-ons/virtual-pads/) and [Screenshots](/docs/add-ons/screenshots/).
 
-- **Settings** starts with **Enabled**, the same switch as Y, and the only row while the feature is off. Once it's on, the feature's settings follow, the advanced ones behind **Y** (or **Start** › **Show advanced**). Turning on a feature that waits on a setting puts the cursor on it.
-- **Game defaults** sets the feature's per-game settings for every game, until a game sets its own.
-
-A feature's switch for one game, such as **Record the session**, is in that game's Game settings, in a card named after the feature.
-
-| Feature | Settings | Behind Y | Game defaults | One game only |
-| --- | --- | --- | --- | --- |
-| Video capture | Video codec, Quality, Frame rate, Video size, Audio | Container, Audio codec, Audio bitrate, Shortest recording kept, Window wait, FFmpeg video options, Extra gpu-screen-recorder arguments | Capture, Show the cursor in the recording | Record the session |
-| Emulator controls | Share HOME with the emulator | none | Nintendo button layout, Wii controller, Triggers and bumpers | Set up controllers |
-| Play journal | Writing model, Model, API endpoint, API key, API key file | Let the model look the game up on the web, Reasoning effort, Tries per session, Seconds a single try may take, Maximum images sent to the model, Frame size, Prompt file | Entry language | Write a journal entry after each session |
-| Virtual pads | Share HOME with the emulator | none | none | Hand the pads to the emulator as virtual pads |
-| Screenshots | none | none | The game's window alone, not every monitor; Show the cursor in screenshots | Take screenshots |
-
-Emulator controls' **Nintendo button layout** offers **Each controller's own** (the default, which follows the Nintendo games row of Settings › [Controller](/docs/settings/controller/)), **A on the right, every controller** and **A at the bottom, every controller**.
-
-## From the command line
-
-A feature's settings live in config.toml under `[modules.<id>]`, with the ids `capture`, `controls`, `journal`, `pads` and `screenshot`. A game's own values go in its `game.toml`.
-
-- [`universe module`](/docs/reference/cli/module/) does what this section does with `ls`, `enable <id>`, `disable <id>`, `settings <id>` and `set <id> key=value`, which takes `--game <game>` for one game's value.
-- [`universe extension`](/docs/reference/cli/extension/) installs, updates and removes add-ons.
-
-[Add-ons and modules](/docs/add-ons/) explains what a feature does around a session. Each built-in has its own page: [Video capture](/docs/add-ons/video-capture/), [Emulator controls](/docs/controllers/emulator-controls/), [Play journal](/docs/add-ons/play-journal/), [Virtual pads](/docs/add-ons/virtual-pads/) and [Screenshots](/docs/add-ons/screenshots/).
-
-## In the other looks
-
-The Switch 2 look has the same list under System Settings › **Features**, and the PS5 look under Settings › **Features**. Both turn a feature on or off with **X**. Universe Desktop has it in Preferences › **Features**.
+The Switch 2 and PS5 looks turn a feature on or off with **X**: see [Looks](/docs/using/looks/).
