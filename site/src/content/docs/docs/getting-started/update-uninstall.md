@@ -1,121 +1,65 @@
 ---
 title: Update and uninstall
-description: Updating Universe on each install path, what it keeps current by itself, and removing it with or without your data.
+description: Update Universe, or remove it with or without your data.
 sidebar:
   order: 5
 ---
 
-Universe never checks for updates to itself. Update it the way you installed it. Your library and settings live in your home folder, and an update leaves them alone.
+Universe doesn't update itself: update it the way you installed it. An update keeps your library and settings.
 
 ## Updating
 
-### Arch Linux
-
-Your AUR helper's upgrade picks up each release of `universe` and `universe-bin`, Universe Desktop's packages included:
+On Arch Linux, your AUR helper picks up each release. `universe-git` needs `--devel`:
 
 ```sh
 paru -Syu
 ```
 
-For `universe-git`, which builds `main`, have paru check development packages:
-
-```sh
-paru -Syu --devel
-```
-
-### Fedora
+On Fedora:
 
 ```sh
 sudo dnf upgrade
 ```
 
-### The installer
-
-Run it again:
+With the installer, run it again:
 
 ```sh
 curl -fsSL https://github.com/ilyasturki/universe/releases/latest/download/install.sh | sh
 ```
 
-It replaces the previous install with the latest release, or with the one `--version` names. Pass the same `--prefix` if you used one. It asks for your password only when one of its files outside your home folder is missing or changed. On GNOME, the refreshed Shell extension loads at your next login.
-
-From a checkout, pull and run it again:
-
-```sh
-git pull
-./install.sh
-```
-
-### Nix
-
-Update the flake input, then rebuild:
+On Nix, update the flake input, then rebuild:
 
 ```sh
 nix flake update universe
 sudo nixos-rebuild switch --flake .
 ```
 
-`nixos-rebuild` covers the NixOS module, and Home Manager too when it runs as a NixOS module. A standalone Home Manager needs `home-manager switch --flake .` as well.
-
 ## What Universe keeps current
 
-Universe updates what it installed for your games: runner builds such as Proton, Wine and the emulators, and tools such as umu-launcher, gogdl, legendary and butler. Universe Big Screen looks for new builds once a day while it runs, the first time 90 seconds after it starts, and never during a game. The build before the newest one stays, so Settings › [Emulators & Proton](/docs/settings/emulators-proton/) can roll back an update that misbehaves. What came from your distribution, Steam, Lutris or Heroic is left as it is.
-
-To update them by hand only, turn it off in [config.toml](/docs/reference/config/):
-
-```sh
-universe config set components.auto_update false
-```
-
-Add-ons update separately, with [`universe extension update`](/docs/reference/cli/extension/).
+Universe updates the runners and tools it installed for your games, such as Proton builds and emulators, once a day while Big Screen runs, never during a game. Settings › [Emulators & Proton](/docs/settings/emulators-proton/) can roll back an update that misbehaves. Add-ons [update separately](/docs/add-ons/installing/).
 
 ## What's new
 
-The first time you open Universe after an update, **What's new** opens by itself once, in whichever app you open first, with what changed in every release since the one you last ran. It doesn't open on a first start, or after going back to an older version.
-
-Settings › [About](/docs/settings/about/) reopens it, and its **Show what's new after an update** keeps it from opening by itself. Universe still notes each version you start, so turning the switch back on later shows only the releases that come after.
+The first time you open Universe after an update, **What's new** shows what changed since the version you last ran. Settings › [About](/docs/settings/about/) opens it again, and its **Show what's new after an update** stops it opening by itself.
 
 ## Uninstalling
 
-Each path removes the program and leaves your data, listed under [What stays](/docs/getting-started/update-uninstall/#what-stays).
-
-On Arch Linux, remove the packages you installed, with the `-bin` or `-git` names if those are yours:
+Each way leaves your data, listed under [What stays](/docs/getting-started/update-uninstall/#what-stays).
 
 ```sh
-sudo pacman -Rs universe universe-desktop
-```
-
-On Fedora, remove the packages, and the COPR repository if you want it gone too:
-
-```sh
-sudo dnf remove universe universe-desktop
-sudo dnf copr remove ilyasturki/universe
-```
-
-With the installer, run it with `--uninstall`, and the same `--prefix` if you used one. From a checkout, that's `./install.sh --uninstall`.
-
-```sh
+sudo pacman -Rs universe universe-desktop        # Arch Linux
+sudo dnf remove universe universe-desktop        # Fedora
 curl -fsSL https://github.com/ilyasturki/universe/releases/latest/download/install.sh | sh -s -- --uninstall
 ```
 
-It removes `~/.local/lib/universe` and the commands, app entries and man pages it put under `~/.local`. Through sudo, it also removes the controller rules, its login session entry and the system tools helper with its policy. Without sudo, it names each of those files that stays for you to remove as root.
-
-On Nix, delete the `programs.universe` lines, the module imports and the `universe` input, then rebuild. If you set `programs.universe.settings`, the config.toml that Home Manager wrote goes with them.
+On Nix, delete the `programs.universe` lines, the module imports and the `universe` input, then rebuild.
 
 ## What stays
 
-Whatever the path, these folders stay:
-
-| Folder | What it holds |
-| --- | --- |
-| `~/.config/universe` | config.toml, and your own modules and stores |
-| `~/.local/share/universe` | the library (each game's settings, artwork, sessions, journal and screenshots), store sign-ins, Wine prefixes, save backups, the runner builds and tools Universe installed, add-ons |
-| `~/.local/state/universe` | the first-run and What's new markers, what each app remembers between runs, game logs |
-| `~/.cache/universe` | caches Universe rebuilds when it needs them |
-
-These follow `XDG_CONFIG_HOME` and the other XDG variables when you set them, and `UNIVERSE_CONFIG_HOME`, `UNIVERSE_DATA_HOME`, `UNIVERSE_STATE_HOME` and `UNIVERSE_CACHE_HOME` replace them.
-
-The games Universe installed stay too, in `~/Games` unless you chose another folder, and so do your recordings, in `~/Videos/universe`. The installer's closing message names only `~/.config/universe` and `~/.local/share/universe`, but every folder above stays.
+- `~/.config/universe`: your settings.
+- `~/.local/share/universe`: the library, with play time, save backups, store sign-ins and Wine prefixes.
+- `~/.local/state/universe` and `~/.cache/universe`: logs and caches.
+- The games Universe installed, in `~/Games` unless you chose another folder, and your recordings, in `~/Videos/universe`.
 
 ## Removing everything
 
@@ -123,15 +67,10 @@ The games Universe installed stay too, in `~/Games` unless you chose another fol
 This deletes your play time, your save backups, your store sign-ins and the Wine prefixes, where many Windows games keep their saves. Cloud saves stay with their store.
 :::
 
-After uninstalling, delete Universe's four folders:
+After uninstalling, delete Universe's folders:
 
 ```sh
 rm -rf ~/.config/universe ~/.local/share/universe ~/.local/state/universe ~/.cache/universe
 ```
 
-Then, if you want them gone too:
-
-- The games Universe installed, in `~/Games` or the folders you chose. Look before you delete, since another launcher may install into the same folder.
-- Your recordings, in `~/Videos/universe`.
-- On GNOME, the Shell extension that `universe setup` copied into your home folder, which `gnome-extensions uninstall universe@ilyasturki.github.io` removes.
-- The Universe Big Screen shortcut in Steam, if you added it as a non-Steam game.
+Delete the games and recordings too if you want them gone, but look first: another launcher may install into the same games folder. On GNOME, `gnome-extensions uninstall universe@ilyasturki.github.io` removes the Shell extension.
