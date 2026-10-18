@@ -1361,12 +1361,13 @@ impl Core {
             trash(&written)?;
         }
         // The frames go with the entry; the player's own shots are theirs, not the entry's.
-        for rel in entry.images.iter().filter(|rel| !crate::screenshots::is_shot_name(rel.rsplit('/').next().unwrap_or(rel))) {
+        let shots_dir = r.game.screenshots_dir();
+        for rel in &entry.images {
             if rel.starts_with('/') || rel.split('/').any(|seg| seg == "..") {
                 continue;
             }
-            let p = journal_dir.join(rel);
-            if p.is_file() {
+            let p = crate::journal::image_path(&journal_dir, &shots_dir, rel);
+            if !p.starts_with(&shots_dir) && p.is_file() {
                 trash(&p)?;
             }
         }
