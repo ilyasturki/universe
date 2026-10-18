@@ -949,6 +949,35 @@
       {
        "arch": "x86_64",
        "format": "tar.xz",
+       "sha256": "2bfb50c106065a6776236f35d481d32758c65210380d2ab45955dd81ff283e75",
+       "size": 347254516,
+       "url": "https://github.com/CachyOS/proton-cachyos/releases/download/cachyos-11.0-20261014-slr/proton-cachyos-11.0-20261014-slr-x86_64.tar.xz"
+      },
+      {
+       "arch": "x86_64",
+       "format": "tar.xz",
+       "sha256": "7bedcb21e14ec79fe9f26c57a52e6f72acc27086c84c64edc0307b3d0a14447a",
+       "size": 347330460,
+       "url": "https://github.com/CachyOS/proton-cachyos/releases/download/cachyos-11.0-20261014-slr/proton-cachyos-11.0-20261014-slr-x86_64_v3.tar.xz",
+       "variant": "x86_64_v3"
+      },
+      {
+       "arch": "aarch64",
+       "format": "tar.xz",
+       "sha256": "7d8b0acd3eddd7057782a634f0a3eba44773075c0d757beafe136bcecf541e10",
+       "size": 357219668,
+       "url": "https://github.com/CachyOS/proton-cachyos/releases/download/cachyos-11.0-20261014-slr/proton-cachyos-11.0-20261014-slr-arm64.tar.xz"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-10-17T22:48:11Z",
+     "version": "proton-cachyos-11.0-20261014-slr"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "tar.xz",
        "sha256": "096bfe73b506d6565b04ecc45214197a4091818f16ed91f5324b4d2082d0a263",
        "size": 346993320,
        "url": "https://github.com/CachyOS/proton-cachyos/releases/download/cachyos-11.0-20261005-slr/proton-cachyos-11.0-20261005-slr-x86_64.tar.xz"
@@ -1123,6 +1152,20 @@
       {
        "arch": "x86_64",
        "format": "appimage",
+       "sha256": "6774200691cc3ebbff76e641ff391a837bdb036f40ad975b738d85188b1b9103",
+       "size": 94112221,
+       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-2348d8c37cb60314d7b1b1dc116d7cc8868fcd28/rpcs3-v0.0.43-20333-2348d8c3_linux64.AppImage"
+      }
+     ],
+     "channel": "rolling",
+     "date": "2026-10-18T08:43:42Z",
+     "version": "0.0.43-20333-2348d8c3"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "appimage",
        "sha256": "059473646d4f8e850f2524cf8d8e623cb0e17036f2d1ee6a2fda7f371a6c0a5e",
        "size": 94111628,
        "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-64ba740c27be6946074cd91db85be4d48146d768/rpcs3-v0.0.43-20323-64ba740c_linux64.AppImage"
@@ -1187,20 +1230,6 @@
      "channel": "rolling",
      "date": "2026-10-13T12:03:27Z",
      "version": "0.0.43-20286-6fe3c87f"
-    },
-    {
-     "assets": [
-      {
-       "arch": "x86_64",
-       "format": "appimage",
-       "sha256": "21aa550a312b449ad1f1a2868ccd2100c3ae52f5a03e6fcb46774df0632195cb",
-       "size": 94099251,
-       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-2ba2f75bcea7ef6bdd687046c7fcfb790faf9853/rpcs3-v0.0.43-20284-2ba2f75b_linux64.AppImage"
-      }
-     ],
-     "channel": "rolling",
-     "date": "2026-10-11T10:14:18Z",
-     "version": "0.0.43-20284-2ba2f75b"
     }
    ],
    "homepage": "https://github.com/RPCS3/rpcs3-binaries-linux",
@@ -1448,21 +1477,21 @@
       {
        "arch": "x86_64",
        "format": "appimage",
-       "sha256": "62f48ea5035220af546c942d587b85c1febb018af26c08f824c42cc486d68ad6",
-       "size": 78522076,
+       "sha256": "0f320515c723d4786d2d5e624ed5f039e45f33156afae776208f5cd46734dcab",
+       "size": 78571087,
        "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-x86_64.AppImage"
       },
       {
        "arch": "aarch64",
        "format": "appimage",
-       "sha256": "e5bcf5e3c05a0ecc52bcfa8f8a506c315989f7915b70ce34f1998ce0f0d26895",
-       "size": 78105864,
+       "sha256": "035346f464cdc7e61d6c7e11f6b90c450d91bb80828647aa01f61b99d63d0627",
+       "size": 78124584,
        "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-aarch64.AppImage"
       }
      ],
      "channel": "rolling",
-     "date": "2026-10-17T08:33:06Z",
-     "version": "2026.10.17"
+     "date": "2026-10-18T08:07:05Z",
+     "version": "2026.10.18"
     }
    ],
    "homepage": "https://github.com/Vita3K/Vita3K",
@@ -1624,6 +1653,6 @@
    "name": "xemu"
   }
  },
- "generated_at": "2026-10-17T09:30:19Z",
+ "generated_at": "2026-10-18T09:44:03Z",
  "schema": 1
 }
