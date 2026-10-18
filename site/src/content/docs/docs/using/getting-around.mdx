@@ -1,20 +1,17 @@
 ---
 title: Getting around
-description: The four tabs, what each controller button and key does, the hint bar, search, the power menu, menus, and the mouse and touch.
+description: The tabs, what each button does, search, the power menu, and the mouse and touch.
 sidebar:
   order: 1
 ---
 
 import Shot from '../../../../components/Shot.astro';
-import Clip from '../../../../components/Clip.astro';
 
-Universe Big Screen has four tabs along the top: **Home**, **Library**, **Media** and **Settings**. **LB** and **RB** step through them. After the tabs come the search glass, the power button and, while a game runs, a badge with its title and how long it has been running.
-
-Up from the top of a page reaches the tab bar, where landing on a tab switches to it. **A** opens search or the power menu, or resumes the game from its badge. Down goes back into the page. **B** does too on Home, and on any other tab returns to Home.
+Universe Big Screen has four tabs along the top: **Home**, **Library**, **Media** and **Settings**. **LB** and **RB** switch between them. Up from the top of a page reaches the tab bar, with the search glass, the power button and, while a game runs, its badge.
 
 ## Buttons and keys
 
-These pages name the buttons by their Xbox letters. Each one but **HOME** has a key on the keyboard.
+These pages name the buttons by their Xbox letters. The keyboard has a key for each one but **HOME**.
 
 | Pad | Keyboard | What it does |
 | --- | --- | --- |
@@ -23,76 +20,39 @@ These pages name the buttons by their Xbox letters. Each one but **HOME** has a 
 | **X** | <kbd>I</kbd> | Opens the focused game's page. |
 | **Y** | <kbd>F</kbd> | Adds the focused game to your favourites, or takes it out. |
 | **LB** / **RB** | <kbd>Q</kbd> / <kbd>E</kbd> | Previous and next tab. |
-| **LT** / **RT** | <kbd>PgUp</kbd> / <kbd>PgDn</kbd> | Previous and next section in Settings, and on pages split into cards, such as a game's settings. |
-| **Start** | <kbd>F1</kbd> | More, the menu for what has the focus. On a game, that's the game menu. |
+| **LT** / **RT** | <kbd>PgUp</kbd> / <kbd>PgDn</kbd> | Previous and next section in Settings and on a game's settings. |
+| **Start** | <kbd>F1</kbd> | The menu for what has the focus. On a game, that's the game menu. |
 | D-pad, left stick | Arrow keys | Move. |
-| Right stick | <kbd>[</kbd> / <kbd>]</kbd> | Up and down move a screenful at a time. Left and right scrub through a recording. |
+| Right stick | <kbd>[</kbd> / <kbd>]</kbd> | Scrolls a screenful at a time. |
 | **HOME** | none | Opens the dock over a running game ([Playing](/docs/using/playing/)). |
 
-A hold lasts 450 ms. Where a button does something else, the hint bar says so. In Settings, **X** refreshes and **Y** turns a feature on or off.
-
-<kbd>Backspace</kbd> goes back too, and <kbd>Home</kbd> and <kbd>End</kbd> jump to the first and last item. The Select button (View, Create or − on your pad) and the stick clicks do nothing in the menus, though a [macro](/docs/controllers/macros/) can use them.
-
-## The hint bar
-
-The bar along the bottom lists the buttons the focused item takes, **A** first, and shows messages in its middle.
-
-The buttons are drawn as your pad prints them:
-
-- A PlayStation pad shows ✕ for **A**, ○ for **B**, □ for **X** and △ for **Y**, with L1, R1, L2 and R2 for the shoulders.
-- An Xbox pad and a Steam Deck show the letters.
-- On a Nintendo-style pad (a Switch Pro Controller, an 8BitDo Pro 3), each letter is the button printed with it, wherever it sits. **A**, on the right, confirms, and **B**, at the bottom, goes back.
-
-With several pads connected, the hints follow the one connected first, or the one picked in Settings › **Controller**. Until Universe has seen a pad, they show Xbox letters, a Steam Deck's buttons on a Deck, or the pad picked in **Buttons and glyphs** in the [first-run setup](/docs/getting-started/first-run/). Pick up the keyboard or the mouse and they show key caps instead.
+The hint bar along the bottom lists the buttons the focused item takes, drawn as your pad prints them ([Button glyphs](/docs/controllers/supported/#button-glyphs)). Where a button does something else, it says so.
 
 ## Search
 
-Search finds games and settings at once. Press **A** on the search glass in the tab bar, or click it.
+Press **A** on the search glass in the tab bar. Search finds games and settings as you type.
 
 <Shot name="search" />
 
-- Games whose title contains what you type show as covers, last played first.
-- Settings show under them: the section names, the rows of Game defaults and Controller, the runners, the features and the stores with their rows, Appearance's **Theme** and **Startup animation**, and each look by name.
-- Games' own settings show once per setting, with how many games have it and how many override it. **A** on such a row expands it into one row per game.
-- A word's start, a typo or a related word finds a row, and a word that names a game narrows the settings to that game's own.
-- The sections' former names still find them: Launch (Game defaults), Runners (Emulators & Proton), Sources (Stores), Install (Downloads), Modules (Features), Themes (Appearance), System (Performance) and Doctor (System check).
-
-On the on-screen keyboard, **X** deletes the last letter and **B** closes search from anywhere in it. Up from its top row reaches the results; a physical keyboard types straight in, and <kbd>Enter</kbd> moves to them. On a cover, **A** plays the game and **Start** opens its menu. On a setting, **A** opens its page with the row in view.
+**A** on a cover plays the game, and **Start** opens its menu. **A** on a setting opens its page on that row. On the on-screen keyboard, **X** deletes the last letter and **B** closes search. A physical keyboard types straight in.
 
 ## Power
 
-Hold **B** to open **Power**, or press **A** on the power button in the tab bar or on Settings › About › **Power**. Holding **B** does nothing while a game is launching or while a menu, a question or search is open.
+Hold **B**, or press **A** on the power button in the tab bar.
 
 <Shot name="power-menu" />
 
-- **Quit Universe** closes Universe at once, and the running game with it. In the [Universe session](/docs/getting-started/universe-session/) it reads **Log out**.
+- **Quit Universe** closes Universe and the running game.
 - **Suspend** puts the machine to sleep. A running game keeps running.
-- **Reboot** and **Power off** ask first, with the cursor on **Cancel**, and close the running game.
+- **Reboot** and **Power off** ask first, and close the running game.
 - **Stay** closes the menu.
-
-Suspend, Reboot and Power off show only when logind allows them. Under [Steam's Game Mode](/docs/getting-started/steam-deck/#steams-game-mode) only Quit Universe and Stay remain; Steam's own menu has the power options.
 
 ## Menus and questions
 
-In a menu, Right opens a row marked ›, Left or **B** goes back one level and **Start** closes the whole menu. Where a menu changes a game's setting, the hint bar can offer **A** for that game alone and **Y** for all your games.
-
-In a question, **B** answers no. A click outside a menu or a question counts as **B**.
+In a menu, Right opens a row marked ›, Left or **B** goes back, and **Start** closes the menu. A menu that changes a game's setting can also offer **Y**, for all your games. In a question, **B** answers no.
 
 ## Mouse and touch
 
-- A click or a tap moves the focus to what it lands on, and a second one is **A**, so a second tap on a cover plays the game. Buttons, menu rows, tabs and the on-screen keyboard's keys act on the first tap.
-- A press held past 180 ms on the focused item counts as a held **A**.
-- Dragging and the wheel scroll. The wheel moves the home row sideways.
-- Right click on a cover opens the game's page. Anywhere else, right click is **B**.
+A click or a tap moves the focus, and a second one acts like **A**. Buttons, tabs and menu rows act on the first. Press and hold works like holding **A**, and dragging and the wheel scroll. A right click on a cover opens the game's page; anywhere else it's **B**.
 
-A finger counts as the pad, so the hints keep showing its buttons.
-
-## In the other looks
-
-The Switch 2 look puts a row of games over a bar of round buttons (**All Software**, **News**, **Install**, **Album**, **Controllers**, **System Settings** and **Power**). **B** goes back from any page, and **Start** returns to HOME wherever the page doesn't use it. Holding **B** opens **Power Options**, with **Quit Universe**, **Sleep Mode**, **Restart** and **Turn Off**. System Settings › **Search** finds settings only, and **All Software** has a search of its own for titles.
-
-On the Switch 2 and PS5 keyboards, **B** deletes the last letter, and closes the keyboard once the field is empty; **X** closes it at once.
-
-The PS5 look has two tabs, **Games** and **Media**, switched with **LB** and **RB**, and **Search**, **Settings** and **Power** icons in its top bar. Most of its screens show no button hints. Holding **B** opens its power menu (**Enter Rest Mode**, **Turn Off**, **Restart**, **Quit Universe**), and it's the only look that asks before quitting with a game running.
-
-[Looks](/docs/using/looks/) explains how to switch between them.
+The Switch 2 and PS5 looks are laid out differently: see [Looks](/docs/using/looks/).

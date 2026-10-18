@@ -1,12 +1,11 @@
 ---
 title: Home and Library
-description: Which games the home row shows and in what order, the hero's buttons, the Library tab, adding a game, favourites and hidden games.
+description: The home row, the hero over it, the Library tab, favourites and hidden games.
 sidebar:
   order: 2
 ---
 
 import Shot from '../../../../components/Shot.astro';
-import Clip from '../../../../components/Clip.astro';
 
 Home is a row of the games you're playing, under the focused game's art. Library holds every game you have.
 
@@ -14,68 +13,32 @@ Home is a row of the games you're playing, under the focused game's art. Library
 
 ## The home row
 
-The row holds the games you have played and the ones you added, by installing them from a store or with **Add a game**. Games a scan or an import brought in (Lutris, emulator folders, store games already on disk) join it once you play them.
+The row holds the 12 games you played or added last, newest first, and the running game always comes first. A store install in progress leads the row with its percentage. Games an import or a scan brought in join the row once you play them. While fewer than five games qualify, the row shows your library's newest releases instead.
 
-- The newest come first, by the later of the last time you played and the time you added the game. Ties read A to Z.
-- The running game is always first.
-- The row holds 12 games at most. Library has the rest.
-- A store install in progress leads the row, its cover marked **INSTALLING** with the percentage.
-- While fewer than five games qualify, the row shows the 12 newest games of your library by release year instead.
-
-A favourite's cover carries a ♥. The running game's reads **PLAYING**, **PAUSED** or **QUITTING**. A game with no art shows its title on a dark card ([Artwork](/docs/library/artwork/)).
-
-After the last game, a **Library** tile opens the Library tab. With an empty library, the tile reads **Add a game** and the hero offers **Add a game** and **Set up**, which runs the [first-run setup](/docs/getting-started/first-run/) again.
+A ♥ marks a favourite, and the running game's cover reads **PLAYING** or **PAUSED**. After the last game, the **Library** tile opens the Library tab.
 
 ## The hero
 
 Up from the row reaches the hero, the focused game's logo over three buttons:
 
-- The play button reads **Play**, **Continue** once you have played the game, **Resume** while it runs, and **Manage install** while it installs, which opens Settings › Downloads.
+- The play button reads **Play**, **Continue** once you have played the game, **Resume** while it runs, and **Manage install** while it installs.
 - **Game page** opens [the game's page](/docs/using/game-page/).
 - **···** opens the [game menu](/docs/using/game-page/#the-game-menu).
-
-Down or **B** returns to the row.
 
 ## The Library tab
 
 <Shot name="library" />
 
-Library shows every game but the hidden ones, in the home row's order, then the games you never played or added, A to Z. The keys work as on the home row.
+Library shows every game but the hidden ones: the home row's games first, then the others from A to Z. This look has no sort or filter; [Universe Desktop](/docs/using/universe-desktop/) and the other looks do.
 
-This look has no sort, no filter and no favourites view. The Switch 2 and PS5 looks have them, and so does [Universe Desktop](/docs/using/universe-desktop/).
-
-The last cell, **Add a game**, opens the Add a game page.
-
-## Add a game
-
-The page has three kinds of rows:
-
-- **Pick a game file…** takes a program or a ROM, and Universe proposes the runner and the title from the file ([Add a game by hand](/docs/library/add-a-game/)).
-- One row per store. **A** on a store you're signed in to opens its games in Settings › Downloads; on one you aren't, it opens the store's page to sign in.
-- **Import from Lutris** brings in Lutris's games with their hours and artwork, and leaves the games already here as they are.
+The last cell, **Add a game**, adds a game from a file, a store or Lutris ([Add a game by hand](/docs/library/add-a-game/)). With an empty library, Home offers it too.
 
 ## Favourites
 
 **Y** on a game, the heart on its page and the game menu's **Add to favourites** all add it to your favourites or take it out.
 
-In this look, a favourite only gets its ♥. The Switch 2 look lists favourites under **All Software** › **Groups**, the PS5 look under **Game Library** › **Favourites**, and Universe Desktop in its sidebar.
-
 ## Hidden games
 
-A hidden game stays out of every list in every look, and out of search. To hide one, turn on **Hidden** in the **Desktop and library** card of its **Game settings**.
+To hide a game from every list and from search, turn on **Hidden** in the **Desktop and library** card of its **Game settings**. Big Screen can't show it again. Universe Desktop can: turn on **Show Hidden Games** (<kbd>Ctrl</kbd>+<kbd>H</kbd>), then pick **Unhide** in the game's menu. From a terminal, run `universe set <name> hidden=false`.
 
-Big Screen never lists a hidden game, so it can't bring one back. [`universe set`](/docs/reference/cli/set/) can:
-
-```sh
-universe set <name> hidden=false
-```
-
-So can Universe Desktop. Turn on **Show Hidden Games** in the library's sort menu (<kbd>Ctrl</kbd>+<kbd>H</kbd>), then pick **Unhide** in the game's menu.
-
-A game you removed from the library comes back when you install it again from its store ([Removing a game](/docs/using/game-page/#removing-a-game)).
-
-## In the other looks
-
-The Switch 2 look's HOME row holds the 12 games you played or added last, with no stand-in for a small library. After the games, **View More** opens **All Software**, with two tabs, **Software** and **Groups** (**LB** and **RB**). Software sorts **By Recently Played**, **By Title**, **By Play Time** or **By Release**, and has a search of its own. Groups holds **Favourites**, one group per platform and one per tag.
-
-The PS5 look's Games row starts with a **Welcome** hub, then your recent games, then **Store**, **Media Gallery** and **Game Library**. Under the row, the hero shows **Play Game** (**Resume** while it runs, **View Download** while it installs) and **…**. **Game Library** has **Your Collection**, **Favourites** and **Gamelists** tabs, a **Sort and Filter** menu and **Add Game**.
+The Switch 2 and PS5 looks are laid out differently: see [Looks](/docs/using/looks/).

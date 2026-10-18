@@ -1,124 +1,74 @@
 ---
 title: Playing, and HOME over a game
-description: Launching a game, the dock HOME opens over it, pausing, screenshots, MangoHud, the frame rate limit, volume, controllers and quitting.
+description: Launching a game, the dock HOME opens over it, and quitting.
 sidebar:
   order: 4
 ---
 
-import Shot from '../../../../components/Shot.astro';
 import Clip from '../../../../components/Clip.astro';
 
-**A** on a game plays it, and one game runs at a time. Over a running game, **HOME** on your controller opens the dock and holding **HOME** goes back to Universe. The dock needs Big Screen running full screen, as it starts by default ([Where the dock works](/docs/using/playing/#where-the-dock-works)).
+**A** on a game plays it, and one game runs at a time. Over a running game, **HOME** on your controller opens the dock, and holding **HOME** goes back to Universe.
 
 ## Launching
 
-The game's poster stays until the game's window is up. Presses do nothing meanwhile except **B**, which drops the poster once the game has started and lets it load behind Universe. **HOME** opens a small dock with **Home** and **Quit** alone.
-
-A game whose runner isn't installed yet, such as a Proton build or an emulator, asks first, with **Install and play** and **Not now**. A failed launch says why, in a message starting "Could not launch".
-
-Playing another game while one runs asks to quit the first, with **Quit and start** and **Keep playing**.
+The game's poster stays up until its window shows. **B** lets the game load behind Universe instead. A game whose runner isn't installed yet offers **Install and play**, and a launch that fails says why. Playing a second game asks to quit the first.
 
 ## The dock
 
 <Clip name="home-over-game" />
 
-The game's card at the left reads **PLAYING** or **PAUSED**, and **REC** with the time shows at the top right while the session is recorded. A second **HOME**, or **B**, closes the dock.
-
 The buttons, left to right:
 
 - **Resume** closes the dock.
-- **Home** brings Universe up, the game behind it, frozen while Pause on HOME is on.
-- **Quit** asks first, with **Quit** and **Keep playing**. Unsaved progress is lost.
-- **Game** opens the game's **Details**, **Journal**, **Recordings** or **Sessions** page in Universe.
-- **Screenshot** takes a screenshot ([Screenshots](/docs/using/playing/#screenshots)).
-- **Controllers** lists your controllers, then **Find controllers** ([Controllers](/docs/using/playing/#controllers)).
-- **Achievements**, when the game has some, opens them in the tray under the dock.
-- **Performance** holds **MangoHud**, **FPS limit**, **Filter**, **Sharpness** (while Filter is on FSR or NIS) and **Pause on HOME**.
-- **Sound** holds **Volume** and **Output**.
-- **System**, on a machine Universe can tune such as a Steam Deck, holds **Brightness**, **Refresh rate**, **Power limit**, **GPU clock** and **SteamOS fan curve**.
+- **Home** brings Universe up, the game behind it.
+- **Quit** closes the game after asking. Unsaved progress is lost.
+- **Game** opens the game's details, journal, recordings or sessions.
+- **Screenshot** takes a [screenshot](/docs/using/playing/#screenshots).
+- **Controllers** lists your [controllers](/docs/using/playing/#controllers).
+- **Achievements**, when the game has some.
+- **Performance** holds [MangoHud, the frame rate limit and scaling](/docs/using/playing/#mangohud-the-frame-rate-limit-and-scaling), and **Pause on HOME**.
+- **Sound** holds **Volume**, where **A** mutes, and **Output**, the sound device.
+- **System**, on a Steam Deck, holds the [Performance](/docs/settings/performance/) rows for this game.
 
-Left and Right walk the row or change a value, and Up and Down move through an open card. **B** closes the card, then the dock. **X** takes a screenshot from anywhere in the dock. A click on the game behind it, or a right click, counts as **B**.
-
-Down from the row raises a tray of the game's screenshots, this session's first. **A** shows one full screen and **Y** trashes it, after a question. **LB** and **RB** switch the tray to the achievements when the game has some. A GOG game's unlocks also show as a banner at the top right while you play.
+Left and Right walk the row, and Up and Down move through an open card. **B** closes the card, then the dock. Down from the row shows the game's screenshots, this session's first.
 
 ## HOME
 
-- Pressed over the game, HOME opens the dock. With Universe on screen, it goes back to the game. With no game running, it opens the focused game's [game menu](/docs/using/game-page/#the-game-menu).
-- Held over the game for 600 ms, it goes straight to Universe's Home. **Hold length (ms)**, in Settings › **Controller**'s advanced rows, sets the hold, from 400 to 1000.
-- With another app in front, HOME brings Universe to the front. **HOME opens Universe**, in the same advanced rows, turns that off.
-- No macro can take HOME, and a keyboard has no key for it, so the dock needs a controller.
+- Over the game, HOME opens the dock. With Universe on screen, it goes back to the game.
+- Held over the game, it goes straight to Universe's Home, where **A** on the game's tile returns to it.
+- With no game running, it opens the focused game's [game menu](/docs/using/game-page/#the-game-menu).
+- With another app in front, it brings Universe to the front.
 
-Back on Home, the game's last frame shrinks into its tile and the tab bar shows a badge with its title and time. **A** on the tile, the badge or the hero's **Resume** returns to the game.
+A keyboard has no HOME key, so the dock needs a controller.
 
 ## Pause on HOME
 
-**Pause on HOME**, on by default, freezes the game while the dock or Universe covers it, and a recording pauses with it. A game still loading never freezes.
+**Pause on HOME**, on by default, freezes the game while the dock or Universe covers it. Turn it off for a game that must keep running, such as online play: the game then reads every button you press in the dock.
 
-Turn it off for a game that must keep running, such as online play. The game then runs on behind the dock and reads every button you press there.
-
-The dock's switch sets the running game's own value. **Y** there gives it to every game without a value of its own. The default for every game is in Settings › [Game defaults](/docs/settings/game-defaults/), and each game's in its **Game settings**.
+The dock's switch sets it for the running game, and **Y** there for every game. [Game defaults](/docs/settings/game-defaults/) holds the default.
 
 ## Screenshots
 
-Screenshots need the **Screenshots** feature, off until you turn it on in Settings › **Features** ([Screenshots](/docs/add-ons/screenshots/)). Without it, the dock answers **Screenshot failed**. Then take one:
-
-- with **Screenshot** in the dock, or **X** anywhere in it;
-- with a pad button bound to the Screenshot macro in Settings › Controller. [Some pads ship with one](/docs/controllers/macros/#shipped-macros);
-- with [`universe screenshot`](/docs/reference/cli/screenshot/) in a terminal.
-
-A shutter sounds and the screen flashes white. [Media](/docs/using/media/#screenshots) says where the file lands. Inside Big Screen's own gamescope, the shot holds the game alone, without MangoHud, until you turn off **The game's window alone, not every monitor** in the feature's settings.
+Turn on the **Screenshots** feature first, in Settings › Features ([Screenshots](/docs/add-ons/screenshots/)). Then press **Screenshot** or **X** in the dock, or a pad button with the Screenshot macro ([some pads have one](/docs/controllers/macros/#shipped-macros)).
 
 ## MangoHud, the frame rate limit and scaling
 
-Apart from **Pause on HOME**, the dock's **Performance** card changes the running game alone, and its next launch starts from its settings again. Keep a value in the game's **Game settings**, or for every game in Settings › Game defaults ([Gamescope, HDR and frame rate](/docs/running/gamescope/)).
+The **Performance** card changes the running game until it ends. To keep a value, set it in the game's **Game settings** ([Gamescope, HDR and frame rate](/docs/running/gamescope/)).
 
-- **MangoHud** shows or hides the overlay. Nothing draws it if MangoHud isn't installed.
-- **FPS limit** reads **Auto** (the refresh rate the game sees; no limit for an emulator), **None**, or a rate from the screen's refresh down to 30. It holds with the overlay hidden.
-- **Filter** sets how gamescope scales the game: **Default**, **Linear**, **Nearest**, **FSR**, **NIS** or **Pixel**.
-- **Sharpness**, for FSR and NIS, runs from **0 · sharpest** to **20 · softest**, or **Default**.
-
-A pad's **Toggle MangoHud** macro shows or hides MangoHud the same way, for this session alone ([shipped macros](/docs/controllers/macros/#shipped-macros)).
-
-## Volume and output
-
-On **Volume**, Left and Right step the level, 2 % at a time; **Volume step (%)**, in Settings › Controller's advanced rows, changes the step. Right also unmutes, and **A** mutes.
-
-**Output** switches to a sound device once you rest on it for half a second.
-
-A pad's **Volume up**, **Volume down** and **Mute** macros work with the dock closed too, and show the level over the game ([shipped macros](/docs/controllers/macros/#shipped-macros)).
+- **MangoHud** shows or hides the overlay.
+- **FPS limit** caps the frame rate, and **None** lifts the cap.
+- **Filter** sets how the picture is scaled to your screen, and **Sharpness** how sharp FSR and NIS make it.
 
 ## Controllers
 
-**Controllers** lists each controller Universe reads, with **Bluetooth** or **USB** and its charge when known. **A** on one reconnects it:
-
-- A Bluetooth pad is disconnected and connected again. One that doesn't answer has switched itself off; press its PS or HOME button to wake it.
-- A pad on a cable can't be reconnected from software. Unplug it and plug it back in.
-
-A game using [Virtual pads](/docs/add-ons/virtual-pads/) sees its pads unplugged and plugged back in, and each takes back its player.
-
-**Find controllers**, the last row, reopens every pad and retries the devices Universe passed over. Use it when a pad in your hands isn't listed. In this look the two exist only in the dock; [`universe controller reconnect`](/docs/reference/cli/controller/) reconnects pads from a terminal.
+**Controllers** lists each controller with its charge. **A** on one reconnects it. A Bluetooth pad that doesn't come back has switched itself off: press its PS or HOME button. Unplug a pad on a cable and plug it back in. **Find controllers** looks again for a pad that isn't listed.
 
 ## Quitting
 
-The dock's **Quit** asks first. **Quit** with the title, in the game menu, doesn't. Quitting Universe or logging out of the Universe session closes the game too, as do the pad's **Stop the game** macro (a hold, bound to no button at first) and [`universe stop`](/docs/reference/cli/stop/).
-
-Universe comes back first, the tile reading **QUITTING**, and the game is asked to close. One that doesn't is asked again after 3 s and stopped 5 s later. Whether it saves on the way out is up to the game.
-
-After a crash, or when the system kills the game, a message points to its log under **Sessions and logs** on the game's page.
-
-With **Back up after playing** on in Settings › Game defaults, the game's saves are backed up when the session ends.
+Save in the game before you quit: whether it saves on the way out is up to the game. If it crashes, a message points to its log under **Sessions and logs** on its page.
 
 ## Where the dock works
 
-The dock, the screenshot flash and the volume level over the game need Big Screen full screen in its own gamescope, as it starts by default. Elsewhere:
+The dock needs Big Screen full screen, as it starts by default. In a window, HOME brings Universe's window up instead, and a game frozen by Pause on HOME stays frozen until you resume it from Universe. Games started from Universe Desktop get no dock, and neither does an add-on theme. Under [Steam's Game Mode](/docs/getting-started/steam-deck/#steams-game-mode), HOME is Steam's.
 
-- **Big Screen on the desktop**, in a window (`--windowed` or `--size`) or because gamescope failed to start, has no dock. HOME brings its window up over the game. A game frozen by Pause on HOME stays frozen until you resume it from Universe, even if you switch to it from the desktop.
-- **Under [Steam's Game Mode](/docs/getting-started/steam-deck/#steams-game-mode)**, HOME over a game stays Steam's. Steam owns MangoHud, the frame rate limit, the volume, screenshots and power, and the pad's macros for those do nothing.
-- **Games started from Universe Desktop or `universe play`** get no dock. The pad's macros still work.
-- **An add-on theme** draws no dock. Holding HOME brings the launcher back.
-
-## In the other looks
-
-The PS5 look opens its **Control Center** over the game: cards for the game, its **Game Hub**, its trophies and your captures, over a bar with **Home**, the game (**Resume**, **Game Hub**, **Pause on HOME**, **Close Game**), **Screenshot**, **Controllers**, **Trophies**, **Performance**, **Sound**, **System** and **Power**. □ takes a screenshot from anywhere in it. While the game loads, only **Home** and **Power** show.
-
-The Switch 2 look has no overlay. **HOME** over a game flips to its HOME menu and back. On the running game's tile, **A** resumes, **Start** opens its options and **X** closes it, after a question. It has no MangoHud, frame rate or volume controls of its own, though the settings and the pad's macros still apply. Its **Controllers** page, on the HOME menu, lists each pad with **Reconnect**, then **Find Controllers**.
+The PS5 look has its own Control Center over a game, and the Switch 2 look none: see [Looks](/docs/using/looks/).

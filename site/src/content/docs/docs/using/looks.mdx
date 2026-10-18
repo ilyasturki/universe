@@ -1,14 +1,13 @@
 ---
 title: Looks
-description: The three looks of Universe Big Screen, switching between them, the startup animation, What's new, and themes others made.
+description: The Universe, Switch 2 and PS5 looks, and how to switch between them.
 sidebar:
   order: 6
 ---
 
 import Shot from '../../../../components/Shot.astro';
-import Clip from '../../../../components/Clip.astro';
 
-Universe Big Screen comes with three looks: **Universe**, the default, then **Switch 2** and **PS5**. They share your library and your settings.
+Universe Big Screen comes with three looks: **Universe**, the default, then **Switch 2** and **PS5**. They share your library and your settings, and differ in where things are.
 
 ## Universe
 
@@ -20,13 +19,26 @@ Dark, with the game's art behind everything: tabs along the top, a hint bar alon
 
 <Shot name="look-switch2" />
 
-A light look after the Switch 2 HOME menu, with a row of games over a bar of round buttons. Settings is **System Settings**, the media lives in **Album** and **News**, and **HOME** over a game flips to the HOME menu instead of opening a dock. **Font file** in its Appearance replaces its BIZ UDPGothic with a .ttf of your own, the Switch's own font for one.
+A light look after the Switch 2 HOME menu: a row of games over a bar of round buttons.
+
+- **All Software** lists every game, with sorting, search and **Groups** for your favourites.
+- Settings is **System Settings**. Downloads is **Updates** there, Network is **Internet** and Storage is **Data Management**. Stores install from **Install** on the HOME bar.
+- Screenshots and recordings are in **Album**, the journal in **News**.
+- **Start** on a game opens **Software Options**, with its settings, data, artwork and journal.
+- There's no dock. **HOME** over a game flips to the HOME menu and back, and on the running game's tile **X** closes it.
+- **Controllers**, on the HOME bar, reconnects and pairs your pads.
 
 ## PS5
 
 <Shot name="look-ps5" />
 
-After the PS5 home screen: two tabs, Games and Media, a row of tiles over the focused game's hero and Game Hub, and the Control Center over a running game. Most screens carry no button hints, and until Universe has seen a controller the few that do show a DualSense's buttons. **Font file** replaces its Source Sans 3.
+After the PS5 home screen: two tabs, **Games** and **Media**, and a row of tiles over the focused game's hero and **Game Hub**.
+
+- **Search**, **Settings** and **Power** are icons in the top bar. Downloads is **Updates** in Settings, and Bluetooth is **Accessories**.
+- **Game Library**, at the end of the row, sorts and filters your games. The **Store** tile installs them.
+- **HOME** over a game opens the **Control Center**, with the game, screenshots, controllers, performance, sound and power.
+- Achievements are trophies, and most screens show no button hints.
+- It asks before quitting Universe with a game running.
 
 ## Switching looks
 
@@ -34,23 +46,13 @@ Settings › **Appearance** › **Theme** lists the three looks, then the themes
 
 <Shot name="settings-appearance" />
 
-Universe remembers the look for the next start, in `~/.local/state/universe/ui-memory.json`. `universe-ui --theme switch2` (or `ps5`, or `universe`) uses one for a single run.
-
-[Appearance](/docs/settings/appearance/) also holds **Sound folder**, **Font file** (Switch 2 and PS5), **Get more…** and **Startup animation**.
-
 ## The startup animation
 
-A full-screen start opens on the Universe mark for about two seconds, with a chime unless the sound is muted. Any button skips it.
-
-It doesn't play with a game running, under [Steam's Game Mode](/docs/getting-started/steam-deck/#steams-game-mode), or when Universe starts again after a crash. Settings › Appearance › **Startup animation** turns it off in every look. `universe-ui --no-boot` skips it for one run and `--boot` forces it, but the switch in Appearance wins.
-
-## What's new
-
-The first start after an update opens **What's new**, with the changes of each release since the one you last ran. Settings › [About](/docs/settings/about/) › **What's new** opens it whenever you like, and **Show what's new after an update** there stops it opening by itself ([What's new](/docs/getting-started/update-uninstall/#whats-new)).
+A full-screen start opens on the Universe mark, with a chime. Any button skips it, and Settings › Appearance › **Startup animation** turns it off.
 
 ## Themes others made
 
-A theme is a look someone else made, installed from **Get more…** in Appearance or with [`universe extension install`](/docs/reference/cli/extension/). It has no dock over a running game; holding **HOME** brings Universe back instead. If a theme leaves you no way out, hold **HOME** on the pad for 5 s to get the Universe look back. [Themes](/docs/add-ons/themes/) covers installing, updating and making one.
+A theme is a look someone else made, installed from **Get more…** in Appearance ([Themes](/docs/add-ons/themes/)). If a theme leaves you no way out, hold **HOME** on the pad for 5 seconds to get the Universe look back.
 
 ## Trademarks
 
