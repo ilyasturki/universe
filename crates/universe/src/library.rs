@@ -308,7 +308,7 @@ pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Modu
 pub fn load_one(game: Game, config: &Config, modules: &[crate::modules::Module]) -> Resolved {
     let mut r = resolve(game, config, modules);
     r.version = crate::versions::read_one(&r.game);
-    r.check = crate::upstream::check(&r.game, &r.version, &crate::upstream::Upstream::load());
+    r.check = crate::upstream::check(&r.game, &r.version, &crate::upstream::Upstream::load().with_sources(&config.sources.enabled));
     r
 }
 
@@ -317,7 +317,7 @@ pub fn load_all(config: &Config, modules: &[crate::modules::Module]) -> Vec<Reso
     let Ok(rd) = std::fs::read_dir(paths::games_dir()) else { return out };
     let mut located = HashMap::new();
     let mut probes = crate::versions::Probes::default();
-    let upstream = crate::upstream::Upstream::load();
+    let upstream = crate::upstream::Upstream::load().with_sources(&config.sources.enabled);
     for e in rd.flatten() {
         let p = e.path().join("game.toml");
         if !p.is_file() {

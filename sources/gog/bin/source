@@ -624,6 +624,7 @@ def cmd_update(settings, args):
                 version=remote["version"],
                 date=remote["date"],
                 local_version=remote["names"].get(install["build"]),
+                **({"current": True} if install["build"] == remote["build"] else {}),
                 **({"skipped": "not owned"} if owned_status(install["id"], index) is False else {}),
             )
         emit("done")

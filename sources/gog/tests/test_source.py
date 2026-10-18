@@ -311,7 +311,7 @@ def test_updates_list_every_install_against_the_published_build(web, src, env, r
     assert code == 0
     latest = {"remote_build": "B2", "version": "1.1", "date": "2025-03-01"}
     assert events == [
-        {"event": "update", "id": "2", "title": "Current", "local_build": "B2", **latest, "local_version": "1.1"},
+        {"event": "update", "id": "2", "title": "Current", "local_build": "B2", **latest, "local_version": "1.1", "current": True},
         {"event": "update", "id": "1434554947", "title": "Mini Metro", "local_build": "B1", **latest, "local_version": "1.0"},
         {"event": "update", "id": "4", "title": "Unknown", "local_build": None, **latest, "local_version": None},
         {"event": "update", "id": "3", "title": "Unowned", "local_build": "B0", **latest, "local_version": None, "skipped": "not owned"},

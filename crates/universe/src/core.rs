@@ -224,9 +224,9 @@ fn load_source_caches(sources: &[Source]) -> BTreeMap<String, Vec<serde_json::Ma
     caches
 }
 
-/// A store's `update` row names an install it checked: one at the published build, or one it would not update, is no update to apply.
+/// A store's `update` row may name an install at the published build (`current`), or one it would not update (`skipped`).
 fn pending(u: &serde_json::Map<String, serde_json::Value>) -> bool {
-    u.get("skipped").and_then(|s| s.as_str()).is_none_or(str::is_empty) && u.get("local_build") != u.get("remote_build")
+    u.get("skipped").and_then(|s| s.as_str()).is_none_or(str::is_empty) && u.get("current") != Some(&serde_json::Value::Bool(true))
 }
 
 fn runtime_of(c: &Current, seed: Runtime) -> Runtime {
@@ -2456,17 +2456,19 @@ impl Core {
             crate::upstream::wants(asked.map(|g| (&g.game, &g.version)), &active)
         };
         let now = chrono::Utc::now().timestamp();
-        let mut up = crate::upstream::Upstream::load();
-        up.keep_stores(&active);
-        let stores: Vec<&Source> = sources.iter().filter(|m| wants.stores.contains(m.id()) && up.store_stale(m.id(), now)).collect();
+        let kept = crate::upstream::Upstream::load();
+        let stores: Vec<&Source> = sources.iter().filter(|m| wants.stores.contains(m.id()) && kept.store_stale(m.id(), now)).collect();
         let listing = futures_util::future::join_all(stores.iter().map(|m| self.run_verb(m, "update", &[], None)));
-        let (listed, ()) = futures_util::future::join(listing, crate::upstream::refresh(net, &mut up, &wants, now)).await;
+        let (listed, mut fresh) = futures_util::future::join(listing, crate::upstream::refresh(net, &kept, &wants, now)).await;
         for (m, listed) in stores.iter().zip(listed) {
             match listed {
-                Ok(events) => up.set_store(m.id(), events.into_iter().filter_map(|e| if let SourceEvent::Update(u) = e { Some(u) } else { None }), now),
+                Ok(events) => fresh.set_store(m.id(), events.into_iter().filter_map(|e| if let SourceEvent::Update(u) = e { Some(u) } else { None }), now),
                 Err(e) => tracing::warn!("{}: no updates listed: {e}", m.id()),
             }
         }
+        // Read again: a store update may have marked its row while the network answered.
+        let mut up = crate::upstream::Upstream::load().with_sources(&active);
+        up.absorb(fresh);
         up.save();
         for r in self.games.write().await.iter_mut() {
             r.check = crate::upstream::check(&r.game, &r.version, &up);
@@ -3357,7 +3359,7 @@ uninstall) echo '{{"event":"window","class":"steam","title":""}}'; echo "$2" >> 
     async fn a_failing_source_leaves_the_others_scanned_and_listed() {
         let dir = fake_source(
             r#"scan) echo '{"event":"game","id":"1","title":"Old","owned":true,"installed":true,"dir":"/g/Old","exe":"old.exe"}' ;;
-update) echo '{"event":"update","id":"1","title":"Old","local_build":"1","remote_build":"2","version":"2","date":""}'; echo '{"event":"update","id":"2","title":"Current","local_build":"2","remote_build":"2","version":"2","date":""}'; echo '{"event":"update","id":"3","title":"Unowned","local_build":"1","remote_build":"2","version":"2","date":"","skipped":"not owned"}' ;;"#,
+update) echo '{"event":"update","id":"1","title":"Old","local_build":"1","remote_build":"2","version":"2","date":""}'; echo '{"event":"update","id":"2","title":"Current","local_build":"2","remote_build":"2","version":"2","date":"","current":true}'; echo '{"event":"update","id":"3","title":"Unowned","local_build":"1","remote_build":"2","version":"2","date":"","skipped":"not owned"}'; echo '{"event":"update","id":"4","title":"Reuploaded","local_build":"upload 7","remote_build":"upload 7","version":"","date":""}' ;;"#,
         );
         let bad = dir.path().join("sources/bad");
         std::fs::create_dir_all(&bad).unwrap();
@@ -3372,8 +3374,8 @@ update) echo '{"event":"update","id":"1","title":"Old","local_build":"1","remote
         let updates = core.source_updates().await.unwrap();
         assert_eq!(
             updates.iter().map(|u| (u["id"].as_str(), u["source"].as_str())).collect::<Vec<_>>(),
-            [(Some("1"), Some("fake"))],
-            "a current or skipped row is none"
+            [(Some("1"), Some("fake")), (Some("4"), Some("fake"))],
+            "a current or skipped row is none; one with equal build labels still is"
         );
     }
 

@@ -129,6 +129,9 @@ pub struct Upstream {
     switch: BTreeMap<String, Titles>,
     ps3: BTreeMap<String, Sony>,
     stores: BTreeMap<String, Store>,
+    /// The sources on, whose games their store judges even before it answered.
+    #[serde(skip)]
+    sources: Vec<String>,
 }
 
 fn write_atomic(path: &Path, bytes: &[u8]) {
@@ -165,8 +168,18 @@ impl Upstream {
         self.stores.insert(source.into(), Store { rows, at: now });
     }
 
-    pub(crate) fn keep_stores(&mut self, active: &[String]) {
+    pub fn with_sources(mut self, active: &[String]) -> Upstream {
         self.stores.retain(|s, _| active.contains(s));
+        self.sources = active.to_vec();
+        self
+    }
+
+    /// Answers asked for since this was loaded, over it: the file may have changed in between.
+    pub(crate) fn absorb(&mut self, fresh: Upstream) {
+        self.steam.extend(fresh.steam);
+        self.switch.extend(fresh.switch);
+        self.ps3.extend(fresh.ps3);
+        self.stores.extend(fresh.stores);
     }
 
     /// After the store updated `id`: its row says the published build is the one installed.
@@ -178,6 +191,7 @@ impl Upstream {
             }
         }
         row.remove("skipped");
+        row.insert("current".into(), Value::Bool(true));
         true
     }
 }
@@ -294,30 +308,25 @@ async fn titledb(net: &Net, kept: &BTreeMap<String, Titles>, wanted: &BTreeSet<S
     )
 }
 
-/// Asks for every wanted answer missing or older than its time; one not given keeps the last.
-pub(crate) async fn refresh(net: &Net, up: &mut Upstream, wants: &Wants, now: i64) {
+/// The answers missing from `kept` or older than their time, asked for again; one not given is left out.
+pub(crate) async fn refresh(net: &Net, kept: &Upstream, wants: &Wants, now: i64) -> Upstream {
     let stale = |at: Option<i64>| at.is_none_or(|at| now - at >= FRESH_S);
-    let steam: Vec<u64> = wants.steam.iter().copied().filter(|id| stale(up.steam.get(&id.to_string()).map(|s| s.at))).collect();
-    let ps3: Vec<&String> = wants.ps3.iter().filter(|id| stale(up.ps3.get(*id).map(|s| s.at))).collect();
+    let steam: Vec<u64> = wants.steam.iter().copied().filter(|id| stale(kept.steam.get(&id.to_string()).map(|s| s.at))).collect();
+    let ps3: Vec<&String> = wants.ps3.iter().filter(|id| stale(kept.ps3.get(*id).map(|s| s.at))).collect();
     let (steam, (ps3, switch)) = futures_util::future::join(
         stream::iter(steam).map(|id| async move { (id, steam_build(net, id).await) }).buffer_unordered(AT_ONCE).collect::<Vec<_>>(),
         futures_util::future::join(
             stream::iter(ps3).map(|id| async move { (id.clone(), sony_version(net, id).await) }).buffer_unordered(AT_ONCE).collect::<Vec<_>>(),
-            titledb(net, &up.switch, &wants.switch, now),
+            titledb(net, &kept.switch, &wants.switch, now),
         ),
     )
     .await;
-    for (id, found) in steam {
-        if let Some(s) = found {
-            up.steam.insert(id.to_string(), Steam { at: now, ..s });
-        }
+    Upstream {
+        steam: steam.into_iter().filter_map(|(id, s)| Some((id.to_string(), Steam { at: now, ..s? }))).collect(),
+        ps3: ps3.into_iter().filter_map(|(id, version)| Some((id, Sony { version: version?, at: now }))).collect(),
+        switch: switch.unwrap_or_default(),
+        ..Default::default()
     }
-    for (id, found) in ps3 {
-        if let Some(version) = found {
-            up.ps3.insert(id, Sony { version, at: now });
-        }
-    }
-    up.switch.extend(switch.unwrap_or_default());
 }
 
 /// Upstream's newest build of a game updated by hand, asked for anew: Steam's public build id, titledb's newest title
@@ -382,9 +391,11 @@ fn manual(status: &'static str, reason: &'static str) -> Check {
 
 /// A game's status by the answers kept: its store's list, else its runner's channel; `version.final` holds it at final.
 pub fn check(game: &Game, read: &Installed, up: &Upstream) -> Check {
-    let active: Vec<String> = up.stores.keys().cloned().collect();
-    let mut c = match store_of(game, read, &active) {
-        Some((store, id)) => by_store(game, read, &up.stores[store], store, id),
+    let mut c = match store_of(game, read, &up.sources) {
+        Some((store, id)) => match up.stores.get(store) {
+            Some(list) => by_store(game, read, list, store, id),
+            None => Check { store: store.into(), store_id: id.into(), ..manual("unknown", "no-answer") },
+        },
         None => match read.channel {
             "pc" => by_steam(game, read, up),
             "switch" => by_titledb(game, read, up),
@@ -409,7 +420,8 @@ fn by_store(game: &Game, read: &Installed, list: &Store, store: &str, id: &str) 
     };
     let text = |k: &str| row.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
     let local = if read.build.is_empty() { text("local_build") } else { read.build.clone() };
-    let current = !local.is_empty() && local == text("remote_build");
+    // A store's build labels may match across an update (an itch upload changed in place): only its word or the files say current.
+    let current = if read.build.is_empty() { row.get("current") == Some(&Value::Bool(true)) } else { read.build == text("remote_build") };
     let skipped = !text("skipped").is_empty();
     Check {
         status: if current { "current" } else { "update" },
@@ -681,15 +693,17 @@ mod tests {
             (g.source.kind, g.source.id, g.source.dir) = ("gog".into(), "1434554947".into(), games.join("Mini Metro").to_string_lossy().into());
         });
         game("Witcher", "proton", &exe("Witcher"), |g| (g.source.kind, g.source.id) = ("gog".into(), "20".into()));
+        game("Hades", "proton", &exe("Hades"), |g| (g.source.kind, g.source.id) = ("gog".into(), "30".into()));
         let row = |id: &str, local: &str, remote: &str, version: &str, local_version: &str, extra: &str| {
             format!(
                 r#"echo '{{"event":"update","id":"{id}","title":"x","local_build":"{local}","remote_build":"{remote}","version":"{version}","date":"2025-10-03","local_version":"{local_version}"{extra}}}'"#
             )
         };
         let listed = [
-            row("1237807960", "B2", "B2", "1.25.3", "1.25.3", ""),
+            row("1237807960", "B2", "B2", "1.25.3", "1.25.3", r#","current":true"#),
             row("1963513391", "C1", "C2", "1.3.9", "", r#","skipped":"not owned""#),
             row("1434554947", "M1", "M2", "1.1", "1.0", ""),
+            row("30", "upload 7", "upload 7", "1.1", "", ""),
         ]
         .join("; ");
         let event = format!(
@@ -708,9 +722,16 @@ mod tests {
         file(&env.path().join("config/config.toml"), b"[modules]\nenabled = []\n[sources]\nenabled = [\"gog\"]\n");
         let net = saved(Vec::new());
         let core = open().await;
+        let before = judged(&core).await;
+        assert_eq!(
+            (of(&before, "witcher"), before["witcher"]["store"].as_str()),
+            (("unknown", "no-answer", "manual", ""), Some("gog")),
+            "its store on, not asked yet"
+        );
         core.check_versions_with(&net, "").await.unwrap();
         let v = judged(&core).await;
         assert_eq!(of(&v, "dead-cells"), ("current", "", "apply", "1.25.3"));
+        assert_eq!(of(&v, "hades"), ("update", "", "apply", "1.1"), "a store's build labels may match across an update: only its word says current");
         assert_eq!((v["dead-cells"]["installed"].as_str(), v["dead-cells"]["from"].as_str()), (Some("1.25.3"), Some("gog")), "the store's name of the build");
         assert_eq!((v["dead-cells"]["store"].as_str(), v["dead-cells"]["store_id"].as_str()), (Some("gog"), Some("1237807960")));
         assert_eq!(of(&v, "cuphead"), ("update", "not-owned", "manual", "1.3.9"));
