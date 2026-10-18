@@ -95,7 +95,8 @@ for _ in $(seq 100); do
     sleep 0.1
 done
 [ -s "$tmp/catalogue-port" ] || fail "the catalogue stand-in opened no port in 10 s"
-export UNIVERSE_CATALOGUE="http://127.0.0.1:$(cat "$tmp/catalogue-port")/catalogue.json"
+UNIVERSE_CATALOGUE="http://127.0.0.1:$(cat "$tmp/catalogue-port")/catalogue.json"
+export UNIVERSE_CATALOGUE
 
 export UNIVERSE_DATA_HOME="$tmp/data" UNIVERSE_CONFIG_HOME="$tmp/config" UNIVERSE_STATE_HOME="$tmp/state" UNIVERSE_CACHE_HOME="$tmp/cache"
 cat >"$UNIVERSE_CONFIG_HOME/config.toml" <<EOF
