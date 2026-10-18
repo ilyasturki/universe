@@ -1,15 +1,21 @@
 use std::future::Future;
 use std::sync::{Arc, OnceLock};
 
+use tokio::runtime::{Handle, Runtime};
 use universe::core::Core;
 
-static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+static RUNTIME: OnceLock<Handle> = OnceLock::new();
 static CORE: OnceLock<Arc<Core>> = OnceLock::new();
 
-pub fn runtime() -> &'static tokio::runtime::Runtime {
-    RUNTIME.get_or_init(|| {
-        tokio::runtime::Builder::new_multi_thread().worker_threads(4).thread_name("universe-core").enable_all().build().expect("the core's runtime")
-    })
+/// The core's runtime, owned by `main` so it can stop it before the process exits.
+pub fn start() -> Runtime {
+    let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(4).thread_name("universe-core").enable_all().build().expect("the core's runtime");
+    let _ = RUNTIME.set(runtime.handle().clone());
+    runtime
+}
+
+pub fn runtime() -> &'static Handle {
+    RUNTIME.get().expect("the core's runtime is started")
 }
 
 /// Set once, when `open` succeeds; nothing asks for it before the window has a library.
@@ -46,7 +52,7 @@ where
     Fut: Future<Output = T> + 'static,
 {
     let core = core();
-    let handle = runtime().handle().clone();
+    let handle = runtime().clone();
     let (tx, rx) = tokio::sync::oneshot::channel();
     runtime().spawn_blocking(move || {
         let _ = tx.send(handle.block_on(f(core)));

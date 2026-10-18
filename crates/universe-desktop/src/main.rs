@@ -24,6 +24,8 @@ mod watcher;
 mod widgets;
 mod window;
 
+use std::time::Duration;
+
 use gettextrs::LocaleCategory;
 use gtk::prelude::*;
 use gtk::{gio, glib};
@@ -43,5 +45,9 @@ fn main() -> glib::ExitCode {
     let _ = gettextrs::textdomain(config::GETTEXT_PACKAGE);
     gio::resources_register_include!("universe-desktop.gresource").expect("the bundled resources");
     glib::set_application_name("Universe");
-    app::Application::new().run()
+    let runtime = backend::start();
+    let code = app::Application::new().run();
+    // A core task still running once `exit` has torn down aws-lc's state aborts the process in its TLS handshake.
+    runtime.shutdown_timeout(Duration::from_secs(3));
+    code
 }

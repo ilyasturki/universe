@@ -42,11 +42,13 @@ fail() {
 tmp="$(mktemp -d)"
 weston_pid=
 bus_pid=
+catalogue_pid=
 apps=()
 cleanup() {
     for app_pid in "${apps[@]}"; do kill -KILL -- "-$app_pid" 2>/dev/null || true; done
     [ -n "$weston_pid" ] && kill "$weston_pid" 2>/dev/null
     [ -n "$bus_pid" ] && kill "$bus_pid" 2>/dev/null
+    [ -n "$catalogue_pid" ] && kill "$catalogue_pid" 2>/dev/null
     rm -rf "$tmp"
 }
 trap cleanup EXIT
@@ -77,6 +79,23 @@ started=$SECONDS
 printf '#!/bin/sh\necho "{}"\n' >"$tmp/bin/ludusavi"
 chmod +x "$tmp/bin/ludusavi"
 export PATH="$tmp/bin:$PATH"
+
+# A catalogue that never answers: the app quits with its fetch in flight, the core's runtime stopped before exit, and no run reaches the network.
+python3 -c '
+import socket, sys
+s = socket.create_server(("127.0.0.1", 0))
+open(sys.argv[1], "w").write(str(s.getsockname()[1]))
+held = []
+while True:
+    held.append(s.accept()[0])
+' "$tmp/catalogue-port" &
+catalogue_pid=$!
+for _ in $(seq 100); do
+    [ -s "$tmp/catalogue-port" ] && break
+    sleep 0.1
+done
+[ -s "$tmp/catalogue-port" ] || fail "the catalogue stand-in opened no port in 10 s"
+export UNIVERSE_CATALOGUE="http://127.0.0.1:$(cat "$tmp/catalogue-port")/catalogue.json"
 
 export UNIVERSE_DATA_HOME="$tmp/data" UNIVERSE_CONFIG_HOME="$tmp/config" UNIVERSE_STATE_HOME="$tmp/state" UNIVERSE_CACHE_HOME="$tmp/cache"
 cat >"$UNIVERSE_CONFIG_HOME/config.toml" <<EOF
