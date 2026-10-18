@@ -39,8 +39,8 @@ const SYSTEM_CHECK_URI: &str = "universe-desktop:system-check";
 // Started by the shell for a search, the app stays up between keystrokes rather than open the core for each.
 const SEARCH_LINGER_MS: u32 = 60_000;
 
-/// A delete held back while its toast offers Undo: what runs once the toast goes.
-pub type Commit = Box<dyn FnOnce() -> Pin<Box<dyn Future<Output = ()>>>>;
+/// A delete held back while its toast offers Undo: what runs once the toast goes, and the line that tells its failure.
+pub type Commit = Box<dyn FnOnce() -> Pin<Box<dyn Future<Output = Result<(), String>>>>>;
 
 mod imp {
     use super::*;
@@ -541,7 +541,7 @@ impl Application {
     }
 
     /// Takes `key` out of what the pages show and commits the delete once the toast goes, unless Undo brings it back.
-    pub fn defer<F: Future<Output = ()> + 'static>(&self, key: &str, text: &str, commit: impl FnOnce() -> F + 'static) {
+    pub fn defer<F: Future<Output = Result<(), String>> + 'static>(&self, key: &str, text: &str, commit: impl FnOnce() -> F + 'static) {
         self.imp().deferred.borrow_mut().push((key.to_string(), Box::new(move || Box::pin(commit()))));
         self.emit_by_name::<()>("deferred-changed", &[]);
         let toast = adw::Toast::builder().title(text).button_label(gettext("_Undo")).priority(adw::ToastPriority::High).build();
@@ -558,7 +558,7 @@ impl Application {
             if let Some(commit) = commit {
                 let app = app.clone();
                 glib::spawn_future_local(async move {
-                    commit().await;
+                    app.commit(commit).await;
                     app.emit_by_name::<()>("deferred-changed", &[]);
                 });
             }
@@ -594,7 +594,15 @@ impl Application {
     pub async fn flush_deferred(&self) {
         let deferred = self.imp().deferred.take();
         for (_, commit) in deferred {
-            commit().await;
+            self.commit(commit).await;
+        }
+    }
+
+    /// A failed delete is told; the item it hid comes back once `deferred-changed` goes out.
+    async fn commit(&self, commit: Commit) {
+        if let Err(line) = commit().await {
+            tracing::warn!("{line}");
+            self.say(&line);
         }
     }
 

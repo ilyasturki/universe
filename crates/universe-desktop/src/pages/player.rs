@@ -84,10 +84,10 @@ impl Player {
         let Recording { game, session, path, .. } = self.recording.clone();
         let forget = app.clone();
         app.defer(&media::recording_key(&game, &session), &gettext("Recording deleted"), move || async move {
-            match backend::call(move |core| async move { core.remove_recording(&game, &session).await }).await {
-                Ok(()) => forget.forget_frames(&path),
-                Err(e) => tracing::warn!("remove recording: {e}"),
-            }
+            backend::call(move |core| async move { core.remove_recording(&game, &session).await })
+                .await
+                .map(|()| forget.forget_frames(&path))
+                .map_err(|e| gettext("The recording could not be deleted: {}").replace("{}", &e.to_string()))
         });
         if let Some(page) = self.page.upgrade() {
             let _ = page.activate_action("navigation.pop", None);

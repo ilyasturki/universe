@@ -225,9 +225,9 @@ pub fn write(win: &Window, game: &str, session: &str, rewrite: bool) {
 fn delete(win: &Window, game: &str, session: &str) {
     let (game, session) = (game.to_string(), session.to_string());
     win.app().defer(&media::journal_key(&game, &session), &gettext("Journal entry deleted"), move || async move {
-        if let Err(e) = backend::call(move |core| async move { core.remove_journal_entry(&game, &session).await }).await {
-            tracing::warn!("remove journal entry: {e}");
-        }
+        backend::call(move |core| async move { core.remove_journal_entry(&game, &session).await })
+            .await
+            .map_err(|e| gettext("The journal entry could not be deleted: {}").replace("{}", &e.to_string()))
     });
 }
 

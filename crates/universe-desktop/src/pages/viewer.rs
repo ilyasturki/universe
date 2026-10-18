@@ -105,9 +105,9 @@ impl Viewer {
         let name = std::path::Path::new(&shot.path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         let game = shot.game.clone();
         win.app().defer(&media::shot_key(&shot.path), &gettext("Screenshot deleted"), move || async move {
-            if let Err(e) = backend::call(move |core| async move { core.remove_screenshot(&game, &name).await }).await {
-                tracing::warn!("remove screenshot: {e}");
-            }
+            backend::call(move |core| async move { core.remove_screenshot(&game, &name).await })
+                .await
+                .map_err(|e| gettext("The screenshot could not be deleted: {}").replace("{}", &e.to_string()))
         });
         let left = {
             let mut shots = self.shots.borrow_mut();

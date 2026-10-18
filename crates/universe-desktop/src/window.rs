@@ -685,11 +685,10 @@ impl Window {
         app.defer(&crate::game::removal_key(&id), &gettext("“{}” removed from the library").replace("{}", &title), move || async move {
             let target = id.clone();
             let result = backend::call(move |core| async move { core.remove(&target, false).await }).await;
-            let Some(app) = weak.upgrade() else { return };
-            if let Err(e) = result {
-                app.say(&e.to_string());
+            if let Some(app) = weak.upgrade() {
+                app.library().refresh(&[id]).await;
             }
-            app.library().refresh(&[id]).await;
+            result.map_err(|e| e.to_string())
         });
     }
 
