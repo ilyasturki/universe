@@ -90,9 +90,9 @@ pub enum Cmd {
     },
     /// The games with an update and how each is updated, then the store updates after asking; or update one game
     Update {
-        /// Game: exact id, then whole word, substring or path; lists pending updates when omitted
+        /// Game: exact id, then whole word, substring or path; lists pending updates when omitted, of the games not hidden
         name: Option<String>,
-        /// Every game: its version, upstream's latest and its status
+        /// Every game, hidden ones too: its version, upstream's latest and its status
         #[arg(long, conflicts_with = "name")]
         all: bool,
         /// After updating the game by hand: take upstream's newest build, or BUILD, as the one installed
@@ -953,8 +953,9 @@ fn update_table<'a>(games: impl IntoIterator<Item = &'a Value>) -> Table {
             "manual" if matches!(s(v, "status").as_str(), "update" | "likely") => "by hand".into(),
             _ => String::new(),
         };
-        let dash = |x: String| if x.is_empty() { "-".to_string() } else { x };
-        t.add_row(vec![s(g, "id"), s(g, "title"), dash(version), dash(latest), dash(status), how]);
+        let dash = |x: String| Cell::new(if x.is_empty() { "-".to_string() } else { x });
+        let title = if g["hidden"].as_bool() == Some(true) { Cell::new(s(g, "title")).add_attribute(Attribute::Dim) } else { Cell::new(s(g, "title")) };
+        t.add_row(vec![Cell::new(s(g, "id")), title, dash(version), dash(latest), dash(status), Cell::new(how)]);
     }
     t
 }
@@ -1382,7 +1383,8 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             core.check_versions("").await?;
             let mut games = core.list().await;
             games.sort_by_cached_key(|g| s(g, "title").to_lowercase());
-            let shown: Vec<&Value> = games.iter().filter(|g| all || matches!(g["version"]["status"].as_str(), Some("update" | "likely"))).collect();
+            let pending = |g: &Value| g["hidden"] != true && matches!(g["version"]["status"].as_str(), Some("update" | "likely"));
+            let shown: Vec<&Value> = games.iter().filter(|g| all || pending(g)).collect();
             if json {
                 return print_json(&shown.iter().map(|g| update_row(g)).collect::<Vec<_>>());
             }
