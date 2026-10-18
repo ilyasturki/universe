@@ -50,13 +50,13 @@ REPO = Path(__file__).resolve().parent.parent
 LOOKS = ("reprise", "switch2", "ps5", "desktop")
 SIZES = ("1920x1080", "1280x800")
 KINDS = ("still", "clip", "gamescope-clip")
-FIELDS = {"name", "look", "size", "kind", "keys", "segments", "alt", "fake", "release"}
+FIELDS = {"name", "look", "size", "kind", "keys", "segments", "gap", "alt", "fake", "release"}
 NAME = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 SEGMENT = re.compile(r"(?P<start>[^.\s]+)\.\.(?:\+(?P<seconds>\d+(?:\.\d+)?)|(?P<end>[^.\s+][^.\s]*))")
 USE = re.compile(r'<(Shot|Clip)\s+name="([a-z0-9-]+)"')
 VERSION = re.compile(r"^## \[(\d+\.\d+\.\d+)\]", re.MULTILINE)
 SEMVER = re.compile(r"\d+\.\d+\.\d+")
-# Wait:N counts gaps of this many ms; the takes are written against it.
+# Wait:N counts gaps of this many ms in a take that sets no gap; the takes are written against it.
 GAP_MS = 400
 SETTLE_WAITS = 3
 STILL_WIDTH = 1920
@@ -84,6 +84,7 @@ class Take:
     fake: bool
     segments: tuple[str, ...]
     release: str = ""
+    gap: int = GAP_MS
 
     @property
     def w(self) -> int:
@@ -96,6 +97,8 @@ class Take:
     @property
     def hash(self) -> str:
         what = {"look": self.look, "size": self.size, "kind": self.kind, "keys": self.keys, "segments": self.segments, "alt": self.alt}
+        if self.gap != GAP_MS:
+            what["gap"] = self.gap
         return hashlib.sha256(json.dumps(what, sort_keys=True).encode()).hexdigest()[:12]
 
     def live(self, version: str) -> bool:
@@ -179,6 +182,11 @@ def problems_of(entry: dict, seen: set[str]) -> list[str]:
         errors.append("alt says what it shows")
     if not isinstance(entry.get("fake", False), bool):
         errors.append("fake is true or false")
+    gap = entry.get("gap", GAP_MS)
+    if "gap" in entry and kind == "still":
+        errors.append("gap is a clip's: the stills of a look share one take")
+    elif not isinstance(gap, int) or isinstance(gap, bool) or gap <= 0:
+        errors.append("gap is the ms between keys")
     if "release" in entry and not (isinstance(entry["release"], str) and SEMVER.fullmatch(entry["release"])):
         errors.append("release is the X.Y.Z whose notes show it")
     keys = entry["keys"].split()
@@ -248,6 +256,7 @@ def load_takes(site: Site) -> tuple[list[Take], list[str]]:
                     entry.get("fake", False),
                     tuple(entry.get("segments", [])),
                     entry.get("release", ""),
+                    entry.get("gap", GAP_MS),
                 )
             )
     return takes, errors
@@ -376,8 +385,9 @@ def dry_run(site: Site) -> int:
             script = ["Wait", *keys, "Wait:2"]
             gaps = sum(int(k[5:]) if re.fullmatch(r"Wait:\d+", k) else 1 for k in script)
             env = {**os.environ, "QT_QPA_PLATFORM": "offscreen", "PIPEWIRE_REMOTE": "/nonexistent"}
-            command = [ui, *ui_args(look, True), "--size", size, "--key-gap", str(GAP_MS), "--keys", " ".join(script)]
-            command += ["--quit-after", str(1200 + GAP_MS * (gaps + 8))]
+            gap = run[0].gap
+            command = [ui, *ui_args(look, True), "--size", size, "--key-gap", str(gap), "--keys", " ".join(script)]
+            command += ["--quit-after", str(1200 + gap * (gaps + 8))]
             started = time.monotonic()
             done = subprocess.run(command, env=env, capture_output=True, text=True, timeout=300, check=False)
             names = ", ".join(t.name for t in run)
@@ -625,7 +635,7 @@ def record(site: Site, names: list[str], version: str | None) -> int:
 
     for take in sorted((t for t in chosen if t.kind != "still"), key=lambda t: t.kind == "gamescope-clip"):
         raw = masters / f"{take.name}.raw.mp4"
-        shown = {**env, "UNIVERSE_UI_ARGS": " ".join(ui_args(take.look, False)), "UNIVERSE_UI_SIZE": take.size}
+        shown = {**env, "UNIVERSE_UI_ARGS": " ".join(ui_args(take.look, False)), "UNIVERSE_UI_SIZE": take.size, "UNIVERSE_UI_GAP": str(take.gap)}
         if take.kind == "gamescope-clip":
             shown["UNIVERSE_RECORD_GAMESCOPE"] = "1"
         raw.with_suffix(".marks").unlink(missing_ok=True)

@@ -1,3 +1,4 @@
+import os
 from types import SimpleNamespace
 
 import pytest
@@ -300,3 +301,21 @@ def test_a_mark_logs_its_name_with_the_time(app, caplog, monkeypatch):
     with caplog.at_level("INFO", logger="universe.gamepad"):
         gamepad.KeyScript("Mark:launch", 1, None)._step()
     assert "mark launch 1234.500" in caplog.messages
+
+
+def test_a_game_key_goes_to_the_game_on_display_through_xdotool(app, tmp_path, monkeypatch, caplog):
+    calls = tmp_path / "calls"
+    shim = tmp_path / "xdotool"
+    shim.write_text(f'#!/bin/sh\necho "$DISPLAY $*" >> {calls}\n')
+    shim.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{tmp_path}:{os.environ['PATH']}")
+    monkeypatch.setenv("DISPLAY", ":7")
+    script = gamepad.KeyScript("Game:Return GameHold:Left GameRelease:Left", 1, None)
+    for done in range(1, 4):
+        script._step()
+        until(lambda: calls.is_file() and len(calls.read_text().splitlines()) == done, "xdotool never ran")
+    assert calls.read_text().splitlines() == [":7 keydown Return sleep 0.2 keyup Return", ":7 keydown Left", ":7 keyup Left"]
+    monkeypatch.setenv("PATH", str(tmp_path / "nothing"))
+    with caplog.at_level("WARNING", logger="universe.gamepad"):
+        gamepad.KeyScript("Game:space", 1, None)._step()
+    assert any(m.startswith("Game:space: ") for m in caplog.messages), "no xdotool is a warning, not an exception out of the slot"

@@ -1,6 +1,7 @@
 import functools
 import logging
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -447,7 +448,12 @@ def launch_target(window):
 # a finger: `Tap:x,y`, `LongTap:x,y,ms` held that long, `Swipe:x1,y1,x2,y2` dragged across in eight moves; `Await` holds the script until a line comes on stdin,
 # `Ready` until a game is on screen for Return to launch, `Quit` quits;
 # `Volume:up`/`Volume:down`/`Volume:mute` as a pad's volume macro; `Expect:ID` quits with EXPECT_FAILED unless Return would launch game ID (`Expect:` none);
-# `Mark:NAME` logs NAME with the wall-clock time, which tools/ui-record turns into a time in its recording; `Reset` reloads the look, back on its first screen.
+# `Mark:NAME` logs NAME with the wall-clock time, which tools/ui-record turns into a time in its recording; `Reset` reloads the look, back on its first screen;
+# `Game:KEY` presses an X keysym in the game on $DISPLAY through xdotool (a gamescope take's Xwayland), `GameHold:KEY`/`GameRelease:KEY` one half.
+# A game that polls its keys once a frame misses a press released within the same frame: Game: holds it 200 ms.
+GAME_KEYS = {"Game": ("keydown", "{}", "sleep", "0.2", "keyup", "{}"), "GameHold": ("keydown", "{}"), "GameRelease": ("keyup", "{}")}
+
+
 class KeyScript(QObject):
     def __init__(self, script, gap_ms, window, pad=None, watcher=None, home=None, gamepad=None, parent=None):
         super().__init__(parent)
@@ -508,6 +514,12 @@ class KeyScript(QObject):
             return
         if phase == "Mark":
             log.info("mark %s %.3f", bare, time.time())
+            return
+        if phase in GAME_KEYS:
+            try:
+                subprocess.Popen(["xdotool", *(step.format(bare) for step in GAME_KEYS[phase])])
+            except OSError as e:
+                log.warning("%s: %s", name, e)
             return
         if phase == "Reset":
             look = self._window.findChild(QObject, "look")

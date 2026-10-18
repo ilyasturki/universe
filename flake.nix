@@ -679,6 +679,7 @@
             SDL2
             sway
             wf-recorder
+            xdotool
             # `just crawl` stops the wall clock its shots show
             libfaketime
             dbus

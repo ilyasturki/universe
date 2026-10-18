@@ -86,6 +86,7 @@ look = "reprise"
 size = "1920x1080"
 kind = "still"
 keys = "Right Return Shot:"
+gap = 250
 alt = "x"
 
 [[take]]
@@ -95,6 +96,7 @@ size = "1280x800"
 kind = "gamescope-clip"
 keys = "Expect:dead-cells Return Mark:a"
 segments = ["a..b"]
+gap = 0
 alt = "x"
 fake = true
 """
@@ -105,6 +107,8 @@ fake = true
     assert "take launches: its Shot: comes right after a Wait:3" in out, "a still shot before the screen settles"
     assert "take faked-launch: a gamescope-clip launches a real game: never fake" in out
     assert "take faked-launch: segment 'a..b': no Mark:b in its keys" in out
+    assert "take launches: gap is a clip's" in out, "the stills of a look share one take's gap"
+    assert "take faked-launch: gap is the ms between keys" in out
 
 
 def test_check_holds_pages_to_the_takes_and_strict_to_a_recording_of_them_at_that_version(tmp_path):
@@ -114,6 +118,12 @@ def test_check_holds_pages_to_the_takes_and_strict_to_a_recording_of_them_at_tha
     assert code == 1 and "nothing recorded yet" in out
     recorded(tmp_path, "0.0.12")
     assert docs_media(tmp_path, "check", "--strict", "0.0.12")[0] == 0
+    site(tmp_path, TAKES.replace('kind = "clip"', 'kind = "clip"\ngap = 400'))
+    assert docs_media(tmp_path, "check", "--strict", "0.0.12")[0] == 0, "the default gap spelled out is the same take"
+    site(tmp_path, TAKES.replace('kind = "clip"', 'kind = "clip"\ngap = 250'))
+    code, out = docs_media(tmp_path, "check", "--strict", "0.0.12")
+    assert code == 1 and "take browse: changed since it was recorded" in out, "a faster take is filmed again"
+    site(tmp_path)
     code, out = docs_media(tmp_path, "check", "--strict", "0.0.13")
     assert code == 1 and "take library: recorded at 0.0.12, not 0.0.13" in out
     site(tmp_path, TAKES.replace("E Wait:5", "E Wait:6"), page='<Shot name="library" />\n<Shot name="browse" />\n<Clip name="ghost" />\n')
