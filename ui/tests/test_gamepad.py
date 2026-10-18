@@ -313,7 +313,7 @@ def test_a_game_key_goes_to_the_game_on_display_through_xdotool(app, tmp_path, m
     script = gamepad.KeyScript("Game:Return GameHold:Left GameRelease:Left", 1, None)
     for done in range(1, 4):
         script._step()
-        until(lambda: calls.is_file() and len(calls.read_text().splitlines()) == done, "xdotool never ran")
+        until(lambda done=done: calls.is_file() and len(calls.read_text().splitlines()) == done, "xdotool never ran")
     assert calls.read_text().splitlines() == [":7 keydown Return sleep 0.2 keyup Return", ":7 keydown Left", ":7 keyup Left"]
     monkeypatch.setenv("PATH", str(tmp_path / "nothing"))
     with caplog.at_level("WARNING", logger="universe.gamepad"):
