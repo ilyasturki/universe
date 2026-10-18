@@ -8,7 +8,7 @@ interface Props {
 }
 
 const { title, description } = Astro.props;
-const host = new URL(Astro.site ?? 'https://universe.ilyasturki.com').hostname;
+const host = Astro.site?.hostname;
 ---
 
 <!doctype html>

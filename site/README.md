@@ -1,6 +1,6 @@
 # The site
 
-universe.ilyasturki.com: the landing page and the docs, built with Astro and Starlight. It documents the latest release.
+universelauncher.com: the landing page and the docs, built with Astro and Starlight. It documents the latest release.
 
 ```sh
 just site          # build into site/dist: the reference pages are generated first, from this checkout's universe

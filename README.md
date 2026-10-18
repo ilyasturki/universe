@@ -115,7 +115,7 @@ Open **Universe Big Screen** from your app menu, or Universe Desktop. With an em
 
 ## Docs
 
-[universe.ilyasturki.com/docs](https://universe.ilyasturki.com/docs/) has the guide: install, first run, controllers, every settings section, and a reference of the CLI, the launch settings and config.toml generated from the app.
+[universelauncher.com/docs](https://universelauncher.com/docs/) has the guide: install, first run, controllers, every settings section, and a reference of the CLI, the launch settings and config.toml generated from the app.
 
 For development:
 

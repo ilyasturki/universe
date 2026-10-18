@@ -7,7 +7,7 @@ import { checkBuiltLinks, writeCname } from './scripts/built';
 import { generate, generatedFrom } from './scripts/generate';
 import { settingsSidebar } from './scripts/settings';
 
-const site = 'https://universe.ilyasturki.com';
+const site = 'https://universelauncher.com';
 const repo = 'https://github.com/ilyasturki/universe';
 const cargo = readFileSync(new URL('../Cargo.toml', import.meta.url), 'utf8');
 const version = /^\[workspace\.package\][^[]*?^version = "([^"]+)"/ms.exec(cargo)?.[1] ?? 'unknown';
