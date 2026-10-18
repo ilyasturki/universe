@@ -499,8 +499,7 @@ def test_a_file_picked_on_the_artwork_page_becomes_the_games_cover(journey):
     type_text(look, str(cover))
     look.press(Qt.Key.Key_Return)
     picked = journey.data / "games" / game / "media" / "picked" / "box_front.png"
-    until(picked.is_file, "the file is copied in as the game's own pick")
-    assert picked.read_bytes() == PNG
+    until(lambda: picked.is_file() and picked.read_bytes() == PNG, "the file is copied in as the game's own pick")
     until(lambda: journey.api.allGames.byId(game).assets.boxFront.toLocalFile() == str(picked), "the library's cover is the pick")
 
 
