@@ -26,7 +26,7 @@ fn trash(path: &Path) -> Result<()> {
     // The crate's Display is its Debug: the OS's own words are what a toast can show.
     let why = |e: trash::Error| match e {
         trash::Error::FileSystem { source, .. } => source.to_string(),
-        trash::Error::Os { description, .. } => description,
+        trash::Error::Os { description, .. } | trash::Error::Unknown { description } => description,
         e => e.to_string(),
     };
     trash::delete(path).map_err(|e| Error::Io(format!("trash {}: {}", path.display(), why(e))))
