@@ -23,7 +23,13 @@ pub const JOURNAL_MODULE: &str = "journal";
 pub type Progress<'a, 'b> = &'a mut (dyn FnMut(u64, u64, &str) + 'b);
 
 fn trash(path: &Path) -> Result<()> {
-    trash::delete(path).map_err(|e| Error::Io(format!("trash {}: {e}", path.display())))
+    // The crate's Display is its Debug: the OS's own words are what a toast can show.
+    let why = |e: trash::Error| match e {
+        trash::Error::FileSystem { source, .. } => source.to_string(),
+        trash::Error::Os { description, .. } => description,
+        e => e.to_string(),
+    };
+    trash::delete(path).map_err(|e| Error::Io(format!("trash {}: {}", path.display(), why(e))))
 }
 
 const PRESENT_POLL: std::time::Duration = std::time::Duration::from_millis(250);
