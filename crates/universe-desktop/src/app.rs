@@ -474,11 +474,11 @@ impl Application {
                         Ok(Vec::new())
                     }
                 };
-                let (versions, listed) = tokio::join!(core.check_versions(""), listed);
-                if let Err(e) = versions {
+                // One after the other: both may run the same store's `update` verb.
+                if let Err(e) = core.check_versions("").await {
                     tracing::warn!("versions: {e}");
                 }
-                listed
+                listed.await
             })
             .await;
             let Some(app) = app.upgrade() else { return };
