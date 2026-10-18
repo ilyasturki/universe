@@ -26,29 +26,38 @@ imports = [ inputs.universe.homeModules.default ];
 programs.universe.enable = true;`;
 
 const looks = [
-    { id: 'universe', name: 'Universe', about: 'The default look, a port of my Pegasus theme Reprise: the game’s art behind everything.' },
-    { id: 'switch2', name: 'Switch 2', about: 'A Switch 2 style HOME menu: a row of games over a bar of round buttons.' },
-    { id: 'ps5', name: 'PS5', about: 'A PS5 style home: the game’s world behind a row of tiles, and a hub for each game.' },
+    { id: 'universe', name: 'Universe', about: 'The default look, a port of my Pegasus theme Reprise, with the game’s art behind everything.' },
+    { id: 'switch2', name: 'Switch 2', about: 'A row of games over a bar of round buttons, like the Switch 2’s HOME menu.' },
+    { id: 'ps5', name: 'PS5', about: 'The game’s world behind a row of tiles, with a hub for each game, like the PS5’s home.' },
 ];
 
 const also = [
     { title: 'Recordings and screenshots', text: 'Record every session if you like. Videos and screenshots land in the Media tab.' },
-    { title: 'Achievements', text: 'The ones each store tracks, with a banner over the game on unlock.' },
-    { title: 'Saves', text: 'Backed up after every session. GOG and Epic cloud saves synced.' },
+    { title: 'Achievements', text: 'From each store, with a banner over the game on unlock.' },
+    { title: 'Saves', text: 'Backed up after every session, restored or exported from the game’s page. GOG and Epic cloud saves synced.' },
     { title: 'Runners', text: 'Proton, Wine and 21 emulators, installed, updated and rolled back from the settings.' },
     { title: 'Add-ons', text: 'Modules, stores and themes made by others, installed from the settings.' },
+    { title: 'Power menu', text: 'Hold B to suspend, reboot or power off.' },
     { title: 'Any desktop', text: 'GNOME, KDE, Cinnamon, Sway, Hyprland, Niri, X11, or no desktop at all.' },
-    { title: 'Universe Desktop', text: 'A GTK app for mouse and keyboard, on the same library.' },
-    { title: 'A CLI', text: 'universe does everything the app does, with --json on every command.' },
+    { title: 'Universe Desktop', text: 'A GTK app for mouse and keyboard on the same library. GNOME’s search finds your games.' },
 ];
+
+const cli = `universe                            # your library, last played first
+universe play "dead cells"          # by id, a word or part of the title
+universe login gog                  # sign in to a store
+universe search hades --source gog  # then universe install <id> --source gog
+universe update                     # pending updates; name a game to update it
+universe saves backup "dead cells"  # also list, restore, export and cloud
+universe doctor                     # what this system is missing
+universe status --json              # the running game, for a script`;
 
 const installs = [
     {
         id: 'arch',
         name: 'Arch Linux',
         logo: archLogo,
-        lead: 'From the AUR. universe-bin is the prebuilt build, universe-git follows main. Add universe-desktop for Universe Desktop.',
-        code: 'paru -S universe',
+        lead: 'From the AUR. Add -bin to both names for the prebuilt build, -git to follow main.',
+        code: 'paru -S universe universe-desktop',
         lang: 'sh',
     },
     {
@@ -63,17 +72,17 @@ const installs = [
         id: 'other',
         name: 'SteamOS and others',
         logo: deckLogo,
-        lead: 'SteamOS, Bazzite and any other distribution. Installs for your user under ~/.local and asks for your password once.',
+        lead: 'SteamOS, Bazzite and any other distribution. Installs under ~/.local, with Python 3.11 to 3.14.',
         code: installer,
         lang: 'sh',
     },
-    { id: 'nix', name: 'Nix', logo: nixLogo, lead: 'A NixOS module for the system side, a Home Manager module for the apps.', code: nix, lang: 'nix' },
+    { id: 'nix', name: 'Nix', logo: nixLogo, lead: 'The flake’s NixOS module for the system and Home Manager module for the apps.', code: nix, lang: 'nix' },
 ];
 ---
 
 <Landing
     title="Universe: a game launcher for Linux you drive with a controller"
-    description="Your GOG, Steam, Epic, itch.io, Lutris and emulated games in one library, launched with a controller from the couch or on a Steam Deck."
+    description="Your GOG, Steam, Epic, itch.io and emulated games in one library, played from the couch or on a Steam Deck."
 >
     <header class="bar wrap">
         <a class="brand" href="/" aria-label="Universe">
@@ -90,7 +99,7 @@ const installs = [
     <main>
         <section class="hero wrap">
             <h1>A game launcher for Linux you drive with a controller.</h1>
-            <p class="lead">GOG, Steam, Epic, itch.io, Lutris and emulated games in one library, played from the couch or on a Steam Deck.</p>
+            <p class="lead">Your GOG, Steam, Epic, itch.io and emulated games in one library, played from the couch or on a Steam Deck.</p>
             <div class="actions">
                 <a class="button primary" href="#install">Install</a>
                 <a class="button" href="/docs/">Docs</a>
@@ -106,7 +115,9 @@ const installs = [
                     </li>
                 ))}
             </ul>
-            <p class="note">Version {version}. Early days: expect rough edges.</p>
+            <p class="note">
+                <span>Early days, version {version}. I use it every day, but expect rough edges. <a href={`${repo}/issues`}>Issues</a> are welcome.</span>
+            </p>
             <div class="stage">
                 <Clip name="home" />
             </div>
@@ -114,7 +125,7 @@ const installs = [
 
         <section class="install wrap" id="install">
             <h2>Install</h2>
-            <p class="center">x86_64 Linux with a systemd user session. gamescope is optional, but on by default.</p>
+            <p class="center">x86_64 Linux with a systemd user session.</p>
             <div class="tabs" data-tabs>
                 <div class="tablist" role="tablist" aria-label="Install">
                     {installs.map((way, i) => (
@@ -143,16 +154,21 @@ const installs = [
                     </div>
                 ))}
             </div>
+            <p class="center after">
+                On GNOME, run <code>universe setup</code> once after the Arch or Fedora package. Then open Universe Big Screen, and a short setup finds your
+                games.
+            </p>
             <p class="center">
-                Then open Universe Big Screen: a short setup finds your games. <a href="/docs/getting-started/install/">Every way to install</a>
+                More: <a href="/docs/getting-started/install/">every way to install</a>,{' '}
+                <a href="/docs/getting-started/update-uninstall/">updating and uninstalling</a>.
             </p>
         </section>
 
         <section class="feature wrap">
             <div class="copy">
                 <h2>Your whole library</h2>
-                <p>GOG, Steam, Epic and itch.io games installed and updated from Universe, plus your Lutris games and your emulators' ROM folders.</p>
-                <p>The first run finds what your other launchers installed, and moves nothing.</p>
+                <p>GOG, Steam, Epic and itch.io games, installed and updated from Universe.</p>
+                <p>The first run brings in the games Lutris and Heroic installed and your emulators' ROM folders, and moves nothing.</p>
                 <a class="more" href="/docs/library/gog/">The stores and imports</a>
             </div>
             <div class="media"><Shot name="library" sizes="(min-width: 60rem) 40rem, 100vw" /></div>
@@ -162,7 +178,7 @@ const installs = [
             <div class="copy">
                 <h2>A page for every game</h2>
                 <p>Art, screenshots, play time, achievements, saves and disk use.</p>
-                <p>Its settings are one button away: runner, Proton build, resolution, frame cap. Each starts from a default you set once.</p>
+                <p>Its settings are one button away: runner, Proton build, resolution, frame cap.</p>
                 <a class="more" href="/docs/using/game-page/">A game's page</a>
             </div>
             <div class="media"><Shot name="game-page" sizes="(min-width: 60rem) 40rem, 100vw" /></div>
@@ -208,33 +224,42 @@ const installs = [
         <section class="feature wrap">
             <div class="copy">
                 <h2>HOME over a running game</h2>
-                <p>HOME pauses the game and opens over it: screenshot, MangoHud, frame cap, volume, controllers, quit.</p>
+                <p>
+                    HOME pauses the game and opens over it. From there, take a screenshot, turn on MangoHud, cap the frame rate, change the volume, reconnect a
+                    controller or quit.
+                </p>
                 <a class="more" href="/docs/using/playing/">Playing, and HOME over a game</a>
             </div>
             <div class="media"><Clip name="home-over-game" /></div>
         </section>
 
-        <section class="strip wrap">
-            <article>
-                <h3>Controllers</h3>
-                <p>DualSense, DualShock 4, Xbox, Switch Pro and 8BitDo, each with its own glyphs. Emulators get the pads you hold, one per player.</p>
-                <a class="more" href="/docs/controllers/supported/">Controllers</a>
-            </article>
-            <article>
-                <h3>Steam Deck</h3>
-                <p>Fits its 1280×800 screen. Back buttons for macros; refresh rate, power limit and fan curve in the settings.</p>
-                <a class="more" href="/docs/getting-started/steam-deck/">Steam Deck</a>
-            </article>
-            <article>
-                <h3>Steam's Game Mode</h3>
-                <p>Add it as a non-Steam game and it runs inside Game Mode.</p>
-                <a class="more" href="/docs/getting-started/steam-deck/#steams-game-mode">Game Mode</a>
-            </article>
-            <article>
-                <h3>The Universe session</h3>
-                <p>A login session with the launcher on the whole screen and no desktop, like a console.</p>
-                <a class="more" href="/docs/getting-started/universe-session/">The session</a>
-            </article>
+        <section class="couch wrap">
+            <h2>Couch and Steam Deck</h2>
+            <div class="strip">
+                <article>
+                    <h3>Controllers</h3>
+                    <p>
+                        DualSense, DualShock 4, Xbox, Switch Pro and 8BitDo, each with its own glyphs, and a guided setup for any other pad. Emulators get the
+                        pads you hold, one per player.
+                    </p>
+                    <a class="more" href="/docs/controllers/supported/">Controllers</a>
+                </article>
+                <article>
+                    <h3>Steam Deck</h3>
+                    <p>Fits its 1280×800 screen. Back buttons for macros; refresh rate, power limit and fan curve in the settings.</p>
+                    <a class="more" href="/docs/getting-started/steam-deck/">Steam Deck</a>
+                </article>
+                <article>
+                    <h3>Steam's Game Mode</h3>
+                    <p>Add it as a non-Steam game and it runs inside Game Mode.</p>
+                    <a class="more" href="/docs/getting-started/steam-deck/#steams-game-mode">Game Mode</a>
+                </article>
+                <article>
+                    <h3>The Universe session</h3>
+                    <p>A login session with the launcher on the whole screen and no desktop, like a console.</p>
+                    <a class="more" href="/docs/getting-started/universe-session/">The session</a>
+                </article>
+            </div>
         </section>
 
         <section class="also wrap">
@@ -248,11 +273,32 @@ const installs = [
                 ))}
             </div>
         </section>
+
+        <section class="terminal wrap">
+            <h2>From a terminal</h2>
+            <p class="center"><code>universe</code> does everything the apps do. Add <code>--json</code> to any command.</p>
+            <div class="code">
+                <Code code={cli} lang="sh" themes={{ light: 'github-light', dark: 'github-dark' }} defaultColor={false} />
+            </div>
+            <p class="center"><a class="more" href="/docs/reference/cli/">Every command</a></p>
+        </section>
+
+        <section class="docs wrap">
+            <h2>Docs</h2>
+            <p class="center">
+                The guide covers install, first run, controllers and every settings section, with a reference of the CLI, the launch settings and config.toml
+                generated from the app.
+            </p>
+            <div class="actions">
+                <a class="button primary" href="/docs/">Read the docs</a>
+                <a class="button" href="/docs/changelog/">Changelog</a>
+            </div>
+        </section>
     </main>
 
     <footer class="wrap">
         <p>
-            Universe {version} · <a href="/docs/changelog/">Changelog</a> · <a href="/docs/">Docs</a> · <a href={repo}>GitHub</a> ·
+            Universe {version} · <a href="/docs/changelog/">Changelog</a> · <a href="/docs/">Docs</a> · <a href={repo}>GitHub</a> ·{' '}
             <a href={`${repo}/blob/main/LICENSE`}>MIT license</a>
         </p>
         <p class="fine">Made by <a href="https://ilyasturki.com">Ilyas Turki</a>.</p>
@@ -405,9 +451,27 @@ h1 {
     vertical-align: -0.15em;
 }
 .note {
-    margin-top: 1rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-top: 1.5rem;
+    padding: 0.45rem 1rem;
+    border: 1px solid var(--line);
+    border-radius: 1.25rem;
+    background: var(--bg-raised);
     font-size: 0.9rem;
-    color: var(--faint);
+    color: var(--muted);
+}
+.note::before {
+    content: "";
+    flex: none;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--warm);
+}
+.note a {
+    color: var(--accent);
 }
 .stage {
     margin-top: 3rem;
@@ -438,6 +502,13 @@ p {
     margin-inline: auto;
     text-align: center;
     color: var(--muted);
+}
+.center code {
+    padding: 0.1em 0.4em;
+    white-space: nowrap;
+    border-radius: 0.35rem;
+    background: var(--bg-code);
+    font-size: 0.9em;
 }
 .fine {
     margin-top: 1.5rem;
@@ -479,12 +550,18 @@ p {
 }
 
 .looks,
+.couch,
 .also,
+.terminal,
+.docs,
 .install {
     padding-block: 4rem;
 }
 .looks h2,
+.couch h2,
 .also h2,
+.terminal h2,
+.docs h2,
 .install h2 {
     text-align: center;
 }
@@ -517,7 +594,7 @@ p {
 .strip {
     display: grid;
     gap: 1rem;
-    padding-block: 2rem 4rem;
+    margin-top: 2rem;
 }
 @media (min-width: 40rem) {
     .strip {
@@ -593,11 +670,18 @@ p {
     font-size: 0.8rem;
     cursor: pointer;
 }
-.install > .center:last-child {
+.install .after {
     margin-top: 2rem;
 }
 .install a:not(.button) {
     color: var(--accent);
+}
+.terminal .code {
+    max-width: 48rem;
+    margin: 2rem auto 0;
+}
+.terminal .code :global(pre) {
+    padding-right: 1.2rem;
 }
 
 footer {
