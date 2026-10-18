@@ -51,6 +51,8 @@ FocusScope {
         add("Platform", g.platform === "windows" ? "Windows" : g.platform === "linux" ? "Linux" : g.platform);
         add("Source", api.sourceNames[g.source] || g.source);
         add("Runner", g.runnerName || g.runner);
+        add("Version", g.installedVersion);
+        add("Updates", g.updateState);
         add("Play time", Format.playTime(g.playTime));
         add("Sessions", g.playCount > 0 ? g.playCount : "");
         var last = g.lastPlayed ? new Date(g.lastPlayed) : null;
@@ -134,6 +136,8 @@ FocusScope {
                 act: "play"
             }
         ];
+        if (game.updateAction)
+            items.push(Home.updateItem(game));
         if (screenshots.length > 0)
             items.push({
                 label: "View Screenshots",
@@ -187,6 +191,8 @@ FocusScope {
     onArgsChanged: {
         var g = args && args.gameId ? api.allGames.byId(args.gameId) : null;
         record = g ? (api.universe.game(g.id) || {}) : {};
+        if (g)
+            api.universe.checkVersions(g.id);
         var shot = args ? args.shot : undefined;
         if (shot !== undefined && shot !== null && g && g.assets.screenshotList.length > 0) {
             zone = "shots";

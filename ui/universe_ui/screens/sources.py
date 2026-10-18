@@ -300,6 +300,18 @@ class SourcesBrowser(AsyncScreen):
         row = next((r for r in self._rows if r["id"] == item.get("id")), {"id": item.get("id", ""), "title": item.get("title", "")})
         return self._begin(self._client.update(self._source, item.get("id", "")), row, f"Updating {item.get('title', '')}")
 
+    @Slot(str, str, str, result=str)
+    def updateGame(self, source, game_id, title):
+        """A game page's Update: Downloads' job for that one game, told on screen wherever the player is."""
+        if self._job and self._job["ok"] is None:
+            self._client.notice.emit(f"{self._job['label']} first: cancel it or wait")
+            return ""
+        job_id = self._begin(self._client.update(source, game_id), {"id": game_id, "title": title}, f"Updating {title}", f"Updated {title}")
+        if job_id and self._job is not None:
+            self._job["told"] = True
+            self._client.notice.emit(f"Updating {title}…")
+        return job_id
+
     @Slot(result=str)
     def updateAll(self):
         return self._begin(self._client.update(self._source, ""), {"id": "", "title": ""}, "Updating everything")
@@ -418,6 +430,8 @@ class SourcesBrowser(AsyncScreen):
         else:
             self._set_arriving(None)
         self.message.emit(text)
+        if self._job.get("told"):
+            self._client.notice.emit(text)
         self._reload(False)
         if self._query:
             self.search(self._query)

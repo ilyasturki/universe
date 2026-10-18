@@ -447,6 +447,8 @@ FocusScope {
             resume();
         else if (act === "close")
             closeSoftware(g);
+        else if (act === "update" || act === "mark-current")
+            api.updateGame(id);
         else if (act === "favourite") {
             g.favorite = !g.favorite;
             Sound.play("select");

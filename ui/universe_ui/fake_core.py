@@ -1832,6 +1832,10 @@ class FakeCore:
         self._tick(progress, "Updating" + (f" {game_id}" if game_id else " everything"), 12)
         before = len(self._data.get("updates", []))
         self._data["updates"] = [u for u in self._data.get("updates", []) if game_id and u["id"] != game_id]
+        for game in self._data["games"]:
+            v = game.get("version") or {}
+            if v.get("how") == "apply" and v.get("store") == source and game_id in ("", v.get("store_id")):
+                v.update(status="current", newer=0, installed=v.get("latest") or v.get("installed", ""))
         return before - len(self._data["updates"])
 
     def updates(self):

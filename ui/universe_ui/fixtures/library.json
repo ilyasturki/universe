@@ -46,6 +46,7 @@
         "description": "Draw the subway map of a growing city. Stations appear, passengers wait, and every week you pick one upgrade to keep the lines from clogging."
       },
       "stats": {"hours": 6.2, "play_count": 11, "last_played": "2026-09-07T20:10:00+02:00"},
+      "version": {"installed": "1.2.0", "from": "gog", "status": "update", "how": "apply", "store": "gog", "store_id": "1434554947", "latest": "1.2.1", "latest_date": "2026-09-01", "newer": 1},
       "platform": "Nintendo Switch"
     },
     {
@@ -94,6 +95,7 @@
         "description": "Corvo Attano, bodyguard framed for the Empress's murder, takes to the rooftops of Dunwall with a blade, a mask and the Outsider's mark."
       },
       "stats": {"hours": 3.4, "play_count": 3, "last_played": "2026-07-14T19:00:00+02:00"},
+      "version": {"seen": "21000000", "installed": "1.4", "from": "exe", "channel": "pc", "status": "update", "how": "manual", "latest": "24129523", "latest_date": "2026-09-11", "newer": 1, "markable": true},
       "platform": "windows"
     },
     {

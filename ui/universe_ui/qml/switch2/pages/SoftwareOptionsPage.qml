@@ -30,8 +30,10 @@ FocusScope {
     focus: true
 
     onGameChanged: {
-        if (game)
+        if (game) {
             api.screens.achievements.prime(game.id, game.source, game.achievementsTotal);
+            api.universe.checkVersions(game.id);
+        }
     }
 
     readonly property var entries: {
@@ -56,6 +58,13 @@ FocusScope {
                 type: "action"
             }
         ];
+        var update = game.updateAction ? [
+            {
+                key: game.updateAction,
+                label: game.updateAction === "update" ? "Update" : "Mark as Current",
+                type: "action"
+            }
+        ] : [];
         var achievements = game.achievementsTotal > 0 ? [
             {
                 key: "achievements",
@@ -77,7 +86,7 @@ FocusScope {
                 label: game.favorite ? "Remove from Favourites" : "Add to Favourites",
                 type: "action"
             }
-        ], achievements, [
+        ], update, achievements, [
             {
                 key: "settings",
                 label: "Game Settings",
@@ -126,7 +135,8 @@ FocusScope {
         if (!game)
             return [];
         var last = Format.lastPlayed(game.lastPlayed), time = Format.playTime(game.playTime);
-        return [last === "Never played" ? last : "Last played " + last.toLowerCase(), time && "Played for " + time, Format.sessions(game.playCount)].filter(Boolean);
+        var version = [game.installedVersion && "Version " + game.installedVersion, game.updateState].filter(Boolean).join(" · ");
+        return [last === "Never played" ? last : "Last played " + last.toLowerCase(), time && "Played for " + time, Format.sessions(game.playCount), version].filter(Boolean);
     }
 
     function activate(index, row) {
@@ -144,6 +154,9 @@ FocusScope {
             shell.push(row.page, {
                 gameId: game.id
             });
+        } else if (row.key === "update" || row.key === "mark-current") {
+            Sound.play("ok");
+            api.updateGame(game.id);
         } else if (row.key === "favourite") {
             game.favorite = !game.favorite;
             Sound.play("select");

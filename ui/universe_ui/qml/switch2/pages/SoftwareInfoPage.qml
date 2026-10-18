@@ -72,6 +72,16 @@ FocusScope {
                 label: "Metacritic",
                 value: String(game.extra["metacritic"][0])
             });
+        if (game.installedVersion !== "")
+            out.push({
+                label: "Version",
+                value: game.installedVersion
+            });
+        if (game.updateState !== "")
+            out.push({
+                label: "Updates",
+                value: game.updateState
+            });
         return out;
     }
 

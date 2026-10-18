@@ -10,7 +10,7 @@ from . import keyboard
 from .boot import Boot
 from .focus import Focus
 from .home import Home
-from .models import Collection, CollectionGames, Game, GameListModel, ObjectListModel, collection_key
+from .models import SOURCE_NAMES, Collection, CollectionGames, Game, GameListModel, ObjectListModel, collection_key
 from .qt import Property
 from .screens import Screens
 from .screens.network import Network
@@ -93,10 +93,11 @@ def key_label(key):
 
 # B held this long opens the power menu: the A-hold that opens a game's menu.
 CANCEL_HOLD_MS = 450
+# After the start has settled: upstream is asked how each game's version stands.
+VERSIONS_AFTER_MS = 5000
 # Escape only: Backspace held in a text sheet is deleting, not leaving.
 HOLD_KEYS = (Qt.Key.Key_Escape,)
 
-SOURCE_NAMES = {"gog": "GOG", "steam": "Steam", "epic": "Epic Games", "itch": "itch.io", "manual": "Added by hand"}
 
 PLATFORM_SHORT = {
     "windows": "windows",
@@ -594,6 +595,21 @@ class Api(QObject):
         network.changed.connect(start)
         bluetooth.changed.connect(start)
         start()
+
+    def startVersionChecks(self):
+        QTimer.singleShot(VERSIONS_AFTER_MS, lambda: self._client.checkVersions(""))
+
+    @Slot(str)
+    def updateGame(self, ident):
+        """A game page's update action: its store's update through Downloads' job, else Mark as current."""
+        game = self._library.get(ident)
+        if game is None:
+            return
+        if game.updateAction == "update":
+            v = game.version
+            self._screens.sources.updateGame(v.get("store", ""), v.get("store_id", ""), game.title)
+        elif game.updateAction == "mark-current":
+            self._client.markCurrent(ident, game.title)
 
     def shutdown(self):
         self._focus.shutdown()

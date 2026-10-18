@@ -23,12 +23,15 @@ FocusScope {
     signal mediaRequested(var game, Item anchor)
     signal achievementsRequested(var game)
 
-    readonly property var pills: ["play", "favourite", "settings"].concat(media.length > 0 ? ["media"] : []).concat(game && game.achievementsTotal > 0 ? ["achievements"] : []).concat(["more"])
+    readonly property string updateAction: game ? game.updateAction : ""
+    readonly property var pills: ["play", "favourite", "settings"].concat(media.length > 0 ? ["media"] : []).concat(game && game.achievementsTotal > 0 ? ["achievements"] : []).concat(updateAction ? [updateAction] : []).concat(["more"])
     readonly property string action: pills[Math.max(0, Math.min(actionIndex, pills.length - 1))]
     readonly property var actionLabels: ({
             settings: "Game settings",
             media: "Media",
             achievements: "Achievements",
+            update: "Update",
+            "mark-current": "Mark as current",
             more: "More"
         })
     readonly property var session: api.universe.currentSession
@@ -86,8 +89,10 @@ FocusScope {
     onGameChanged: reset()
 
     function reset() {
-        if (game)
+        if (game) {
             api.screens.achievements.prime(game.id, game.source, game.achievementsTotal);
+            api.universe.checkVersions(game.id);
+        }
         section = 0;
         actionIndex = 0;
         shotIndex = 0;
@@ -271,6 +276,16 @@ FocusScope {
                         onPicked: page.pointToAction("achievements")
                     }
 
+                    PillButton {
+                        visible: page.updateAction !== ""
+                        ghost: true
+                        icon: page.updateAction === "update" ? "download" : "check"
+                        label: page.actionLabels[page.updateAction] || ""
+                        focused: actions.active && visible && page.action === page.updateAction
+                        dimmed: actions.active && !focused
+                        onPicked: page.pointToAction(page.updateAction)
+                    }
+
                     RoundButton {
                         id: moreButton
                         icon: "more"
@@ -423,6 +438,9 @@ FocusScope {
                 page.mediaRequested(page.game, mediaButton);
             } else if (page.action === "achievements") {
                 page.achievementsRequested(page.game);
+            } else if (page.action === page.updateAction) {
+                Sound.enter();
+                api.updateGame(page.game.id);
             } else {
                 page.menuRequested(page.game, moreButton);
             }

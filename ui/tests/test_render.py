@@ -1393,3 +1393,21 @@ def test_the_hero_shows_the_focused_game_s_background_on_home_and_on_its_page(lo
     invoke(root, "openDetail", game)
     until(lambda: root.findChild(QObject, "detailPage"))
     until(lambda: art_shown(root, ident, "background"), "the game page's hero")
+
+
+def test_a_game_page_offers_the_stores_update_or_mark_as_current_by_hand(look, api, fake):
+    fake.core._game("control")["version"] = {"status": "update", "reason": "not-owned", "how": "manual", "store": "gog", "store_id": "2049187585"}
+    api.library.refresh("control")
+    offered = {
+        ident: {"update", "mark-current"} & set(look.game_actions(look.game_page(ident)))
+        for ident in ("mini-metro", "dishonored", "control", "the-technomancer")
+    }
+    assert offered == {"mini-metro": {"update"}, "dishonored": {"mark-current"}, "control": set(), "the-technomancer": set()}, "GOG refuses control"
+    page = look.game_page("dishonored")
+    look.game_action(page, "mark-current")
+    until(lambda: "mark-current" not in look.game_actions(page), "marked, it is current")
+    assert fake.game("dishonored")["version"]["status"] == "current"
+    page = look.game_page("mini-metro")
+    look.game_action(page, "update")
+    until(lambda: (api.screens.sources.job or {}).get("game") == "1434554947", "Downloads' job updates it")
+    until(lambda: "update" not in look.game_actions(page), "updated, it is current")

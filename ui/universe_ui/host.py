@@ -458,6 +458,8 @@ def run(argv=None):
             watcher = Watcher(app)
         api.screens.controller.start(watcher)
     api.startRadios()
+    if not args.keys:
+        api.startVersionChecks()
 
     if args.keys:
         from .gamepad import KeyScript

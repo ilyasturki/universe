@@ -617,6 +617,25 @@ class CoreClient(QObject):
     def update(self, source, game_id):
         return self._job("update", game_id, lambda progress: f"{self._core.update(source, game_id, progress)} updated", source=source)
 
+    @Slot(str)
+    def checkVersions(self, ident):
+        """How each game's version stands, asked of upstream off the main thread (`ident`'s alone when given); the library reloads after."""
+        self._call_async(
+            lambda: self._core.check_versions(ident),
+            lambda _: self.libraryChanged.emit([ident] if ident else []),
+            lambda e: log.info("versions: %s", e.message or e.kind),
+        )
+
+    @Slot(str, str)
+    def markCurrent(self, ident, title):
+        """After an update by hand: upstream's newest build, asked anew, is taken as the one installed."""
+
+        def marked(_):
+            self.libraryChanged.emit([ident])
+            self.notice.emit(f"{title} marked as current")
+
+        self._call_async(lambda: self._core.mark_current(ident, ""), marked)
+
     @Slot(str, result=bool)
     def cancel(self, job):
         """Stops a job: SIGTERMs the source behind an install or update (it finishes as failed), lets a media

@@ -31,6 +31,16 @@ Row {
                     label: "SESSIONS",
                     value: root.game.playCount.toString()
                 });
+            if (root.game.installedVersion !== "")
+                out.push({
+                    label: "VERSION",
+                    value: root.game.installedVersion
+                });
+            if (root.game.updateState !== "")
+                out.push({
+                    label: "UPDATES",
+                    value: root.game.updateState
+                });
             return out;
         }
 

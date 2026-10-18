@@ -213,6 +213,46 @@ class Look:
         """A game page's argument for `game_id`: Reprise takes the game, the others its id."""
         return {"gameId": game_id} if self.stacked else {"game": self.api.allGames.byId(game_id)}
 
+    def game_page(self, game_id):
+        """The game's own page, open: Reprise's detail page, Switch 2's options, the PS5's Information."""
+        if self.stacked:
+            return self.open("pages/SoftwareOptionsPage.qml" if self.name == "switch2" else "pages/SoftwareInfoPage.qml", {"gameId": game_id})
+        root = self.root
+        invoke(root, "openDetail", self.api.allGames.byId(game_id))
+        return until(
+            lambda: (p := root.findChild(QObject, "detailPage")) is not None and p.property("game").property("id") == game_id and p, f"{game_id}'s page"
+        )
+
+    def _options(self):
+        self.press(Qt.Key.Key_F1)
+        menu = self.menu()
+        until(lambda: menu.property("open") is True, "the Options menu")
+        return menu
+
+    def game_actions(self, page):
+        """The keys of what a game page offers: Reprise's buttons, Switch 2's options, the PS5 Information's Options menu."""
+        if self.name == "reprise":
+            return read(page, "pills")
+        if self.name == "switch2":
+            return [e["key"] for e in read(page, "entries")]
+        menu = self._options()
+        keys = [i["act"] for i in read(menu, "items")]
+        self.press(Qt.Key.Key_Escape)
+        until(lambda: menu.property("open") is False)
+        return keys
+
+    def game_action(self, page, key):
+        """Picks `key` of what a game page offers."""
+        if self.name == "reprise":
+            self.press(Qt.Key.Key_Right, read(page, "pills").index(key) - page.property("actionIndex"))
+            self.press(Qt.Key.Key_Return)
+        elif self.name == "switch2":
+            activate(page, read(page, "entries"), key=key)
+        else:
+            menu = self._options()
+            self.press(Qt.Key.Key_Down, [i["act"] for i in read(menu, "items")].index(key) - menu.property("index"))
+            self.press(Qt.Key.Key_Return)
+
     def settings(self, section):
         if self.stacked:
             return self.open("pages/SettingsPage.qml", {"section": section})
