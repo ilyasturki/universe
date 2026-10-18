@@ -27,8 +27,9 @@ Item {
     onSourceSizeChanged: loader.restart()
     Component.onCompleted: load()
 
+    // An unset dimension reads back as the picture's own once it is loaded.
     function sized(layer) {
-        return layer.sourceSize.width === sourceSize.width && layer.sourceSize.height === sourceSize.height;
+        return (sourceSize.width <= 0 || layer.sourceSize.width === sourceSize.width) && (sourceSize.height <= 0 || layer.sourceSize.height === sourceSize.height);
     }
 
     function load() {

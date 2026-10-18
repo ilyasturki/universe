@@ -1322,3 +1322,31 @@ def test_a_runner_pages_builds_card_installs_after_asking(look, api, fake):
     until(lambda: finished)
     until(lambda: not components.busy)
     until(lambda: not next(r for r in form.rows if r.get("component") == "rpcs3")["accent"], "in: nothing left to do")
+
+
+def art_shown(item, game, slot):
+    """A CrossfadeImage layer under `item` shows `game`'s `slot` art, decoded, whole and on screen."""
+    for child in item.childItems():
+        source = child.property("source") if child.property("ready") is not None else None
+        if (
+            source is not None
+            and source.toString().split("?")[0].endswith(f"/{game}/media/{slot}.png")
+            and child.property("ready")
+            and child.property("opacity") == 1.0
+            and child.isVisible()
+        ):
+            return True
+        if art_shown(child, game, slot):
+            return True
+    return False
+
+
+@reprise
+def test_the_hero_shows_the_focused_game_s_background_on_home_and_on_its_page(look, api):
+    root = look.root
+    game = until(lambda: look.page("homePage").property("currentGame"))
+    ident = game.property("id")
+    until(lambda: art_shown(root, ident, "background"), "home's hero")
+    invoke(root, "openDetail", game)
+    until(lambda: root.findChild(QObject, "detailPage"))
+    until(lambda: art_shown(root, ident, "background"), "the game page's hero")
