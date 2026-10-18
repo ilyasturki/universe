@@ -32,28 +32,29 @@ fn trash(path: &Path) -> Result<()> {
     trash::delete(path).map_err(|e| Error::Io(format!("trash {}: {}", path.display(), why(e))))
 }
 
-/// `remove`'s archive of the game's recordings back under `root`; returns what stays archived because its path is taken.
+/// Returns the archived paths left in `.archive` because their name is taken.
 fn unarchive_recordings(root: &Path, id: &str) -> std::io::Result<Vec<PathBuf>> {
     let mut kept = Vec::new();
     let from = root.join(".archive").join(id);
     if from.is_dir() {
-        move_back(&from, &root.join(id), &mut kept)?;
+        merge_into(&from, &root.join(id), &mut kept)?;
     }
     Ok(kept)
 }
 
-/// Merges `from` into `to` entry by entry, never over a path already there: such an entry stays in `from`.
-fn move_back(from: &Path, to: &Path, kept: &mut Vec<PathBuf>) -> std::io::Result<()> {
-    if to.symlink_metadata().is_err() {
-        return std::fs::rename(from, to);
-    }
-    if !(from.symlink_metadata()?.is_dir() && to.symlink_metadata()?.is_dir()) {
+/// Never over a path already there: such an entry stays in `from`, listed in `kept`.
+fn merge_into(from: &Path, to: &Path, kept: &mut Vec<PathBuf>) -> std::io::Result<()> {
+    let to_meta = match to.symlink_metadata() {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return std::fs::rename(from, to),
+        meta => meta?,
+    };
+    if !(from.symlink_metadata()?.is_dir() && to_meta.is_dir()) {
         kept.push(from.to_path_buf());
         return Ok(());
     }
-    for entry in std::fs::read_dir(from)? {
-        let name = entry?.file_name();
-        move_back(&from.join(&name), &to.join(&name), kept)?;
+    let names = std::fs::read_dir(from)?.map(|e| e.map(|e| e.file_name())).collect::<std::io::Result<Vec<_>>>()?;
+    for name in names {
+        merge_into(&from.join(&name), &to.join(&name), kept)?;
     }
     // Refused while a kept entry is still in it.
     let _ = std::fs::remove_dir(from);
@@ -534,11 +535,10 @@ impl Core {
         if from.is_dir() {
             let archive = root.join(".archive");
             std::fs::create_dir_all(&archive)?;
-            let to = archive.join(id);
-            if to.exists() {
-                tracing::warn!("recordings: {} already archived", to.display());
-            } else {
-                std::fs::rename(&from, &to)?;
+            let mut kept = Vec::new();
+            merge_into(&from, &archive.join(id), &mut kept)?;
+            for p in kept {
+                tracing::warn!("recordings: {} stays, its name is already archived", p.display());
             }
         }
         if purge {
@@ -558,8 +558,7 @@ impl Core {
         self.reload_game(id).await
     }
 
-    /// Undoes `remove`: the recordings come back first, then the game, unhidden. Returns the archived recordings left where
-    /// they are because a file of that name is back in place.
+    /// Returns the archived recordings left in `.archive` because a file of that name is back in place.
     pub async fn restore(&self, id: &str) -> Result<Vec<PathBuf>> {
         let r = self.get(id).await?;
         if r.game.removed_at.is_empty() {

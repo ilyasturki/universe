@@ -388,6 +388,10 @@ fn restore_brings_a_removed_game_back_with_its_recordings_and_overwrites_none() 
     let games = listed(&dir);
     assert_eq!((games.len(), games[0]["hidden"].as_bool(), games[0]["removed"].as_bool()), (1, Some(false), Some(false)), "in the library again");
     assert!(!universe(&dir, &["restore", "dishonored"], &[NO_BUS]).status.success(), "a game in the library has nothing to restore");
+
+    assert!(universe(&dir, &["rm", "-y", "dishonored"], &[NO_BUS]).status.success());
+    assert!(archived.join("b.mkv").is_file() && archived.join("clips/c.mkv").is_file(), "a second rm archives next to what stayed archived");
+    assert_eq!(std::fs::read_to_string(live.join("a.mkv")).unwrap(), "recorded since", "and never over it");
 }
 
 #[test]
