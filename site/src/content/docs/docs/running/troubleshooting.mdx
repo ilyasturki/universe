@@ -34,7 +34,9 @@ A Proton game that crashed may still read **Quit** when Proton filed no report.
 
 **Debug log**, off by default, has Proton, Wine and DXVK write their full logs for each session. They're large, so turn it on for a game that misbehaves and off again after. It's in the **Proton** card of the game's settings (**Logs** for a Wine game), behind **Y**. The game's **Data and saves** page shows where the files go, under **Storage** › **Logs**.
 
-It also prints the installed version, as the game's files give it: a Windows program's version, a Unity game's own, a PS3 disc's, the update a Switch emulator applies or a ROM's name. When the files say nothing or the wrong thing, set **Installed version** in Game settings (Show advanced), or run `universe set <game> version.pin=1.2`.
+## Installed version
+
+[`universe info <game>`](/docs/reference/cli/info/) prints the installed version, as the game's files give it: a Windows program's version, a Unity game's own, a PS3 disc's, the update a Switch emulator applies or a ROM's name. When the files say nothing or the wrong thing, set **Installed version** in Game settings (Show advanced), or run `universe set <game> version.pin=1.2`.
 
 ## Prefix tools
 
