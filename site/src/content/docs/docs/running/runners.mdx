@@ -15,7 +15,7 @@ A runner is what starts a game: Proton or Wine for a Windows game, the runner ca
 
 A store game runs on Proton unless the store installed a Linux build, and a game found in an emulator's folder gets that emulator. To change it, pick another **Runner** in the **Launch** card of the game's **Game settings**. That's also how a native game that landed on Proton goes back to Linux.
 
-When a game's runner is missing, **Install and play** installs it first.
+When a game's runner is missing and Universe can download it, **Install and play** installs it first.
 
 ## Emulators & Proton
 
@@ -23,14 +23,14 @@ Settings › [Emulators & Proton](/docs/settings/emulators-proton/) lists the ru
 
 A runner's page has:
 
-- **Program**, the program Universe found. On an emulator's page you can set your own path, such as a Flatpak's, which Universe doesn't look for.
+- **Program**, the program Universe found. On an emulator's page you can set your own path.
 - **Gamescope**, whether this runner's games get a gamescope of their own ([Gamescope, HDR and frame rate](/docs/running/gamescope/)).
 - **Builds**, what Universe can install for this runner.
 - The defaults for this runner's games ([Launch settings](/docs/running/launch-settings/#where-each-one-is-set)), and **Games**, which ends on **Add a game…**.
 
 ## Builds
 
-Universe installs Proton builds and emulators itself, and [keeps them up to date](/docs/getting-started/update-uninstall/#what-universe-keeps-current). An emulator on your PATH runs first. **A** on a build's row offers what fits: **Follow the newest …**, **Use …** for one build, **Roll back …** after an update that misbehaves, or **Install another version…**.
+Universe installs Proton builds and emulators itself, and [keeps them up to date](/docs/getting-started/update-uninstall/#what-universe-keeps-current). By default, an emulator on your PATH runs first. **A** on a build's row offers what fits: **Follow the newest …**, **Use …** for one build, **Roll back …** after an update that misbehaves, or **Install another version…**.
 
 gamescope, MangoHud and gpu-screen-recorder come from your distribution. Their **Install from the distribution** installs one where your system allows it.
 

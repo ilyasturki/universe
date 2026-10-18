@@ -26,7 +26,7 @@ The logs survive a reboot only when the system keeps its journal. System check's
 - **Quit**: the game exited normally.
 - **Stopped**: you stopped it from Universe.
 - **Crashed (exit 1)**: it exited with an error, here code 1. **Crashed** alone means Proton filed a crash report.
-- **Killed**: the system ended it, for instance when memory ran out.
+- **Killed**: a signal Universe didn't send ended it, such as the out-of-memory killer's.
 
 A Proton game that crashed may still read **Quit** when Proton filed no report.
 

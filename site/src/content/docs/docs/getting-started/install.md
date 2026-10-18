@@ -7,7 +7,7 @@ sidebar:
 
 Universe runs on x86_64 Linux with systemd 250 or newer, on cgroups v2. You get two apps on the same library: **Universe Big Screen**, which you drive with a controller, and **Universe Desktop**, for the mouse and the keyboard.
 
-Install gamescope too. Without it, games open on your desktop and the [Universe session](/docs/getting-started/universe-session/) can't start.
+Install gamescope too. Without it, games open on your desktop, there's no dock over a game, and the [Universe session](/docs/getting-started/universe-session/) can't start.
 
 ## Arch Linux
 

@@ -27,6 +27,6 @@ Once you're signed in, the Epic games Heroic installed show under **On this PC**
 
 ## Cloud saves and achievements
 
-Epic's page in Settings › Stores turns both on or off for every Epic game, and a game's **Game settings** › **Epic Games** card for that game alone. **Achievements**, on by default, show once a session has ended. [Cloud saves](/docs/library/saves/#cloud-saves) are off.
+Epic's page in Settings › Stores turns both on or off for every Epic game, and a game's **Game settings** › **Epic Games** card for that game alone. **Achievements**, on by default, show once a session has ended. [Cloud saves](/docs/library/saves/#cloud-saves) are off by default.
 
 A game with Easy Anti-Cheat or BattlEye gets the runtime Proton needs for it, while **Anti-cheat runtimes** is on.

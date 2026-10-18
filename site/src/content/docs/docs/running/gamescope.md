@@ -25,7 +25,7 @@ The **Display** card of Game defaults or of a game's settings has:
 
 ## HDR
 
-**HDR**, off by default, sends HDR to an HDR screen in the games that support it. Turn it on in Settings › Emulators & Proton › **Proton**, or for one game in the **Proton** card of its settings.
+**HDR**, off by default, sends HDR to an HDR screen in the games that support it. Turn it on in Settings › Emulators & Proton › **Proton**, or for one game in the **Proton** card of its settings. In Big Screen, only the default turns HDR on.
 
 ## MangoHud
 

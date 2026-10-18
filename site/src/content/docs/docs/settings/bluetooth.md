@@ -13,4 +13,4 @@ Settings › **Bluetooth** pairs and connects controllers, headphones, keyboards
 
 [Bluetooth pairing](/docs/controllers/bluetooth/) goes through pairing a controller and the [questions](/docs/controllers/bluetooth/#pairing-questions) a device can ask.
 
-The Switch 2 and PS5 looks name this section differently: see [Looks](/docs/using/looks/).
+The PS5 look calls this section **Accessories**: see [Looks](/docs/using/looks/).

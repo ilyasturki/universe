@@ -31,4 +31,4 @@ A game's own are under **Environment** in the **Launch** card of its Game settin
 
 ## Check what a launch got
 
-A game's log starts with the command its last session ran ([A game's logs](/docs/running/troubleshooting/#a-games-logs)). For every variable it started with, turn on the [Debug log](/docs/running/troubleshooting/#debug-log).
+A game's log starts with the command its last session ran ([A game's logs](/docs/running/troubleshooting/#a-games-logs)). For a Windows game, turn on the [Debug log](/docs/running/troubleshooting/#debug-log) to see every variable it started with.

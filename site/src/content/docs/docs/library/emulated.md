@@ -11,9 +11,9 @@ Universe doesn't ask where your ROMs are. It reads the game folders each emulato
 
 Eden (and Citron, Sudachi, Suyu and yuzu), Azahar (and Lime3DS and Citra), Dolphin, Ryujinx, RPCS3, PCSX2, DuckStation, Cemu, shadPS4 and Flycast.
 
-Universe reads an emulator's folders only when it finds the emulator, on your PATH or installed by Universe; it doesn't look for Flatpak emulators. The games of other emulators, such as melonDS, mGBA or PPSSPP, go in [by hand](/docs/library/add-a-game/).
+Universe reads an emulator's folders only when it finds the emulator, on your PATH, installed by Universe or set as its program; it doesn't look for Flatpak emulators. The games of other emulators, such as melonDS, mGBA or PPSSPP, go in [by hand](/docs/library/add-a-game/).
 
-A game is a file with one of its emulator's extensions ([Runners](/docs/reference/runners/)). Universe passes over update, DLC and firmware folders, and a file whose game is already in the library.
+A game is a file with one of its emulator's extensions ([Runners](/docs/reference/runners/)), or a folder for RPCS3 and shadPS4. Universe passes over update, DLC and firmware folders, and a file whose game is already in the library.
 
 ## Adding new ROMs
 

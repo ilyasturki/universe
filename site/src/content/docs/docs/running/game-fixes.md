@@ -19,7 +19,7 @@ When a PlayStation pad does nothing in a game, see [PlayStation controller](/doc
 
 ## GAMEID and protonfixes
 
-umu-run applies the fixes it knows for a game by the game's **umu id**, which Universe fills in from its store or its Steam app id. When the fixes are missing because the game got the wrong id, set **Desktop and library** › **Steam app id**, or the **umu id** itself.
+umu-run applies the fixes it knows for a game by the game's **umu id**, which Universe fills in from its store or its Steam app id. When the fixes are missing because the game got the wrong id, set the **umu id**, or, while it's empty, **Desktop and library** › **Steam app id**.
 
 ## Another Proton build
 
@@ -31,7 +31,7 @@ Pick another **Proton build**. To get one you don't have, install it from Settin
 
 ## Wayland
 
-**Wayland**, on by default, runs Proton's own Wayland driver. Universe leaves it out inside gamescope, unless the game's gamescope arguments include `--expose-wayland`, so it matters for a game on the desktop. Turn it off when such a game misbehaves.
+**Wayland**, on by default, runs Proton's own Wayland driver. Universe leaves it out in Big Screen's gamescope, and in a game's own unless its arguments include `--expose-wayland`, so it matters for a game on the desktop. Turn it off when such a game misbehaves.
 
 ## DLL overrides and runtimes
 
@@ -43,4 +43,4 @@ Under **Upscaling**, four rows swap a game's upscaler for a newer one, and each 
 
 ## PlayStation controller
 
-**PlayStation controller** sets how a PlayStation pad reaches a Windows game: **native**, **as a DualShock 4** or **as an Xbox pad**. **auto**, the default, goes by what the game's Steam page says it supports, and the row says which one the game gets. When a game made for Xbox pads doesn't see your pad, pick **as an Xbox pad**.
+**PlayStation controller** sets how GE-Proton hands a PlayStation pad to a Windows game: **native**, **as a DualShock 4** or **as an Xbox pad**. **auto**, the default, goes by what the game's Steam page says it supports, and the row says which one the game gets. When a game made for Xbox pads doesn't see your pad, pick **as an Xbox pad**.

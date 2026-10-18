@@ -47,7 +47,7 @@ Key-combo macros and [Virtual pads](/docs/add-ons/virtual-pads/) need access tha
 
 In emulators, a pad's gyro and touchpad need the pad opened to you too. `game-devices-udev` does it for Sony and Nintendo pads, and `steam-devices` for an Xbox pad on Bluetooth.
 
-Settings › [System check](/docs/settings/system-check/) checks all of this under **Controller**, and each failing entry says how to fix it.
+Settings › [System check](/docs/settings/system-check/) checks the key-combo and gyro access under **Controller**, with a fix for each. It can't tell whether [Virtual pads](/docs/add-ons/virtual-pads/#when-the-emulator-lists-your-own-pads) will start.
 
 ## Battery levels
 
