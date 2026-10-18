@@ -129,6 +129,49 @@ def test_the_media_tab_and_the_screenshots_page(look, api):
 
 
 @reprise
+def test_the_media_tab_removes_a_recording_and_a_journal_entry_alone(look, api, fake):
+    root = look.root
+    root.goToTab(root.property("mediaTab"))
+    page = look.page("mediaPage")
+    menu = page.findChild(QObject, "mediaMenu")
+    until(lambda: not api.screens.media.loading and read(page, "rows"))
+
+    def actions():
+        return [i.get("action") for i in read(menu, "items") or []] if menu.property("open") else []
+
+    def choose(action):
+        until(lambda: action in actions(), f"no {action} in the menu")
+        step = actions().index(action) - menu.property("index")
+        look.press(Qt.Key.Key_Down if step > 0 else Qt.Key.Key_Up, abs(step))
+        look.press(Qt.Key.Key_Return)
+
+    def recorded(game, session):
+        return any(line["session"] == session and line.get("recording") for line in fake.sessions(game))
+
+    def journaled(game, session):
+        return any(e["session"] == session for e in fake.journal(game))
+
+    def keys():
+        return [r["key"] for r in read(page, "rows")]
+
+    def remove(key, question):
+        page.setProperty("index", keys().index(key))
+        look.press(Qt.Key.Key_F1)
+        choose("remove")
+        until(lambda: actions() == question, f"{key}: {actions()}")
+        choose("remove!")
+
+    recording = next(r for r in read(page, "rows") if r["kind"] == "recording")
+    game, session = recording["gameId"], recording["session"]
+    assert recorded(game, session) and journaled(game, session), "the fixture's newest recording has its entry"
+    remove(recording["key"], ["", "remove!", "remove-both!"])
+    until(lambda: recording["key"] not in keys(), "the recording leaves the grid")
+    assert not recorded(game, session) and journaled(game, session), "trashed alone: its entry stays"
+    remove(f"journal:{game}:{session}", ["", "remove!"])
+    until(lambda: not journaled(game, session), "the entry, its recording gone, is asked about alone")
+
+
+@reprise
 def test_the_tab_bar_search_finds_the_settings_under_the_games(look, api):
     root = look.root
     root.openSearch()

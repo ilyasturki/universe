@@ -165,15 +165,57 @@ FocusScope {
                 label: "Journal entry",
                 action: "journal"
             });
-        if (current.kind === "shot")
+        items.push({
+            icon: "trash",
+            label: current.kind === "shot" ? "Remove screenshot…" : current.kind === "recording" ? "Remove recording…" : "Remove entry…",
+            action: "remove",
+            danger: true,
+            gap: true
+        });
+        menu.show(items, cellAnchor(), cellRect(), "", menuAction);
+    }
+
+    function hasPair(row) {
+        if (row.kind === "recording")
+            return row.hasJournal;
+        return row.kind === "journal" && rows.some(function (r) {
+            return r.kind === "recording" && r.gameId === row.gameId && r.session === row.session;
+        });
+    }
+
+    function confirmRemove() {
+        var kind = current.kind;
+        var items = [
+            {
+                icon: "",
+                label: "Keep it",
+                action: ""
+            },
+            {
+                icon: "trash",
+                label: kind === "shot" ? "Trash the screenshot" : kind === "recording" ? "Trash the recording" : "Trash the entry",
+                action: "remove!",
+                danger: true
+            }
+        ];
+        if (hasPair(current))
             items.push({
                 icon: "trash",
-                label: "Remove screenshot…",
-                action: "remove",
-                danger: true,
-                gap: true
+                label: kind === "recording" ? "Trash it and its journal entry" : "Trash it and its recording",
+                action: "remove-both!",
+                danger: true
             });
-        menu.show(items, cellAnchor(), cellRect(), "", menuAction);
+        menu.show(items, cellAnchor(), cellRect(), kind === "shot" ? "Remove this screenshot?" : kind === "recording" ? "Remove this recording?" : "Remove this entry?", menuAction);
+    }
+
+    function remove(both) {
+        var row = current;
+        if (row.kind === "shot")
+            api.screens.shots.remove(row.gameId, row.name);
+        if (row.kind === "recording" || both)
+            api.screens.recordings.remove(row.gameId, row.session);
+        if (row.kind === "journal" || both)
+            api.screens.journal.remove(row.gameId, row.session);
     }
 
     function menuAction(action) {
@@ -185,25 +227,13 @@ FocusScope {
             openJournal();
         } else if (action === "remove") {
             Sound.panel();
-            menu.show([
-                {
-                    icon: "",
-                    label: "Keep it",
-                    action: ""
-                },
-                {
-                    icon: "trash",
-                    label: "Trash the screenshot",
-                    action: "remove!",
-                    danger: true
-                }
-            ], cellAnchor(), cellRect(), "Remove this screenshot?", menuAction);
-        } else if (action === "remove!") {
+            confirmRemove();
+        } else if (action === "remove!" || action === "remove-both!") {
             Sound.enter();
-            api.screens.shots.remove(current.gameId, current.name);
+            remove(action === "remove-both!");
         }
         // A request opened a sub-page, which took the focus; only an action that stays here gives it back to the grid.
-        if (action === "" || action === "remove!" || (action === "open" && current && current.kind === "shot"))
+        if (action === "" || action === "remove!" || action === "remove-both!" || (action === "open" && current && current.kind === "shot"))
             grid.forceActiveFocus();
     }
 
@@ -344,6 +374,7 @@ FocusScope {
     ActionMenu {
         id: menu
 
+        objectName: "mediaMenu"
         anchors.fill: parent
         z: 5
         copyMargin: Theme.dp(18)

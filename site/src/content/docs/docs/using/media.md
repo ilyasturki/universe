@@ -21,7 +21,7 @@ The grid runs newest first, every game mixed in, with no sort or filter.
 - **A** on a recording plays it on the game's Recordings page.
 - **A** on a journal entry opens it on the game's Journal page.
 
-**X** opens the game's page, and **Y** jumps to the journal entry of a screenshot or a recording that has one. On a screenshot, **Start** › **Remove screenshot…** sends it to the trash, after a question. **B** returns to Home.
+**X** opens the game's page, and **Y** jumps to the journal entry of a screenshot or a recording that has one. **Start** › **Remove screenshot…**, **Remove recording…** or **Remove entry…** sends the item to the trash, after a question. A recording and its journal entry can go together, or one alone. **B** returns to Home.
 
 ## Screenshots
 
