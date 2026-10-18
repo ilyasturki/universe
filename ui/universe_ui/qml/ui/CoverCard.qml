@@ -21,7 +21,7 @@ Item {
     property int focusOrigin: Item.Center
     property real ringOpacity: 1.0
     property real ringGap: Theme.dp(Theme.ringGap)
-    // Under the mouse: hovering lifts the idle dimming, a click on a card that is not `current` is `picked`, on one that is, A.
+    // Under the mouse: hovering lifts the idle dimming, a click on a card that is not `current` is `picked`, on one that is, A; a right click picks it and opens its page.
     property bool pointable: false
     property bool current: false
 
@@ -69,9 +69,26 @@ Item {
             anchors.fill: parent
             active: root.pointable
             sourceComponent: Pointer {
+                id: pointed
+
                 current: root.current
                 wash: 0
                 onPicked: root.picked()
+
+                // An exclusive grab: the root's right click, B, never sees this one's release and closes the page it opened.
+                TapHandler {
+                    enabled: root.game !== null
+                    acceptedButtons: Qt.RightButton
+                    // A touch point has no buttons: unfiltered, this one would take a finger from the Pointer's own handler.
+                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                    gesturePolicy: TapHandler.ReleaseWithinBounds
+                    onTapped: {
+                        Theme.pointed(pointed.parent);
+                        if (!root.current)
+                            root.picked();
+                        Theme.detailRequested(root.game);
+                    }
+                }
             }
         }
         opacity: root.selected || root.hovered ? 1.0 : Theme.idleOpacity

@@ -20,6 +20,8 @@ QtObject {
 
     // A Pointer landed on `item`: the root tells the bar from the page by it.
     signal pointed(Item item)
+    // A right click on a cover: the root opens that game's page.
+    signal detailRequested(var game)
 
     readonly property color ground: "#0e0f13"
     readonly property color text: "#f2f3f5"

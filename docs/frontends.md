@@ -709,7 +709,8 @@ settings row, a key of the on-screen keyboard is `direct`: one tap picks and pre
 waits for the release (or for the press to be held): a finger that lands to scroll moves no ring.
 A drag, the finger's or a pressed mouse's, moves the view under it along its axis and flings it on
 the release, and the press it started is no tap; under gamescope a touch may come as an emulated
-left click, and scrolls the same. A right click is B. The wheel
+left click, and scrolls the same. A right click on a cover (`ui/CoverCard.qml`) picks it and opens its
+game page; anywhere else, the game page included, a right click is B. The wheel
 scrolls the view under it, the ring staying where it is — a notch adds a fixed step to where the
 view is heading and it eases after, so notches run into one motion, and a touchpad's pixels move
 it as they come — a strip that scrolls sideways (the Home rail, a screenshot strip) by a card from the wheel's y, its x or Shift+y; the next key brings the view back to the
