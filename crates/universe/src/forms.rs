@@ -740,6 +740,18 @@ impl Build<'_> {
             let n = render(dig(game, key));
             out.push(Field::new(key, label, "int", "Artwork").about("", true).plain(if n == "0" { String::new() } else { n }));
         }
+        let mut version = vec![
+            ("version.pin", "Installed version", "string", "Shown instead of what the game's files say."),
+            ("version.final", "Final version", "bool", "Never flag an update for this game."),
+            ("version.probe", "Version file", "string", r"Another file to read the version from: @Game.exe for a program, @version.txt:v(\S+) for a pattern."),
+            ("version.seen", "Update taken as installed", "string", "The Steam build or Switch title version you installed."),
+        ];
+        if crate::versions::channel_of(spec.id) == "switch" {
+            version.push(("version.switch_title_id", "Switch title id", "string", "For a file whose name has none, as 16 hex digits."));
+        }
+        for (key, label, kind, about) in version {
+            out.push(Field::new(key, label, kind, "Version").about(about, true).plain(render(dig(game, key))));
+        }
 
         for m in owners(&self.inputs.modules)?.iter().filter(|m| m.enabled && m.applies.takes(kind)) {
             let global = config.modules.settings.get(&m.id);
@@ -1206,6 +1218,8 @@ platforms = ["Nintendo Wii"]
         let proton = core.form(&Form::Game("hades".into()), None).await.unwrap();
         assert!(names(reach(&proton, "launch.esync"), &["Proton", "Wine"]));
         assert!(names(reach(&proton, "launch.proton"), &["Proton"]) && !names(reach(&proton, "launch.proton"), &["Wine"]));
+        let keys: Vec<&str> = proton.iter().map(|f| f.key.as_str()).collect();
+        assert!(keys.contains(&"version.pin") && !keys.contains(&"version.switch_title_id"), "a title id is a Switch game's: {keys:?}");
 
         core.set("sample", "platform", "Nintendo Wii").await.unwrap();
         let wii = Form::Game("sample".into());

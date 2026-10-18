@@ -23,6 +23,8 @@ pub struct Game {
     pub launch: Launch,
     pub desktop: Desktop,
     pub metadata: Metadata,
+    #[serde(skip_serializing_if = "Version::is_empty")]
+    pub version: Version,
     #[serde(skip_serializing_if = "Saves::is_empty")]
     pub saves: Saves,
     pub modules: BTreeMap<String, toml::Table>,
@@ -122,6 +124,26 @@ pub struct Metadata {
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
+pub struct Version {
+    /// Wins over what the files say.
+    pub pin: String,
+    /// `@<file>` reads that file's version instead of the program's, `@<file>:<regex>` the regex's first group in it; the file is looked for from the program's folder up.
+    pub probe: String,
+    /// The ROM name's `[0100…]` wins.
+    pub switch_title_id: String,
+    /// The upstream build taken as the installed one: a Steam build id, a Switch title version.
+    pub seen: String,
+    pub r#final: bool,
+}
+
+impl Version {
+    fn is_empty(&self) -> bool {
+        *self == Version::default()
+    }
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
 pub struct Saves {
     /// ludusavi's title for the game: found once from its store ids and title, or set by hand.
     pub name: String,
@@ -151,6 +173,7 @@ impl Default for Game {
             launch: Launch::default(),
             desktop: Desktop::default(),
             metadata: Metadata::default(),
+            version: Version::default(),
             saves: Saves::default(),
             modules: BTreeMap::new(),
             sources: BTreeMap::new(),
@@ -361,13 +384,15 @@ pub fn set_dotted(doc: &mut toml_edit::DocumentMut, key: &str, value: &str) -> c
     // A build is a version, which `2606` or `2.8` would otherwise turn into a number.
     let is_build = key == "launch.runner_build" || (parts.len() == 3 && parts[0] == "runners" && last == "build");
     let is_store_id = matches!(key, "source.id" | "source.build_id" | "saves.name");
+    // `1.2`, a Steam build id or a Switch title id `0100…` would otherwise turn into a number.
+    let is_version = parts[0] == "version" && last != "final";
     let is_words = parts.len() == 2 && parts[0] == "launch" && crate::launch_keys::find(last).is_some_and(|k| k.kind == crate::launch_keys::Kind::Words);
     let v = if is_words {
         let words = shell_words::split(value).map_err(|e| crate::Error::Invalid(format!("{key}: {e}")))?;
         toml_edit::Value::Array(words.into_iter().collect())
     } else if is_list && !value.starts_with('[') {
         parse_value(&format!("[{value}]"))
-    } else if is_rate || is_text_map || is_system || is_build || is_store_id {
+    } else if is_rate || is_text_map || is_system || is_build || is_store_id || is_version {
         value.into()
     } else {
         parse_value(value)
@@ -392,6 +417,7 @@ pub fn set_key(game_toml: &Path, key: &str, value: &str) -> crate::Result<Game> 
         "launch",
         "desktop",
         "metadata",
+        "version",
         "saves",
         "modules",
         "sources",
@@ -505,6 +531,16 @@ configpath = "the-technomancer-1780794348"
         assert_eq!(set_key(&p, "source.gog_id", "43").unwrap().source.id, "43");
         let text = std::fs::read_to_string(&p).unwrap();
         assert!(!text.contains("gog_id") && text.contains("id = \"43\""), "{text}");
+
+        set_key(&p, "version.pin", "1.2").unwrap();
+        set_key(&p, "version.seen", "24129078").unwrap();
+        let g = set_key(&p, "version.switch_title_id", "0100000000010000").unwrap();
+        assert_eq!(
+            (g.version.pin.as_str(), g.version.seen.as_str(), g.version.switch_title_id.as_str()),
+            ("1.2", "24129078", "0100000000010000"),
+            "a version stays text"
+        );
+        assert!(set_key(&p, "version.final", "true").unwrap().version.r#final);
     }
 
     #[test]

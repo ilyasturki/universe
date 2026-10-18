@@ -27,6 +27,7 @@ pub fn section_title(section: &str) -> String {
         "Proton builds" => gettext("Proton Builds"),
         "Desktop and library" => gettext("Desktop and Library"),
         "Artwork" => gettext("Artwork"),
+        "Version" => gettext("Version"),
         "Runner" => gettext("Runner"),
         "Builds" => gettext("Builds"),
         "Options" => gettext("Options"),

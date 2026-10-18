@@ -3062,6 +3062,7 @@ dependencies = [
  "liblzma",
  "owo-colors",
  "percent-encoding",
+ "regex",
  "reqwest",
  "rusqlite",
  "rustix",

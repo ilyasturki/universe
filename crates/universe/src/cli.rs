@@ -68,7 +68,7 @@ pub enum Cmd {
     Stop,
     /// Current session and last sessions
     Status,
-    /// Source, build, prefix, hours, modules
+    /// Source, build, installed version, prefix, hours, modules
     Info {
         /// Game: exact id, then whole word, substring or path
         name: String,
@@ -167,7 +167,9 @@ pub enum Cmd {
     Set {
         /// Game: exact id, then whole word, substring or path
         name: String,
-        /// key=value; launch keys (`universe launch-keys`) need no `launch.` prefix, a runner option is options.<key>
+        /// key=value; launch keys (`universe launch-keys`) need no `launch.` prefix, a runner option is options.<key>; the installed
+        /// version is version.pin (said by hand), version.probe (@<file> or @<file>:<regex>, where the files hold it),
+        /// version.switch_title_id, version.seen (the upstream build taken as installed) and version.final=true (no update flagged)
         pairs: Vec<String>,
     },
     /// The launch keys: what `set` and `config set launch.*` take, with each one's type, default and scope
@@ -871,6 +873,19 @@ fn missing(m: &Value) -> String {
     m["incompatible"].as_str().filter(|i| !i.is_empty()).map(String::from).unwrap_or_else(|| joined(&m["missing"], ","))
 }
 
+/// `1.6.0 (eden) · title 01007ef00011e000`: the installed version, where it was read, then what an update check goes by.
+fn version_line(v: &Value) -> String {
+    let mut parts = vec![match (s(v, "installed"), s(v, "from")) {
+        (installed, _) if installed.is_empty() => "unknown".to_string(),
+        (installed, from) => format!("{installed} ({from})"),
+    }];
+    parts.extend([("title", "title_id"), ("build", "build")].into_iter().filter(|(_, k)| !s(v, k).is_empty()).map(|(label, k)| format!("{label} {}", s(v, k))));
+    if v["final"].as_bool() == Some(true) || s(v, "channel") == "final" {
+        parts.push("final".into());
+    }
+    parts.join(" · ")
+}
+
 fn hours(v: &Value) -> String {
     let h = v["stats"]["hours"].as_f64().unwrap_or(0.0);
     if h == 0.0 {
@@ -1214,6 +1229,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 if s(&g["effective"], "runner_path").is_empty() { "not found".to_string() } else { s(&g["effective"], "runner_path") }
             );
             println!("  platform   {}", s(&g, "platform"));
+            println!("  version    {}", version_line(&g["version"]));
             println!("  exe        {}", s(&g["launch"], "exe"));
             if s(&g["effective"], "runner_kind") == "emulator" {
                 println!("  options    {}", g["effective"]["options"]);
@@ -2804,6 +2820,11 @@ fn game_keys() -> Vec<String> {
             "metadata.sgdb_id=",
             "metadata.gamesdb_id=",
             "metadata.steam_appid=",
+            "version.pin=",
+            "version.probe=",
+            "version.switch_title_id=",
+            "version.seen=",
+            "version.final=",
             "capture.cursor=",
         ]
         .map(String::from),

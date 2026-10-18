@@ -21,6 +21,7 @@ pub struct Resolved {
     pub journal_count: usize,
     pub achievements: crate::achievements::Summary,
     pub effective: Effective,
+    pub version: crate::versions::Installed,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -83,6 +84,11 @@ impl Resolved {
         v["achievements"] = serde_json::to_value(self.achievements).unwrap();
         v["recording_count"] = serde_json::json!(self.sessions.iter().filter(|s| s.recording.is_some()).count());
         v["dir"] = serde_json::json!(self.game.dir());
+        let mut version = serde_json::to_value(&self.game.version).unwrap();
+        if let (Some(own), serde_json::Value::Object(read)) = (version.as_object_mut(), serde_json::to_value(&self.version).unwrap()) {
+            own.extend(read);
+        }
+        v["version"] = version;
         v
     }
 }
@@ -288,23 +294,36 @@ pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Modu
         },
         modules: mods,
     };
-    Resolved { game, stats, sessions, media, screenshots, journal_count, achievements, effective }
+    Resolved { game, stats, sessions, media, screenshots, journal_count, achievements, effective, version: Default::default() }
+}
+
+/// `resolve`, and the version the game's files say: what `load_all` makes of each game.
+pub fn load_one(game: Game, config: &Config, modules: &[crate::modules::Module]) -> Resolved {
+    let mut r = resolve(game, config, modules);
+    r.version = crate::versions::read_one(&r.game);
+    r
 }
 
 pub fn load_all(config: &Config, modules: &[crate::modules::Module]) -> Vec<Resolved> {
     let mut out = Vec::new();
     let Ok(rd) = std::fs::read_dir(paths::games_dir()) else { return out };
     let mut located = HashMap::new();
+    let mut probes = crate::versions::Probes::default();
     for e in rd.flatten() {
         let p = e.path().join("game.toml");
         if !p.is_file() {
             continue;
         }
         match Game::load(&p) {
-            Ok(g) => out.push(resolve_with(g, config, modules, &mut located)),
+            Ok(g) => {
+                let mut r = resolve_with(g, config, modules, &mut located);
+                r.version = crate::versions::read(&r.game, &mut probes);
+                out.push(r);
+            }
             Err(err) => tracing::warn!("{}: {err}", p.display()),
         }
     }
+    probes.save();
     sort_default(&mut out);
     out
 }

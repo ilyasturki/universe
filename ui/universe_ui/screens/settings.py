@@ -158,7 +158,15 @@ def _card_meta(section, mode, gpu):
 UPSCALING = "Upscaling"
 
 # The basic card an advanced card folds into when the page has it; the runner's card stands in for Proton.
-HOMES = {"Scaling": "Display", "Environment": "Launch", "Sync": "Proton", "Upscaling": "Proton", "Logs": "Proton", "Artwork": "Desktop and library"}
+HOMES = {
+    "Scaling": "Display",
+    "Environment": "Launch",
+    "Sync": "Proton",
+    "Upscaling": "Proton",
+    "Logs": "Proton",
+    "Artwork": "Desktop and library",
+    "Version": "Desktop and library",
+}
 
 MAP_NOUNS = {"env": "a variable", "dll_overrides": "an override"}
 MAP_FIELDS = {"env": ["Variable", "Value"], "dll_overrides": ["DLL", "Override"]}

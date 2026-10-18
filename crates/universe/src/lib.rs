@@ -50,9 +50,12 @@ pub mod system_install;
 pub mod thumbs;
 pub mod timeline;
 pub mod tools;
+pub mod versions;
 
 #[cfg(test)]
 mod testbus;
+#[cfg(test)]
+mod testpe;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 

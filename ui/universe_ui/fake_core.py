@@ -54,6 +54,8 @@ GAME = {
     "desktop": {"hide_cursor": None},
     "metadata": dict.fromkeys(("sgdb_id", "gamesdb_id", "steam_appid", "metacritic", "players"), 0)
     | {"developers": [], "publishers": [], "genres": [], "summary": "", "description": "", "playstation": ""},
+    "version": {"pin": "", "probe": "", "switch_title_id": "", "seen": "", "final": False}
+    | dict.fromkeys(("installed", "from", "channel", "title_id", "build", "modified"), ""),
     "modules": {},
     "launch": {
         **dict.fromkeys(
@@ -100,6 +102,10 @@ GAME = {
         "options": {},
     },
 }
+# versions::channel_of: the kind of updates a runner's games take.
+CHANNELS = {"proton": "pc", "wine": "pc", "linux": "pc", "eden": "switch", "ryujinx": "switch", "rpcs3": "ps3"} | dict.fromkeys(
+    ("dolphin", "melonds", "mgba", "pcsx2", "duckstation", "ppsspp", "xemu", "mupen64plus", "snes9x", "flycast", "scummvm", "dosbox", "mame"), "final"
+)
 # The config sections the fixture leaves out, at the core's defaults.
 CONFIG = {
     "components": {"auto_update": True, "catalogue": ""},
@@ -838,6 +844,10 @@ class FakeCore:
         steam_pads = {"dualsense": "native", "dualshock": "dualshock4"}.get((out.get("metadata") or {}).get("playstation") or "", "xinput")
         pad = effective["sony_pad"] or "auto"
         effective["sony_pad"] = "" if any(k.startswith("PROTON_SONY_") for k in env) else steam_pads if pad == "auto" else pad
+        # A fixture game's `version` stands for what the core reads from its files.
+        version = out["version"] = {"channel": CHANNELS.get(spec["id"], ""), **(out.get("version") or {})}
+        if version.get("pin"):
+            version.update({"installed": version["pin"], "from": "pin"})
         items = self._data.get("achievements", {}).get(game["id"], {}).get("items") or []
         out["achievements"] = {"total": len(items), "unlocked": sum(1 for a in items if a.get("unlocked_at"))}
         meta = out.setdefault("metadata", {})

@@ -299,7 +299,7 @@ impl Core {
         let mut games = self.games.write().await;
         games.retain(|g| g.game.id != id);
         if toml_path.exists() {
-            games.push(library::resolve(Game::load(&toml_path)?, &config, &modules));
+            games.push(library::load_one(Game::load(&toml_path)?, &config, &modules));
         }
         library::sort_default(&mut games);
         Ok(())
@@ -356,6 +356,9 @@ impl Core {
         }
         if let Some(field) = real_key.strip_prefix("launch.") {
             crate::launch_keys::validate(crate::launch_keys::Scope::Game, field, &value)?;
+        }
+        if let Some(field) = real_key.strip_prefix("version.") {
+            value = crate::versions::checked(field, &value)?;
         }
         if let Some(okey) = real_key.strip_prefix("launch.options.") {
             let spec = crate::runners::spec(&r.game.runner_id()).ok_or_else(|| Error::Invalid(format!("{id} has no known runner")))?;

@@ -302,6 +302,39 @@ fn ls_lists_a_thousand_games_within_its_budget() {
     assert!(took < speed_limit(1500, 6000), "listed in {took:?}");
 }
 
+#[path = "../src/testpe.rs"]
+mod testpe;
+
+#[test]
+fn info_reads_the_installed_version_from_the_program_until_set_pins_one() {
+    let dir = no_desktop();
+    let exe = dir.path().join("games/Sekiro/sekiro.exe");
+    std::fs::create_dir_all(exe.parent().unwrap()).unwrap();
+    testpe::Exe { strings: &[("ProductVersion", "1.6.0.0")], ..Default::default() }.write(&exe);
+    let game = dir.path().join("data/games/sekiro");
+    std::fs::create_dir_all(&game).unwrap();
+    let toml = format!("schema = 1\nid = \"sekiro\"\ntitle = \"Sekiro\"\n[launch]\nrunner = \"proton\"\nexe = \"{}\"\n", exe.display());
+    std::fs::write(game.join("game.toml"), toml).unwrap();
+    let version = || {
+        let out = universe(&dir, &["--json", "info", "sekiro"], &[NO_BUS]);
+        serde_json::from_slice::<serde_json::Value>(&out.stdout).unwrap_or_else(|e| panic!("{e}: {}", text(&out.stderr)))["version"].clone()
+    };
+    let v = version();
+    assert_eq!(
+        (v["installed"].as_str(), v["from"].as_str(), v["channel"].as_str(), v["final"].as_bool()),
+        (Some("1.6.0.0"), Some("exe"), Some("pc"), Some(false))
+    );
+    let set = universe(&dir, &["set", "sekiro", "version.pin=1.06", "version.seen=5794815", "version.final=true"], &[NO_BUS]);
+    assert!(set.status.success(), "{}", text(&set.stderr));
+    let v = version();
+    assert_eq!(
+        (v["installed"].as_str(), v["from"].as_str(), v["seen"].as_str(), v["final"].as_bool()),
+        (Some("1.06"), Some("pin"), Some("5794815"), Some(true)),
+        "a pin wins, a build stays text"
+    );
+    assert!(!universe(&dir, &["set", "sekiro", "version.switch_title_id=0100"], &[NO_BUS]).status.success());
+}
+
 #[test]
 fn session_window_without_a_session_fails_at_once_even_told_to_wait() {
     let dir = no_desktop();

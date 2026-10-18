@@ -99,7 +99,8 @@ operation; a dash means the surface doesn't expose it.
 a game key left empty takes `[launch]`'s, a value is validated as the key's type says, an unknown
 or global-only key is refused — with the maps `launch.dll_overrides.d3d11`, `launch.env.FOO` and
 `launch.options.<key>` (validated against the runner's options); then `desktop.hide_cursor`, `hidden`,
-`favorite`, `tags`, `sort_title`, `platform`, the pins `metadata.steam_appid`, `metadata.gamesdb_id` and `metadata.sgdb_id`, `saves.name` (ludusavi's title, see Game data), and `capture.cursor` as a
+`favorite`, `tags`, `sort_title`, `platform`, the pins `metadata.steam_appid`, `metadata.gamesdb_id` and `metadata.sgdb_id`, `saves.name` (ludusavi's title, see Game data),
+`version.pin`, `version.probe` (`@<file>` or `@<file>:<regex>`), `version.switch_title_id` (16 hex digits), `version.seen` and `version.final` (see `version` below), and `capture.cursor` as a
 validated shorthand for `modules.capture.cursor`. Values are strings: `true`/`false` for booleans, `auto`/`on`/`off` for a toggle (`true`/`false` read as on/off),
 comma-separated for lists, shell words for `launch.args` (`--delay 0 'a b'` is three arguments), `""` deletes the key. A runner is written under its shipped id (`yuzu` →
 `eden`).
@@ -118,8 +119,26 @@ comma-separated for lists, shell words for `launch.args` (`--delay 0 'a b'` is t
                "optiscaler": false, "mangohud": false, "gamescope": true, "gamescope_args": "", "gamescope_resolution": "auto", "gamescope_refresh": "auto", "gamescope_scaler": "", "gamescope_filter": "", "gamescope_sharpness": null, "gamescope_adaptive_sync": "auto", "fps_limit": "auto", "hide_cursor": true, "env": {},
                "working_dir": "/…/games/melee", "prefix": "", "modules": {"capture": {"enabled": true, "cursor": false}}},
  "achievements": {"total": 40, "unlocked": 12},
+ "version": {"pin": "", "probe": "@GTA5_Enhanced.exe", "switch_title_id": "", "seen": "24129078", "final": false,
+             "installed": "1.0.1158.13", "from": "exe", "channel": "pc", "title_id": "", "build": "", "modified": "2026-08-29"},
  "removed": false}
 ```
+
+`version` is the game's `[version]` table (empty keys when it has none) plus what its files say is installed,
+read when the library loads and cached under `$XDG_CACHE_HOME/universe/versions.json` by each file's size and time.
+`installed` is `pin` when set, else what `from` read, else empty: `exe` (a Windows program's `ProductVersion`, then
+`FileVersion`, then its fixed block, which an Unreal `Engine/Binaries` tree above leaves out; `1.0.0.0` and other
+placeholders count as none), `unity` (`bundleVersion` in `<program>_Data/globalgamemanagers`), `file` (a `probe`'s
+regex), `name` (a ROM's name: `v1.2.0`, `[v131072]`, `_102_`, `(Rev 2)`), `eden` or `ryujinx` (the update the
+emulator applies), `param.sfo` or `rpcs3` (a PS3 disc's `APP_VER` or the higher one of the update RPCS3 installed).
+`probe` is `@<file>` (that program's version instead) or `@<file>:<regex>` (the first group, else the match), the file
+looked for from the program's folder up. `channel` follows the runner, not the source: `pc` (Proton, Wine, Linux),
+`gog` (a `pc` game with a `goggame-<id>.info` above its program, or the GOG source's), `switch` (Eden, Ryujinx), `ps3`
+(RPCS3), `final` (Dolphin, melonDS, mGBA, PCSX2 and the other consoles no update reached), empty for the rest.
+`title_id` is the Switch title id (the ROM name's `[0100…]`, else `switch_title_id`), the PS3 `TITLE_ID` or the GOG
+game id; `build` the GOG `buildId` or the Switch title version (`update << 16`) the emulator or the name gives;
+`modified` the day the file read last changed. `seen` (the upstream build taken as installed: a Steam build id, a Switch
+title version) and `final` are the player's.
 
 `effective` is what the launch will use: the game's own keys over the global defaults, the runner
 resolved (`runner_path` empty when its program was not found), the platform the runner implies when
