@@ -1,23 +1,21 @@
 ---
 title: Add-ons and modules
-description: What modules, stores and themes are, which ones ship with Universe, and how to turn a module on for every game or for one.
+description: What modules, stores and themes are, which ones ship with Universe, and turning a module on.
 sidebar:
   order: 1
 ---
 
 import Shot from '../../../../components/Shot.astro';
 
-A module runs programs around a game session. It records the session, writes a journal entry once it ends, takes your screenshots, or sets up the emulator's pads. A store (called a *source* on the command line) lists the games you own there and installs them. A theme is a look for Universe Big Screen. The modules, stores and themes other people make are add-ons ([Installing add-ons](/docs/add-ons/installing/)).
+A module runs around a game session: it records the session, writes a journal entry once it ends, takes your screenshots, or sets up the emulator's pads. A store lists the games you own there and installs them. A theme is a look for Universe Big Screen. Add-ons are the modules, stores and themes other people make ([Installing add-ons](/docs/add-ons/installing/)).
 
-## What ships with Universe
+Universe comes with four stores ([Settings › Stores](/docs/settings/stores/)), three looks ([Looks](/docs/using/looks/)) and five modules, each off until you turn it on:
 
-Universe comes with four stores (GOG, Steam, Epic Games and itch.io, set up in [Settings › Stores](/docs/settings/stores/)), three looks (Universe, Switch 2 and PS5, see [Looks](/docs/using/looks/)) and the five modules listed at the end of this page.
-
-Every module starts off, and the first run turns on your stores but no module. Turn a module on in Settings › Features, or from a terminal:
-
-```sh
-universe module enable capture
-```
+- [Video capture](/docs/add-ons/video-capture/) records each session.
+- [Play journal](/docs/add-ons/play-journal/) has a model write an entry about each session.
+- [Screenshots](/docs/add-ons/screenshots/) takes the screenshots you ask for.
+- [Virtual pads](/docs/add-ons/virtual-pads/) gives an emulator one virtual pad per player.
+- [Emulator controls](/docs/controllers/emulator-controls/) writes each emulator's controller settings for the pads you hold.
 
 ## Settings › Features
 
@@ -25,67 +23,10 @@ universe module enable capture
 
 Settings › [Features](/docs/settings/features/) has one row per module. **A** opens its page and **Y** turns it on or off. Each row says where its module stands:
 
-- **On**: it runs for every game that doesn't turn it off.
-- **Off**: it runs for none.
-- **Set it up**: it's on, but a setting it can't guess is still empty, so it does nothing yet. The line under it names the setting, as in "On, waiting on writing model".
-- **Unavailable**: a program it needs is missing, or it was written for another version of Universe. The line under it reads "Cannot be enabled: missing …" while it's off, and "On, but its hooks are skipped: missing …" while it's on.
+- **On** or **Off**.
+- **Set it up**: it's on, but waits on a setting it can't guess. The line under it names the setting.
+- **Unavailable**: a program it needs is missing, or it was written for another version of Universe. [System check](/docs/settings/system-check/) gives the fix.
 
-A module that is on but misses a program runs nothing. After a session, a notice names what it's missing, and [System check](/docs/settings/system-check/) gives the fix.
+## A module for one game
 
-## A module's two switches
-
-A module runs for a game when both of its switches are on:
-
-- its global switch, in Settings › Features, kept in config.toml's `[modules] enabled`;
-- the game's own, a row such as **Record the session** on that game's **Game settings** page, in a card named after the module. It's on by default, and turning it off is written to the game's `game.toml`.
-
-A game's settings page shows a module's card only while the module is on and serves that game. Emulator controls and Virtual pads serve emulated games alone; the other three serve every game.
-
-A module setting starts from the module's default, which `[modules.<id>]` in config.toml overrides for every game, and `[modules.<id>]` in a game's `game.toml` for that game.
-
-:::caution
-`universe module set <id> enabled=false` without `--game` doesn't turn a module off. It writes the game-level switch into config.toml, so the module stops for every game that has no value of its own, while Features still reads On. To turn a module off, run `universe module disable <id>`.
-:::
-
-## Where modules, stores and themes live
-
-Universe reads modules and stores from three places. When two hold the same id, the later one in this list wins:
-
-1. Installed add-ons, in `~/.local/share/universe/extensions/`, under a `module`, `source` or `theme` folder, each with a `<id>.json` beside it recording where it came from.
-2. The ones that ship with Universe: `/usr/share/universe/modules` and `/usr/share/universe/sources` from a package, `~/.local/lib/universe/` from the installer. The folders in `UNIVERSE_MODULES_PATH` and `UNIVERSE_SOURCES_PATH` are read before these.
-3. Your own, in `~/.config/universe/modules/<id>/` and `~/.config/universe/sources/<id>/`. Work on a module or a store here.
-
-An add-on can't take the id of a shipped module or store, but a folder of your own can. Themes come from the first place only.
-
-What a module or a store keeps for itself, such as the journal's memory of each game, lives in `~/.local/share/universe/modules/<id>/` or `~/.local/share/universe/sources/<id>/`.
-
-## Versions
-
-The page of an add-on, or of a module in your own folder, shows its version and where it came from: "v1.2.0 · from the index", "v1.2.0 · Unlisted" for one installed from a URL, an archive or a folder, or "v1.2.0 · your own folder". Built-in modules and stores show none, and `universe module ls` gives them Universe's. In the Features list, an Unlisted add-on carries an **Unlisted** tag.
-
-## From a terminal
-
-[`universe module`](/docs/reference/cli/module/) lists, switches and sets modules:
-
-```sh
-universe module ls                                      # id, version, on, available, what's missing, hooks
-universe module enable journal
-universe module disable journal
-universe module settings capture "Dead Cells"           # the values that game gets
-universe module set capture quality=ultra               # for every game
-universe module set capture enabled=false --game "Dead Cells"
-```
-
-The built-in ids are `capture`, `journal`, `screenshot`, `pads` and `controls`. The command line can turn on an Unavailable module; it runs nothing until the missing program is installed. Stores have the same commands under [`universe source`](/docs/reference/cli/source/).
-
-When Home Manager writes your config.toml (`programs.universe.settings`), Universe can't change it, so list your modules in `modules.enabled` there ([Nix options](/docs/reference/nix/)).
-
-## The modules
-
-- [Video capture](/docs/add-ons/video-capture/) (`capture`) records each session with gpu-screen-recorder.
-- [Play journal](/docs/add-ons/play-journal/) (`journal`) has a model write an entry about each session, from its recording and your screenshots.
-- [Screenshots](/docs/add-ons/screenshots/) (`screenshot`) takes the screenshots you ask for from the dock, a pad button or the command line.
-- [Virtual pads](/docs/add-ons/virtual-pads/) (`pads`) gives an emulator one virtual pad per player, whatever pads you hold.
-- [Emulator controls](/docs/controllers/emulator-controls/) (`controls`) writes each emulator's controller settings for the pads you hold, at every launch.
-
-[Themes](/docs/add-ons/themes/) covers the looks others made.
+A module runs for a game when it's on in Features and on for that game, in the card named after it in the game's **Game settings**. It's on for every game at first. Emulator controls and Virtual pads serve emulated games alone; the other three serve every game.
