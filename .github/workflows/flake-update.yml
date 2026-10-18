@@ -12,18 +12,74 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: DeterminateSystems/nix-installer-action@v23
-      - uses: DeterminateSystems/magic-nix-cache-action@v15
+      # Main's last store from ci.yml's build job, never saved from here
+      - uses: nix-community/cache-nix-action/restore@v7
         with:
-          use-flakehub: disabled
-      - run: nix flake update
-      # A pull request opened with the workflow token starts no ci run, so the checks run here first
-      - run: nix build .#universe .#universe-ui --no-link -L
-      - run: nix flake check -L
-      - uses: peter-evans/create-pull-request@v8
+          primary-key: nix-build-${{ github.sha }}
+          restore-prefixes-first-match: nix-build-
+      - id: update
+        run: nix flake update
+      # A formatter's new release reformats in the pull request instead of failing the lint check
+      - id: fmt
+        continue-on-error: true
+        run: nix develop -c tools/fmt
+      # A pull request opened with the workflow token starts no ci run, so the checks run here and a red one opens it as a draft
+      - id: build
+        continue-on-error: true
+        run: nix build .#universe .#universe-ui --no-link -L
+      - id: check
+        continue-on-error: true
+        shell: bash
+        run: nix flake check -L --keep-going 2>&1 | tee "$RUNNER_TEMP/check.log"
+      - id: report
+        shell: bash
+        env:
+          FMT: ${{ steps.fmt.outcome }}
+          BUILD: ${{ steps.build.outcome }}
+          CHECK: ${{ steps.check.outcome }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          failed=()
+          [ "$FMT" = success ] || failed+=("\`tools/fmt\`")
+          [ "$BUILD" = success ] || failed+=("\`nix build .#universe .#universe-ui\`")
+          if [ "$CHECK" != success ]; then
+            drvs=$(grep -oE "(Cannot build|builder for) '/nix/store/[a-z0-9]{32}-[^']+\.drv'" "$RUNNER_TEMP/check.log" | sed -E "s|.*/nix/store/[a-z0-9]{32}-||; s|\.drv'$||" | sort -u || true)
+            # Nothing named: the evaluation failed before a build
+            [ -n "$drvs" ] || drvs="\`nix flake check\` (evaluation)"
+            while IFS= read -r drv; do failed+=("$drv"); done <<< "$drvs"
+          fi
+          {
+            echo "body<<EOF"
+            if [ ${#failed[@]} -eq 0 ]; then
+              echo "Weekly \`nix flake update\`. The packages and \`nix flake check\` passed in [the run]($RUN) that opened this."
+              echo EOF
+              echo "draft=false"
+            else
+              echo "Weekly \`nix flake update\`. These failed in [the run]($RUN) that opened this:"
+              echo
+              printf -- '- %s\n' "${failed[@]}"
+              echo
+              echo "Fix them on this branch: \`git switch flake-update\`."
+              echo EOF
+              echo "draft=always-true"
+            fi
+          } >> "$GITHUB_OUTPUT"
+      - id: pr
+        uses: peter-evans/create-pull-request@v8
         with:
           branch: flake-update
           commit-message: "build(nix): update flake.lock"
           title: "build(nix): update flake.lock"
-          body: "Weekly `nix flake update`. The packages and `nix flake check` passed in the run that opened this."
+          body: ${{ steps.report.outputs.body }}
+          draft: ${{ steps.report.outputs.draft }}
+      # create-pull-request turns a pull request into a draft but never back
+      - if: steps.report.outputs.draft == 'false' && steps.pr.outputs.pull-request-operation == 'updated'
+        run: gh pr ready "${{ steps.pr.outputs.pull-request-number }}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+      # Red run, so the failure email still goes out
+      - if: steps.report.outputs.draft != 'false'
+        run: exit 1
   nixpkgs:
     uses: ./.github/workflows/nixpkgs.yml
