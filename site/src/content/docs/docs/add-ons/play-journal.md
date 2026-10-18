@@ -44,7 +44,7 @@ universe module set journal provider=codex
 | **Write a journal entry after each session** | On | Per game. |
 | **Entry language** | Auto | Auto writes in the game's on-screen language. Or French, English, Spanish, German, Italian, Portuguese, Japanese. |
 | **Writing model** | none | Codex, OpenAI-compatible API, Stub (no model). |
-| **Model** | Latest | The model the provider is asked for. The choices come from the provider. When the endpoint can't be reached, its last list stays. |
+| **Model** | Latest | The model the provider is asked for. The choices come from the provider. When the API endpoint can't be reached, the list it last gave stays. |
 | **API endpoint** | `https://api.openai.com/v1` | For the OpenAI-compatible API. |
 | **API key** | empty | For the OpenAI-compatible API. |
 | **API key file** | empty | A file read in place of the API key. |

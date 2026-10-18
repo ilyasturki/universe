@@ -53,7 +53,7 @@ key = "model"
 type = "string"
 default = "latest"
 label = "Model"
-description = "The model the provider is asked for. Latest is Codex's newest; the OpenAI-compatible API needs a name."
+description = "The model the provider is asked for. Latest is Codex's newest; the OpenAI-compatible API needs a model picked by name."
 keywords = ["gpt", "claude", "llm", "ai", "latest"]
 choice_labels = { latest = "Latest" }
 scope = "global"
