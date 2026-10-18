@@ -459,6 +459,14 @@ impl Core {
     fn updates(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.value(py, |c| c.source_updates())
     }
+    #[pyo3(signature = (id=String::new()))]
+    fn check_versions(&self, py: Python<'_>, id: String) -> PyResult<()> {
+        self.run(py, |c| async move { c.check_versions(&id).await })
+    }
+    #[pyo3(signature = (id, build=String::new()))]
+    fn mark_current(&self, py: Python<'_>, id: String, build: String) -> PyResult<String> {
+        self.run(py, |c| async move { c.mark_current(&id, &build).await })
+    }
     #[pyo3(signature = (source, progress=None))]
     fn scan(&self, py: Python<'_>, source: String, progress: Option<Py<PyAny>>) -> PyResult<Vec<String>> {
         self.run(py, |c| async move {

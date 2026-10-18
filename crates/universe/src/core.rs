@@ -2426,12 +2426,78 @@ impl Core {
         let mut n = 0;
         for t in targets {
             let events = self.run_verb(&m, "update", std::slice::from_ref(&t), progress.as_deref_mut()).await.map_err(|e| Error::Io(format!("{t}: {e}")))?;
+            let mut up = crate::upstream::Upstream::load();
+            up.applied(source, &t);
+            up.save();
             for g in Self::game_events(&events) {
                 let _ = self.apply_source_game(source, &g, false, Arrival::Found).await;
             }
             n += 1;
         }
         Ok(n)
+    }
+
+    /// Asks Steam, titledb, Sony and the stores again what their answers kept are too old for, then judges every game by
+    /// them; `id` limits it to that game's. Never at startup: the library is judged by the answers kept.
+    pub async fn check_versions(&self, id: &str) -> Result<()> {
+        self.check_versions_with(&crate::upstream::LIVE, id).await
+    }
+
+    pub(crate) async fn check_versions_with(&self, net: &crate::upstream::Net, id: &str) -> Result<()> {
+        let sources: Vec<Source> = self.sources.read().await.iter().filter(|m| m.active()).cloned().collect();
+        let active: Vec<String> = sources.iter().map(|m| m.id().to_string()).collect();
+        let wants = {
+            let games = self.games.read().await;
+            if !id.is_empty() && !games.iter().any(|g| g.game.id == id) {
+                return Err(Error::NotFound(id.into()));
+            }
+            let asked = games.iter().filter(|g| g.game.removed_at.is_empty() && (id.is_empty() || g.game.id == id));
+            crate::upstream::wants(asked.map(|g| (&g.game, &g.version)), &active)
+        };
+        let now = chrono::Utc::now().timestamp();
+        let mut up = crate::upstream::Upstream::load();
+        up.keep_stores(&active);
+        let stores: Vec<&Source> = sources.iter().filter(|m| wants.stores.contains(m.id()) && up.store_stale(m.id(), now)).collect();
+        let listing = futures_util::future::join_all(stores.iter().map(|m| self.run_verb(m, "update", &[], None)));
+        let (listed, ()) = futures_util::future::join(listing, crate::upstream::refresh(net, &mut up, &wants, now)).await;
+        for (m, listed) in stores.iter().zip(listed) {
+            match listed {
+                Ok(events) => up.set_store(m.id(), events.into_iter().filter_map(|e| if let SourceEvent::Update(u) = e { Some(u) } else { None }), now),
+                Err(e) => tracing::warn!("{}: no updates listed: {e}", m.id()),
+            }
+        }
+        up.save();
+        for r in self.games.write().await.iter_mut() {
+            r.check = crate::upstream::check(&r.game, &r.version, &up);
+        }
+        Ok(())
+    }
+
+    /// Takes `build`, else upstream's newest build asked for anew, as the one installed: after a game is updated by hand.
+    /// Returns what `version.seen` now holds.
+    pub async fn mark_current(&self, id: &str, build: &str) -> Result<String> {
+        self.mark_current_with(&crate::upstream::LIVE, id, build).await
+    }
+
+    pub(crate) async fn mark_current_with(&self, net: &crate::upstream::Net, id: &str, build: &str) -> Result<String> {
+        let r = self.get(id).await?;
+        let refused = match (r.check.store.as_str(), r.version.channel) {
+            ("", "pc" | "switch") => None,
+            ("", "ps3") => Some(format!("{id}'s version is read from its PARAM.SFO")),
+            ("", "gog") => Some(format!("{id} is updated by gog: universe update {id}")),
+            ("", _) => Some(format!("{id} takes no update")),
+            (store, _) => Some(format!("{id} is updated by {store}: universe update {id}")),
+        };
+        if let Some(why) = refused {
+            return Err(Error::Invalid(why));
+        }
+        let build = match build.trim() {
+            "" => crate::upstream::newest(net, &r.game, &r.version).await?,
+            b if b.bytes().all(|c| c.is_ascii_digit()) => b.to_string(),
+            b => return Err(Error::Invalid(format!("{b}: a build is a number"))),
+        };
+        self.set(id, "version.seen", &build).await?;
+        Ok(build)
     }
 
     /// `{source, fetched_at, total, unlocked, items}` from the game's cache; through its source's `achievements`

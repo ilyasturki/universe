@@ -50,6 +50,7 @@ pub mod system_install;
 pub mod thumbs;
 pub mod timeline;
 pub mod tools;
+pub mod upstream;
 pub mod versions;
 
 #[cfg(test)]

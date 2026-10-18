@@ -22,6 +22,7 @@ pub struct Resolved {
     pub achievements: crate::achievements::Summary,
     pub effective: Effective,
     pub version: crate::versions::Installed,
+    pub check: crate::upstream::Check,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -85,8 +86,14 @@ impl Resolved {
         v["recording_count"] = serde_json::json!(self.sessions.iter().filter(|s| s.recording.is_some()).count());
         v["dir"] = serde_json::json!(self.game.dir());
         let mut version = serde_json::to_value(&self.game.version).unwrap();
-        if let (Some(own), serde_json::Value::Object(read)) = (version.as_object_mut(), serde_json::to_value(&self.version).unwrap()) {
-            own.extend(read);
+        for part in [serde_json::to_value(&self.version).unwrap(), serde_json::to_value(&self.check).unwrap()] {
+            if let (Some(own), serde_json::Value::Object(part)) = (version.as_object_mut(), part) {
+                own.extend(part);
+            }
+        }
+        if !self.check.version_name.is_empty() && self.version.from != "pin" {
+            version["installed"] = serde_json::json!(self.check.version_name);
+            version["from"] = serde_json::json!(self.check.store);
         }
         v["version"] = version;
         v
@@ -294,13 +301,14 @@ pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Modu
         },
         modules: mods,
     };
-    Resolved { game, stats, sessions, media, screenshots, journal_count, achievements, effective, version: Default::default() }
+    Resolved { game, stats, sessions, media, screenshots, journal_count, achievements, effective, version: Default::default(), check: Default::default() }
 }
 
-/// `resolve`, and the version the game's files say: what `load_all` makes of each game.
+/// `resolve`, the version the game's files say and how it stands by the answers kept: what `load_all` makes of each game.
 pub fn load_one(game: Game, config: &Config, modules: &[crate::modules::Module]) -> Resolved {
     let mut r = resolve(game, config, modules);
     r.version = crate::versions::read_one(&r.game);
+    r.check = crate::upstream::check(&r.game, &r.version, &crate::upstream::Upstream::load());
     r
 }
 
@@ -309,6 +317,7 @@ pub fn load_all(config: &Config, modules: &[crate::modules::Module]) -> Vec<Reso
     let Ok(rd) = std::fs::read_dir(paths::games_dir()) else { return out };
     let mut located = HashMap::new();
     let mut probes = crate::versions::Probes::default();
+    let upstream = crate::upstream::Upstream::load();
     for e in rd.flatten() {
         let p = e.path().join("game.toml");
         if !p.is_file() {
@@ -318,6 +327,7 @@ pub fn load_all(config: &Config, modules: &[crate::modules::Module]) -> Vec<Reso
             Ok(g) => {
                 let mut r = resolve_with(g, config, modules, &mut located);
                 r.version = crate::versions::read(&r.game, &mut probes);
+                r.check = crate::upstream::check(&r.game, &r.version, &upstream);
                 out.push(r);
             }
             Err(err) => tracing::warn!("{}: {err}", p.display()),

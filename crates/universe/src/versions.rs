@@ -448,7 +448,7 @@ fn ps3_version(eboot: &Path, out: &mut Installed) -> Option<(String, &'static st
 }
 
 /// Dotted versions by their numbers: `01.02` after `01.00`, `1.10` after `1.9`.
-fn compare(a: &str, b: &str) -> std::cmp::Ordering {
+pub(crate) fn compare(a: &str, b: &str) -> std::cmp::Ordering {
     let parts = |s: &str| s.split('.').map(|p| p.parse::<u64>().map_err(|_| p.to_string())).collect::<Vec<_>>();
     parts(a).cmp(&parts(b))
 }

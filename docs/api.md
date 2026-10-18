@@ -87,6 +87,8 @@ operation; a dash means the surface doesn't expose it.
 | `reload_all()` | `reload()` | — | rereads config and `games/*/game.toml` |
 | `rescan()` | `rescan()` | `universe rescan` | `reload_all`, then `import_roms(true)`: its report (the CLI then fetches the new games' art) |
 | `reload_game(id)` | `reload_game(id)` | — | rereads one game |
+| `check_versions(id)` | `check_versions(id="")` | `universe update [name] [--all]` | asks Steam, titledb, Sony and the stores what is newer than the answers kept allow (see `version` below), keeps the answers under `$XDG_CACHE_HOME/universe/upstream.json` and judges every game by them again; `id` limits it to that game's. It reaches the network, so a frontend runs it off its main thread; startup never runs it, the library is judged by the answers kept |
+| `mark_current(id, build)` | `mark_current(id, build="")` | `universe update <name> --mark-current [build]` | after a game was updated by hand: writes `build` (digits), else upstream's newest build asked anew (Steam's public build id, titledb's newest title version), to `version.seen`, and returns it. `Invalid` for a game its store judges, a PS3 game (its files say which update it has), and one with no update channel or no Steam app id or Switch title id to ask about |
 | `import_lutris(apply)` | `import_lutris(apply)` | `universe migrate [--apply]` | a report of what it read from Lutris's own folders (`~/.config/lutris`, `~/.local/share/lutris/pga.db`, under the XDG homes): imported games, per-game env diff (`{id, lutris_env, universe_env, added, removed, changed}`), imported hours and `runners` (what Lutris's runner configs say: a wrapper script is seen through, the program is written to `[runners.<id>] exe` when it is not on PATH, its extra arguments to `args`). Without `apply` it only reports |
 | `discover()` | `discover()` | `universe discover [--json]` | what other launchers hold on this machine, nothing written: `{launchers: [{id, name, found, dir, games, titles, importable, via, detail}], gog_dirs, install_dirs: [{dir, by}]}`. `lutris` (`via: "lutris"`: the installed games `import_lutris` would add), `steam` (`via: "steam"`: the `appmanifest_*.acf` of every library in `libraryfolders.vdf`, Proton and the runtimes left out), `heroic-gog` (`via: "gog"`: `goggame-*.info` installs one level under `gog_dirs` and `paths.games_root`), `heroic-epic` (`via: "epic"`: legendary's `installed.json`, the installs whose folder is still there) and `heroic-amazon` (nile's), `itch` (`via: "itch"`: the itch app's installs, from the `caves` of its `db/butler.db`), `roms` (`via: "roms"`: the games `import_roms` would add, `dir` the folders it read). `importable` names what Universe launches itself; `titles` holds the first six. `gog_dirs` are Heroic's GOG install folders (its `gog_store/installed.json` and default install path), for the gog source's `scan_dirs` before a `scan`; `install_dirs` the folders other launchers install into (those and Lutris's `game_path`, `by` naming the launcher), that exist and are not `paths.games_root`: the choices of a first run's install folder |
 | `onboarded()` / `mark_onboarded()` | `onboarded()` / `mark_onboarded()` | — | whether the first-run setup ran on this machine, in any frontend: `$XDG_STATE_HOME/universe/onboarded` |
@@ -121,7 +123,9 @@ comma-separated for lists, shell words for `launch.args` (`--delay 0 'a b'` is t
                "working_dir": "/…/games/melee", "prefix": "", "modules": {"capture": {"enabled": true, "cursor": false}}},
  "achievements": {"total": 40, "unlocked": 12},
  "version": {"pin": "", "probe": "@GTA5_Enhanced.exe", "switch_title_id": "", "seen": "24129078", "final": false,
-             "installed": "1.0.1158.13", "from": "exe", "channel": "pc", "title_id": "", "build": "", "modified": "2026-08-29"},
+             "installed": "1.0.1158.13", "from": "exe", "channel": "pc", "title_id": "", "build": "", "modified": "2026-08-29",
+             "status": "update", "reason": "", "how": "manual", "store": "", "store_id": "", "latest": "24129523",
+             "latest_date": "2026-09-11", "newer": 1},
  "removed": false}
 ```
 
@@ -140,6 +144,25 @@ looked for from the program's folder up. `channel` follows the runner, not the s
 game id; `build` the GOG `buildId` or the Switch title version (`update << 16`) the emulator or the name gives;
 `modified` the day the file read last changed. `seen` (the upstream build taken as installed: a Steam build id, a Switch
 title version) and `final` are the player's.
+
+The rest is how the game stands by the answers `check_versions` kept. A game is judged by its store when one answered
+for it: the active source it came from (by `source.kind` and `source.id`), else GOG for a `gog` install (by its game id).
+That store's `update` row decides: `current` when the installed build (the `goggame-<id>.info`'s, else the row's
+`local_build`) is the published one, else `update`; the store's own game it does not list is `current`. Its
+`local_version`, when it names the installed build, shows as `installed` with `from` the store's id. Without a store,
+the channel decides: `pc` by Steam's public branch (`api.steamcmd.net/v1/info/<metadata.steam_appid>`): `current` when
+`seen` is its build id, `update` when `seen` is another, else `likely` when `modified` is before the branch's build
+day, `unknown` otherwise; `switch` by titledb's `versions.json` (downloaded once a day): the title version the emulator
+or the ROM's name gives, else `seen`, against titledb's newest; `ps3` by Sony's update feed for the `TITLE_ID`
+against `installed`; `final` is `final`. Steam and Sony answers and a store's list are asked again after four hours, a
+missing one at the next check. `status` is `current`, `update`, `likely`, `unknown`, `final` (also whenever `final`
+is set) or `untracked` (no Steam app id, Switch title id or `TITLE_ID` to ask about), empty without a channel.
+`reason` says why when it helps: `no-answer` (nothing kept from upstream), `no-baseline` (no installed build to
+compare), `dates-rewritten` (the program is dated after Steam's build), `none-listed` (upstream lists no update),
+`not-owned` (the store would refuse the update). `how` is `apply` when the store updates it (`source_update(store,
+store_id)`), `manual` when it is updated by hand then `mark_current`, empty for a final game. `latest` is upstream's
+newest as it names it (the store's version name, Sony's version, titledb's title version, Steam's build id) and
+`latest_date` its day; `newer` counts upstream's builds past the installed one (titledb's versions above it, else 1).
 
 `effective` is what the launch will use: the game's own keys over the global defaults, the runner
 resolved (`runner_path` empty when its program was not found), the platform the runner implies when

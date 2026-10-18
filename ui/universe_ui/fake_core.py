@@ -54,8 +54,9 @@ GAME = {
     "desktop": {"hide_cursor": None},
     "metadata": dict.fromkeys(("sgdb_id", "gamesdb_id", "steam_appid", "metacritic", "players"), 0)
     | {"developers": [], "publishers": [], "genres": [], "summary": "", "description": "", "playstation": ""},
-    "version": {"pin": "", "probe": "", "switch_title_id": "", "seen": "", "final": False}
-    | dict.fromkeys(("installed", "from", "channel", "title_id", "build", "modified"), ""),
+    "version": {"pin": "", "probe": "", "switch_title_id": "", "seen": "", "final": False, "newer": 0}
+    | dict.fromkeys(("installed", "from", "channel", "title_id", "build", "modified"), "")
+    | dict.fromkeys(("status", "reason", "how", "store", "store_id", "latest", "latest_date"), ""),
     "modules": {},
     "launch": {
         **dict.fromkeys(
@@ -1835,6 +1836,18 @@ class FakeCore:
 
     def updates(self):
         return copy.deepcopy(self._data.get("updates", []))
+
+    def check_versions(self, id=""):
+        if id:
+            self._game(id)
+
+    def mark_current(self, id, build=""):
+        shown = self.get(id)["version"]
+        if shown.get("store") or shown.get("channel") not in ("pc", "switch"):
+            raise UniverseError("Invalid", f"{id} has no upstream build to take")
+        seen = build or shown.get("latest") or ""
+        self._game(id).setdefault("version", {}).update(seen=seen, status="current", reason="", newer=0)
+        return seen
 
     def scan(self, source, progress=None):
         self._tick(progress, "Scanning", 4)

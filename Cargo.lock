@@ -3075,6 +3075,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tokio",
+ "tokio-rustls",
  "toml",
  "toml_edit",
  "tracing",
