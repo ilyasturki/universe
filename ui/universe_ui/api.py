@@ -96,7 +96,7 @@ CANCEL_HOLD_MS = 450
 # Escape only: Backspace held in a text sheet is deleting, not leaving.
 HOLD_KEYS = (Qt.Key.Key_Escape,)
 
-SOURCE_NAMES = {"gog": "GOG", "lutris": "Lutris", "steam": "Steam", "epic": "Epic", "itch": "itch.io"}
+SOURCE_NAMES = {"gog": "GOG", "steam": "Steam", "epic": "Epic Games", "itch": "itch.io", "manual": "Added by hand"}
 
 PLATFORM_SHORT = {
     "windows": "windows",
@@ -631,6 +631,8 @@ class Api(QObject):
     memory = Property(QObject, lambda self: self._memory, constant=True)
     allGames = Property(QObject, lambda self: self._library.allGames, constant=True)
     collections = Property(QObject, lambda self: self._library.collections, constant=True)
+    # A game's `source` → its name; `manual` is also every game imported from another launcher.
+    sourceNames = Property("QVariantMap", lambda self: SOURCE_NAMES, constant=True)
     universe = Property(QObject, lambda self: self._client, constant=True)
     screens = Property(QObject, lambda self: self._screens, constant=True)
     theme = Property(QObject, lambda self: self._theme, constant=True)

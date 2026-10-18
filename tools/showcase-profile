@@ -26,7 +26,7 @@ def library(src: Path) -> list[dict]:
 def refusal(game: dict, emulated: bool) -> str | None:
     if game.get("hidden") or game.get("removed"):
         return "hidden"
-    if (game.get("source") or {}).get("kind") == "manual":
+    if (game.get("source") or {}).get("kind") == "manual" and "lutris" not in game:
         return "added by hand"
     if not emulated and (game.get("effective") or {}).get("runner_kind") == "emulator":
         return "emulated"

@@ -992,8 +992,7 @@ class FakeCore:
         prefix = None
         if effective["prefix"]:
             path = effective["prefix"]
-            source = str(game.get("source") or "")
-            owner = "universe" if path.startswith(prefixes) else "lutris" if source == "lutris" else "elsewhere"
+            owner = "universe" if path.startswith(prefixes) else "lutris" if "lutris" in game else "elsewhere"
             target = os.path.join(prefixes, ident)
             shared = [g["id"] for g in self._data["games"] if g["id"] != ident and not g.get("removed") and self.get(g["id"])["effective"]["prefix"] == path]
             prefix = {
@@ -1187,7 +1186,8 @@ class FakeCore:
                 game = {
                     "id": ident,
                     "title": ident.replace("-", " ").title(),
-                    "source": "lutris",
+                    "source": "manual",
+                    "lutris": {"slug": ident},
                     "favorite": False,
                     "hidden": False,
                     "platform": "windows",

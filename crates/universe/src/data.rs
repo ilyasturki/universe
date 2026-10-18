@@ -56,7 +56,7 @@ pub fn prefix_owner(prefix: &Path, game: &Game, config: &Config) -> &'static str
         "steam"
     } else if defaults.iter().any(|d| d == prefix) {
         "wine"
-    } else if game.source.kind == "lutris" || !game.source.lutris_slug.is_empty() {
+    } else if game.extra.contains_key("lutris") || !game.source.lutris_slug.is_empty() {
         "lutris"
     } else {
         "elsewhere"
@@ -942,7 +942,7 @@ mod tests {
         assert_eq!(prefix_owner(Path::new("/data/prefixes/x"), &g, &config), "universe");
         assert_eq!(prefix_owner(Path::new("/games/SteamLibrary/steamapps/compatdata/620"), &g, &config), "steam");
         assert_eq!(prefix_owner(Path::new("/home/me/Games/x"), &g, &config), "elsewhere");
-        g.source.kind = "lutris".into();
-        assert_eq!(prefix_owner(Path::new("/home/me/Games/x"), &g, &config), "lutris");
+        g.extra.insert("lutris".into(), toml::Value::Table(toml::Table::new()));
+        assert_eq!(prefix_owner(Path::new("/home/me/Games/x"), &g, &config), "lutris", "imported: its source is not Lutris, its prefix is");
     }
 }

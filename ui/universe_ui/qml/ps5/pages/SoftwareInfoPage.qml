@@ -31,15 +31,6 @@ FocusScope {
     // The core's own record: where the game lives on disk.
     property var record: ({})
 
-    readonly property var sourceNames: ({
-            gog: "GOG",
-            steam: "Steam",
-            epic: "Epic Games",
-            itch: "itch.io",
-            lutris: "Lutris",
-            manual: "Added by hand"
-        })
-
     readonly property var facts: {
         var g = game;
         if (!g)
@@ -58,7 +49,7 @@ FocusScope {
         add("Genre", g.genreList.join(", "));
         add("Players", g.players > 1 ? "Up to " + g.players : g.players === 1 ? "Single player" : "");
         add("Platform", g.platform === "windows" ? "Windows" : g.platform === "linux" ? "Linux" : g.platform);
-        add("Source", sourceNames[g.source] || g.source);
+        add("Source", api.sourceNames[g.source] || g.source);
         add("Runner", g.runnerName || g.runner);
         add("Play time", Format.playTime(g.playTime));
         add("Sessions", g.playCount > 0 ? g.playCount : "");

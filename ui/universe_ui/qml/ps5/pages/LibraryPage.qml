@@ -156,15 +156,7 @@ FocusScope {
     }
 
     function sourceName(id) {
-        var names = {
-            gog: "GOG",
-            steam: "Steam",
-            epic: "Epic",
-            itch: "itch.io",
-            lutris: "Lutris",
-            local: "This machine"
-        };
-        return names[id] || (id ? id.charAt(0).toUpperCase() + id.slice(1) : "");
+        return api.sourceNames[id] || (id ? id.charAt(0).toUpperCase() + id.slice(1) : "");
     }
 
     readonly property var drawerRows: [

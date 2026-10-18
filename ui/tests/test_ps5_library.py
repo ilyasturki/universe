@@ -1,5 +1,5 @@
 import pytest
-from looks import invoke, read
+from looks import call, invoke, read
 from PySide6.QtCore import Qt
 from uitest import until
 
@@ -21,6 +21,9 @@ def test_the_collection_holds_the_whole_library_and_a_search_or_a_filter_narrows
     until(lambda: titles(library) and all("batman" in t.casefold() for t in titles(library)))
     library.setProperty("query", "")
     until(lambda: len(titles(library)) == api.allGames.count)
+    kinds = call(library, "valuesOf", "source")
+    assert "manual" in kinds and "lutris" not in kinds, "a Lutris import is added by hand: Lutris is no source"
+    assert call(library, "sourceName", "manual") == api.sourceNames["manual"], "named as the game's info page names it"
     library.setProperty("source", "gog")
     until(lambda: read(library, "items") and all(g.property("source") == "gog" for g in read(library, "items")))
     assert library.property("filtering") is True

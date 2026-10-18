@@ -82,7 +82,8 @@
     {
       "id": "dishonored",
       "title": "Dishonored",
-      "source": "lutris",
+      "source": "manual",
+      "lutris": {"slug": "dishonored"},
       "sort_title": "Dishonored",
       "metadata": {
         "developers": ["Arkane Studios"],
@@ -98,7 +99,8 @@
     {
       "id": "mirrors-edge",
       "title": "Mirror's Edge",
-      "source": "lutris",
+      "source": "manual",
+      "lutris": {"slug": "mirrors-edge"},
       "metadata": {
         "developers": ["DICE"],
         "publishers": ["Electronic Arts"],

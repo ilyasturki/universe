@@ -54,7 +54,7 @@ pub fn title_of(path: &Path) -> String {
 
 /// Added by hand or imported from Lutris: a store that finds it installed takes it over.
 fn unclaimed(g: &Game) -> bool {
-    matches!(g.source.kind.as_str(), "manual" | "lutris" | "")
+    matches!(g.source.kind.as_str(), "manual" | "")
 }
 
 fn real(p: &Path) -> PathBuf {
@@ -2999,6 +2999,9 @@ install) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":t
         let before: Vec<Vec<u8>> = [&imported, &parked].iter().map(|g| std::fs::read(g.toml_path()).unwrap()).collect();
         let core = open().await;
         assert_eq!(core.sources().await[0]["scan_dirs"], serde_json::json!([pc]), "where the page says it looked");
+        for id in ["dishonored", "dead-cells"] {
+            assert_eq!(core.get(id).await.unwrap().game.source.kind, "manual", "{id}: an old Lutris import reads as added by hand");
+        }
 
         let list = core.source_library("gog", true).await.unwrap();
         let linked: Vec<(&str, &str, bool)> =

@@ -293,6 +293,10 @@ impl Game {
         if g.id.is_empty() {
             g.id = path.parent().and_then(|p| p.file_name()).map(|s| s.to_string_lossy().into()).unwrap_or_default();
         }
+        // A Lutris import before 0.0.13 wrote `lutris` as its kind: Lutris is no store, and the file keeps it until a save.
+        if g.source.kind == "lutris" {
+            g.source.kind = "manual".into();
+        }
         Ok(g)
     }
 

@@ -240,8 +240,7 @@ pub fn source_name(kind: &str) -> String {
         "epic" => "Epic Games".into(),
         "itch" => "itch.io".into(),
         "steam" => "Steam".into(),
-        "lutris" => "Lutris".into(),
-        "manual" => gettextrs::gettext("Added"),
+        "manual" => gettextrs::gettext("Added by hand"),
         other => {
             let mut chars = other.chars();
             chars.next().map(|c| c.to_uppercase().chain(chars).collect()).unwrap_or_default()
@@ -265,7 +264,6 @@ pub fn source_icon(kind: &str) -> &'static str {
         "epic" => "source-epic-symbolic",
         "itch" => "source-itch-symbolic",
         "steam" => "source-steam-symbolic",
-        "lutris" => "source-lutris-symbolic",
         _ => "list-add-symbolic",
     }
 }
@@ -324,7 +322,17 @@ mod tests {
         );
         assert_eq!(icons(&["Arcade"]), ["platform-arcade-symbolic"]);
         assert_eq!(icons(&["Nintendo GameCube", "Sony PlayStation 2", "Sega Dreamcast", "Nintendo SNES"]), ["input-gaming-symbolic"; 4]);
-        assert_ne!(source_icon("manual"), "folder-new-symbolic", "Added names where the games came from, not a new folder");
+        assert_ne!(source_icon("manual"), "folder-new-symbolic", "Added by hand names where the games came from, not a new folder");
+    }
+
+    #[test]
+    fn an_old_lutris_import_sits_under_added_by_hand() {
+        let dir = tempfile::tempdir().unwrap();
+        let toml = dir.path().join("game.toml");
+        std::fs::write(&toml, "id = \"dishonored\"\ntitle = \"Dishonored\"\n[source]\nkind = \"lutris\"\n[lutris]\nslug = \"dishonored\"\n").unwrap();
+        let r = Resolved { game: universe::game::Game::load(&toml).unwrap(), ..Default::default() };
+        let row = Row::of(&r, &[], &universe::config::Config::default());
+        assert!(View::Source("manual".into()).holds(&row), "Lutris is where it came from, not its store");
     }
 
     #[test]

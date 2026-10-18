@@ -351,7 +351,6 @@ pub fn convert(p: &PgaGame, lutris_dir: &Path, runners_dir: &Path, global_env: &
             g.launch.fps_limit = fps;
         }
         let exe_dir = g.exe_path().parent().map(|p| p.to_path_buf()).unwrap_or_default();
-        g.source.kind = "lutris".into();
         g.source.dir = exe_dir.to_string_lossy().into();
         let stops: Vec<PathBuf> = [&p.directory, &g.launch.prefix].into_iter().filter(|d| !d.is_empty()).map(|d| paths::expand(d)).collect();
         if let Some((root, m)) = find_gog_manifest(&exe_dir, &stops) {
@@ -372,7 +371,6 @@ pub fn convert(p: &PgaGame, lutris_dir: &Path, runners_dir: &Path, global_env: &
         g.launch.exe = yaml_str(&yml, &["game", "main_file"]).unwrap_or_default();
         g.launch.working_dir = yaml_str(&yml, &["game", "working_dir"]).unwrap_or_default();
         g.launch.env = yaml_map(&yml, &["system", "env"]);
-        g.source.kind = "lutris".into();
         if let Some(core) = yaml_str(&yml, &["game", "core"]) {
             parked.insert("core".into(), toml::Value::String(core));
         }
@@ -596,13 +594,13 @@ mod tests {
             "two folders up, and the install's own folder is the game's"
         );
         let g = game("origins", &dishonored, "SinglePlayer/Binaries/Win32/Origins.exe", None, "", dir.path());
-        assert_eq!((g.source.kind.as_str(), g.source.id.as_str()), ("lutris", ""), "added by hand in Lutris: the id is parked");
+        assert_eq!((g.source.kind.as_str(), g.source.id.as_str()), ("manual", ""), "added by hand in Lutris: the id is parked");
         assert_eq!(g.extra["lutris"]["gog_manifest"].as_str(), Some("1701063787"));
         let outer = dir.path().join("Outer");
         let g = game("inner", &outer, "Game/Bin/x.exe", Some(&outer), "gog", &outer.join("Game"));
         assert_eq!(
             (g.source.kind.as_str(), g.source.dir.as_str()),
-            ("lutris", &*outer.join("Game/Bin").to_string_lossy()),
+            ("manual", &*outer.join("Game/Bin").to_string_lossy()),
             "never above the Lutris game's folder"
         );
     }
@@ -656,7 +654,7 @@ mod tests {
             ..Default::default()
         };
         let g = convert(&p, dir.path(), dir.path(), &BTreeMap::new()).game;
-        assert_eq!(g.launch.runner, "dolphin");
+        assert_eq!((g.launch.runner.as_str(), g.source.kind.as_str()), ("dolphin", "manual"), "Lutris is where it came from, not its store");
         assert_eq!(g.platform, "Nintendo GameCube");
     }
 

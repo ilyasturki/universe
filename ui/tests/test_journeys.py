@@ -411,6 +411,7 @@ def test_installs_a_scan_finds_read_as_in_the_library_by_folder_and_one_is_added
     page, row = settings(look, "install")
     until(lambda: store_row(journey, DISHONORED).get("installed") and store_row(journey, MINI_METRO).get("installed"), "the scan finds both installs")
     assert store_row(journey, DISHONORED)["game_id"] == "dishonored", "the Lutris import is the install in its folder: in the library"
+    assert journey.api.allGames.byId("dishonored").property("source") == "manual", "added by hand until a store claims it: Lutris is no source"
     assert (store_row(journey, MINI_METRO)["game_id"], store_row(journey, MINI_METRO)["dir"]) == ("", str(scan / "Mini Metro")), "nobody's: found where"
     assert imported.read_bytes() == before, "listing writes no game.toml"
     down_to(look, row, storeId=MINI_METRO)

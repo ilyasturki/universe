@@ -681,7 +681,9 @@ DXVK/VKD3D versions and registry options have no counterpart (Proton bundles its
 none of those variables). A wine game's `goggame-<id>.info` is looked for in the exe's folder, then
 up to three folders above it, never above the Lutris game's own folder, its prefix, a `drive_c` or
 home; the folder it is in becomes `source.dir`. Lutris's `service` `gog` makes it a `gog` game with
-that `source.id`; otherwise it stays `lutris` with the id parked as `[lutris] gog_manifest`.
+that `source.id`; otherwise it is `manual`, with the id parked as `[lutris] gog_manifest`. Lutris is never
+a `source.kind`: a `game.toml` an import wrote before 0.0.13 holds `lutris`, which reads as `manual` and
+stays on disk until the game is saved.
 
 ### Fetched tools
 
@@ -733,7 +735,7 @@ that `install` resumes.
 A game a source reports installed and owned enters the library with `source.kind`, the source's
 id, and `source.id`, the store's id of the game (a `game.toml` written before this carried it as
 `gog_id`, which still reads). The next report finds it again by that pair; else, for an install it
-found on disk, among the games no store has claimed (`kind` `manual` or `lutris`): one with that
+found on disk, among the games no store has claimed (`kind` `manual`, which an import is): one with that
 `source.id` or the id a Lutris import parked (`[lutris] gog_manifest` for `gog`), then one whose
 `launch.exe` or `source.dir` lies in the install's `dir` (never when `dir` is home, a Universe folder,
 `paths.games_root`, `paths.prefixes_root` or a source's `games_dir`/`scan_dirs`, nor one holding
@@ -755,7 +757,7 @@ named to a source call (or the reverse) is refused with the command that does ta
 
 | Rust | Python | CLI | Role |
 |---|---|---|---|
-| `achievements(id, refresh)` | `achievements(id, refresh=False)` | `universe achievements <name> [--refresh] [--json]` | `{source, fetched_at, total, unlocked, items: [Achievement]}` from `games/<id>/achievements.json`; through the game's source (its `achievements` verb, when the source declares that capability) when `refresh` or when there is no cache yet. A refresh keeps an unlock the store has not heard of yet. `Unavailable` when no source lists the game's: a manual game, a Lutris one, a source without the capability |
+| `achievements(id, refresh)` | `achievements(id, refresh=False)` | `universe achievements <name> [--refresh] [--json]` | `{source, fetched_at, total, unlocked, items: [Achievement]}` from `games/<id>/achievements.json`; through the game's source (its `achievements` verb, when the source declares that capability) when `refresh` or when there is no cache yet. A refresh keeps an unlock the store has not heard of yet. `Unavailable` when no source lists the game's: a manual game (added by hand or imported), a source without the capability |
 | `achievements_replay(id, count)` | — | `universe achievements <name> --replay [--count N] [--json]` | stamps `replay: {at, keys}` into the cache: the `count` latest unlocks (all by default), oldest first, for the UI's `UnlockWatch` to show again as banners over the running game. Nothing reaches the store or comet: a way to see the banners without a fresh unlock. `Invalid` when the game is not the one running, or has nothing unlocked. A store refresh drops the stamp |
 | `achievement_unlocked(id, item)` | — | `universe achievement-unlocked <id> '<json>'` (hidden) | files one unlock a session saw into the cache at once, ahead of the store's list: sets `unlocked_at` (now when empty) on the item with that `key`, or adds the item. Prints whether it is new; the first unlock stands |
 

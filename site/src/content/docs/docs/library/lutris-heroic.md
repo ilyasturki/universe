@@ -18,6 +18,7 @@ Later, **Add a game** › **Import from Lutris**, at the end of the Library, imp
 - The play time, the hidden flag and the year.
 - A Wine game's launch settings, on the Proton or Wine build Lutris ran it with. Its prefix stays where Lutris made it, until [**Move into Universe's Prefixes**](/docs/library/disk-space/#what-one-game-takes) moves it.
 - A GOG game Lutris installed becomes a GOG game, which the [GOG store](/docs/library/gog/) then updates.
+- Every other game counts as added by hand: Lutris is where it came from, not its store.
 - An emulated game keeps its emulator.
 
 Only installed games come over, and games already in your library stay as they are.
