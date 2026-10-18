@@ -11,7 +11,7 @@ takes of site/media/takes.toml, as `UNIVERSE_DEV=.dev-showcase just docs-media r
 home home-over-game` cut them into target/docs-media/masters. Animated AVIF at 1080p60,
 which a README's <img> loops without sound.
 
-  UNIVERSE_AVIF_CRF the encode's quality, lower is larger (default 24)
+  UNIVERSE_AVIF_CRF the encode's quality, lower is larger (default 28)
 USAGE
 }
 
@@ -24,7 +24,7 @@ for name in home home-over-game; do
     [ -f "$masters/$name.mp4" ] ||
         { echo "readme-video: no $masters/$name.mp4: UNIVERSE_DEV=.dev-showcase just docs-media record $name" >&2; exit 1; }
     ffmpeg -hide_banner -loglevel error -y -i "$masters/$name.mp4" -vf fps=60,format=yuv420p \
-        -c:v libsvtav1 -crf "${UNIVERSE_AVIF_CRF:-24}" -preset 4 \
+        -c:v libsvtav1 -crf "${UNIVERSE_AVIF_CRF:-28}" -preset 4 \
         -svtav1-params tune=0:color-primaries=1:transfer-characteristics=1:matrix-coefficients=1:color-range=0 \
         -colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv -loop 0 -an "$dir/$name.avif"
     echo "$dir/$name.avif: $(du -h "$dir/$name.avif" | cut -f1)"
