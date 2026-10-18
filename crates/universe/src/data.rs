@@ -56,7 +56,7 @@ pub fn prefix_owner(prefix: &Path, game: &Game, config: &Config) -> &'static str
         "steam"
     } else if defaults.iter().any(|d| d == prefix) {
         "wine"
-    } else if game.extra.contains_key("lutris") || !game.source.lutris_slug.is_empty() {
+    } else if game.imported_from_lutris() {
         "lutris"
     } else {
         "elsewhere"

@@ -498,7 +498,7 @@ impl Core {
                     return Err(Error::Invalid(format!("{id} has no install folder")));
                 }
                 // A Lutris import from before the manifest was looked for above the exe holds the exe's folder, not the install's.
-                if r.game.extra.contains_key("lutris") {
+                if r.game.imported_from_lutris() {
                     let stops: Vec<PathBuf> = [&r.game.launch.prefix].into_iter().filter(|p| !p.is_empty()).map(|p| paths::expand(p)).collect();
                     if let Some((root, _)) = crate::lutris::find_gog_manifest(&dir, &stops) {
                         dir = root;

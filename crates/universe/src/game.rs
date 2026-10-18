@@ -248,6 +248,10 @@ impl Game {
         self.hidden = false;
     }
 
+    pub fn imported_from_lutris(&self) -> bool {
+        self.extra.contains_key("lutris") || !self.source.lutris_slug.is_empty()
+    }
+
     pub fn dir(&self) -> PathBuf {
         paths::game_dir(&self.id)
     }
@@ -296,6 +300,7 @@ impl Game {
         // A Lutris import before 0.0.13 wrote `lutris` as its kind: Lutris is no store, and the file keeps it until a save.
         if g.source.kind == "lutris" {
             g.source.kind = "manual".into();
+            g.extra.entry("lutris".into()).or_insert_with(|| toml::Value::Table(toml::Table::new()));
         }
         Ok(g)
     }
