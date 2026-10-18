@@ -98,10 +98,13 @@ const installs = [
             </div>
             <ul class="distros" aria-label="Install on">
                 {installs.map((way) => (
-                        <li>
-                            <a href="#install" data-install={way.id}><span class="logo" aria-hidden="true" set:html={way.logo}></span>{way.name}</a>
-                        </li>
-                    ))}
+                    <li>
+                        <a href="#install" data-install={way.id}>
+                            <span class="logo" aria-hidden="true" set:html={way.logo}></span>
+                            {way.name}
+                        </a>
+                    </li>
+                ))}
             </ul>
             <p class="note">Version {version}. Early days: expect rough edges.</p>
             <div class="stage">
@@ -115,23 +118,30 @@ const installs = [
             <div class="tabs" data-tabs>
                 <div class="tablist" role="tablist" aria-label="Install">
                     {installs.map((way, i) => (
-                            <button type="button" role="tab" id={`install-tab-${way.id}`} aria-controls={`install-${way.id}`} aria-selected={i === 0 ? 'true' : 'false'} tabindex={i === 0 ? 0 : -1}>
-                                <span class="logo" aria-hidden="true" set:html={way.logo}></span>
-                                {way.name}
-                            </button>
-                        ))}
+                        <button
+                            type="button"
+                            role="tab"
+                            id={`install-tab-${way.id}`}
+                            aria-controls={`install-${way.id}`}
+                            aria-selected={i === 0 ? 'true' : 'false'}
+                            tabindex={i === 0 ? 0 : -1}
+                        >
+                            <span class="logo" aria-hidden="true" set:html={way.logo}></span>
+                            {way.name}
+                        </button>
+                    ))}
                 </div>
                 {installs.map((way, i) => (
-                        <div class="panel" role="tabpanel" id={`install-${way.id}`} aria-labelledby={`install-tab-${way.id}`} hidden={i !== 0}>
-                            <p>{way.lead}</p>
-                            <div class="code">
-                                <Code code={way.code} lang={way.lang} themes={{ light: 'github-light', dark: 'github-dark' }} defaultColor={false} />
-                                <button type="button" class="copy-button" data-copy={way.code}>
-                                    Copy
-                                </button>
-                            </div>
+                    <div class="panel" role="tabpanel" id={`install-${way.id}`} aria-labelledby={`install-tab-${way.id}`} hidden={i !== 0}>
+                        <p>{way.lead}</p>
+                        <div class="code">
+                            <Code code={way.code} lang={way.lang} themes={{ light: 'github-light', dark: 'github-dark' }} defaultColor={false} />
+                            <button type="button" class="copy-button" data-copy={way.code}>
+                                Copy
+                            </button>
                         </div>
-                    ))}
+                    </div>
+                ))}
             </div>
             <p class="center">
                 Then open Universe Big Screen: a short setup finds your games. <a href="/docs/getting-started/install/">Every way to install</a>
@@ -164,10 +174,17 @@ const installs = [
             <div class="tabs" data-tabs>
                 <div class="tablist" role="tablist" aria-label="Looks">
                     {looks.map((look, i) => (
-                            <button type="button" role="tab" id={`look-tab-${look.id}`} aria-controls={`look-${look.id}`} aria-selected={i === 0 ? 'true' : 'false'} tabindex={i === 0 ? 0 : -1}>
-                                {look.name}
-                            </button>
-                        ))}
+                        <button
+                            type="button"
+                            role="tab"
+                            id={`look-tab-${look.id}`}
+                            aria-controls={`look-${look.id}`}
+                            aria-selected={i === 0 ? 'true' : 'false'}
+                            tabindex={i === 0 ? 0 : -1}
+                        >
+                            {look.name}
+                        </button>
+                    ))}
                 </div>
                 <div class="panel" role="tabpanel" id="look-universe" aria-labelledby="look-tab-universe">
                     <Shot name="look-universe" sizes="(min-width: 72rem) 72rem, 100vw" />
@@ -224,11 +241,11 @@ const installs = [
             <h2>Also</h2>
             <div class="grid">
                 {also.map((item) => (
-                        <article>
-                            <h3>{item.title}</h3>
-                            <p>{item.text}</p>
-                        </article>
-                    ))}
+                    <article>
+                        <h3>{item.title}</h3>
+                        <p>{item.text}</p>
+                    </article>
+                ))}
             </div>
         </section>
     </main>

@@ -18,19 +18,12 @@ const widths = image ? [640, 960, 1440, 1920].filter((w) => w <= image.width) : 
 
 <figure class="media" style={`--aspect: ${shot.aspect}`}>
     {image ? (
-            <Image
-                src={image}
-                format="webp"
-                widths={widths}
-                sizes={sizes}
-                alt={alt}
-                loading={eager ? 'eager' : 'lazy'}
-            />
-        ) : (
-            <div class="placeholder" role="img" aria-label={alt}>
-                <span>{alt}</span>
-            </div>
-        )}
+        <Image src={image} format="webp" widths={widths} sizes={sizes} alt={alt} loading={eager ? 'eager' : 'lazy'} />
+    ) : (
+        <div class="placeholder" role="img" aria-label={alt}>
+            <span>{alt}</span>
+        </div>
+    )}
     {caption && <figcaption>{caption}</figcaption>}
 </figure>
 

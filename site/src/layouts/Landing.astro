@@ -33,7 +33,9 @@ const host = new URL(Astro.site ?? 'https://universe.ilyasturki.com').hostname;
             document.documentElement.dataset.theme = 'dark';
         }
         </script>
-        {__UMAMI_WEBSITE_ID__ && <script defer src="https://analytics.ilyasturki.com/script.js" data-website-id={__UMAMI_WEBSITE_ID__} data-domains={host}></script>}
+        {__UMAMI_WEBSITE_ID__ && (
+            <script defer src="https://analytics.ilyasturki.com/script.js" data-website-id={__UMAMI_WEBSITE_ID__} data-domains={host}></script>
+        )}
     </head>
     <body>
         <slot />

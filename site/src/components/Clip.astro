@@ -14,15 +14,15 @@ const files = media.recorded?.files;
 
 <figure class="media" style={`--aspect: ${media.aspect}`}>
     {files ? (
-            <video autoplay muted loop playsinline preload="metadata" poster={files.poster && `/media/${files.poster}`} aria-label={alt} data-clip>
-                {files.av1 && <source src={`/media/${files.av1}`} type="video/mp4; codecs=av01.0.08M.08" />}
-                {files.h264 && <source src={`/media/${files.h264}`} type="video/mp4" />}
-            </video>
-        ) : (
-            <div class="placeholder" role="img" aria-label={alt}>
-                <span>{alt}</span>
-            </div>
-        )}
+        <video autoplay muted loop playsinline preload="metadata" poster={files.poster && `/media/${files.poster}`} aria-label={alt} data-clip>
+            {files.av1 && <source src={`/media/${files.av1}`} type="video/mp4; codecs=av01.0.08M.08" />}
+            {files.h264 && <source src={`/media/${files.h264}`} type="video/mp4" />}
+        </video>
+    ) : (
+        <div class="placeholder" role="img" aria-label={alt}>
+            <span>{alt}</span>
+        </div>
+    )}
     {caption && <figcaption>{caption}</figcaption>}
 </figure>
 
