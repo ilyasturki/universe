@@ -897,7 +897,11 @@ fn version_line(v: &Value) -> String {
     parts.join(" · ")
 }
 
-/// `universe update`'s JSON row: the game's id and title, then its `version`.
+/// Mirrors the refusals of `Core::mark_current_with`.
+fn takes_mark_current(v: &Value) -> bool {
+    s(v, "store").is_empty() && (s(v, "channel") == "pc" || (s(v, "channel") == "switch" && s(v, "build").is_empty()))
+}
+
 fn update_row(g: &Value) -> Value {
     let mut row = serde_json::json!({"id": g["id"], "title": g["title"]});
     if let (Some(row), Some(v)) = (row.as_object_mut(), g["version"].as_object()) {
@@ -1376,7 +1380,10 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             }
             println!("{}", update_table([&g]));
             if s(v, "how") == "manual" && matches!(s(v, "status").as_str(), "update" | "likely") {
-                anyhow::bail!("update it by hand, then: universe update {id} --mark-current");
+                if takes_mark_current(v) {
+                    anyhow::bail!("update it by hand, then: universe update {id} --mark-current");
+                }
+                anyhow::bail!("update it by hand");
             }
         }
         Cmd::Update { name: None, all, yes, .. } => {
@@ -1409,8 +1416,11 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     }
                 }
             }
-            if shown.iter().any(|g| g["version"]["how"] == "manual") {
+            let by_hand: Vec<&Value> = shown.iter().map(|g| &g["version"]).filter(|v| v["how"] == "manual").collect();
+            if by_hand.iter().any(|v| takes_mark_current(v)) {
                 println!("update the others by hand, then: universe update <game> --mark-current");
+            } else if !by_hand.is_empty() {
+                println!("update the others by hand");
             }
         }
         Cmd::Rm { name, yes, purge } => {

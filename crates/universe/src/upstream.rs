@@ -170,18 +170,18 @@ impl Upstream {
     }
 
     /// After the store updated `id`: its row says the published build is the one installed.
-    pub(crate) fn applied(&mut self, source: &str, id: &str) {
-        let Some(row) = self.stores.get_mut(source).and_then(|s| s.rows.get_mut(id)) else { return };
+    pub(crate) fn applied(&mut self, source: &str, id: &str) -> bool {
+        let Some(row) = self.stores.get_mut(source).and_then(|s| s.rows.get_mut(id)) else { return false };
         for (to, from) in [("local_build", "remote_build"), ("local_version", "version")] {
             if let Some(v) = row.get(from).cloned() {
                 row.insert(to.into(), v);
             }
         }
         row.remove("skipped");
+        true
     }
 }
 
-/// What a set of games needs asked: Steam app ids, Switch and PS3 title ids, and the stores that judge them.
 #[derive(Debug, Default)]
 pub(crate) struct Wants {
     steam: BTreeSet<u64>,
@@ -260,11 +260,18 @@ async fn titledb(net: &Net, kept: &BTreeMap<String, Titles>, wanted: &BTreeSet<S
     if wanted.is_empty() {
         return None;
     }
+    type List = BTreeMap<String, BTreeMap<String, String>>;
     let file = titledb_file();
+    let mut downloaded: Option<List> = None;
     if mtime_s(&file).is_none_or(|at| now - at >= TITLEDB_FRESH_S) {
         match net.get(TITLEDB).await {
-            Ok(body) if serde_json::from_slice::<serde::de::IgnoredAny>(&body).is_ok() => write_atomic(&file, &body),
-            Ok(_) => tracing::info!("titledb: not JSON"),
+            Ok(body) => match serde_json::from_slice::<List>(&body) {
+                Ok(list) => {
+                    write_atomic(&file, &body);
+                    downloaded = Some(list);
+                }
+                Err(e) => tracing::info!("titledb: {e}"),
+            },
             Err(e) => tracing::info!("titledb: {e}"),
         }
     }
@@ -272,7 +279,10 @@ async fn titledb(net: &Net, kept: &BTreeMap<String, Titles>, wanted: &BTreeSet<S
     if wanted.iter().all(|t| kept.get(t).is_some_and(|k| k.at == at)) {
         return None;
     }
-    let list: BTreeMap<String, BTreeMap<String, String>> = serde_json::from_slice(&std::fs::read(&file).ok()?).ok()?;
+    let list: List = match downloaded {
+        Some(list) => list,
+        None => serde_json::from_slice(&std::fs::read(&file).ok()?).ok()?,
+    };
     Some(
         wanted
             .iter()
@@ -433,7 +443,7 @@ fn by_steam(game: &Game, read: &Installed, up: &Upstream) -> Check {
     } else {
         ("unknown", "dates-rewritten")
     };
-    Check { latest: s.build.clone(), latest_date: s.date.clone(), newer: usize::from(*seen != s.build), ..manual(status, reason) }
+    Check { latest: s.build.clone(), latest_date: s.date.clone(), newer: usize::from(!seen.is_empty() && *seen != s.build), ..manual(status, reason) }
 }
 
 /// The title version the emulator or the ROM's name gives, else `seen`: a release's own version name and the title
@@ -450,7 +460,7 @@ fn by_titledb(game: &Game, read: &Installed, up: &Upstream) -> Check {
         Some(h) if h >= latest => ("current", ""),
         Some(_) => ("update", ""),
     };
-    let newer = titles.versions.keys().filter(|&&v| v > have.unwrap_or(0)).count();
+    let newer = have.map_or(0, |h| titles.versions.keys().filter(|&&v| v > h).count());
     Check { latest: latest.to_string(), latest_date: date.clone(), newer, ..manual(status, reason) }
 }
 
@@ -618,6 +628,7 @@ mod tests {
         assert_eq!(core.mark_current_with(&net, "baseline", "").await.unwrap(), "65536", "titledb's newest version of it");
         assert_eq!(of(&judged(&core).await, "baseline").0, "current");
         assert_eq!(asked(&net), [TITLEDB], "from the day's copy");
+        assert!(core.mark_current_with(&net, "galaxy", "").await.is_err(), "its ROM's name gives its title version");
     }
 
     #[tokio::test]

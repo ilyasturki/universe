@@ -2427,8 +2427,9 @@ impl Core {
         for t in targets {
             let events = self.run_verb(&m, "update", std::slice::from_ref(&t), progress.as_deref_mut()).await.map_err(|e| Error::Io(format!("{t}: {e}")))?;
             let mut up = crate::upstream::Upstream::load();
-            up.applied(source, &t);
-            up.save();
+            if up.applied(source, &t) {
+                up.save();
+            }
             for g in Self::game_events(&events) {
                 let _ = self.apply_source_game(source, &g, false, Arrival::Found).await;
             }
@@ -2482,6 +2483,7 @@ impl Core {
     pub(crate) async fn mark_current_with(&self, net: &crate::upstream::Net, id: &str, build: &str) -> Result<String> {
         let r = self.get(id).await?;
         let refused = match (r.check.store.as_str(), r.version.channel) {
+            ("", "switch") if !r.version.build.is_empty() => Some(format!("{id}'s title version is read from its emulator or its ROM's name")),
             ("", "pc" | "switch") => None,
             ("", "ps3") => Some(format!("{id}'s version is read from its PARAM.SFO")),
             ("", "gog") => Some(format!("{id} is updated by gog: universe update {id}")),
