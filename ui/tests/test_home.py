@@ -922,7 +922,7 @@ def test_a_quit_lands_on_the_tiles_cover_and_the_games_exit_swaps_nothing(api, f
     tile = tile_of(look, "mirrors-edge")
     cover, rebuilt, art = read(tile, "artSource").toString(), record(tile.destroyed), layers(tile)
     home.toLauncher()
-    until(lambda: home.frame != "" and any(layer.property("source").toString() == home.frame and layer.property("opacity") == 1.0 for layer in art))
+    until(lambda: home.frame != "" and whole(layer for layer in art if layer.property("source").toString() == home.frame), "the tile shows the decoded frame")
     home.toGame()
     until(lambda: fake.core.game_shown is True)
     home.guide(True)
