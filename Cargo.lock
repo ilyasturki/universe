@@ -3044,7 +3044,7 @@ checksum = "b4ac048d71ede7ee76d585517add45da530660ef4390e49b098733c6e897f254"
 
 [[package]]
 name = "universe"
-version = "0.0.12"
+version = "0.0.13"
 dependencies = [
  "anstream",
  "anyhow",
@@ -3090,7 +3090,7 @@ dependencies = [
 
 [[package]]
 name = "universe-desktop"
-version = "0.0.12"
+version = "0.0.13"
 dependencies = [
  "chrono",
  "gettext-rs",
@@ -3111,7 +3111,7 @@ dependencies = [
 
 [[package]]
 name = "universe-py"
-version = "0.0.12"
+version = "0.0.13"
 dependencies = [
  "pyo3",
  "pythonize",

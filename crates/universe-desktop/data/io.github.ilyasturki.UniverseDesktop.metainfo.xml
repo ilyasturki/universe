@@ -44,6 +44,33 @@
     <color type="primary" scheme_preference="dark">#c64600</color>
   </branding>
   <releases>
+    <release version="0.0.13" date="2026-10-18">
+      <description>
+        <p>Added</p>
+        <ul>
+          <li>A game's page shows its installed version and whether an update is out, in every look and in Universe Desktop: <em>Update</em> installs the store's, and <em>Mark as current</em> takes one you installed yourself.</li>
+          <li>The installed version comes from the game's files and is checked against Steam, titledb, Sony or GOG; <code>universe update</code> lists the games behind, <code>--all</code> every game's version, and <em>Installed version</em> in Game settings or <code>universe set &lt;game&gt; version.pin=&lt;version&gt;</code> sets it by hand.</li>
+          <li>Recordings and journal entries can be removed from the Media tab, a recording with its journal entry or alone.</li>
+          <li><code>universe restore</code> brings a removed game back with its recordings.</li>
+          <li>What's new shows a screenshot or a short clip under a release's main changes.</li>
+          <li>A right click on a cover opens its game page.</li>
+          <li>The play journal's <em>Model</em> defaults to <em>Latest</em>, Codex's newest, and its reasoning efforts come from the chosen model.</li>
+        </ul>
+        <p>Changed</p>
+        <ul>
+          <li>The site and its guide moved to universelauncher.com.</li>
+          <li>A game imported from Lutris counts as added by hand, and Universe Desktop lists it under <em>Added by hand</em>.</li>
+        </ul>
+        <p>Fixed</p>
+        <ul>
+          <li>The focused game's background shows again on home and on its page.</li>
+          <li>Universe Desktop no longer crashes when it quits with a request still running.</li>
+          <li>A removal in Universe Desktop that fails says why once its <em>Undo</em> goes, and the item comes back.</li>
+          <li>Removing a journal entry trashes its own copy of a screenshot, and an entry imported before 0.0.4 finds its screenshots again.</li>
+          <li>A game removed a second time archives its new recordings next to the ones already archived.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.0.12" date="2026-10-11">
       <description>
         <p>Breaking</p>

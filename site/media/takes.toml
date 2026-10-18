@@ -256,3 +256,13 @@ kind = "still"
 keys = "Wait:4 Up Wait:1 Up Wait:1 Left Wait:1 Left Wait:2 Expect: Return Wait:3 Type:about Wait:3 Expect: Return Wait:2 Expect: Return Wait:6 Shot:"
 alt = "Settings, About: the version, what's new, first-run setup and power"
 fake = true
+
+[[take]]
+name = "right-click-cover"
+look = "reprise"
+size = "1920x1080"
+kind = "clip"
+keys = "Wait:3 E Wait:4 Mark:start Mouse:400,390 Wait:2 Mouse:850,390 Wait:2 Mouse:1070,390 Wait:2 RightClick:1070,390 Wait:6 Mark:end"
+segments = ["start..end"]
+alt = "A right click on a cover in the library opening its game page"
+release = "0.0.13"

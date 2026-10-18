@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.0.13] - 2026-10-18
+
+### Added
+
+- A game's page shows its installed version and whether an update is out, in every look and in Universe Desktop: **Update** installs the store's, and **Mark as current** takes one you installed yourself.
+  ![A game page showing its installed version under its play time](https://github.com/ilyasturki/universe/releases/download/v0.0.13/game-page.webp)
+- The installed version comes from the game's files and is checked against Steam, titledb, Sony or GOG; `universe update` lists the games behind, `--all` every game's version, and **Installed version** in Game settings or `universe set <game> version.pin=<version>` sets it by hand.
+- Recordings and journal entries can be removed from the Media tab, a recording with its journal entry or alone.
+- `universe restore` brings a removed game back with its recordings.
+- What's new shows a screenshot or a short clip under a release's main changes.
+- A right click on a cover opens its game page.
+  ![A right click on a cover in the library opening its game page](https://github.com/ilyasturki/universe/releases/download/v0.0.13/right-click-cover.avif)
+- The play journal's **Model** defaults to **Latest**, Codex's newest, and its reasoning efforts come from the chosen model.
+
+### Changed
+
+- The site and its guide moved to universelauncher.com.
+- A game imported from Lutris counts as added by hand, and Universe Desktop lists it under **Added by hand**.
+
+### Fixed
+
+- The focused game's background shows again on home and on its page.
+- Universe Desktop no longer crashes when it quits with a request still running.
+- A removal in Universe Desktop that fails says why once its **Undo** goes, and the item comes back.
+- Removing a journal entry trashes its own copy of a screenshot, and an entry imported before 0.0.4 finds its screenshots again.
+- A game removed a second time archives its new recordings next to the ones already archived.
+
 ## [0.0.12] - 2026-10-11
 
 ### Breaking
@@ -344,6 +371,7 @@
 
 - The search row on the Reprise look's store page.
 
+[0.0.13]: https://github.com/ilyasturki/universe/compare/v0.0.12...v0.0.13
 [0.0.12]: https://github.com/ilyasturki/universe/compare/v0.0.11...v0.0.12
 [0.0.11]: https://github.com/ilyasturki/universe/compare/v0.0.10...v0.0.11
 [0.0.10]: https://github.com/ilyasturki/universe/compare/v0.0.9...v0.0.10
