@@ -461,6 +461,27 @@
       {
        "arch": "x86_64",
        "format": "tar.gz",
+       "sha256": "3c26ee96735ce9f42de018db4f82ab33e275f19150d6cea25ea7937b7f2530dd",
+       "size": 566144788,
+       "url": "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton11-10/GE-Proton11-10-x86_64.tar.gz"
+      },
+      {
+       "arch": "aarch64",
+       "format": "tar.gz",
+       "sha256": "0d27025f4903299e31251d83eaa6981b8f0a96218108a735a43651f047db0dcc",
+       "size": 648016707,
+       "url": "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton11-10/GE-Proton11-10-aarch64.tar.gz"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-10-19T06:21:57Z",
+     "version": "GE-Proton11-10"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "tar.gz",
        "sha256": "b2cf4a632a70ec321cdb9904fa396a2a45d4061129f9fdc89d8a27ea5ceeb9d6",
        "size": 564697280,
        "url": "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton11-9/GE-Proton11-9-x86_64.tar.gz"
@@ -1152,6 +1173,20 @@
       {
        "arch": "x86_64",
        "format": "appimage",
+       "sha256": "541649aed66a70600b14b33bbb343f3c57a3bbe1fa08cfd62101cac91c672a71",
+       "size": 94685878,
+       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-1b1b7dea308e8385a636ddf208c77498b01bc061/rpcs3-v0.0.43-20337-1b1b7dea_linux64.AppImage"
+      }
+     ],
+     "channel": "rolling",
+     "date": "2026-10-19T07:38:24Z",
+     "version": "0.0.43-20337-1b1b7dea"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "appimage",
        "sha256": "6774200691cc3ebbff76e641ff391a837bdb036f40ad975b738d85188b1b9103",
        "size": 94112221,
        "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-2348d8c37cb60314d7b1b1dc116d7cc8868fcd28/rpcs3-v0.0.43-20333-2348d8c3_linux64.AppImage"
@@ -1216,20 +1251,6 @@
      "channel": "rolling",
      "date": "2026-10-14T01:38:06Z",
      "version": "0.0.43-20291-ffba2bf0"
-    },
-    {
-     "assets": [
-      {
-       "arch": "x86_64",
-       "format": "appimage",
-       "sha256": "c926aa28895db4902f8aec877ff403c317523d60e488e3a6f94eedc537926d6b",
-       "size": 94097472,
-       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-6fe3c87fb41c29b21d8796b15eca5c80ad3b36d4/rpcs3-v0.0.43-20286-6fe3c87f_linux64.AppImage"
-      }
-     ],
-     "channel": "rolling",
-     "date": "2026-10-13T12:03:27Z",
-     "version": "0.0.43-20286-6fe3c87f"
     }
    ],
    "homepage": "https://github.com/RPCS3/rpcs3-binaries-linux",
@@ -1477,21 +1498,21 @@
       {
        "arch": "x86_64",
        "format": "appimage",
-       "sha256": "0f320515c723d4786d2d5e624ed5f039e45f33156afae776208f5cd46734dcab",
-       "size": 78571087,
+       "sha256": "1720e09780e049b7d0841ceae01356e499565d8cb1581be6062250004862cf6e",
+       "size": 78620993,
        "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-x86_64.AppImage"
       },
       {
        "arch": "aarch64",
        "format": "appimage",
-       "sha256": "035346f464cdc7e61d6c7e11f6b90c450d91bb80828647aa01f61b99d63d0627",
-       "size": 78124584,
+       "sha256": "34ed502f316a8553ba9acb5b599160d5519fd1a12b0ac6c381b10fecf24acb73",
+       "size": 78176533,
        "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-aarch64.AppImage"
       }
      ],
      "channel": "rolling",
-     "date": "2026-10-18T08:07:05Z",
-     "version": "2026.10.18"
+     "date": "2026-10-19T07:38:01Z",
+     "version": "2026.10.19"
     }
    ],
    "homepage": "https://github.com/Vita3K/Vita3K",
@@ -1500,6 +1521,20 @@
   },
   "wine": {
    "builds": [
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "tar.xz",
+       "sha256": "fad302e59925777bac89e3e4fc3e55ad396663d031c62718d0b029dd1e0fa823",
+       "size": 101599560,
+       "url": "https://github.com/Kron4ek/Wine-Builds/releases/download/11.20/wine-11.20-staging-amd64-wow64.tar.xz"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-10-18T14:23:50Z",
+     "version": "11.20"
+    },
     {
      "assets": [
       {
@@ -1653,6 +1688,6 @@
    "name": "xemu"
   }
  },
- "generated_at": "2026-10-18T09:44:03Z",
+ "generated_at": "2026-10-19T10:58:47Z",
  "schema": 1
 }
