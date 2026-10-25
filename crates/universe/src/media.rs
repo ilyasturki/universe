@@ -469,6 +469,8 @@ struct Match {
 /// editions, the bare name first; one on the game's platform first, twins told apart by year.
 fn gamesdb_match(items: &Value, title: &str, year: u32, platforms: &[&str]) -> Option<Match> {
     let games: Vec<&Value> = items.as_array().into_iter().flatten().filter(|i| i["type"].as_str().is_none_or(|t| t == "game")).collect();
+    // "DOOM (1993)" and "DOOM" share a key once unbracketed: the bracketed year tells them apart.
+    let year = if year > 0 { year } else { first_year(&title[unbracketed(title).len()..]).unwrap_or(0) };
     let want = title_key(title);
     let same: Vec<&Value> = games.iter().copied().filter(|g| title_key(&gamesdb_title(g)) == want).collect();
     let edition = same.is_empty();
@@ -812,7 +814,7 @@ impl<'a> Lookup<'a> {
         }
         // GamesDB finds nothing under "… ReMIX (All Games)", and only the first game under "Xenoblade Chronicles X: Definitive Edition".
         let title = article_first(&self.game.title);
-        let short = edition_base(&title).unwrap_or(unbracketed(&title)).to_string();
+        let short = article_first(edition_base(&title).unwrap_or(unbracketed(&title)));
         let platforms = gamesdb_platforms(&platform_of(&self.game));
         for query in std::iter::once(&title).chain((short != title).then_some(&short)) {
             let hits = self.net.json(&format!("{GAMESDB}/games?title={}", encode(query)), None).await?;
@@ -1566,6 +1568,11 @@ mod tests {
         assert_eq!(found("gamesdb-search-xenoblade-x.json", "Xenoblade Chronicles: Definitive Edition", &["nswitch"]).map(|f| f.1), Some(false));
         assert_eq!(edition_base("Foo: Bar - Game of the Year Edition"), Some("Foo: Bar"));
         assert_eq!(unbracketed("Legend of Zelda, The (USA) (Rev 1)"), "Legend of Zelda, The");
+        let doom = serde_json::json!([
+            {"id": "2016", "title": "DOOM", "first_release_date": "2016-05-13"},
+            {"id": "1993", "title": "DOOM (1993)", "first_release_date": "1993-12-10"},
+        ]);
+        assert_eq!(gamesdb_match(&doom, "DOOM (1993)", 0, &[]).map(|m| gamesdb_id_of(&m.game)), Some(1993), "its bracketed year");
     }
 
     #[tokio::test]
