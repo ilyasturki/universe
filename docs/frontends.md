@@ -416,7 +416,8 @@ HOME pressed while another app has the focus is not HOME: see "Focus".
 
 The dock is `ui/Dock.qml` in the overlay window: the game's card at the left (its art, PLAYING or
 PAUSED, the title), a row of round buttons at the right (`row` in `Dock.qml`), a group's settings
-in a card above its button — Resume, Home, Quit, then Game (Details, Journal, Recordings, Sessions), Screenshot,
+in a card above its button — Resume, Home, Quit, then Game (drawn with the playing game's square art, else its box front, the glyph
+without either; Details, Journal, Recordings, Sessions), Screenshot,
 Controllers (a row per pad of `api.screens.controller.devices`, its bus and charge as the value, "Reconnect" in its place on the
 focused row (`verb`), A `reconnect(id)`; then Find controllers, `rescan()`, and Controller settings, `toLauncher("controller")`), Achievements (while the game's `achievementsTotal` is not 0 and its source's `achievements` switch,
 read through `sourceSettingsOf` on opening, is not off), Performance (MangoHud, FPS limit, Filter, Sharpness while the filter is FSR or NIS, the two

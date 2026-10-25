@@ -565,6 +565,8 @@ def test_the_dock_renders_over_a_running_game(api, fake, reprise, tmp_path):
         image.save(str(tmp_path / "dock.png"))
     buttons = ids(read(dock, "buttons"))
     assert {"resume", "home", "quit", "game"} <= set(buttons), "Quit a button of its own"
+    square = api.allGames.byId("mirrors-edge").assets.square
+    assert not square.isEmpty() and descendant(overlay.contentItem(), "gameButtonArt").property("source") == square, "Game draws the game's art"
     key(overlay, Qt.Key.Key_Right, buttons.index("game"))
     assert dock.property("index") == buttons.index("game")
     key(overlay, Qt.Key.Key_Return)

@@ -877,7 +877,27 @@ FocusScope {
                             }
                         }
 
+                        RoundedMask {
+                            id: gameArt
+
+                            readonly property url art: modelData.id === "game" && dock.game ? (dock.game.assets.square.toString() ? dock.game.assets.square : dock.game.assets.boxFront) : ""
+
+                            visible: art.toString() !== ""
+                            anchors.fill: parent
+                            radius: width / 2
+
+                            Image {
+                                objectName: modelData.id === "game" ? "gameButtonArt" : ""
+                                anchors.fill: parent
+                                source: gameArt.art
+                                fillMode: Image.PreserveAspectCrop
+                                asynchronous: true
+                                sourceSize.width: 200
+                            }
+                        }
+
                         MenuGlyph {
+                            visible: !gameArt.visible
                             anchors.centerIn: parent
                             width: Theme.dp(30)
                             height: width
