@@ -1608,8 +1608,8 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
   Under 600 px of content the cards shrink (`game_card::cover_size`, two columns on a 360 px screen); under 550 px Media's toggles turn to icons, named on hover. The running game sits in
   a bar under every page (`playing_bar`, the window's own `NowPlaying`) whenever the sidebar's foot is
   out of sight: folded, hidden with F9, or under a page pushed over the home.
-- **Game page** (`pages/game.rs`): the library's row draws the hero at once, the runner in its facts
-  line included, and under the title only an update mark (Update available for `update`, May be out
+- **Game page** (`pages/game.rs`): the library's row alone draws the hero at once (the byline, the
+  facts line with the runner, the achievement count left to its row below), and under the title only an update mark (Update available for `update`, May be out
   of date for `likely`, nothing otherwise and never the version). The body under the hero (Your
   Play, About, the Gallery of the store's pictures) waits in a `loading` stack child until the
   details land (`get`, the screenshots' count and whether the source's manifest lists achievements,

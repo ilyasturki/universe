@@ -21,8 +21,6 @@ type Opener = fn(&Window, &str);
 #[derive(Debug, Clone, Default)]
 pub struct Details {
     description: String,
-    developers: Vec<String>,
-    publishers: Vec<String>,
     genres: Vec<String>,
     screenshots: Vec<String>,
     achievements: (usize, usize),
@@ -39,8 +37,6 @@ impl Details {
         let m = &r.game.metadata;
         Details {
             description: if m.description.trim().is_empty() { m.summary.trim().to_string() } else { m.description.trim().to_string() },
-            developers: m.developers.clone(),
-            publishers: m.publishers.clone(),
             genres: m.genres.clone(),
             screenshots: r.screenshots.clone(),
             achievements: (r.achievements.unlocked, r.achievements.total),
@@ -223,19 +219,11 @@ impl GamePage {
         self.set_title(&row.title);
         imp.title.set_label(&row.title);
         imp.cover.set_path(row.cover.clone());
-        let details = imp.details.borrow().clone();
-        let mut byline: Vec<String> = Vec::new();
-        byline.extend(details.developers.first().cloned().or_else(|| Some(row.developer.clone())).filter(|d| !d.is_empty()));
-        if let Some(publisher) = details.publishers.first().filter(|p| !byline.contains(p)) {
-            byline.push(publisher.clone());
-        }
-        if row.release_year > 0 {
-            byline.push(row.release_year.to_string());
-        }
+        let byline = byline(&row);
         imp.byline.set_label(&byline.join(" · "));
         imp.byline.set_visible(!byline.is_empty());
 
-        imp.facts.set_label(&facts(&row, details.achievements, game.playing(), chrono::Local::now()).join(" · "));
+        imp.facts.set_label(&facts(&row, game.playing(), chrono::Local::now()).join(" · "));
         let mark = game.update_mark();
         imp.update_mark.set_label(&mark);
         imp.update_mark.set_visible(!mark.is_empty());
@@ -315,7 +303,6 @@ impl GamePage {
             if let Ok((r, shots, achievable)) = resolved {
                 this.imp().details.replace(Details::of(&r, shots, achievable));
                 this.show_details();
-                this.refresh();
             }
             this.imp().body.set_visible_child_name("details");
         });
@@ -372,7 +359,16 @@ impl GamePage {
     }
 }
 
-fn facts(row: &crate::game::Row, achievements: (usize, usize), playing: bool, now: chrono::DateTime<chrono::Local>) -> Vec<String> {
+fn byline(row: &crate::game::Row) -> Vec<String> {
+    let mut byline: Vec<String> = [&row.developer, &row.publisher].into_iter().filter(|s| !s.is_empty()).cloned().collect();
+    byline.dedup();
+    if row.release_year > 0 {
+        byline.push(row.release_year.to_string());
+    }
+    byline
+}
+
+fn facts(row: &crate::game::Row, playing: bool, now: chrono::DateTime<chrono::Local>) -> Vec<String> {
     let mut facts = vec![library::platform_name(&row.platform)];
     if !facts.contains(&row.runner_name) {
         facts.push(row.runner_name.clone());
@@ -383,9 +379,6 @@ fn facts(row: &crate::game::Row, achievements: (usize, usize), playing: bool, no
         facts.push(gettext("Last played {}").replace("{}", &format::relative(row.last_played, now)));
     }
     facts.push(format::played(row.hours));
-    if achievements.1 > 0 {
-        facts.push(gettext("{} of {} achievements").replacen("{}", &achievements.0.to_string(), 1).replacen("{}", &achievements.1.to_string(), 1));
-    }
     facts.retain(|f| !f.is_empty());
     facts
 }
@@ -395,13 +388,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_facts_name_the_runner_before_the_details_land() {
-        let row = crate::game::Row { platform: "windows".into(), runner_name: "Proton".into(), hours: 2.0, ..Default::default() };
-        let now = chrono::Local::now();
-        let before = facts(&row, (0, 0), false, now);
-        assert_eq!(before[..2], ["Windows", "Proton"], "the library's row has the runner: nothing waits on the details");
-        let after = facts(&row, (3, 40), false, now);
-        assert_eq!(after[..before.len()], before[..], "the details only add to the end of the line");
-        assert_eq!(after.len(), before.len() + 1);
+    fn the_hero_reads_the_library_row_alone() {
+        let row = crate::game::Row {
+            platform: "windows".into(),
+            runner_name: "Proton".into(),
+            hours: 2.0,
+            developer: "Larian".into(),
+            publisher: "Larian".into(),
+            release_year: 2023,
+            ..Default::default()
+        };
+        assert_eq!(facts(&row, false, chrono::Local::now())[..2], ["Windows", "Proton"], "the runner is there before the details land");
+        assert_eq!(byline(&row), ["Larian", "2023"], "a publisher that is the developer is named once");
+        let published = crate::game::Row { publisher: "Bandai Namco".into(), ..row };
+        assert_eq!(byline(&published), ["Larian", "Bandai Namco", "2023"]);
     }
 }
