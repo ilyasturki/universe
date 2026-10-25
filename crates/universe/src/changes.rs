@@ -534,7 +534,8 @@ mod tests {
     #[tokio::test]
     async fn a_journal_made_after_the_start_is_watched_and_its_entries_reported() {
         let _sb = sandbox();
-        let core = Arc::new(open().await.0);
+        let (core, memory) = open().await;
+        let core = Arc::new(core);
         let unit = crate::host::UnitSpec { name: "universe-journal-post-process-s1".into(), ..Default::default() };
         core.host.units.start(&unit).await.unwrap();
         let (_watch, mut rx) = watch(core.clone(), QUICK).await.unwrap();
@@ -551,6 +552,23 @@ mod tests {
         std::fs::write(journal.join("s1.json"), entry.to_string()).unwrap();
         let e = until(&mut rx, |e| matches!(e, Event::JournalDone { .. })).await;
         assert!(matches!(&e, Event::JournalDone { state, text, .. } if state == "written" && text == "A first run"), "{e:?}");
+
+        let unit = crate::host::UnitSpec { name: "universe-journal-post-process-s2".into(), ..Default::default() };
+        core.host.units.start(&unit).await.unwrap();
+        std::fs::write(journal.join("s2.pending.json"), pending.to_string().replace("s1", "s2")).unwrap();
+        until(&mut rx, |e| matches!(e, Event::JournalWriting { session, .. } if session == "s2")).await;
+        memory.finish(&unit.name, 143);
+        let seen = std::sync::Mutex::new(vec![]);
+        for marker in ["s3", "s4"] {
+            std::fs::write(journal.join(format!("{marker}.json")), entry.to_string().replace("s1", marker)).unwrap();
+            until(&mut rx, |e| {
+                seen.lock().unwrap().push(format!("{e:?}"));
+                matches!(e, Event::Journal(_))
+            })
+            .await;
+        }
+        let seen = seen.into_inner().unwrap();
+        assert!(!seen.iter().any(|e| e.starts_with("JournalDone")), "a run whose unit died is put off, not done: {seen:?}");
     }
 
     #[tokio::test]
