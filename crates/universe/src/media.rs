@@ -1133,8 +1133,8 @@ pub async fn refresh(config: &Config, game: &Game, force: bool) -> crate::Result
 }
 
 /// No refresh has reached the game yet (`fetched_at` empty): a frontend's start fetches its art, details and shots.
-pub fn unfetched(game: &Game) -> bool {
-    read_cache_in(&game.media_dir()).fetched_at.is_empty()
+pub fn unfetched(media_dir: &Path) -> bool {
+    read_cache_in(media_dir).fetched_at.is_empty()
 }
 
 async fn refresh_with(net: &Net, config: &Config, game: &Game, force: bool) -> crate::Result<bool> {
