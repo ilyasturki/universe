@@ -528,7 +528,7 @@ class System(QObject):
 
 class Api(QObject):
     # boot: whether this start may open on the startup animation; Settings › Themes can still turn it off.
-    def __init__(self, client, memory_path=None, fullscreen=False, theme="", power_root=None, net_root=None, boot=False, parent=None):
+    def __init__(self, client, memory_path=None, fullscreen=False, theme="", power_root=None, net_root=None, boot=False, overlay_only=False, parent=None):
         super().__init__(parent)
         self._client = client
         self._memory = Memory(memory_path, self)
@@ -562,7 +562,9 @@ class Api(QObject):
         controller.walkChanged.connect(lambda: self._pad.setMuted(controller.testing or controller.walking))
         self._focus = Focus(client, parent=self)
         self._focus.changed.connect(self._on_focus)
-        self._home = Home(client, controller, self.screenMode, self, frames=lambda: self._theme.frame, focus=self._focus, boot=self._boot)
+        self._home = Home(
+            client, controller, self.screenMode, self, frames=lambda: self._theme.frame, focus=self._focus, boot=self._boot, overlay_only=overlay_only
+        )
         self._home.escapeHeld.connect(self._theme.escape)
         self._window = None
         self._fullscreen = fullscreen

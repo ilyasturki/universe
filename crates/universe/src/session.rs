@@ -12,6 +12,13 @@ use crate::paths;
 use crate::sessions::{self, Session};
 use crate::{Error, Result};
 
+const OVERLAY_PROGRAM: &str = "universe-ui";
+
+/// Where splash records the display of a game's own gamescope for the overlay.
+fn display_file(session_id: &str) -> std::path::PathBuf {
+    paths::runtime_dir().join(format!("display-{session_id}"))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Current {
     pub session_id: String,
@@ -25,6 +32,9 @@ pub struct Current {
     pub gamescope_pid: u32,
     #[serde(default)]
     pub launcher_pid: u32,
+    /// The process that asked for the launch (Universe Desktop's): the window the overlay's Home raises.
+    #[serde(default)]
+    pub app_pid: u32,
 }
 
 /// state/current-session.json: everything `session-end` needs to close the session from a process that never saw the launch.
@@ -299,6 +309,11 @@ impl Core {
                 Runtime::at_launch(&r.effective, gamescope_pid != 0, &cfg.launch),
             )
         };
+        // Over a gamescope of the game's own, the overlay connects to the display splash records.
+        let overlay = plan.gamescope.then(|| crate::runners::on_path(OVERLAY_PROGRAM)).flatten().map(|ui| (ui, display_file(&session_id)));
+        if let Some((_, file)) = &overlay {
+            plan.env.insert(crate::splash::DISPLAY_FILE_ENV.into(), file.to_string_lossy().into());
+        }
         for (path, text) in plan.mangohud_conf.iter().chain(&plan.mangoapp_conf) {
             std::fs::write(path, text)?;
         }
@@ -334,6 +349,7 @@ impl Core {
             started_at: started.to_rfc3339(),
             gamescope_pid,
             launcher_pid,
+            app_pid: std::process::id(),
         };
         let mut undo = Vec::new();
         if let Err(e) = self.begin(&r, &plan, &current, base.vars.clone(), runtime, &mut undo).await {
@@ -347,7 +363,12 @@ impl Core {
                 tracing::warn!("post-launch {}: {e}", m.id());
             }
         }
-        if cfg.controller.enabled {
+        let overlaid = match &overlay {
+            Some((ui, file)) => self.spawn_overlay(&session_id, &unit, ui, file).await.inspect_err(|e| tracing::warn!("overlay: {e}")).is_ok(),
+            None => false,
+        };
+        // The overlay's own watcher reads the pads: a second one would hold the lock it waits on, and HOME would never reach it.
+        if cfg.controller.enabled && !overlaid {
             if let Err(e) = self.spawn_controller_watch(&session_id, &unit).await {
                 tracing::warn!("controller watch: {e}");
             }
@@ -464,6 +485,27 @@ impl Core {
         self.host.units.start(&spec).await
     }
 
+    /// Big Screen's overlay alone over the game's own gamescope: the dock on HOME, unlocks, the shot's flash and the volume level.
+    async fn spawn_overlay(&self, session_id: &str, game_unit: &str, program: &Path, display: &Path) -> Result<()> {
+        let mut env = passthrough_env();
+        // gamescope's display replaces the desktop's: the core inside asks the desktop about its windows through these.
+        for var in crate::desktop::HOST_VARS {
+            env.entry(crate::desktop::host_var(var)).or_insert_with(|| std::env::var(var).unwrap_or_default());
+        }
+        // Universe's gamescope whatever its flags: never taken for Steam's.
+        env.insert(crate::nest::OWN_ENV.into(), "nested".into());
+        let spec = UnitSpec {
+            name: format!("universe-overlay-{session_id}"),
+            description: "Universe overlay".into(),
+            program: program.to_string_lossy().to_string(),
+            args: vec!["--overlay".into(), display.to_string_lossy().to_string()],
+            env,
+            bind_to: Some(game_unit.into()),
+            ..Default::default()
+        };
+        self.host.units.start(&spec).await
+    }
+
     /// The desktop's idle inhibitor for the session: a unit of its own, since the inhibit stands only as long as the connection holding it.
     async fn spawn_keep_awake(&self, session_id: &str, game_unit: &str, title: &str) -> Result<()> {
         let spec = UnitSpec {
@@ -480,6 +522,7 @@ impl Core {
 
     /// Run by `ExecStopPost`, or by `reconcile` for a session left open; idempotent. Without a marker (a reboot) the times come from the unit's log.
     pub async fn session_end(&self, id: &str, session_id: &str, exit: Option<i32>, ended: Option<chrono::DateTime<chrono::Local>>) -> Result<()> {
+        let _ = std::fs::remove_file(display_file(session_id));
         let marker = read_marker().filter(|m| m.current.session_id == session_id);
         let filed = match self.get(id).await {
             Err(e) => Err(e),
@@ -721,6 +764,7 @@ pub(crate) mod tests {
         assert!(spec.bind_to.is_none(), "no scope adopted");
         assert_eq!(spec.env["UNIVERSE_BIN"], paths::self_exe().to_string_lossy());
         assert_eq!(memory.spec(&format!("universe-controller-{sid}")).expect("the watcher").bind_to.as_deref(), Some(unit.as_str()));
+        assert!(memory.spec(&format!("universe-overlay-{sid}")).is_none(), "no gamescope of its own, no overlay");
         let marker = read_marker().expect("a marker");
         assert_eq!((marker.current.session_id.as_str(), marker.current.unit.as_str()), (sid.as_str(), unit.as_str()));
         assert_eq!(undo_steps(&marker), ["post_command", "cursor"]);
@@ -743,6 +787,42 @@ pub(crate) mod tests {
 
         core.session_end("sample", &sid, None, None).await.unwrap();
         assert_eq!(sessions::read(&core.get("sample").await.unwrap().game.sessions_path()).unwrap().len(), 1, "idempotent");
+    }
+
+    #[tokio::test]
+    async fn a_game_in_a_gamescope_of_its_own_gets_the_overlay_bound_to_it_in_place_of_the_controller_watch() {
+        let sb = sandbox();
+        let bin = sb._env.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        for name in ["gamescope", OVERLAY_PROGRAM] {
+            std::fs::write(bin.join(name), b"#!/bin/sh\n").unwrap();
+            std::fs::set_permissions(bin.join(name), std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+        }
+        let path_was = std::env::var_os("PATH").unwrap_or_default();
+        std::env::set_var("PATH", std::env::join_paths(std::iter::once(bin.clone()).chain(std::env::split_paths(&path_was))).unwrap());
+        std::env::set_var("XDG_CURRENT_DESKTOP", "GNOME");
+        let config = format!(
+            "[launch]\ngamescope = true\ngamescope_bin = \"{}\"\nmangohud = false\nfps_limit = \"none\"\n[modules]\nenabled = []\n",
+            bin.join("gamescope").display()
+        );
+        std::fs::write(crate::paths::config_file(), config).unwrap();
+        let (core, memory) = open().await;
+        let sid = core.launch("sample", "", "").await.unwrap();
+        let unit = format!("universe-game-sample-{sid}.service");
+        let game = memory.spec(&unit).expect("the game unit started");
+        assert_eq!(game.program, bin.join("gamescope").to_string_lossy());
+        let display = game.env.get(crate::splash::DISPLAY_FILE_ENV).expect("splash is told where to record gamescope's display");
+        let overlay = memory.spec(&format!("universe-overlay-{sid}")).expect("the overlay");
+        assert_eq!(overlay.program, bin.join(OVERLAY_PROGRAM).to_string_lossy());
+        assert_eq!(overlay.args, ["--overlay", display.as_str()]);
+        assert_eq!(overlay.bind_to.as_deref(), Some(unit.as_str()), "it goes down with the game");
+        assert_eq!(overlay.env[&crate::desktop::host_var("XDG_CURRENT_DESKTOP")], "GNOME", "the desktop is still asked about its windows");
+        assert!(memory.spec(&format!("universe-controller-{sid}")).is_none(), "the overlay's own watcher reads the pads");
+        assert_eq!(read_marker().expect("a marker").current.app_pid, std::process::id(), "its Home raises the window of the app that launched");
+        std::fs::write(display, "DISPLAY=:1\n").unwrap();
+        memory.finish(&unit, 0);
+        core.session_end("sample", &sid, None, None).await.unwrap();
+        assert!(!Path::new(display).exists(), "the record goes with the session");
     }
 
     #[tokio::test]

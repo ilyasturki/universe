@@ -1,12 +1,16 @@
 import os
 
 import pytest
-from looks import current_row, invoke, read, settle
-from PySide6.QtCore import QObject, Qt
+from looks import LOOKS, current_row, invoke, read, settle
+from PySide6.QtCore import QObject, QSize, Qt
+from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtTest import QTest
 from uitest import own, record, until
 
 from universe_ui import host
+from universe_ui.api import Api
+from universe_ui.screens.network import FAKE as FAKE_NET
+from universe_ui.screens.power import FAKE as FAKE_POWER
 
 # What closes each look's keyboard on the value typed, and what gives it up.
 DONE = {"reprise": Qt.Key.Key_Return, "switch2": Qt.Key.Key_F1, "ps5": Qt.Key.Key_F1}
@@ -204,3 +208,55 @@ def test_a_decks_control_set_in_a_game_is_its_own_until_y_makes_it_the_machines(
     api.home.stop()
     until(lambda: api.universe.currentSession is None)
     assert watts() == "14", "the machine's own now, kept after the game"
+
+
+@pytest.fixture
+def alone(request, fake, rendered_looks, tmp_path, monkeypatch):
+    """`universe-ui --overlay` on the look `request.param`, over a game launched before it as Universe Desktop does: (api, overlay)."""
+    monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-1")
+    fake.core.launch("mirrors-edge", "")
+    until(lambda: fake.currentSession, "the session is found")
+    api = Api(fake, memory_path=str(tmp_path / "overlay.json"), power_root=FAKE_POWER, net_root=FAKE_NET, overlay_only=True)
+    api.theme.set(request.param)
+    engine = QQmlApplicationEngine()
+    engine.rootContext().setContextProperty("api", api)
+    layer = host.create_overlay(engine, QSize(1280, 720))
+    api.keys.watch(layer)
+    api.home.attachOverlay(layer)
+    settle(layer)
+    yield api, layer
+    layer.close()
+    api.shutdown()
+
+
+def home_press(api):
+    api.home.guide(True)
+    api.home.guide(False)
+
+
+@pytest.mark.parametrize("alone", LOOKS, indirect=True)
+def test_alone_over_a_desktop_launch_home_opens_the_quick_settings_without_pause_and_their_home_raises_the_app(alone, fake):
+    api, overlay = alone
+    name = api.theme.current
+    assert api.home.shown == "game" and not api.home.pausable
+    home_press(api)
+    if name not in PANEL:
+        until(lambda: fake.core.app_summons == 1, "no quick settings in this look: HOME brings up the app that launched")
+        assert not api.home.open
+        return
+    panel = overlay.findChild(QObject, PANEL[name])
+    until(lambda: panel.property("open") is True, "HOME opens them over the game")
+    if name == "reprise":
+        groups = {b["id"]: [c["id"] for c in b.get("children") or []] for b in read(panel, "buttons")}
+        rows = groups["perf"]
+    else:
+        panel.setProperty("icon", [i["id"] for i in read(panel, "icons")].index("game"))
+        rows = [r["id"] for r in read(panel, "panelRows")]
+    assert rows and "pause" not in rows, "no Pause on HOME: it would freeze the gamescope that paints them"
+    invoke(panel, "act", {"id": "home"} if name == "reprise" else "home")
+    until(lambda: fake.core.app_summons == 1 and not api.home.open, "Home closes them and brings up the app that launched")
+    home_press(api)
+    until(lambda: panel.property("open") is True)
+    api.home.stop()
+    until(lambda: fake.currentSession is None, "Quit stops the game where it is")
+    assert fake.core.frozen is False and fake.core.frames == 0 and api.home.frame == "", "nothing frozen, no frame taken for a flip"

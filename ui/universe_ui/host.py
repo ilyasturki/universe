@@ -54,11 +54,16 @@ def parse_args(argv):
         "--boot", action=argparse.BooleanOptionalAction, default=None, help="open on the startup animation, or not (default: fullscreen starts only)"
     )
     parser.add_argument("--session", action="store_true", help="the display manager's session: gamescope on the whole screen, quitting logs out")
+    parser.add_argument(
+        "--overlay", default="", metavar="FILE", help="the dock alone over a game in its own gamescope, whose display `universe splash` writes to FILE"
+    )
     args = parser.parse_args(argv)
     if args.session and (args.windowed or args.size):
         parser.error("--session takes the whole screen: no --windowed or --size")
+    if args.overlay and (args.session or args.windowed or args.size):
+        parser.error("--overlay covers the game's own screen: no --session, --windowed or --size")
     args.fake = args.fake or args.fake_launch
-    args.fullscreen = not (args.windowed or args.size)
+    args.fullscreen = not (args.windowed or args.size or args.overlay)
     args.size = args.size or "1920x1080"
     return args
 
@@ -332,6 +337,25 @@ def mark_done(code):
             Path(path).write_text(str(code))
 
 
+def join_display(path, wait_s=READY_S):
+    """The game's gamescope as this process's display, once `universe splash` has written it; False when it never comes."""
+    deadline = time.monotonic() + wait_s
+    while True:
+        with contextlib.suppress(OSError):
+            found = dict(line.split("=", 1) for line in Path(path).read_text().splitlines() if "=" in line)
+            break
+        if time.monotonic() > deadline:
+            logging.getLogger("universe.host").warning("no display in %s within %d s: no overlay", path, wait_s)
+            return False
+        time.sleep(0.1)
+    if not found.get("GAMESCOPE_WAYLAND_DISPLAY") or not found.get("DISPLAY"):
+        return False
+    os.environ["DISPLAY"] = found["DISPLAY"]
+    os.environ["GAMESCOPE_WAYLAND_DISPLAY"] = found["GAMESCOPE_WAYLAND_DISPLAY"]
+    os.environ.pop("WAYLAND_DISPLAY", None)
+    return True
+
+
 def create_overlay(engine, size):
     from PySide6.QtCore import QUrl
 
@@ -356,6 +380,8 @@ def run(argv=None):
     os.environ.setdefault("QT_AUDIO_BACKEND", "pulseaudio")
     logging.basicConfig(level=logging.INFO, format="%(name)s: %(message)s")
 
+    if args.overlay and not join_display(args.overlay):
+        return 0
     nested = bool(os.environ.get("GAMESCOPE_WAYLAND_DISPLAY"))
     if args.session and not nested:
         # The session's own screen: no desktop display to nest in, and a desktop name nothing detects as a desktop.
@@ -398,7 +424,10 @@ def run(argv=None):
 
     # The fake library paints its art with fonts, which need the app.
     client = build_client(args)
-    if not args.fake:
+    # The game ended before its display came up: nothing to cover.
+    if args.overlay and not client.currentSession:
+        return 0
+    if not args.fake and not args.overlay:
         client.adoptScope()
     api = Api(
         client,
@@ -406,21 +435,32 @@ def run(argv=None):
         theme=args.theme,
         power_root=FAKE_POWER if args.fake else None,
         net_root=FAKE_NET if args.fake else None,
-        boot=boot_wanted(args, client, int(os.environ.get(RESTARTS_ENV) or 0)),
+        boot=not args.overlay and boot_wanted(args, client, int(os.environ.get(RESTARTS_ENV) or 0)),
+        overlay_only=bool(args.overlay),
         parent=app,
     )
     quit_on_signals(app)
 
     engine = QQmlApplicationEngine()
     engine.rootContext().setContextProperty("api", api)
-    engine.load(QUrl.fromLocalFile(str(QML_DIR / "main.qml")))
-    if not engine.rootObjects():
-        print("universe-ui: main.qml failed to load", file=sys.stderr)
-        return 1
-    window = cast("QQuickWindow", engine.rootObjects()[0])
-    mark_ready()
-    api.attachWindow(window)
-    if not args.fullscreen:
+    if args.overlay:
+        layer = create_overlay(engine, app.primaryScreen().size())
+        if layer is None:
+            print("universe-ui: overlay.qml failed to load", file=sys.stderr)
+            return 1
+        window = cast("QQuickWindow", layer)
+        api.keys.watch(window)
+        api.home.attachOverlay(window)
+        client.sessionEnded.connect(lambda *_: app.quit())
+    else:
+        engine.load(QUrl.fromLocalFile(str(QML_DIR / "main.qml")))
+        if not engine.rootObjects():
+            print("universe-ui: main.qml failed to load", file=sys.stderr)
+            return 1
+        window = cast("QQuickWindow", engine.rootObjects()[0])
+        mark_ready()
+        api.attachWindow(window)
+    if not args.fullscreen and not args.overlay:
         try:
             w, h = (int(v) for v in args.size.lower().split("x"))
             window.setWidth(w)
@@ -428,7 +468,7 @@ def run(argv=None):
         except ValueError:
             pass
     # Under Steam nothing opens the dock over a game: Steam keeps the Steam button and its overlay.
-    if client.nested and not client.underSteam:
+    if client.nested and not client.underSteam and not args.overlay:
         overlay = create_overlay(engine, window.screen().size())
         if overlay is not None:
             api.keys.watch(overlay)
@@ -457,8 +497,9 @@ def run(argv=None):
         else:
             watcher = Watcher(app)
         api.screens.controller.start(watcher)
-    api.startRadios()
-    if not args.keys:
+    if not args.overlay:
+        api.startRadios()
+    if not args.keys and not args.overlay:
         api.startVersionChecks()
         api.startArtFetch()
 
@@ -475,7 +516,7 @@ def run(argv=None):
     rc = app.exec()
     if gamepad is not None:
         gamepad.stop()
-    if client.currentSession:
+    if client.currentSession and not args.overlay:
         client.stopNow("")
     api.shutdown()
     mark_done(rc)

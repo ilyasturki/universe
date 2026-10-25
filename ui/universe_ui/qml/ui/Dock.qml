@@ -117,14 +117,14 @@ FocusScope {
                     options: ["", "linear", "nearest", "fsr", "nis", "pixel"],
                     names: ["Default", "Linear", "Nearest", "FSR", "NIS", "Pixel"]
                 }
-            ].concat(sharpens ? [sharpness] : []).concat([
+            ].concat(sharpens ? [sharpness] : []).concat(api.home.pausable ? [
                 {
                     id: "pause",
                     icon: "snowflake",
                     label: "Pause on HOME",
                     kind: "toggle"
                 }
-            ])
+            ] : [])
         },
         {
             id: "sound",

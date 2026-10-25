@@ -20,6 +20,20 @@ Window {
         focus: true
     }
 
+    // Alone over the game, HOME is answered here: the dock opens and closes, and a look without one brings up the app that launched.
+    Connections {
+        target: api.home
+        enabled: api.home.overlayOnly
+        function onPressed() {
+            if (api.home.open)
+                api.home.closeDock();
+            else if (api.theme.overlay !== "")
+                api.home.openDock();
+            else
+                api.home.toLauncher();
+        }
+    }
+
     // An unlock over the game, whichever look: Home keeps the window painted (and the game's input) while it shows.
     Column {
         id: unlocks

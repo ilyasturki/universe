@@ -12,6 +12,17 @@ use x11rb::wrapper::ConnectionExt as _;
 
 const WS_DISABLED: u32 = 0x0800_0000;
 
+/// Set on a game's unit when an overlay runs over its gamescope: the file splash writes that gamescope's display to.
+pub const DISPLAY_FILE_ENV: &str = "UNIVERSE_DISPLAY_FILE";
+
+/// What gamescope set for its child, `KEY=value` lines, renamed into place whole.
+fn record_display(path: &Path) -> std::io::Result<()> {
+    let text: String = ["DISPLAY", "GAMESCOPE_WAYLAND_DISPLAY"].iter().filter_map(|k| std::env::var(k).ok().map(|v| format!("{k}={v}\n"))).collect();
+    let tmp = path.with_extension("tmp");
+    std::fs::write(&tmp, text)?;
+    std::fs::rename(tmp, path)
+}
+
 /// `<width> <height>\n` then width×height×4 bytes of Qt's `Format_RGB32` (X's depth-24 ZPixmap, little-endian).
 pub struct Poster {
     pub width: u32,
@@ -139,10 +150,13 @@ pub fn run(image: Option<&Path>, cmd: &[String]) -> i32 {
     if let Some(p) = image {
         let _ = std::fs::remove_file(p);
     }
+    if let Some(p) = std::env::var_os(DISPLAY_FILE_ENV).map(std::path::PathBuf::from) {
+        let _ = record_display(&p).inspect_err(|e| eprintln!("splash: {}: {e}", p.display()));
+    }
     if let Ok(s) = show(poster.as_ref()).inspect_err(|e| eprintln!("splash: no window: {e}")) {
         std::thread::spawn(move || serve(s));
     }
-    match Command::new(program).args(args).status() {
+    match Command::new(program).args(args).env_remove(DISPLAY_FILE_ENV).status() {
         Ok(status) => status.code().unwrap_or_else(|| 128 + status.signal().unwrap_or(0)),
         Err(e) => {
             eprintln!("splash: {program}: {e}");
@@ -173,5 +187,18 @@ mod tests {
     #[test]
     fn no_command_is_refused_before_any_window() {
         assert_eq!(run(None, &[]), 2);
+    }
+
+    #[test]
+    fn gamescopes_display_is_recorded_for_the_overlay_and_kept_from_the_game() {
+        let env = crate::paths::test_env();
+        let (file, seen) = (env.path().join("display"), env.path().join("seen"));
+        std::env::set_var("DISPLAY", ":1023");
+        std::env::set_var("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-7");
+        std::env::set_var(DISPLAY_FILE_ENV, &file);
+        let cmd = ["sh".to_string(), "-c".into(), format!("echo \"${{{DISPLAY_FILE_ENV}:-unset}}\" > {}", seen.display())];
+        assert_eq!(run(None, &cmd), 0);
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "DISPLAY=:1023\nGAMESCOPE_WAYLAND_DISPLAY=gamescope-7\n");
+        assert_eq!(std::fs::read_to_string(&seen).unwrap().trim(), "unset", "the game never sees it");
     }
 }

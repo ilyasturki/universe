@@ -841,6 +841,15 @@ impl Core {
         self.activate_largest(&self.launcher_pids()).await
     }
 
+    /// Raises the window of the app that launched the running game (Universe Desktop's): Home in the overlay over its gamescope.
+    pub async fn summon_app(&self) -> Result<()> {
+        let pid = self.current().await.map_or(0, |c| c.app_pid);
+        if pid == 0 {
+            return Err(Error::NotFound("no app launched a running game".into()));
+        }
+        self.activate_largest(&[i64::from(pid)]).await
+    }
+
     pub fn nest_game_shown(&self) -> Result<bool> {
         let unit = crate::session::read_marker().map(|m| m.current.unit);
         self.nest_or()?.game_shown(self.launcher_pid(), unit.as_deref())

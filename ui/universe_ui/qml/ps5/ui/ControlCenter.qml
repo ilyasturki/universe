@@ -179,7 +179,9 @@ FocusScope {
                     label: "Close Game",
                     kind: "action"
                 }
-            ];
+            ].filter(function (r) {
+                return r.id !== "pause" || api.home.pausable;
+            });
         if (id === "perf")
             return [
                 {

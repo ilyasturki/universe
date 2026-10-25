@@ -294,6 +294,9 @@ impl Core {
     fn summon(&self, py: Python<'_>) -> PyResult<()> {
         self.run(py, |c| c.summon())
     }
+    fn summon_app(&self, py: Python<'_>) -> PyResult<()> {
+        self.run(py, |c| c.summon_app())
+    }
     fn freeze(&self, py: Python<'_>, on: bool) -> PyResult<()> {
         self.run(py, |c| async move { c.freeze(on).await })
     }

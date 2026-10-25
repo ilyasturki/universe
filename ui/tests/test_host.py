@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -209,6 +210,19 @@ def test_a_dead_socket_its_notifier_still_owns_is_no_wedge(tmp_path):
 def test_only_a_plain_fullscreen_start_opens_on_the_intro(argv, session, steam, restarts, wanted):
     client = SimpleNamespace(currentSession=session, underSteam=steam)
     assert host.boot_wanted(host.parse_args(argv), client, restarts) is wanted
+
+
+def test_the_overlay_joins_the_display_splash_records_for_the_games_gamescope(tmp_path, monkeypatch):
+    for var, value in {"DISPLAY": ":0", "WAYLAND_DISPLAY": "wayland-0"}.items():
+        monkeypatch.setenv(var, value)
+    monkeypatch.delenv("GAMESCOPE_WAYLAND_DISPLAY", raising=False)
+    record = tmp_path / "display-20261025-120000"
+    assert not host.join_display(record, wait_s=0.05), "no record: gamescope never came up, and the overlay stays out"
+    assert os.environ["DISPLAY"] == ":0"
+    threading.Timer(0.1, lambda: record.write_text("DISPLAY=:2\nGAMESCOPE_WAYLAND_DISPLAY=gamescope-1\n")).start()
+    assert host.join_display(record, wait_s=2), "it waits for splash, written as splash.rs writes it"
+    assert (os.environ["DISPLAY"], os.environ["GAMESCOPE_WAYLAND_DISPLAY"], os.environ.get("WAYLAND_DISPLAY")) == (":2", "gamescope-1", None)
+    assert host.parse_args(["--overlay", str(record)]).fullscreen is False, "the game's gamescope is the screen: no gamescope of its own"
 
 
 @pytest.mark.slow

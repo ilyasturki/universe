@@ -475,6 +475,7 @@ class FakeCore:
         self.window_misses = 0
         self.focus = ""
         self.summons = 0
+        self.app_summons = 0
         self.frozen = False
         self.reconnects = []
         self._runtime = {}
@@ -1445,6 +1446,11 @@ class FakeCore:
     def summon(self):
         self.summons += 1
         self.focus = "launcher"
+
+    def summon_app(self):
+        if not self.current():
+            raise UniverseError("NotFound", "no app launched a running game")
+        self.app_summons += 1
 
     def freeze(self, on):
         if not self.current():

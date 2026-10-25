@@ -33,7 +33,7 @@ One context property, `api`:
 | `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written, a game's sessions and their logs, a game's data and the storage view, the changelog, Wi-Fi and Bluetooth) |
 | `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed` and `--size` turn it off) |
 | `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `overlay`, `osd`, `frame`, `ground`, `accent`, `detail`, `unlocked`, `screenshot`, `installed`, `unavailable`; the built-in ones, then the installed themes, see "Themes"), `current`, `frame`, `ground` and `accent` (the current look's colours), `set(id)` (false for one that is `unavailable`), `rescan()`, `failed()`, `escape()`, `takeNotice()`, `landing` / `takeLanding()`, `fontPath` (the current look's own font file, stored under `<id>Font`: `switch2Font`, `ps5Font`; "" while what it names is no file, a folder or a font since gone), `soundsPath` (a folder of WAVs, stored under `<id>Sounds`) and `soundFiles` (`{name: url}` of the WAVs in it, the name lowercased: each replaces the look's bundled sound of that name, `sound/SoundPool.qml`'s `overrides`; Switch 2 offers it in Settings › Appearance), `bootIntro` (the startup animation's switch, every look's: on until `ui-memory.json`'s `bootIntro` is false) |
-| `api.home` | the HOME button over a running game (see "HOME and the dock"): `shown` (`game` / `launcher`), `underGame` (the game is on screen over the launcher, inside gamescope), `open`, `loading` (a session this client launched has no window up yet), `paused`, `pauseOnHome`, `quitting` (`stop()` was asked and the session has not ended yet), `flipped`, `frame`, `nextFrame` (the frame the last Guide press took, as soon as it lands), `volumePercent`, `muted`, `outputs` (`loadOutputs()` fills it); `pressed()`, `stopping(title)`; `openDock()`, `closeDock()`, `dockClosed()`, `toGame()`, `toLauncher(landing?)` / `takeLanding()`, `covered()`, `stop()`, `setPauseOnHome(on)`, `screenshot()` (→ `screenshotGrabbed()` at the grab, then `screenshotTaken(path)`, and `screenshotLost()` when it fails after the grab), `volume(change, value)`, `setOutput(id)`, `runtime()` / `setRuntime(key, value)` (the running game's HUD, frame limit and filter, for this session alone), `launchChoices(key)`, `setLaunchValueAll(key, value)` (every game's default, the game following it), `screenRefresh()`, `escapeHeld()` (HOME held 5 s) |
+| `api.home` | the HOME button over a running game (see "HOME and the dock"): `shown` (`game` / `launcher`), `underGame` (the game is on screen over the launcher, inside gamescope), `open`, `loading` (a session this client launched has no window up yet), `paused`, `pauseOnHome`, `pausable` (false in the overlay alone: the dock and the Control Center drop Pause on HOME), `overlayOnly` (`universe-ui --overlay`), `quitting` (`stop()` was asked and the session has not ended yet), `flipped`, `frame`, `nextFrame` (the frame the last Guide press took, as soon as it lands), `volumePercent`, `muted`, `outputs` (`loadOutputs()` fills it); `pressed()`, `stopping(title)`; `openDock()`, `closeDock()`, `dockClosed()`, `toGame()`, `toLauncher(landing?)` / `takeLanding()`, `covered()`, `stop()`, `setPauseOnHome(on)`, `screenshot()` (→ `screenshotGrabbed()` at the grab, then `screenshotTaken(path)`, and `screenshotLost()` when it fails after the grab), `volume(change, value)`, `setOutput(id)`, `runtime()` / `setRuntime(key, value)` (the running game's HUD, frame limit and filter, for this session alone), `launchChoices(key)`, `setLaunchValueAll(key, value)` (every game's default, the game following it), `screenRefresh()`, `escapeHeld()` (HOME held 5 s) |
 | `api.boot` | the startup animation (see "Startup animation"): `running`, `started()` (its first frame is on screen), `skipped()`, `landed(skipped)` (the ground opens: each look builds its home), `land()`, `finish()` |
 
 A `Game` exposes `id`, `title`, `sortTitle`, `favorite` (writable), `hidden`, `playTime`,
@@ -500,6 +500,19 @@ launcher and answers every press the menu gets; turning it on from the dock whil
 is up freezes at once. The session ending drops the overlay whatever state it was in. Without an
 overlay window (the launcher on the desktop) `openDock` is `toLauncher`, and only `toGame`
 thaws: a game window raised from the desktop's own switcher stays frozen until Resume.
+
+A game started from Universe Desktop (or `universe play`) in a gamescope of its own gets the
+overlay alone: the core starts `universe-ui --overlay <file>` as its own unit, bound to the game's
+(see api.md), and `universe splash` writes that gamescope's display to the file. The host waits
+for it (`join_display`, up to 30 s), joins that display and loads `overlay.qml` and nothing else,
+with `api.home.overlayOnly` set: no main window, no scope adopted, no radios or version checks,
+the pad thread and its watcher as usual. With no launcher under the game, `overlay.qml` answers
+`pressed()` itself (the dock opens and closes; a look without one, Switch 2's, calls
+`toLauncher`). `toLauncher`, whatever its landing, closes the dock and raises the window of the
+app that launched (`summonApp()`, the core's `summon_app`); `stop()` stops the game where it is;
+no frame is taken. `FreezeUnit` on the game's unit would freeze the gamescope painting the dock,
+so `pausable` is false and nothing pauses. The process quits on `sessionEnded`, and its own end
+stops no game.
 
 A frozen game reads no key, so what the dock asks of the game's MangoHud types none. The
 MangoHud, FPS limit, Filter and Sharpness rows change the running game alone: they read

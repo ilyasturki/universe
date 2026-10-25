@@ -332,6 +332,9 @@ class CoreClient(QObject):
     def summon(self, on_done):
         self._call_async(self._core.summon, lambda _: on_done(), on_error=lambda e: log.info("summon: %s", e.message))
 
+    def summonApp(self):
+        self._call_async(self._core.summon_app, on_error=lambda e: log.info("summon the app: %s", e.message))
+
     def freeze(self, on, on_reply=None):
         self._call_async(lambda: self._core.freeze(on), on_reply)
 

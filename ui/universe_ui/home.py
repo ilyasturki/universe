@@ -44,9 +44,11 @@ class Home(QObject):
     escapeHeld = Signal()
     nextFrameChanged = Signal()
 
-    def __init__(self, client, controller, screen_mode: Callable[[], dict] = dict, parent=None, frames=lambda: True, focus=None, boot=None):
+    def __init__(self, client, controller, screen_mode: Callable[[], dict] = dict, parent=None, frames=lambda: True, focus=None, boot=None, overlay_only=False):
         super().__init__(parent)
         self._client = client
+        # Alone over a game in its own gamescope: no launcher under the game, and a freeze would stop the gamescope that paints the dock.
+        self._overlay_only = overlay_only
         self._boot = boot
         self._controller = controller
         self._focus = focus
@@ -153,8 +155,10 @@ class Home(QObject):
 
     def _on_session(self):
         if self._session():
-            self._pause_on_home = bool((self._game().get("effective") or {}).get("pause_on_home"))
-            if self._client.nested:
+            self._pause_on_home = not self._overlay_only and bool((self._game().get("effective") or {}).get("pause_on_home"))
+            if self._overlay_only:
+                self._set_shown("game")
+            elif self._client.nested:
                 self._poll.start()
                 self._refresh()
         else:
@@ -344,7 +348,7 @@ class Home(QObject):
 
     # Asked at the press so the flip need not wait: gamescope takes up to 5 s at 4K.
     def _capture(self):
-        if self._capturing or not self._client.nested or not self._frames():
+        if self._capturing or self._overlay_only or not self._client.nested or not self._frames():
             return
         self._capturing = True
         self._captured = None
@@ -382,6 +386,10 @@ class Home(QObject):
     @Slot(str)
     def toLauncher(self, landing=""):
         if not self._session_or_pending() or self._flipping:
+            return
+        if self._overlay_only:
+            self.closeDock()
+            self._client.summonApp()
             return
         self._landing = str(landing or "")
         # A loading game has painted nothing to bridge with.
@@ -451,6 +459,9 @@ class Home(QObject):
         if session is self._pending:
             self._stop_on_launch = True
             self.toLauncher()
+        elif self._overlay_only:
+            self.closeDock()
+            self._client.stop(str(session.get("session_id") or ""))
         elif self._shown == "game" or self._open:
             self.toLauncher()
         else:
@@ -468,7 +479,7 @@ class Home(QObject):
     @Slot(bool)
     def setPauseOnHome(self, on):
         session = self._session()
-        if not session:
+        if not session or self._overlay_only:
             return
         self._pause_on_home = bool(on)
         self._client.set(str(session.get("id") or ""), "launch.pause_on_home", "true" if on else "false")
@@ -656,6 +667,10 @@ class Home(QObject):
     # Quit was asked and the session has not ended yet.
     quitting = Property(bool, lambda self: self._stopping, notify=changed)
     pauseOnHome = Property(bool, lambda self: self._pause_on_home, notify=changed)
+    # Pause on HOME is on offer: not in the overlay alone, whose gamescope the freeze would stop too.
+    pausable = Property(bool, lambda self: not self._overlay_only, constant=True)
+    # No launcher under the game: HOME's dock is all there is, and Home raises the app that launched it.
+    overlayOnly = Property(bool, lambda self: self._overlay_only, constant=True)
     flipped = Property(bool, lambda self: self._flipped, notify=changed)
     frame = Property(str, lambda self: self._frame, notify=changed)
     # The frame the last Guide press took, for the theme to decode before a flip asks for it.

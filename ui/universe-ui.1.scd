@@ -60,6 +60,14 @@ whatever has the focus.
 	_universe-system-install_, whose polkit action is granted to the local,
 	active session.
 
+*--overlay* _FILE_
+	The dock alone over a game in a gamescope of its own, without the launcher:
+	what a launch from Universe Desktop starts, bound to the game. It waits for
+	*universe splash* to write that gamescope's display to _FILE_, then shows
+	the look's dock on HOME, unlocks, the screenshot flash and the volume level.
+	There is no Pause on HOME, and Home brings up the app that launched the
+	game. It quits when the game ends, and quitting it leaves the game running.
+
 *--fake*
 	A fixture library instead of the core, for UI work.
 
