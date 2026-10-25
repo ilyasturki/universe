@@ -961,7 +961,7 @@ FocusScope {
         openLanding(landing);
     }
 
-    // What the dock asked for over the game: its details, trophies, captures, journal or log.
+    // What the dock asked for over the game: its details, trophies, captures, journal or log, or the Controllers page.
     function openLanding(landing) {
         if (landing === "controller") {
             push("pages/ControllersPage.qml", {});
