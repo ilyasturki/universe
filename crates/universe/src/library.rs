@@ -236,16 +236,8 @@ pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Modu
     env.extend(game.launch.env.clone());
     let runner = game.runner_id();
     let spec = crate::runners::spec(&runner);
-    let own_build = spec
-        .filter(|_| !game.launch.runner_build.is_empty())
-        .and_then(|s| crate::components::find_build(s.id, &game.launch.runner_build).filter(|b| b.version == game.launch.runner_build));
-    let runner_path = if !game.launch.runner_exe.is_empty() {
-        paths::expand(&game.launch.runner_exe).to_string_lossy().into()
-    } else if let Some(b) = own_build {
-        b.program_path().to_string_lossy().into()
-    } else {
-        spec.map(|s| located.entry(s.id.into()).or_insert_with(|| crate::runners::locate(s, config).program).clone()).unwrap_or_default()
-    };
+    let runner_path = runner_path(&game, spec, |s| located.entry(s.id.into()).or_insert_with(|| crate::runners::locate(s, config).program).clone());
+    let working_dir = crate::launcher::working_dir(&game, spec, &runner_path).to_string_lossy().into_owned();
     let options = spec.map(|s| s.merged_options(config, Some(&game))).unwrap_or_default();
     let gamescope = game
         .launch
@@ -300,7 +292,7 @@ pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Modu
             .unwrap_or_else(|| crate::launch_keys::default_of("fps_limit").into()),
         hide_cursor: game.desktop.hide_cursor.unwrap_or(config.desktop.hide_cursor),
         env,
-        working_dir: game.working_dir().to_string_lossy().into(),
+        working_dir,
         prefix: if spec.is_some_and(|s| matches!(s.kind, crate::runners::Kind::Proton | crate::runners::Kind::Wine)) {
             crate::launcher::prefix_of(&game, config).to_string_lossy().into()
         } else {
@@ -309,6 +301,20 @@ pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Modu
         modules: mods,
     };
     Resolved { game, stats, sessions, media, screenshots, journal_count, achievements, effective, version: Default::default(), check: Default::default() }
+}
+
+/// The program `game` starts with: its own runner program, the build it pins, else the one `locate` finds for its runner.
+pub fn runner_path(game: &Game, spec: Option<&crate::runners::RunnerSpec>, locate: impl FnOnce(&crate::runners::RunnerSpec) -> String) -> String {
+    let own_build = spec
+        .filter(|_| !game.launch.runner_build.is_empty())
+        .and_then(|s| crate::components::find_build(s.id, &game.launch.runner_build).filter(|b| b.version == game.launch.runner_build));
+    if !game.launch.runner_exe.is_empty() {
+        paths::expand(&game.launch.runner_exe).to_string_lossy().into()
+    } else if let Some(b) = own_build {
+        b.program_path().to_string_lossy().into()
+    } else {
+        spec.map(locate).unwrap_or_default()
+    }
 }
 
 /// `resolve`, the version the game's files say and how it stands by the answers kept: what `load_all` makes of each game.

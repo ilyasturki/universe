@@ -118,6 +118,15 @@ pub fn prefix_of(g: &crate::game::Game, config: &Config) -> PathBuf {
     }
 }
 
+/// The folder `program` starts in: the game's own, else the runner's home when the working directory is where it writes its saves, else the game file's folder.
+pub fn working_dir(g: &crate::game::Game, spec: Option<&crate::runners::RunnerSpec>, program: &str) -> PathBuf {
+    let data = crate::paths::xdg("XDG_DATA_HOME", ".local/share");
+    match spec.and_then(|s| crate::runners::home(s, Path::new(program), &data)) {
+        Some(home) if home.var.is_empty() && g.launch.working_dir.is_empty() => home.dir,
+        _ => g.working_dir(),
+    }
+}
+
 /// Another game in the library whose prefix is `g`'s too: a removed one no longer holds it.
 pub fn prefix_sharer<'a>(g: &crate::game::Game, games: &'a [crate::library::Resolved], config: &Config) -> Option<&'a crate::game::Game> {
     let prefix = prefix_of(g, config);
@@ -336,6 +345,14 @@ pub fn plan(
             if r.effective.runner_path.is_empty() {
                 return Err(crate::Error::Unavailable(format!("{}: {} not found (install it or set runners.{}.exe)", g.id, spec.name, spec.id)));
             }
+            if let Some(home) = runners::home(spec, Path::new(&r.effective.runner_path), &crate::paths::xdg("XDG_DATA_HOME", ".local/share")) {
+                if home.stable {
+                    std::fs::create_dir_all(&home.dir)?;
+                    if !home.var.is_empty() {
+                        env.entry(home.var.into()).or_insert_with(|| home.dir.to_string_lossy().into());
+                    }
+                }
+            }
             if spec.via_proton {
                 proton_env(g, r, config, &mut env)?;
                 args.insert(0, r.effective.runner_path.clone());
@@ -439,7 +456,7 @@ pub fn plan(
     Ok(Plan {
         program,
         args,
-        cwd: g.working_dir(),
+        cwd: working_dir(g, Some(spec), &r.effective.runner_path),
         env,
         pre_command: g.launch.pre_command.clone(),
         post_command: g.launch.post_command.clone(),
@@ -774,6 +791,37 @@ mod tests {
         );
         assert!(!p.env.contains_key("WINEPREFIX"));
         assert_eq!(p.cwd, dir.path());
+    }
+
+    #[test]
+    fn a_ps5_emulator_keeps_its_saves_out_of_the_build_slot_an_update_prunes() {
+        let env = crate::paths::test_env();
+        let data = env.path().join("home/.local/share");
+        let own = env.path().join("Kyty/kyty_emulator");
+        let ours = crate::components::root().join("kytyps5/2026-10-25-83f8bfd/kyty_emulator");
+        for program in [&own, &ours] {
+            std::fs::create_dir_all(program.parent().unwrap()).unwrap();
+            std::fs::write(program, b"#!/bin/sh\n").unwrap();
+        }
+        let dump = env.path().join("games/PPSA01234");
+        std::fs::create_dir_all(&dump).unwrap();
+        let cfg = Config::default();
+        let planned = |program: &Path, working_dir: &str| {
+            let mut g = game(&dump, "eboot.bin", "kytyps5");
+            g.launch.runner_exe = program.to_string_lossy().into();
+            g.launch.working_dir = working_dir.into();
+            g.launch.gamescope = Some(false);
+            let r = crate::library::resolve(g, &cfg, &[]);
+            let p = plan(&r, &cfg, &BTreeMap::new(), None, None, false, true).unwrap();
+            assert_eq!(r.effective.working_dir, p.cwd.to_string_lossy(), "the folder shown is the one it starts in");
+            p
+        };
+        let p = planned(&own, "");
+        assert_eq!(p.cwd, own.parent().unwrap().canonicalize().unwrap(), "the player's own Kyty saves beside itself, as its launcher has it");
+        assert!(p.args.ends_with(&["--fullscreen".into(), "--game".into(), dump.join("eboot.bin").to_string_lossy().into()]), "{:?}", p.args);
+        assert_eq!(planned(&ours, "").cwd, data.join("KytyPS5"), "Universe's build saves out of its slot");
+        assert!(data.join("KytyPS5").is_dir(), "made before it starts there");
+        assert_eq!(planned(&ours, "/elsewhere").cwd, Path::new("/elsewhere"), "the game's own folder wins");
     }
 
     #[test]

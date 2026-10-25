@@ -382,7 +382,7 @@ fn gamesdb_platforms(platform: &str) -> &'static [&'static str] {
         "Nintendo Game Boy Advance" | "Nintendo Game Boy" => &["ngameboy"],
         "Sony PlayStation" => &["psx"],
         "Sony PlayStation 2" => &["ps2"],
-        "Sony PlayStation 3" | "Sony PlayStation 4" => &["psn"],
+        "Sony PlayStation 3" | "Sony PlayStation 4" | "Sony PlayStation 5" => &["psn"],
         "Sony PlayStation Portable" => &["psp"],
         "Sony PlayStation Vita" => &["psvita"],
         "Sega Dreamcast" => &["dc"],

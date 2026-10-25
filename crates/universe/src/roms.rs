@@ -60,7 +60,8 @@ pub fn folders(config: &Config) -> Vec<Folder> {
 fn folders_under(config: &Config, cfg: &Path, data: &Path) -> Vec<Folder> {
     let mut out = Vec::new();
     for spec in runners::RUNNERS.iter().filter(|s| s.kind == Kind::Emulator) {
-        if runners::locate(spec, config).program.is_empty() {
+        let program = runners::locate(spec, config).program;
+        if program.is_empty() {
             continue;
         }
         let dirs: Vec<(PathBuf, bool)> = match spec.id {
@@ -75,6 +76,7 @@ fn folders_under(config: &Config, cfg: &Path, data: &Path) -> Vec<Folder> {
             }
             "cemu" => xml_entries(&cfg.join("Cemu/settings.xml"), "GamePaths").into_iter().map(|d| (d, true)).collect(),
             "shadps4" => toml_dirs(&cfg.join("shadPS4/config.toml"), "GUI", "installDirs").into_iter().map(|d| (d, false)).collect(),
+            "kytyps5" => kyty_dirs(&cfg.join("Kyty/Kyty.ini")).into_iter().map(|d| (d, true)).collect(),
             "flycast" => ini_value(&cfg.join("flycast/emu.cfg"), "config", "Dreamcast.ContentPath")
                 .map(|v| v.split(';').filter(|s| !s.trim().is_empty()).map(|s| (PathBuf::from(s.trim()), true)).collect())
                 .unwrap_or_default(),
@@ -161,7 +163,7 @@ fn entries(dir: &Path) -> Vec<PathBuf> {
     v
 }
 
-/// The game files of `spec` under `dir`: folder games for RPCS3, shadPS4 and Cemu's `code/*.rpx`, files by extension otherwise.
+/// The game files of `spec` under `dir`: folder games for RPCS3, the PlayStation 4 and 5 and Cemu's `code/*.rpx`, files by extension otherwise.
 fn collect(spec: &RunnerSpec, dir: &Path, recursive: bool, out: &mut Vec<PathBuf>) {
     match spec.id {
         "rpcs3" => {
@@ -176,14 +178,13 @@ fn collect(spec: &RunnerSpec, dir: &Path, recursive: bool, out: &mut Vec<PathBuf
             }
         }
         "shadps4" => {
-            for sub in entries(dir).into_iter().filter(|p| p.is_dir()) {
-                let name = sub.file_name().map(|n| n.to_string_lossy().to_ascii_uppercase()).unwrap_or_default();
-                let eboot = sub.join("eboot.bin");
-                if !name.ends_with("-UPDATE") && !name.ends_with("-PATCH") && eboot.is_file() {
-                    out.push(eboot);
+            for sub in entries(dir).into_iter().filter(|p| p.is_dir() && !patch_dir(p)) {
+                if sub.join("eboot.bin").is_file() && sub.join("sce_sys/param.sfo").is_file() {
+                    out.push(sub.join("eboot.bin"));
                 }
             }
         }
+        "kytyps5" => ps5_dumps(dir, out),
         _ => collect_files(spec, dir, recursive, out),
     }
 }
@@ -211,6 +212,31 @@ fn collect_files(spec: &RunnerSpec, dir: &Path, recursive: bool, out: &mut Vec<P
     }
 }
 
+/// A PlayStation 4 or 5 update or patch dumped beside its game: `CUSA00001-UPDATE`.
+fn patch_dir(dir: &Path) -> bool {
+    let name = dir.file_name().map(|n| n.to_string_lossy().to_ascii_uppercase()).unwrap_or_default();
+    name.ends_with("-UPDATE") || name.ends_with("-PATCH")
+}
+
+/// PlayStation 5 dumps at any depth, as Kyty walks them: a folder holding `eboot.bin` (a game only with `sce_sys/param.json`), whose
+/// own folders are the game's, and `.zar` archives.
+fn ps5_dumps(dir: &Path, out: &mut Vec<PathBuf>) {
+    if dir.join("eboot.bin").is_file() {
+        if dir.join("sce_sys/param.json").is_file() && !patch_dir(dir) {
+            out.push(dir.join("eboot.bin"));
+        }
+        return;
+    }
+    for p in entries(dir) {
+        let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        if p.is_dir() && !p.is_symlink() && !skipped_dir(&name) {
+            ps5_dumps(&p, out);
+        } else if p.is_file() && extension(&p) == "zar" {
+            out.push(p);
+        }
+    }
+}
+
 fn ps3_eboot(dir: &Path) -> Option<PathBuf> {
     [dir.join("PS3_GAME/USRDIR/EBOOT.BIN"), dir.join("USRDIR/EBOOT.BIN")].into_iter().find(|p| p.is_file())
 }
@@ -224,6 +250,9 @@ fn title_for(spec: &RunnerSpec, path: &Path) -> String {
             })
         }),
         "shadps4" => path.parent().and_then(|p| sfo_title(&p.join("sce_sys/param.sfo")).or_else(|| Some(crate::core::title_of(p)))),
+        "kytyps5" if extension(path) == "bin" => path
+            .parent()
+            .map(|p| ps5_param(&p.join("sce_sys/param.json")).map(|(title, _)| title).filter(|t| !t.is_empty()).unwrap_or_else(|| crate::core::title_of(p))),
         "cemu" if extension(path) == "rpx" => path.parent().and_then(|p| p.parent()).and_then(|title| {
             xml_text(&std::fs::read_to_string(title.join("meta/meta.xml")).unwrap_or_default(), "longname_en")
                 .map(|s| s.split_whitespace().collect::<Vec<_>>().join(" "))
@@ -261,12 +290,35 @@ pub(crate) fn sfo_value(path: &Path, wanted: &str) -> Option<String> {
     None
 }
 
+/// A PlayStation 5 `sce_sys/param.json`'s title (the default language's, else en-US's, else any) and title id (else the one inside
+/// `contentId`), as Kyty reads them.
+pub(crate) fn ps5_param(path: &Path) -> Option<(String, String)> {
+    let v: serde_json::Value = serde_json::from_str(&read(path)).ok()?;
+    let text = |v: &serde_json::Value, k: &str| v.get(k).and_then(|x| x.as_str()).map(str::trim).filter(|s| !s.is_empty()).map(String::from);
+    let title = v
+        .get("localizedParameters")
+        .and_then(|l| {
+            let default = text(l, "defaultLanguage").unwrap_or_default();
+            let named = [default.as_str(), "en-US"].into_iter().find_map(|lang| l.get(lang).and_then(|t| text(t, "titleName")));
+            named.or_else(|| l.as_object()?.values().find_map(|t| text(t, "titleName")))
+        })
+        .map(|t| t.split_whitespace().collect::<Vec<_>>().join(" "))
+        .unwrap_or_default();
+    let content_id = |c: String| (c.is_ascii() && c.len() == 36 && &c[6..7] == "-" && &c[16..17] == "_").then(|| c[7..16].to_string());
+    let id = text(&v, "titleId").or_else(|| text(&v, "contentId").and_then(content_id)).unwrap_or_default();
+    Some((title, id))
+}
+
 pub(crate) fn read(path: &Path) -> String {
     std::fs::read_to_string(path).unwrap_or_default()
 }
 
 /// A Qt `.ini`'s `[section]` `key=value` pairs, the values unquoted.
 fn ini_pairs(text: &str) -> Vec<(String, String, String)> {
+    ini_raw_pairs(text).into_iter().map(|(s, k, v)| (s, k, v.strip_prefix('"').and_then(|v| v.strip_suffix('"')).unwrap_or(&v).to_string())).collect()
+}
+
+fn ini_raw_pairs(text: &str) -> Vec<(String, String, String)> {
     let mut section = String::new();
     let mut out = Vec::new();
     for line in text.lines() {
@@ -274,12 +326,49 @@ fn ini_pairs(text: &str) -> Vec<(String, String, String)> {
         if let Some(name) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
             section = name.replace("%20", " ");
         } else if let Some((k, v)) = line.split_once('=') {
-            let v = v.trim();
-            let v = v.strip_prefix('"').and_then(|v| v.strip_suffix('"')).unwrap_or(v);
-            out.push((section.clone(), k.trim().to_string(), v.to_string()));
+            out.push((section.clone(), k.trim().to_string(), v.trim().to_string()));
         }
     }
     out
+}
+
+/// A QSettings string list as its `.ini` writes it: `/a, "/b, c"`, `\"` and `\xHHHH` escaped, `@Invalid()` for none.
+fn qt_string_list(raw: &str) -> Vec<String> {
+    if raw == "@Invalid()" {
+        return Vec::new();
+    }
+    let (mut out, mut item, mut quoted) = (Vec::new(), String::new(), false);
+    let mut chars = raw.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '"' => quoted = !quoted,
+            ',' if !quoted => out.push(std::mem::take(&mut item)),
+            '\\' => match chars.next() {
+                Some('x') => {
+                    let mut code = 0u32;
+                    while let Some(d) = chars.peek().and_then(|d| d.to_digit(16)) {
+                        code = code.saturating_mul(16).saturating_add(d);
+                        chars.next();
+                    }
+                    item.extend(char::from_u32(code));
+                }
+                Some(other) => item.push(other),
+                None => {}
+            },
+            c => item.push(c),
+        }
+    }
+    out.push(item);
+    out.into_iter().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()
+}
+
+/// Kyty's `[Launcher] game_dirs`, else the single `game_dir` it wrote before.
+fn kyty_dirs(path: &Path) -> Vec<PathBuf> {
+    let pairs = ini_raw_pairs(&read(path));
+    let list = |key: &str| pairs.iter().find(|(s, k, _)| s == "Launcher" && k == key).map(|(_, _, v)| qt_string_list(v)).unwrap_or_default();
+    let dirs = list("game_dirs");
+    let dirs = if dirs.is_empty() { list("game_dir") } else { dirs };
+    dirs.into_iter().map(PathBuf::from).collect()
 }
 
 pub(crate) fn ini_value(path: &Path, section: &str, key: &str) -> Option<String> {
@@ -448,7 +537,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn dolphin_pcsx2_cemu_ryujinx_shadps4_lists() {
+    fn the_emulators_own_folder_lists() {
         let dir = tempfile::tempdir().unwrap();
         let d = dir.path();
         std::fs::write(d.join("Dolphin.ini"), "[General]\nISOPath0 = /roms/wii\nISOPaths = 2\nISOPath1 = /roms/gc\nRecursiveISOPaths = True\n").unwrap();
@@ -467,6 +556,10 @@ pub(crate) mod tests {
         assert_eq!(toml_dirs(&d.join("config.toml"), "GUI", "installDirs"), vec![PathBuf::from("/roms/ps4")]);
         std::fs::write(d.join("games.yml"), "BLES00142: /roms/ps3/Simpsons/\nBLES00416: /roms/ps3/Bolt/").unwrap();
         assert_eq!(rpcs3_dirs(d), vec![(PathBuf::from("/roms/ps3/Simpsons"), false), (PathBuf::from("/roms/ps3/Bolt"), false)]);
+        std::fs::write(d.join("Kyty.ini"), "[Launcher]\ngame_dirs=/roms/ps5, \"/roms/a, b\", /roms/caf\\xe9\ngame_dir=/roms/old\n").unwrap();
+        assert_eq!(kyty_dirs(&d.join("Kyty.ini")), [PathBuf::from("/roms/ps5"), PathBuf::from("/roms/a, b"), PathBuf::from("/roms/café")]);
+        std::fs::write(d.join("Kyty.ini"), "[Launcher]\ngame_dirs=@Invalid()\ngame_dir=/roms/old\n").unwrap();
+        assert_eq!(kyty_dirs(&d.join("Kyty.ini")), [PathBuf::from("/roms/old")], "the folder it kept before its list");
     }
 
     #[test]
@@ -513,11 +606,34 @@ pub(crate) mod tests {
         touch(&d.join("ps4/CUSA00001/sce_sys/param.sfo"));
         std::fs::write(d.join("ps4/CUSA00001/sce_sys/param.sfo"), sfo("Bloodborne")).unwrap();
         touch(&d.join("ps4/CUSA00001-UPDATE/eboot.bin"));
+        touch(&d.join("ps4/CUSA00002/eboot.bin"));
+        touch(&d.join("ps4/PPSA01234/eboot.bin"));
+        touch(&d.join("ps4/PPSA01234/sce_sys/param.json"));
+        std::fs::write(
+            d.join("ps4/PPSA01234/sce_sys/param.json"),
+            r#"{"titleId": "PPSA01234", "localizedParameters": {"defaultLanguage": "fr-FR", "en-US": {"titleName": "Astro Bot"}, "fr-FR": {"titleName": "ASTRO  BOT"}}}"#,
+        )
+        .unwrap();
         let shadps4 = runners::spec("shadps4").unwrap();
         let mut ps4 = Vec::new();
         collect(shadps4, &d.join("ps4"), false, &mut ps4);
-        assert_eq!(ps4, vec![d.join("ps4/CUSA00001/eboot.bin")]);
+        assert_eq!(ps4, vec![d.join("ps4/CUSA00001/eboot.bin")], "a PS4 game is the folder with its param.sfo: a PS5 dump beside it is not");
         assert_eq!(title_for(shadps4, &ps4[0]), "Bloodborne");
+        touch(&d.join("ps5/Astro.zar"));
+        touch(&d.join("ps5/deep/PPSA05678/eboot.bin"));
+        touch(&d.join("ps5/deep/PPSA05678/sce_sys/param.json"));
+        touch(&d.join("ps5/deep/PPSA05678/sce_module/inner.zar"));
+        touch(&d.join("ps5/deep/PPSA05678-patch/eboot.bin"));
+        touch(&d.join("ps5/deep/PPSA05678-patch/sce_sys/param.json"));
+        let kyty = runners::spec("kytyps5").unwrap();
+        let mut ps5 = Vec::new();
+        for folder in ["ps4", "ps5"] {
+            collect(kyty, &d.join(folder), true, &mut ps5);
+        }
+        assert_eq!(ps5, vec![d.join("ps4/PPSA01234/eboot.bin"), d.join("ps5/Astro.zar"), d.join("ps5/deep/PPSA05678/eboot.bin")]);
+        assert_eq!(title_for(kyty, &ps5[0]), "ASTRO BOT", "the default language's name");
+        assert_eq!(title_for(kyty, &ps5[1]), "Astro");
+        assert_eq!(title_for(kyty, &ps5[2]), "PPSA05678", "no name in its param.json: the folder's");
 
         touch(&d.join("wiiu/Wind Waker HD [ARZP01]/code/Turbo.rpx"));
         std::fs::create_dir_all(d.join("wiiu/Wind Waker HD [ARZP01]/meta")).unwrap();
@@ -573,6 +689,32 @@ pub(crate) mod tests {
             report.skipped.iter().map(|s| s.reason.as_str()).collect::<Vec<_>>(),
             vec!["mario is already in the library under another file", &format!("same title as {}", d.join("switch/Zelda.xci").display())]
         );
+    }
+
+    #[test]
+    fn a_folder_both_playstation_emulators_list_gives_each_its_own_games() {
+        let env = crate::paths::test_env();
+        let d = env.path();
+        let (cfg, data) = (d.join("home/.config"), d.join("home/.local/share"));
+        let emu = d.join("bin/emu");
+        touch(&emu);
+        std::fs::create_dir_all(cfg.join("shadPS4")).unwrap();
+        std::fs::write(cfg.join("shadPS4/config.toml"), format!("[GUI]\ninstallDirs = [\"{}\"]\n", d.join("ps").display())).unwrap();
+        std::fs::create_dir_all(cfg.join("Kyty")).unwrap();
+        std::fs::write(cfg.join("Kyty/Kyty.ini"), format!("[Launcher]\ngame_dirs={}\n", d.join("ps").display())).unwrap();
+        touch(&d.join("ps/CUSA00001/eboot.bin"));
+        touch(&d.join("ps/CUSA00001/sce_sys/param.sfo"));
+        std::fs::write(d.join("ps/CUSA00001/sce_sys/param.sfo"), sfo("Bloodborne")).unwrap();
+        touch(&d.join("ps/PPSA01234/eboot.bin"));
+        touch(&d.join("ps/PPSA01234/sce_sys/param.json"));
+        std::fs::write(d.join("ps/PPSA01234/sce_sys/param.json"), r#"{"localizedParameters": {"en-US": {"titleName": "Astro Bot"}}}"#).unwrap();
+        let mut config = Config::default();
+        for id in ["shadps4", "kytyps5"] {
+            config.runners.insert(id.into(), [("exe".to_string(), toml::Value::String(emu.to_string_lossy().into()))].into_iter().collect());
+        }
+        let report = scan_under(&config, &[], &cfg, &data);
+        let found: Vec<(&str, &str)> = report.imported.iter().map(|f| (f.id.as_str(), f.runner.as_str())).collect();
+        assert_eq!(found, [("bloodborne", "shadps4"), ("astro-bot", "kytyps5")], "{report:?}");
     }
 
     #[test]

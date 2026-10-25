@@ -135,6 +135,14 @@ UPSTREAMS = (
     ),
     Upstream("shadps4", "shadPS4", "emulator", "github:shadps4-emu/shadPS4", (Pick(r"^shadps4-linux-sdl-[\w.]+\.zip$"),)),
     Upstream(
+        "kytyps5",
+        "KytyPS5",
+        "emulator",
+        "github:KytyPS5/KytyPS5",
+        (Pick(r"^KytyPS5-[\w-]+-Linux-x86_64\.tar\.gz$", program="kyty_emulator"),),
+        version=r"re:^KytyPS5-(\d{4}-\d{2}-\d{2}-[0-9a-f]+)-Linux",
+    ),
+    Upstream(
         "vita3k",
         "Vita3K",
         "emulator",

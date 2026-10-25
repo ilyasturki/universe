@@ -150,7 +150,7 @@ pub enum Cmd {
     Add {
         /// The game file (a .exe for proton/wine, a native program for linux, a ROM or image for an emulator)
         file: std::path::PathBuf,
-        /// Runner id: proton, wine, linux, dolphin, eden, ryujinx, rpcs3, melonds, mgba, pcsx2, duckstation, cemu, azahar, ppsspp, xemu, xenia, shadps4, vita3k, mupen64plus, snes9x, flycast, scummvm, dosbox, mame (an alias such as yuzu or citra works)
+        /// Runner id: proton, wine, linux, dolphin, eden, ryujinx, rpcs3, melonds, mgba, pcsx2, duckstation, cemu, azahar, ppsspp, xemu, xenia, shadps4, kytyps5, vita3k, mupen64plus, snes9x, flycast, scummvm, dosbox, mame (an alias such as yuzu or citra works)
         #[arg(long, short)]
         runner: String,
         /// Title; the file's name, cleaned of release tags, when omitted

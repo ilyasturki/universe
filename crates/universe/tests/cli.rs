@@ -97,6 +97,48 @@ fn discover_on_a_bare_home_finds_nothing() {
 }
 
 #[test]
+fn a_ps5_dump_in_an_emulators_game_folder_is_discovered_and_rescanned_and_one_elsewhere_added_by_hand() {
+    let dir = tempfile::tempdir().unwrap();
+    let dump = |at: &str, id: &str| {
+        let d = dir.path().join(at);
+        std::fs::create_dir_all(d.join("sce_sys")).unwrap();
+        std::fs::write(d.join("eboot.bin"), b"").unwrap();
+        std::fs::write(d.join("sce_sys/param.json"), format!(r#"{{"titleId": "{id}", "localizedParameters": {{"en-US": {{"titleName": "Title {id}"}}}}}}"#))
+            .unwrap();
+        d
+    };
+    dump("ps5/Kyty games/PPSA01234", "PPSA01234");
+    let elsewhere = dump("elsewhere/PPSA05678", "PPSA05678");
+    let kyty = dir.path().join("apps/Kyty");
+    std::fs::create_dir_all(&kyty).unwrap();
+    std::fs::write(kyty.join("kyty_emulator"), b"#!/bin/sh\n").unwrap();
+    std::fs::create_dir_all(dir.path().join(".config/Kyty")).unwrap();
+    std::fs::write(dir.path().join(".config/Kyty/Kyty.ini"), format!("[Launcher]\ngame_dirs={}\n", dir.path().join("ps5").display())).unwrap();
+    std::fs::create_dir_all(dir.path().join("config")).unwrap();
+    std::fs::write(
+        dir.path().join("config/config.toml"),
+        format!("schema = 1\n[desktop]\nprofile = \"none\"\n[runners.kytyps5]\nexe = \"{}\"\n", kyty.join("kyty_emulator").display()),
+    )
+    .unwrap();
+    let json = |args: &[&str]| -> serde_json::Value {
+        let offline = "http://127.0.0.1:9";
+        let out = universe(&dir, args, &[("HTTP_PROXY", offline), ("HTTPS_PROXY", offline), ("ALL_PROXY", offline)]);
+        serde_json::from_slice(&out.stdout).unwrap_or_else(|e| panic!("{args:?}: {e}: {}", text(&out.stderr)))
+    };
+    let report = json(&["discover", "--json"]);
+    let roms = report["launchers"].as_array().unwrap().iter().find(|l| l["id"] == "roms").unwrap().clone();
+    assert_eq!((roms["found"].as_bool(), roms["games"].as_u64()), (Some(true), Some(1)), "{roms}");
+    let rescan = json(&["rescan", "--json"]);
+    let imported: Vec<(&str, &str)> =
+        rescan["imported"].as_array().unwrap().iter().map(|f| (f["id"].as_str().unwrap(), f["runner"].as_str().unwrap())).collect();
+    assert_eq!(imported, [("title-ppsa01234", "kytyps5")]);
+    let added = json(&["add", &elsewhere.join("eboot.bin").to_string_lossy(), "--runner", "kytyps5", "--json"]);
+    let effective = &added["effective"];
+    assert_eq!((effective["runner"].as_str(), effective["platform"].as_str()), (Some("kytyps5"), Some("Sony PlayStation 5")));
+    assert_eq!(effective["working_dir"].as_str(), Some(kyty.canonicalize().unwrap().to_str().unwrap()), "it starts beside the player's own Kyty");
+}
+
+#[test]
 fn an_older_config_gives_up_its_all_games_xbox_layout_and_a_game_keeps_its_own() {
     let dir = tempfile::tempdir().unwrap();
     let controls = dir.path().join("modules/controls");

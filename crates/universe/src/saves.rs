@@ -83,6 +83,13 @@ fn emulator_under(game: &Game, config: &Config, cfg: &Path, data: &Path) -> Opti
             };
             (folder, id, files)
         }
+        "kytyps5" => {
+            let program = crate::library::runner_path(game, Some(spec), |s| runners::locate(s, config).program);
+            let folder = runners::home(spec, Path::new(&program), data)?.dir.join("_SaveData");
+            let id = exe.parent().and_then(|d| crate::roms::ps5_param(&d.join("sce_sys/param.json"))).map(|(_, id)| id).unwrap_or_default();
+            let files = if id.is_empty() { vec![] } else { vec![literal(&folder.join(&id))] };
+            (folder, id, files)
+        }
         "vita3k" => {
             let pref = crate::roms::read(&cfg.join("Vita3K/config.yml"))
                 .lines()
@@ -525,6 +532,20 @@ pub(crate) mod tests {
         std::fs::write(ps4.join("sce_sys/param.sfo"), crate::roms::tests::sfo_of(&[("TITLE_ID", "CUSA00001")])).unwrap();
         let saves = emulator_under(&game("shadps4", &ps4.join("eboot.bin")), &config, &cfg, &data).unwrap();
         assert!(saves.files.iter().all(|f| f.ends_with("/CUSA00001")) && saves.files.len() == 2, "{saves:?}");
+
+        let ps5 = env.path().join("games/PPSA01234");
+        std::fs::create_dir_all(ps5.join("sce_sys")).unwrap();
+        std::fs::write(ps5.join("sce_sys/param.json"), r#"{"contentId": "UP9000-PPSA01234_00-ASTROBOTPS500000"}"#).unwrap();
+        let saves = emulator_under(&game("kytyps5", &ps5.join("eboot.bin")), &config, &cfg, &data).unwrap();
+        assert_eq!(saves.title_id, "PPSA01234", "the id inside its content id");
+        assert_eq!(saves.files, [format!("{}/KytyPS5/_SaveData/PPSA01234", data.display())], "no Kyty of the player's: where Universe's keeps them");
+        let kyty = env.path().join("Kyty");
+        std::fs::create_dir_all(&kyty).unwrap();
+        std::fs::write(kyty.join("kyty_emulator"), b"").unwrap();
+        let mut own = game("kytyps5", &ps5.join("eboot.bin"));
+        own.launch.runner_exe = kyty.join("kyty_emulator").to_string_lossy().into();
+        let saves = emulator_under(&own, &config, &cfg, &data).unwrap();
+        assert_eq!(saves.folder, kyty.canonicalize().unwrap().join("_SaveData").to_string_lossy(), "the player's own Kyty saves beside itself");
 
         let wiiu = env.path().join("games/Zelda [BotW]");
         std::fs::create_dir_all(wiiu.join("meta")).unwrap();

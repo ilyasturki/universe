@@ -320,6 +320,21 @@ pub const RUNNERS: &[RunnerSpec] = &[
         term_twice: true,
     },
     RunnerSpec {
+        id: "kytyps5",
+        name: "KytyPS5",
+        kind: Kind::Emulator,
+        aliases: &[],
+        // Never kyty_launcher: it starts the emulator again in a terminal.
+        binaries: &["kyty_emulator"],
+        platforms: &["Sony PlayStation 5"],
+        extensions: &["bin", "zar"],
+        file_flag: &["--game"],
+        options: &[bool_opt("fullscreen", true, "Fullscreen", "--fullscreen", "")],
+        via_proton: false,
+        file_required: true,
+        term_twice: true,
+    },
+    RunnerSpec {
         id: "mupen64plus",
         name: "Mupen64Plus",
         kind: Kind::Emulator,
@@ -578,6 +593,29 @@ pub fn file_args(spec: &RunnerSpec, file: &Path) -> Vec<String> {
         _ => f,
     };
     spec.file_flag.iter().map(|s| s.to_string()).chain([target]).collect()
+}
+
+/// The emulators that write their saves and caches beside themselves or into their working directory: the folder under
+/// `$XDG_DATA_HOME` that holds them for Universe's build, whose slot an update prunes, and the variable that points the
+/// program there (none: its working directory does).
+const HOMES: &[(&str, &str, &str)] = &[("kytyps5", "KytyPS5", "")];
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Home {
+    pub dir: PathBuf,
+    pub var: &'static str,
+    /// `dir` is the one under `$XDG_DATA_HOME`: the launch makes it and points the program there.
+    pub stable: bool,
+}
+
+/// Where `program` keeps its saves and caches: under `data` (`$XDG_DATA_HOME`) for Universe's build, else the program's own folder when it can write there.
+pub fn home(spec: &RunnerSpec, program: &Path, data: &Path) -> Option<Home> {
+    let &(_, name, var) = HOMES.iter().find(|(id, _, _)| *id == spec.id)?;
+    let own = std::fs::canonicalize(program).ok().filter(|_| !program.starts_with(crate::components::root())).and_then(|p| p.parent().map(Path::to_path_buf));
+    match own.filter(|d| rustix::fs::access(d, rustix::fs::Access::WRITE_OK).is_ok()) {
+        Some(dir) => Some(Home { dir, var, stable: false }),
+        None => Some(Home { dir: data.join(name), var, stable: true }),
+    }
 }
 
 pub fn to_json(spec: &RunnerSpec, config: &Config) -> serde_json::Value {
