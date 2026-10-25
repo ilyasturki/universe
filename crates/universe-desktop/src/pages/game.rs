@@ -74,7 +74,7 @@ mod imp {
         #[template_child]
         pub facts: TemplateChild<gtk::Label>,
         #[template_child]
-        pub version: TemplateChild<gtk::Label>,
+        pub update_mark: TemplateChild<gtk::Label>,
         #[template_child]
         pub play: TemplateChild<gtk::Button>,
         #[template_child]
@@ -187,7 +187,7 @@ impl GamePage {
             page.upgrade().inspect(|page| page.refresh());
         };
         let mut handlers = imp.handlers.take();
-        for prop in ["title", "cover", "playing", "launching", "installed", "favorite", "version"] {
+        for prop in ["title", "cover", "playing", "launching", "installed", "favorite", "update-mark"] {
             handlers.push(game.connect_notify_local(Some(prop), refresh.clone()));
         }
         let page = self.downgrade();
@@ -236,9 +236,9 @@ impl GamePage {
         imp.byline.set_visible(!byline.is_empty());
 
         imp.facts.set_label(&facts(&row, details.achievements, game.playing(), chrono::Local::now()).join(" · "));
-        let version = game.version();
-        imp.version.set_label(&version);
-        imp.version.set_visible(!version.is_empty());
+        let mark = game.update_mark();
+        imp.update_mark.set_label(&mark);
+        imp.update_mark.set_visible(!mark.is_empty());
 
         let (label, icon) = if game.launching() {
             (gettext("Starting…"), "content-loading-symbolic")
