@@ -126,9 +126,9 @@ FocusScope {
     readonly property var focusedGame: subOpen ? (subArgs.game || null) : detailOpen ? detailGame : (activePage ? activePage.currentGame : null)
     readonly property bool menuOpen: gameMenu.open
     // What the bar shows over any page while the sheet, a question or the game menu is up.
-    readonly property var overlayHints: prompts.open ? prompts.hints : confirm.open ? confirm.hints : menuOpen ? gameMenu.hints : null
+    readonly property var overlayHints: prompts.open ? prompts.hints : confirm.open ? confirm.hints : whatsNew.open ? whatsNew.hints : menuOpen ? gameMenu.hints : null
     // Read by a key script's Expect: the id Return launches, "" for none, null while a dialog, menu or page over the row takes the key.
-    readonly property var returnLaunches: launching || launchOverlay.running || confirm.open || detailOpen || subOpen || menuOpen ? null : focusOwner !== "chrome" && focusTarget && focusTarget.currentGame ? String(focusTarget.currentGame.id) : ""
+    readonly property var returnLaunches: launching || launchOverlay.running || confirm.open || whatsNew.open || detailOpen || subOpen || menuOpen ? null : focusOwner !== "chrome" && focusTarget && focusTarget.currentGame ? String(focusTarget.currentGame.id) : ""
     readonly property var session: api.universe.currentSession
     readonly property bool sessionRunning: session != null && session.session_id !== undefined
     readonly property string playingId: sessionRunning ? session.id : ""
@@ -193,7 +193,7 @@ FocusScope {
     // A tab clicked opens and enters in one go, before its page has loaded: the focus lands once it is there.
     onActivePageChanged: {
         deliverLanding();
-        if (activePage && focusOwner === "page" && !detailOpen && !subOpen && !menuOpen && !confirm.open && !launching)
+        if (activePage && focusOwner === "page" && !detailOpen && !subOpen && !menuOpen && !confirm.open && !whatsNew.open && !launching)
             activePage.forceActiveFocus();
     }
 
@@ -210,15 +210,14 @@ FocusScope {
     }
 
     function openChangelog(fresh) {
-        openSub("pages/ChangelogPage.qml", {
-            changelog: true,
-            fresh: fresh
-        });
+        whatsNew.show(fresh);
     }
 
     function restoreFocus() {
         // A sub page still loading holds the focus in its loader, not on the tab under it.
-        if (subOpen)
+        if (whatsNew.open)
+            whatsNew.forceActiveFocus();
+        else if (subOpen)
             (subLoader.item || subLoader).forceActiveFocus();
         else if (detailOpen && detailLoader.item)
             detailLoader.item.forceActiveFocus();
@@ -377,7 +376,7 @@ FocusScope {
             return;
         }
         if (!sessionRunning) {
-            if (root.subOpen || confirm.open || root.menuOpen)
+            if (root.subOpen || confirm.open || root.menuOpen || whatsNew.open)
                 return;
             pageMenu();
             return;
@@ -391,7 +390,7 @@ FocusScope {
     }
 
     function openSub(source, args) {
-        if (!args.game && !args.runner && !args.module && !args.source && !args.add && !args.setup && !args.changelog)
+        if (!args.game && !args.runner && !args.module && !args.source && !args.add && !args.setup)
             return;
         Sound.enter();
         showSub(source, args);
@@ -1254,6 +1253,13 @@ FocusScope {
                 duration: root.subSwapping ? Theme.durQuick : Theme.durScene
             }
         }
+    }
+
+    ChangelogDialog {
+        id: whatsNew
+        objectName: "whatsNew"
+        anchors.fill: parent
+        onClosed: root.restoreFocus()
     }
 
     ActionMenu {

@@ -1358,11 +1358,12 @@ a first start, or the first after an upgrade from a version that kept none — s
 does a downgrade. `dismiss()` empties it.
 
 Each look's `start()` opens the page as its third branch, after the Themes landing and the first-run
-setup, so never over the setup and never on a first run: the Universe look as `pages/ChangelogPage.qml` through
-`openChangelog(true)` (`openSub` with `{ changelog: true, fresh: true }`), Switch 2 and PS5 their own
-`pages/ChangelogPage.qml` pushed with `{ fresh: true }`. A `fresh` page lists `pending` under "What's
-new" and dismisses it when it closes; Settings › About's What's new and Version rows open the same page
-on `releases`, under the same title.
+setup, so never over the setup and never on a first run: the Universe look as a dialog over the page
+underneath, `ui/ChangelogDialog.qml` through `openChangelog(true)` (`show(fresh)`: a centred card on a scrim,
+its hints in the bar through `overlayHints`, the screen under it left as it was; a click outside the card,
+either button, is B), Switch 2 and PS5 their own `pages/ChangelogPage.qml` pushed with `{ fresh: true }`.
+A `fresh` page lists `pending` under "What's new" and dismisses it when it closes; Settings › About's
+What's new and Version rows open the same page on `releases`, under the same title.
 Up and Down scroll it, B closes it, and the Universe look's `isScreenUp`/`isScreenDown` and `isFirst`/`isLast`
 page and jump.
 

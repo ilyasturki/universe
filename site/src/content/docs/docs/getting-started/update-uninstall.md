@@ -40,7 +40,7 @@ Universe updates the runners and tools it installed for your games, such as Prot
 
 ## What's new
 
-The first time you open Universe after an update, **What's new** shows what changed since the version you last ran. Settings › [About](/docs/settings/about/) opens it again, and its **Show what's new after an update** stops it opening by itself.
+The first time you open Universe after an update, **What's new** shows what changed since the version you last ran. In the Universe look it opens as a window over Home, and **B** closes it. Settings › [About](/docs/settings/about/) opens it again, and its **Show what's new after an update** stops it opening by itself.
 
 ## Uninstalling
 
