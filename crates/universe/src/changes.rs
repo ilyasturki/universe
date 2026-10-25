@@ -456,6 +456,10 @@ impl Watcher {
         for (session, id) in gone {
             moved = true;
             let Some(entry) = self.core.journal(&id).await.ok().and_then(|es| es.into_iter().find(|e| e.session == session)) else { continue };
+            // Its unit died with the file left behind: put off, not done.
+            if entry.state == "pending" {
+                continue;
+            }
             let text = if entry.state == "written" { entry.title } else { entry.paragraphs.into_iter().next().unwrap_or_default() };
             self.send(Event::JournalDone { id, session, state: entry.state, text });
         }
@@ -531,6 +535,8 @@ mod tests {
     async fn a_journal_made_after_the_start_is_watched_and_its_entries_reported() {
         let _sb = sandbox();
         let core = Arc::new(open().await.0);
+        let unit = crate::host::UnitSpec { name: "universe-journal-post-process-s1".into(), ..Default::default() };
+        core.host.units.start(&unit).await.unwrap();
         let (_watch, mut rx) = watch(core.clone(), QUICK).await.unwrap();
         let journal = paths::game_dir("sample").join("journal");
         std::fs::create_dir_all(&journal).unwrap();

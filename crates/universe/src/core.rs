@@ -1551,11 +1551,15 @@ impl Core {
             .unwrap_or_default()
     }
 
+    /// A pending file whose unit is gone (a reboot) is owed a run, not listed as being written.
     pub async fn pending_journals(&self) -> Vec<serde_json::Value> {
         let games = self.games.read().await;
         let mut out = Vec::new();
         for r in games.iter() {
             for e in crate::journal::pending(&r.game.journal_dir()) {
+                if !self.host.units.is_active(&format!("universe-{JOURNAL_MODULE}-post-process-{}", e.session)).await {
+                    continue;
+                }
                 out.push(serde_json::json!({"game": r.game.id, "title": r.game.title, "session": e.session, "started_at": e.started_at}));
             }
         }
@@ -2869,12 +2873,17 @@ mod tests {
         assert_eq!(report["started"]["session"], "20260910-100000");
         assert_eq!(report["due"], 0);
         assert_eq!(report["next"].as_str(), Some(soon.as_str()), "the timer is armed on the next one still waiting, not the one just started");
+        std::fs::remove_file(journal_dir.join("20260910-100000.deferred.json")).unwrap();
+        std::fs::write(journal_dir.join("20260910-100000.pending.json"), r#"{"session":"20260910-100000","game":"sample","provider":"stub"}"#).unwrap();
+        let writing: Vec<_> = core.pending_journals().await.iter().map(|v| v["session"].clone()).collect();
+        assert_eq!(writing, vec![serde_json::json!("20260910-100000")], "the run the sweep started is being written");
+        std::fs::remove_file(journal_dir.join("20260910-100000.pending.json")).unwrap();
 
         // A pending file whose unit is gone (a reboot, a stopped hook) is owed a run too, however long it has sat there.
-        std::fs::remove_file(journal_dir.join("20260910-100000.deferred.json")).unwrap();
         std::fs::write(journal_dir.join("20260911-200000.pending.json"), r#"{"session":"20260911-200000","game":"sample","provider":"stub"}"#).unwrap();
         std::fs::remove_file(journal_dir.join("20260911-200000.deferred.json")).unwrap();
         assert_eq!(core.due_journals().await, vec![("sample".to_string(), "20260911-200000".to_string())]);
+        assert!(core.pending_journals().await.is_empty(), "and is not shown as being written");
         let stale = std::fs::OpenOptions::new().write(true).open(journal_dir.join("20260911-200000.pending.json")).unwrap();
         stale.set_modified(std::time::SystemTime::now() - std::time::Duration::from_secs(3 * 3600)).unwrap();
         assert_eq!(
