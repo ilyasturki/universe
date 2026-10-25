@@ -1609,25 +1609,28 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
   a bar under every page (`playing_bar`, the window's own `NowPlaying`) whenever the sidebar's foot is
   out of sight: folded, hidden with F9, or under a page pushed over the home.
 - **Game page** (`pages/game.rs`): the library's row draws the hero at once, the runner in its facts
-  line included; the details (`get` and the screenshots' count: Your Play, About, the Gallery of the
-  store's pictures, the achievement count) land next, whether the source lists achievements after
-  them (`sources()` may ask the stores), and the backdrop fades in on its own once decoded. The
-  header names the game once its title scrolls away, and every page over it (Achievements, Journal,
-  Sessions and Logs, Screenshots, Recordings) has the game under its title. The Journal lists the entries,
+  line included, and under the title only an update mark (Update available for `update`, May be out
+  of date for `likely`, nothing otherwise and never the version). The body under the hero (Your
+  Play, About, the Gallery of the store's pictures) waits in a `loading` stack child until the
+  details land (`get`, the screenshots' count and whether the source's manifest lists achievements,
+  read without asking the stores), so it shows in one frame and nothing already drawn moves; the
+  backdrop fades in on its own once decoded. The header names the game once its title scrolls away,
+  and every page over it (Achievements, Journal, Sessions and Logs, Screenshots, Recordings, Saves
+  and Storage) has the game under its title. The Journal lists the entries,
   newest first, then folds the played sessions without one into a single "N sessions without an
   entry" expander, each with Write; an entry shows only the pictures still on disk, from the text's
   edge. A picture that is missing shows what it stands for — a pad for a game, a page for an entry, a
   camera for a shot — not the app's mark. Sessions and Logs says in words how each session ended
   and what it left, a warning only on a crash or a kill. Achievements puts the unlocked
   and the locked under headings of their own, an All · Unlocked · Locked toggle showing one.
-- **Game data**: the game page's "Saves and Storage" group (`pages/game_data.rs`) is loaded on a task of
-  its own, not in the details' chain, since sizes walk the folders and the saves ask ludusavi: the
-  saves with Back Up, the backups in an expander (Restore each, asking first; Export to the home
+- **Game data**: Saves and Storage (`pages/game_data.rs`) is a page of its own behind a Your Play
+  row, read once it opens behind a `loading` child, since sizes walk the folders and the saves ask
+  ludusavi and the store; an action or a library change refills it in place. It holds the saves with Back Up, the backups in an expander (Restore each, asking first; Export to the home
   folder), the prefix with its size and a menu (Open Folder, Move Into Universe's Prefixes, Wine
   Configuration, Winetricks, Run a Program, Stop the Prefix's Programs, Reset), then the install
   folder, Universe's files and the recordings, each with Open Folder. Storage, a dialog off the main
   menu (`pages/storage.rs`, a `StorageView` page), lists the roots with their free space, the games by
-  size (a row opens the game's page) and the leftovers, each with Move to Trash behind a question.
+  size (a row opens the game's page with its Saves and Storage over it) and the leftovers, each with Move to Trash behind a question.
 - **The main menu** (`menus.rs`, built once and held by every page's header; the Store's adds Find
   Installed Games on top). Preferences keeps Launch, Runners, Stores, Modules and Controller (System
   too on a Deck). Stores and Modules list each one with its whole
