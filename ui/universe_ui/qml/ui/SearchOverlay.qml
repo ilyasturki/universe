@@ -294,6 +294,11 @@ FocusScope {
                 anchors.fill: parent
                 visible: overlay.hasGames
 
+                CoverQueue {
+                    id: resultCovers
+                    view: results
+                }
+
                 Scroller {
                     id: resultsScroll
                     horizontal: true
@@ -332,6 +337,7 @@ FocusScope {
                             width: overlay.cardWidth
                             height: overlay.cardHeight
                             game: model
+                            loadQueue: resultCovers
                             selected: card.selected
                             selectedScale: 1.0
                             idleScale: 0.94

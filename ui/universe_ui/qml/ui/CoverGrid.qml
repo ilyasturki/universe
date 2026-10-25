@@ -136,6 +136,10 @@ GridView {
         follow: false
     }
 
+    readonly property CoverQueue covers: CoverQueue {
+        view: grid
+    }
+
     readonly property Component fadeEffect: Component {
         OpacityMask {
             maskSource: fadeMask
@@ -218,6 +222,7 @@ GridView {
             width: grid.coverWidth
             height: grid.coverWidth * 1.5
             game: model
+            loadQueue: grid.covers
             selected: cell.selected
             ringOpacity: grid.selectionActive ? 1.0 : Theme.ringIdle
             pointable: true

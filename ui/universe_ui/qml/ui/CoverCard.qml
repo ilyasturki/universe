@@ -24,8 +24,30 @@ Item {
     // Under the mouse: hovering lifts the idle dimming, a click on a card that is not `current` is `picked`, on one that is, A; a right click picks it and opens its page.
     property bool pointable: false
     property bool current: false
+    // Set, the art waits for its turn there before its first load; the frame and art replaced later never wait.
+    property CoverQueue loadQueue: null
+    property bool granted: loadQueue === null
 
     signal picked
+
+    function queueArt() {
+        if (!loadQueue || granted)
+            return;
+        if (showsFrame)
+            granted = true;
+        if (showsFrame || String(artSource) === "")
+            loadQueue.release(root);
+        else
+            loadQueue.request(root);
+    }
+
+    onArtSourceChanged: queueArt()
+    onShowsFrameChanged: queueArt()
+    onShownSourceChanged: if (loadQueue && String(shownSource) === "")
+        loadQueue.release(root)
+    Component.onCompleted: queueArt()
+    Component.onDestruction: if (loadQueue)
+        loadQueue.release(root)
 
     readonly property bool hovered: pointer.item !== null && pointer.item.hovering
 
@@ -47,8 +69,8 @@ Item {
     }
 
     readonly property bool showsFrame: String(frameSource) !== ""
-    readonly property url shownSource: showsFrame ? frameSource : artSource
-    readonly property bool artMissing: String(shownSource) === "" || cover.status === Image.Error
+    readonly property url shownSource: showsFrame ? frameSource : granted ? artSource : ""
+    readonly property bool artMissing: String(showsFrame ? frameSource : artSource) === "" || cover.status === Image.Error
 
     Behavior on ringOpacity {
         enabled: root.selected
@@ -141,6 +163,8 @@ Item {
                 opaque: true
                 duration: Theme.durBase
                 opacity: root.arriving ? 0.45 : 1.0
+                onStatusChanged: if (root.loadQueue && (status === Image.Ready || status === Image.Error))
+                    root.loadQueue.release(root)
             }
 
             Loader {

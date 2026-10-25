@@ -466,6 +466,11 @@ FocusScope {
                 }
             }
 
+            CoverQueue {
+                id: railCovers
+                view: rail
+            }
+
             Scroller {
                 id: railScroll
                 horizontal: true
@@ -563,6 +568,7 @@ FocusScope {
                     x: (parent.width - width) / 2 + (tile.delta === 0 ? 0 : (tile.delta < 0 ? -page.spread : page.spread))
 
                     game: model
+                    loadQueue: railCovers
                     artSource: page.coverOf(model.assets)
                     frameSource: model.id === page.playingId && !api.home.quitting ? api.home.frame : ""
                     playing: model.id === page.playingId

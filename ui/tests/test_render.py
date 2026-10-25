@@ -19,7 +19,7 @@ from looks import (
     render,
     settle,
 )
-from PySide6.QtCore import QCoreApplication, QEvent, QObject, Qt
+from PySide6.QtCore import QCoreApplication, QDeadlineTimer, QEvent, QObject, Qt
 from PySide6.QtGui import QKeyEvent
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QTest
@@ -36,6 +36,10 @@ def count_frames(window, ms):
     pump(ms)
     window.frameSwapped.disconnect()
     return len(frames)
+
+
+# QML's Image.Ready.
+IMAGE_READY = 1
 
 
 def game_id(page):
@@ -791,6 +795,30 @@ def library(look):
         return look.open({"switch2": "pages/AllSoftwarePage.qml", "ps5": "pages/LibraryPage.qml"}[look.name])
     look.root.goToTab(look.root.property("libraryTab"))
     return look.page("libraryPage")
+
+
+@reprise
+def test_the_reprise_library_s_covers_come_in_reading_order(look, api):
+    # Each test's fake profile is fresh, and Home decodes these files at another size: the pixmap cache has none of them.
+    root, came, watched = look.root, [], []
+
+    def place(cover):
+        at = cover.mapToScene(cover.boundingRect().topLeft())
+        return round(at.y()), round(at.x())
+
+    root.goToTab(root.property("libraryTab"))
+    deadline = QDeadlineTimer(5000)
+    while len(came) < api.allGames.count:
+        assert not deadline.hasExpired(), f"{len(came)} of {api.allGames.count} covers came in"
+        page = root.property("activePage")
+        found = [c for c in descendants(page, "cover") if c not in watched] if page is not None and page.objectName() == "libraryPage" else []
+        # Already in when first seen: within the last millisecond, in an order no longer known.
+        came.extend(sorted(place(c) for c in found if c.property("status") == IMAGE_READY))
+        for cover in found:
+            cover.statusChanged.connect(lambda cover=cover: cover.property("status") == IMAGE_READY and came.append(place(cover)))
+            watched.append(cover)
+        pump(1)
+    assert came == sorted(came), "top row first, left to right"
 
 
 def test_the_right_stick_pages_the_library_from_a_clamp_at_its_top(look):
