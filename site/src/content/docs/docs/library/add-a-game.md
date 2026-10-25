@@ -21,4 +21,4 @@ Universe takes the folder holding a Windows game's `.exe` as its install folder.
 
 ## Its artwork
 
-A game you add by hand gets no art by itself. Open the game menu (**Start** on the game) › **Manage** › **Artwork**, then **Start** › **Fetch missing art**. Settings › **Artwork** fetches it for every game missing some ([Artwork](/docs/library/artwork/)).
+A game you add by hand gets its art, description and screenshots the next time Universe starts. To fetch them now, open the game menu (**Start** on the game) › **Manage** › **Artwork**, then **Start** › **Fetch missing art**. Settings › **Artwork** fetches it for every game missing some ([Artwork](/docs/library/artwork/)).
