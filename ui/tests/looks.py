@@ -1,6 +1,8 @@
+from pathlib import Path
+
 from PySide6.QtCore import Q_ARG, Q_RETURN_ARG, QMetaObject, QObject, Qt, QUrl
 from PySide6.QtGui import QColor
-from PySide6.QtQml import QQmlApplicationEngine, QQmlEngine
+from PySide6.QtQml import QQmlApplicationEngine, QQmlComponent, QQmlEngine
 from PySide6.QtQuick import QQuickWindow  # noqa: F401  (rootObjects() down-cast, for grabWindow)
 from PySide6.QtTest import QTest
 from uitest import descendants, until
@@ -280,3 +282,16 @@ class Look:
         self.window.close()
         self._root = None
         self.engine = None
+
+
+def notices(engine):
+    """Reads the message the look's Notices shows now."""
+    core = Path(__file__).resolve().parents[1] / "universe_ui" / "qml" / "core"
+    component = QQmlComponent(engine, engine)
+    component.setData(
+        f'import QtQuick\nimport "{core.as_uri()}"\nQtObject {{ function current() {{ return Notices.current; }} }}'.encode(), QUrl("file:///probe.qml")
+    )
+    probe = component.create()
+    assert probe is not None, [e.toString() for e in component.errors()]
+    engine.setObjectOwnership(probe, QQmlEngine.ObjectOwnership.CppOwnership)
+    return lambda: call(probe, "current")

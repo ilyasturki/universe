@@ -767,7 +767,8 @@ class PendingJournals(QObject):
 
     def _resolve(self, session, game):
         entry = next((e for e in self._client.journal(game) if str(e.get("session") or "") == session), None)
-        if entry is None:
+        # Its unit died with the file left behind: put off, not done.
+        if entry is None or entry.get("state") == "pending":
             return
         state = str(entry.get("state") or "written")
         paragraphs = [str(p) for p in entry.get("paragraphs") or []]

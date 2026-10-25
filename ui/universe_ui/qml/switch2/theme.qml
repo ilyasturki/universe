@@ -822,6 +822,19 @@ FocusScope {
     }
 
     Connections {
+        target: api.screens.pendingJournals
+        function onAppeared(session, title) {
+            Base.Notices.show("Journal: writing " + title + "…", "journal:" + session);
+        }
+        function onResolved(session, id, state, text) {
+            if (state === "failed")
+                Base.Notices.fail("Journal failed: " + text, "journal:" + session);
+            else
+                Base.Notices.show((state === "deferred" ? "Journal put off: " : "Journal: ") + text, "journal:" + session);
+        }
+    }
+
+    Connections {
         target: api.screens.addons
         function onMessage(text) {
             Base.Notices.show(text);

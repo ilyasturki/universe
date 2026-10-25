@@ -25,6 +25,10 @@ The session's pictures, the game's title, when you played and for how long, the 
 
 **Entry language**, on Auto, writes in the game's on-screen language. **Write a journal entry after each session** turns the journal off for one game, in its **Game settings**. **Y** shows the advanced rows, such as how hard the model thinks and how long a try may take.
 
+## While it writes
+
+A book pulses in the top bar while an entry is being written, and a notice tells you once it is written or has failed. Quitting Universe leaves it writing. Turning the computer off or restarting it puts the entry off, and it is written once Universe is open again.
+
 ## Retries
 
 An entry that fails on a quota, a sign-out or a timeout is tried again later, never while a game runs. One that can't succeed, as with no API key or an unknown model, fails at once.

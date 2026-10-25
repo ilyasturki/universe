@@ -356,6 +356,10 @@ FocusScope {
         anchors.verticalCenter: parent.verticalCenter
         spacing: Theme.dp(34)
 
+        JournalMark {
+            anchors.verticalCenter: parent.verticalCenter
+        }
+
         GlyphSlot {
             id: search
             kind: "search"

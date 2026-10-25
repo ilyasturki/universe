@@ -1,5 +1,6 @@
 import QtQuick
 import "../core"
+import "../../ui" as Base
 
 Item {
     id: bar
@@ -46,6 +47,12 @@ Item {
         y: Theme.dp(83)
         height: clockLabel.height
         spacing: Theme.dp(28)
+
+        Base.JournalMark {
+            anchors.verticalCenter: parent.verticalCenter
+            width: Theme.dp(34)
+            tint: Theme.text
+        }
 
         Label {
             id: clockLabel

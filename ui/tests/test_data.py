@@ -1,9 +1,6 @@
-from pathlib import Path
-
 import pytest
-from looks import call, focus_names
-from PySide6.QtCore import Qt, QUrl
-from PySide6.QtQml import QQmlComponent, QQmlEngine
+from looks import focus_names, notices
+from PySide6.QtCore import Qt
 from uitest import record, until
 
 from universe_ui.errors import UniverseError
@@ -11,18 +8,6 @@ from universe_ui.errors import UniverseError
 
 def keys(store):
     return [r["key"] for r in store.rows if r["key"]]
-
-
-def notices(engine):
-    core = Path(__file__).resolve().parents[1] / "universe_ui" / "qml" / "core"
-    component = QQmlComponent(engine, engine)
-    component.setData(
-        f'import QtQuick\nimport "{core.as_uri()}"\nQtObject {{ function current() {{ return Notices.current; }} }}'.encode(), QUrl("file:///probe.qml")
-    )
-    probe = component.create()
-    assert probe is not None, [e.toString() for e in component.errors()]
-    engine.setObjectOwnership(probe, QQmlEngine.ObjectOwnership.CppOwnership)
-    return lambda: call(probe, "current")
 
 
 def test_a_games_data_lists_its_saves_its_prefix_and_its_files_and_runs_their_actions(api, fake):

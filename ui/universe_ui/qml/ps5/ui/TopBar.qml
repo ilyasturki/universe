@@ -74,8 +74,16 @@ Item {
         fontWeight: Font.Normal
     }
 
+    Base.JournalMark {
+        id: journal
+        x: (badge.width > 0 ? badge.x - Theme.dp(34) : clock.x - Theme.dp(34)) - width
+        y: Theme.dp(Theme.barY) - height / 2
+        width: Theme.dp(30)
+        tint: Qt.rgba(1, 1, 1, 0.85)
+    }
+
     // The icons stand left of the battery and the clock, 105 apart as the console's.
-    readonly property real iconsRight: badge.width > 0 ? badge.x - Theme.dp(40) : clock.x - Theme.dp(60)
+    readonly property real iconsRight: journal.visible ? journal.x - Theme.dp(40) : badge.width > 0 ? badge.x - Theme.dp(40) : clock.x - Theme.dp(60)
 
     Repeater {
         model: bar.icons

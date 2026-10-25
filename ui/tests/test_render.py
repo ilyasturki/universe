@@ -1,7 +1,24 @@
 import os
 
 import pytest
-from looks import LOOKS, MENU, FocusTrace, Look, activate, call, content_rows, current_row, focus_names, invoke, lit_fraction, lit_rows, read, render, settle
+from looks import (
+    LOOKS,
+    MENU,
+    FocusTrace,
+    Look,
+    activate,
+    call,
+    content_rows,
+    current_row,
+    focus_names,
+    invoke,
+    lit_fraction,
+    lit_rows,
+    notices,
+    read,
+    render,
+    settle,
+)
 from PySide6.QtCore import QCoreApplication, QEvent, QObject, Qt
 from PySide6.QtGui import QKeyEvent
 from PySide6.QtQuick import QQuickItem
@@ -169,6 +186,41 @@ def test_the_media_tab_removes_a_recording_and_a_journal_entry_alone(look, api, 
     assert not recorded(game, session) and journaled(game, session), "trashed alone: its entry stays"
     remove(f"journal:{game}:{session}", ["", "remove!"])
     until(lambda: not journaled(game, session), "the entry, its recording gone, is asked about alone")
+
+
+def test_the_top_bar_marks_an_entry_being_written_and_the_notices_follow_it(look, api, fake, monkeypatch):
+    look.home()
+    mark = look.find("journalMark")
+    shown = notices(look.engine)
+    assert mark.property("visible") is False
+    entries = fake.core._data["journal"]["the-technomancer"]
+    pending = {
+        "session": "20260912-200000",
+        "game": "the-technomancer",
+        "state": "pending",
+        "started_at": "2026-09-12T20:00:00+02:00",
+        "title": "",
+        "paragraphs": [],
+        "images": [],
+    }
+    entries.insert(0, dict(pending))
+    fake.entryWritten.emit("20260912-200000", "the-technomancer")
+    until(lambda: mark.property("visible"), "a pending entry shows the mark")
+    until(lambda: (n := shown()) and n["key"] == "journal:20260912-200000" and not n["error"])
+    entries[0].update(state="failed", paragraphs=["codex timed out"])
+    fake.entryWritten.emit("20260912-200000", "the-technomancer")
+    until(lambda: not mark.property("visible"), "resolved, the mark goes")
+    until(lambda: (n := shown()) and n["key"] == "journal:20260912-200000" and n["error"], "the failure is told")
+
+    # A run whose unit died is no longer listed, its file still pending: put off and retried, so nothing is told.
+    entries.insert(0, dict(pending, session="20260913-100000"))
+    fake.entryWritten.emit("20260913-100000", "the-technomancer")
+    until(lambda: mark.property("visible"))
+    told = record(api.screens.pendingJournals.resolved)
+    monkeypatch.setattr(fake.core, "pending_journals", list)
+    fake.entryWritten.emit("", "the-technomancer")
+    until(lambda: not mark.property("visible"))
+    assert told == []
 
 
 @reprise
