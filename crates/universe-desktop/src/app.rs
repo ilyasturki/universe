@@ -702,7 +702,8 @@ impl Application {
                 app.follow(events);
             }
             glib::timeout_future_seconds(5).await;
-            if !app.windows().is_empty() {
+            // The window has taken the script by now, so `scripted()` no longer tells.
+            if !scripted && !app.windows().is_empty() {
                 app.check_updates(None);
                 app.fetch_unfetched();
             }
