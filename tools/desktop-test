@@ -7,9 +7,10 @@ usage: tools/desktop-test
 
 The GTK app in a headless weston, on a throwaway profile holding two games added
 through the CLI: it shows the library, a platform, the hidden games, Media, the
-Store, a game's page and Preferences, shoots each, and quits by itself. Then it
-starts the app again as the shell does, a D-Bus service on a private bus asked
-for a search before its window opens, and shoots the library. Fails when weston
+Store, a game's page, its Saves and Storage and Preferences, shoots each, and
+quits by itself. Then it starts the app again as the shell does, a D-Bus service
+on a private bus asked for a search before its window opens, and shoots the
+library. Fails when weston
 or the app does not start, a script step fails (an action missing, a shot failed
 or blank, a page still loading), the search misses a game, two surfaces come out
 as the same picture, the app leaves a process running once it quits, or a run
@@ -68,7 +69,7 @@ left_behind() {
     [ -z "$left" ] || fail "the app quit and left the processes above running ($2)"
 }
 
-shots=(media platform library hidden store game preferences)
+shots=(media platform library hidden store game data preferences)
 mkdir -p "$out" "$tmp"/{data,config,state,cache,games,run,bin}
 service_shots=(service service-media service-store)
 for shot in "${shots[@]}" "${service_shots[@]}"; do rm -f "$out/$shot.png"; done
@@ -164,6 +165,7 @@ script+=" action:win.view::all action:win.sort::a-z shot:$out/library.png"
 script+=" action:win.show-hidden shot:$out/hidden.png"
 script+=" action:win.view::store shot:$out/store.png"
 script+=" action:win.open-game::$game shot:$out/game.png"
+script+=" action:page.data shot:$out/data.png"
 script+=" action:app.preferences shot:$out/preferences.png"
 
 status=0

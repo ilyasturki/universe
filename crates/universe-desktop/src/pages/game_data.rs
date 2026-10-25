@@ -270,6 +270,85 @@ pub fn fill(list: &gtk::ListBox, data: &Value, reload: Reload) {
     }
 }
 
+#[derive(Clone)]
+struct View {
+    id: String,
+    stack: glib::WeakRef<adw::ViewStack>,
+    status: glib::WeakRef<adw::StatusPage>,
+    group: glib::WeakRef<adw::PreferencesGroup>,
+    list: glib::WeakRef<gtk::ListBox>,
+}
+
+impl View {
+    fn load(&self) {
+        let view = self.clone();
+        glib::spawn_future_local(async move {
+            let id = view.id.clone();
+            let data = backend::call(move |core| async move { core.game_data(&id).await }).await;
+            let (Some(stack), Some(status), Some(group), Some(list)) = (view.stack.upgrade(), view.status.upgrade(), view.group.upgrade(), view.list.upgrade())
+            else {
+                return;
+            };
+            match data {
+                Ok(data) => {
+                    let again = view.clone();
+                    fill(&list, &data, Rc::new(move || again.load()));
+                    group.set_description(Some(&gettext("{} in all").replace("{}", &size(&data["total"]))));
+                    stack.set_visible_child_name("data");
+                }
+                Err(e) => {
+                    status.set_description(Some(&e.to_string()));
+                    stack.set_visible_child_name("status");
+                }
+            }
+        });
+    }
+}
+
+pub fn open(win: &Window, game: &str) {
+    let stack = adw::ViewStack::new();
+    stack.add_named(
+        &adw::Spinner::builder().width_request(32).height_request(32).halign(gtk::Align::Center).valign(gtk::Align::Center).build(),
+        Some("loading"),
+    );
+    let status = adw::StatusPage::builder().icon_name("dialog-warning-symbolic").title(gettext("Can't Read the Game's Files")).build();
+    stack.add_named(&status, Some("status"));
+    let list = gtk::ListBox::builder().selection_mode(gtk::SelectionMode::None).css_classes(["boxed-list"]).build();
+    let group = adw::PreferencesGroup::new();
+    group.add(&list);
+    let column = gtk::Box::builder().orientation(gtk::Orientation::Vertical).margin_top(24).margin_bottom(36).margin_start(12).margin_end(12).build();
+    column.append(&group);
+    let scrolled = gtk::ScrolledWindow::builder()
+        .hscrollbar_policy(gtk::PolicyType::Never)
+        .vexpand(true)
+        .child(&adw::Clamp::builder().maximum_size(760).child(&column).build())
+        .build();
+    stack.add_named(&scrolled, Some("data"));
+    stack.set_visible_child_name("loading");
+    let toolbar = adw::ToolbarView::builder().content(&stack).build();
+    toolbar.add_top_bar(&crate::pages::game_header(win, &gettext("Saves and Storage"), game));
+    let page = adw::NavigationPage::builder().child(&toolbar).title(gettext("Saves and Storage")).tag(format!("data:{game}")).build();
+
+    let view = View { id: game.to_string(), stack: stack.downgrade(), status: status.downgrade(), group: group.downgrade(), list: list.downgrade() };
+    let app = win.app();
+    let follow = view.clone();
+    let followed = app.connect_changed(move |event| {
+        if let universe::changes::Event::Library(ids) = event {
+            if ids.is_empty() || ids.contains(&follow.id) {
+                follow.load();
+            }
+        }
+    });
+    view.load();
+    let (held, weak_app) = (std::cell::Cell::new(Some(followed)), app.downgrade());
+    page.connect_destroy(move |_| {
+        if let (Some(followed), Some(app)) = (held.take(), weak_app.upgrade()) {
+            app.disconnect(followed);
+        }
+    });
+    win.push_page(&page);
+}
+
 fn prefix_row(list: &gtk::ListBox, id: &str, prefix: &Value, reload: Reload) -> adw::ActionRow {
     let owner = text(prefix, "owner");
     let title = match owner.as_str() {

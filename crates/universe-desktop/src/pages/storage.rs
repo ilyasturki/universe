@@ -97,6 +97,7 @@ impl StorageView {
                     dialog.close();
                 }
                 win.open_game(&game);
+                crate::pages::game_data::open(&win, &id);
             });
             list.add(&row);
         }

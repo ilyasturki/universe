@@ -90,8 +90,6 @@ mod imp {
         #[template_child]
         pub shots: TemplateChild<gtk::Box>,
         #[template_child]
-        pub play_group: TemplateChild<adw::PreferencesGroup>,
-        #[template_child]
         pub achievements_row: TemplateChild<adw::ActionRow>,
         #[template_child]
         pub achievements_count: TemplateChild<gtk::Label>,
@@ -111,10 +109,6 @@ mod imp {
         pub sessions_row: TemplateChild<adw::ActionRow>,
         #[template_child]
         pub sessions_count: TemplateChild<gtk::Label>,
-        #[template_child]
-        pub data_group: TemplateChild<adw::PreferencesGroup>,
-        #[template_child]
-        pub data_list: TemplateChild<gtk::ListBox>,
         pub game: RefCell<Option<GameObject>>,
         pub details: RefCell<Details>,
         pub handlers: RefCell<Vec<glib::SignalHandlerId>>,
@@ -203,7 +197,6 @@ impl GamePage {
         imp.handlers.replace(handlers);
         self.refresh();
         self.load_details();
-        self.load_data();
     }
 
     fn release(&self) {
@@ -219,35 +212,6 @@ impl GamePage {
     pub fn reload(&self) {
         self.refresh();
         self.load_details();
-        self.load_data();
-    }
-
-    // A task of its own: sizes walk the folders and the saves ask ludusavi, which the details must not wait on.
-    fn load_data(&self) {
-        let Some(game) = self.game() else { return };
-        let id = game.id();
-        let page = self.downgrade();
-        glib::spawn_future_local(async move {
-            let data = backend::call(move |core| async move { core.game_data(&id).await }).await;
-            let Some(page) = page.upgrade() else { return };
-            let imp = page.imp();
-            let Ok(data) = data else {
-                imp.data_group.set_visible(false);
-                return;
-            };
-            let again = page.downgrade();
-            crate::pages::game_data::fill(
-                &imp.data_list,
-                &data,
-                std::rc::Rc::new(move || {
-                    if let Some(page) = again.upgrade() {
-                        page.load_data();
-                    }
-                }),
-            );
-            imp.data_group.set_description(Some(&crate::pages::game_data::size(&data["total"])));
-            imp.data_group.set_visible(true);
-        });
     }
 
     fn refresh(&self) {
@@ -292,12 +256,13 @@ impl GamePage {
     /// The rows under "Your Play" open their pages over this one.
     fn setup_page_actions(&self) {
         let group = gio::SimpleActionGroup::new();
-        let open: [(&str, Opener); 5] = [
+        let open: [(&str, Opener); 6] = [
             ("achievements", |win, id| crate::pages::achievements::open(win, id)),
             ("screenshots", |win, id| crate::pages::media::open_game(win, id, Kind::Shot)),
             ("recordings", |win, id| crate::pages::media::open_game(win, id, Kind::Recording)),
             ("journal", |win, id| crate::pages::journal::open_list(win, id)),
             ("sessions", |win, id| crate::pages::sessions::open(win, id)),
+            ("data", |win, id| crate::pages::game_data::open(win, id)),
         ];
         for (name, act) in open {
             let action = gio::SimpleAction::new(name, None);
@@ -411,13 +376,10 @@ impl GamePage {
             (&imp.journal_row, &imp.journal_count, details.journal > 0 || details.sessions > 0, count(details.journal)),
             (&imp.sessions_row, &imp.sessions_count, details.sessions > 0, count(details.sessions)),
         ];
-        let mut any = false;
         for (row, label, shown, text) in rows {
             row.set_visible(shown);
             label.set_label(&text);
-            any |= shown;
         }
-        imp.play_group.set_visible(any);
     }
 }
 

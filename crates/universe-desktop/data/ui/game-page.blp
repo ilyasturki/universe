@@ -200,9 +200,8 @@ template $UniverseGamePage: Adw.NavigationPage {
                 }
               }
 
-              Adw.PreferencesGroup play_group {
+              Adw.PreferencesGroup {
                 title: _("Your Play");
-                visible: false;
 
                 Adw.ActionRow achievements_row {
                   title: _("Achievements");
@@ -323,18 +322,21 @@ template $UniverseGamePage: Adw.NavigationPage {
                     icon-name: "go-next-symbolic";
                   }
                 }
-              }
 
-              Adw.PreferencesGroup data_group {
-                title: _("Saves and Storage");
-                visible: false;
+                Adw.ActionRow {
+                  title: _("Saves and Storage");
+                  activatable: true;
+                  action-name: "page.data";
 
-                ListBox data_list {
-                  selection-mode: none;
+                  [prefix]
+                  Image {
+                    icon-name: "drive-harddisk-symbolic";
+                  }
 
-                  styles [
-                    "boxed-list",
-                  ]
+                  [suffix]
+                  Image {
+                    icon-name: "go-next-symbolic";
+                  }
                 }
               }
 
