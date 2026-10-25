@@ -677,12 +677,18 @@ def test_the_reprise_detail_page_has_one_line_of_play_and_the_screenshots_beside
     invoke(root, "openDetail", game)
     until(lambda: facts() == ["playTime", "lastPlayed"], "one line: the play time and the last session, no sessions count")
     page = root.findChild(QObject, "detailPage")
+    until(lambda: page.property("hasShots") is True and page.property("activeFocus") is True, "the store's screenshots, the page focused")
     look.press(Qt.Key.Key_Down)
     until(lambda: page.property("section") == 1 and page.property("scrollY") > 0, "down to the description")
     look.press(Qt.Key.Key_Right)
     assert (page.property("section"), page.property("shotIndex")) == (2, 0), "Right: the screenshots beside it"
     look.press(Qt.Key.Key_Down)
     assert page.property("shotIndex") == 1, "Down runs through them"
+    pump(400)
+    scrolled = page.property("scrollY")
+    api.library.refresh("the-technomancer")
+    pump(100)
+    assert page.property("scrollY") == scrolled, "a refresh that moves no picture leaves the page where it stands"
     look.press(Qt.Key.Key_Left)
     assert page.property("section") == 1, "Left: back to the description"
     look.press(Qt.Key.Key_Right)

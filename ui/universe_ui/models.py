@@ -129,10 +129,14 @@ class GameAssets(QObject):
         self._urls = dict.fromkeys(ASSET_SLOTS, QUrl())
         self._shots = []
 
+    # A refresh that moves no picture stays silent: a list handed over again rebuilds every view of it.
     def update(self, media):
         media = media or {}
-        self._urls = {k: file_url(media.get(k)) for k in ASSET_SLOTS}
-        self._shots = [file_url(p) for p in (media.get("screenshots") or [])]
+        urls = {k: file_url(media.get(k)) for k in ASSET_SLOTS}
+        shots = [file_url(p) for p in (media.get("screenshots") or [])]
+        if urls == self._urls and shots == self._shots:
+            return
+        self._urls, self._shots = urls, shots
         self.changed.emit()
 
     boxFront = Property(QUrl, lambda self: self._urls["box_front"], notify=changed)

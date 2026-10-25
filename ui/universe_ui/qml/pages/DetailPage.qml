@@ -353,16 +353,19 @@ FocusScope {
                     }
                 }
 
-                Column {
+                // Sized by bindings, not a Column's layout: a key pressed before the first frame scrolls a page of its full height.
+                Item {
                     id: shots
+
+                    readonly property bool active: page.section === 2 && !page.lightbox
+                    readonly property real cardHeight: Math.round(width * 9 / 16)
+                    readonly property real spacing: Theme.dp(24)
 
                     objectName: "shots"
                     x: body.width - width
                     width: body.shotsWidth
-                    spacing: Theme.dp(24)
+                    height: Math.max(0, page.screenshots.length * (cardHeight + spacing) - spacing)
                     visible: page.hasShots
-
-                    readonly property bool active: page.section === 2 && !page.lightbox
 
                     Repeater {
                         id: shotCards
@@ -370,8 +373,9 @@ FocusScope {
                         model: page.screenshots
 
                         ShotCard {
+                            y: index * (shots.cardHeight + shots.spacing)
                             width: shots.width
-                            height: Math.round(width * 9 / 16)
+                            height: shots.cardHeight
                             source: modelData
                             focused: shots.active && index === page.shotIndex
                             dimmed: shots.active && index !== page.shotIndex
