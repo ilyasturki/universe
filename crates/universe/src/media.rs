@@ -100,6 +100,8 @@ struct SyncCache {
     gamesdb_name: String,
     gamesdb_year: u32,
     gamesdb_miss: bool,
+    /// The GamesDB game is another edition of this one (`gamesdb_match`): its Steam release is not taken.
+    gamesdb_edition: bool,
     /// Found through GamesDB or SteamGridDB; `source_appid` is the store's word and wins.
     steam_appid: u64,
     source_appid: u64,
@@ -391,17 +393,64 @@ fn gamesdb_platforms(platform: &str) -> &'static [&'static str] {
     }
 }
 
-/// GamesDB's title search is fuzzy ("hollow knight" brings Silksong): only a hit named like the title counts, one on the game's
-/// platform first, twins told apart by year. `true` with it when it was found on that platform.
-fn gamesdb_match(items: &Value, title: &str, year: u32, platforms: &[&str]) -> Option<(Value, bool)> {
-    let want = name_key(&article_first(title));
-    let same: Vec<&Value> =
-        items.as_array().into_iter().flatten().filter(|i| i["type"].as_str().is_none_or(|t| t == "game") && name_key(&gamesdb_title(i)) == want).collect();
+/// The title without its trailing brackets: "Kingdom Hearts HD 1.5+2.5 ReMIX (All Games)", a ROM's "(USA) (Rev 1)".
+fn unbracketed(title: &str) -> &str {
+    let mut t = title.trim_end();
+    while let Some(head) = t.strip_suffix(')').and_then(|h| h.rfind('(').map(|i| h[..i].trim_end())) {
+        if head.is_empty() {
+            break;
+        }
+        t = head;
+    }
+    t
+}
+
+/// The title without an edition subtitle: "Xenoblade Chronicles X: Definitive Edition" is "Xenoblade Chronicles X".
+fn edition_base(title: &str) -> Option<&str> {
+    let t = unbracketed(title);
+    let (at, sep) = [t.rfind(':').map(|i| (i, 1)), t.rfind(" - ").map(|i| (i, 3))].into_iter().flatten().max()?;
+    let (head, tail) = (&t[..at], &t[at + sep..]);
+    (tail.trim().to_lowercase().ends_with(" edition") && !head.trim().is_empty()).then(|| head.trim())
+}
+
+/// GamesDB names Pokémon's "HeartGold" "HeartGold Version".
+fn title_key(title: &str) -> String {
+    let key = name_key(&article_first(unbracketed(title)));
+    key.strip_suffix(" version").filter(|k| !k.is_empty()).map(str::to_string).unwrap_or(key)
+}
+
+fn edition_key(title: &str) -> String {
+    title_key(edition_base(title).unwrap_or(title))
+}
+
+/// `local`: found on the game's platform; `edition`: another edition of the game, whose store releases are not this one's.
+#[derive(Debug)]
+struct Match {
+    game: Value,
+    local: bool,
+    edition: bool,
+}
+
+/// GamesDB's title search is fuzzy ("hollow knight" brings Silksong): only a hit named like the title counts, else one of its
+/// editions, the bare name first; one on the game's platform first, twins told apart by year.
+fn gamesdb_match(items: &Value, title: &str, year: u32, platforms: &[&str]) -> Option<Match> {
+    let games: Vec<&Value> = items.as_array().into_iter().flatten().filter(|i| i["type"].as_str().is_none_or(|t| t == "game")).collect();
+    let want = title_key(title);
+    let same: Vec<&Value> = games.iter().copied().filter(|g| title_key(&gamesdb_title(g)) == want).collect();
+    let edition = same.is_empty();
+    let pool = if edition {
+        let base = edition_key(title);
+        let mut kin: Vec<&Value> = games.iter().copied().filter(|g| edition_key(&gamesdb_title(g)) == base).collect();
+        kin.sort_by_key(|g| title_key(&gamesdb_title(g)) != base);
+        kin
+    } else {
+        same
+    };
     let on_platform = |g: &Value| releases(g).any(|(p, _)| platforms.contains(&p));
-    let local: Vec<&Value> = same.iter().copied().filter(|g| on_platform(g)).collect();
-    let pool = if local.is_empty() { same } else { local };
+    let local: Vec<&Value> = pool.iter().copied().filter(|g| on_platform(g)).collect();
+    let pool = if local.is_empty() { pool } else { local };
     let pick = (year > 0).then(|| pool.iter().find(|g| gamesdb_year(g) == year)).flatten().or(pool.first())?;
-    Some(((*pick).clone(), on_platform(pick)))
+    Some(Match { game: (*pick).clone(), local: on_platform(pick), edition })
 }
 
 fn libretro_system(platform: &str, ext: &str) -> Option<&'static str> {
@@ -702,22 +751,23 @@ impl<'a> Lookup<'a> {
         ids
     }
 
-    async fn find_gamesdb(&mut self) -> crate::Result<Option<Value>> {
+    /// The game, and whether it is another edition of this one.
+    async fn find_gamesdb(&mut self) -> crate::Result<Option<(Value, bool)>> {
         let by_id = |id: u64| format!("{GAMESDB}/games/{id}");
         let pinned = self.game.metadata.gamesdb_id;
         if pinned > 0 {
-            return self.net.json(&by_id(pinned), None).await.map(Some);
+            return self.net.json(&by_id(pinned), None).await.map(|g| Some((g, false)));
         }
         if self.cache.gamesdb_id > 0 {
             match self.net.json(&by_id(self.cache.gamesdb_id), None).await {
-                Ok(g) => return Ok(Some(g)),
+                Ok(g) => return Ok(Some((g, self.cache.gamesdb_edition))),
                 Err(e) if !not_found(&e) => return Err(e),
                 Err(_) => {}
             }
         }
         for (store, id) in self.store_ids() {
             match self.net.json(&format!("{GAMESDB}/platforms/{store}/external_releases/{}", encode(&id)), None).await {
-                Ok(r) if r["game"].is_object() => return Ok(Some(r["game"].clone())),
+                Ok(r) if r["game"].is_object() => return Ok(Some((r["game"].clone(), false))),
                 Ok(_) => {}
                 Err(e) if !not_found(&e) => return Err(e),
                 Err(_) => {}
@@ -726,17 +776,25 @@ impl<'a> Lookup<'a> {
         if self.cache.gamesdb_miss {
             return Ok(None);
         }
+        // GamesDB finds nothing under "… ReMIX (All Games)", and only the first game under "Xenoblade Chronicles X: Definitive Edition".
         let title = article_first(&self.game.title);
-        let hits = self.net.json(&format!("{GAMESDB}/games?title={}", encode(&title)), None).await?;
-        Ok(gamesdb_match(&hits["items"], &title, self.game.release_year, gamesdb_platforms(&platform_of(&self.game))).map(|(g, _)| g))
+        let short = edition_base(&title).unwrap_or(unbracketed(&title)).to_string();
+        let platforms = gamesdb_platforms(&platform_of(&self.game));
+        for query in std::iter::once(&title).chain((short != title).then_some(&short)) {
+            let hits = self.net.json(&format!("{GAMESDB}/games?title={}", encode(query)), None).await?;
+            if let Some(m) = gamesdb_match(&hits["items"], &title, self.game.release_year, platforms) {
+                return Ok(Some((m.game, m.edition)));
+            }
+        }
+        Ok(None)
     }
 
     async fn gamesdb(&mut self) -> Option<Value> {
         if let Some(found) = &self.gamesdb {
             return found.clone();
         }
-        let found = match self.find_gamesdb().await {
-            Ok(found) => found,
+        let (found, edition) = match self.find_gamesdb().await {
+            Ok(found) => found.map_or((None, false), |(g, edition)| (Some(g), edition)),
             Err(e) => {
                 tracing::warn!("gamesdb {}: {e}", self.game.id);
                 self.gamesdb = Some(None);
@@ -751,7 +809,8 @@ impl<'a> Lookup<'a> {
         self.cache.gamesdb_name = found.as_ref().map(gamesdb_title).unwrap_or_default();
         self.cache.gamesdb_year = found.as_ref().map_or(0, gamesdb_year);
         self.cache.gamesdb_miss = found.is_none();
-        if let Some(appid) = found.as_ref().and_then(steam_release).filter(|_| self.cache.steam_appid == 0) {
+        self.cache.gamesdb_edition = edition;
+        if let Some(appid) = found.as_ref().filter(|_| !edition).and_then(steam_release).filter(|_| self.cache.steam_appid == 0) {
             self.cache.steam_appid = appid;
         }
         self.gamesdb = Some(found.clone());
@@ -1438,11 +1497,28 @@ mod tests {
     #[test]
     fn a_title_search_takes_the_same_name_on_the_games_platform() {
         let items = json_of("gamesdb-search-super-mario-world.json")["items"].clone();
-        let (g, local) = gamesdb_match(&items, "Super Mario World", 0, &["snes"]).unwrap();
-        assert_eq!((gamesdb_year(&g), local), (1990, true));
-        let (g, local) = gamesdb_match(&items, "Super Mario World", 2001, &[]).unwrap();
-        assert_eq!((gamesdb_year(&g), local), (2001, false));
+        let m = gamesdb_match(&items, "Super Mario World", 0, &["snes"]).unwrap();
+        assert_eq!((gamesdb_year(&m.game), m.local, m.edition), (1990, true, false));
+        let m = gamesdb_match(&items, "Super Mario World", 2001, &[]).unwrap();
+        assert_eq!((gamesdb_year(&m.game), m.local), (2001, false));
         assert!(gamesdb_match(&items, "Super Mario", 0, &["snes"]).is_none(), "a fuzzy hit is no match");
+
+        let found = |file: &str, title: &str, platforms: &[&str]| {
+            gamesdb_match(&json_of(file)["items"], title, 0, platforms).map(|m| (gamesdb_id_of(&m.game), m.edition))
+        };
+        assert_eq!(found("gamesdb-search-heartgold.json", "Pokémon HeartGold", &["nds"]), Some((51153503711026117, false)), "its Version");
+        assert_eq!(
+            found("gamesdb-search-kingdom-hearts.json", "KINGDOM HEARTS HD 1.5+2.5 ReMIX (All Games)", &["steam", "gog", "epic"]),
+            Some((51153182353732115, false)),
+            "the bundle, not its Cloud Version"
+        );
+        let xcx = "Xenoblade Chronicles X: Definitive Edition";
+        assert_eq!(found("gamesdb-search-xenoblade-x-de.json", xcx, &["nswitch"]), None, "the first game's Definitive Edition is another game");
+        assert_eq!(found("gamesdb-search-xenoblade-x.json", xcx, &["nswitch"]), Some((51295434815077178, true)), "the Wii U game, not its Limited Edition");
+        assert_eq!(found("gamesdb-search-xenoblade-x.json", "Xenoblade Chronicles X", &["nwiiu"]), Some((51295434815077178, false)));
+        assert_eq!(found("gamesdb-search-xenoblade-x.json", "Xenoblade Chronicles: Definitive Edition", &["nswitch"]).map(|f| f.1), Some(false));
+        assert_eq!(edition_base("Foo: Bar - Game of the Year Edition"), Some("Foo: Bar"));
+        assert_eq!(unbracketed("Legend of Zelda, The (USA) (Rev 1)"), "Legend of Zelda, The");
     }
 
     #[tokio::test]
