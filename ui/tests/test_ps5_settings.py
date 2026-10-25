@@ -1,7 +1,7 @@
 import pytest
 from looks import FocusTrace, Look, invoke
-from looks import settle as drawn
 from looks import read as value
+from looks import settle as drawn
 from PySide6.QtCore import Q_ARG, QMetaObject, QObject, Qt
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QTest
