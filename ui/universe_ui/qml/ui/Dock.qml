@@ -147,7 +147,7 @@ FocusScope {
             ]
         }
     ]).concat(system ? [system] : [])
-    // The pads the launcher reads, each reconnected by A, then a look for pads it may have missed.
+    // The pads the launcher reads, each reconnected by A, then a look for pads it may have missed, then the launcher's controller page.
     readonly property var controllers: ({
             id: "controllers",
             icon: "controllers",
@@ -160,13 +160,20 @@ FocusScope {
                     icon: "gamepad",
                     label: d.name,
                     kind: "action",
-                    value: padValue(d)
+                    value: padValue(d),
+                    verb: "Reconnect"
                 };
             }).concat([
                 {
                     id: "find",
                     icon: "search",
                     label: "Find controllers",
+                    kind: "action"
+                },
+                {
+                    id: "controller",
+                    icon: "sliders",
+                    label: "Controller settings",
                     kind: "action"
                 }
             ])
@@ -407,6 +414,7 @@ FocusScope {
         case "journal":
         case "recordings":
         case "sessions":
+        case "controller":
             Sound.enter();
             api.home.toLauncher(item.id);
             break;
@@ -1044,7 +1052,7 @@ FocusScope {
                             anchors.right: parent.right
                             anchors.rightMargin: Theme.dp(16)
                             anchors.verticalCenter: parent.verticalCenter
-                            text: (modelData.kind === "value" && line.focused ? "◀  " : "") + dock.shows(modelData) + (modelData.kind === "value" && line.focused ? "  ▶" : "")
+                            text: line.focused && modelData.verb ? modelData.verb : (modelData.kind === "value" && line.focused ? "◀  " : "") + dock.shows(modelData) + (modelData.kind === "value" && line.focused ? "  ▶" : "")
                             color: line.focused ? Qt.rgba(0.063, 0.067, 0.086, 0.6) : Qt.rgba(0.949, 0.953, 0.961, 0.5)
                             font.family: Theme.sans
                             font.pixelSize: Theme.dp(19)

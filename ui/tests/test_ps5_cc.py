@@ -60,7 +60,7 @@ def test_the_power_panel_logs_out_in_the_universe_session(universe_session, api,
 
 
 def test_the_bar_opens_a_panel_over_its_icon_and_b_steps_back_out(api, fake, ps5):
-    _shown, overlay = ps5
+    shown, overlay = ps5
     cc = open_cc(api, fake, overlay, "mirrors-edge")
     key(overlay, Qt.Key.Key_Down)
     assert cc.property("zone") == "bar"
@@ -83,12 +83,24 @@ def test_the_bar_opens_a_panel_over_its_icon_and_b_steps_back_out(api, fake, ps5
     cc.setProperty("icon", [i["id"] for i in read(cc, "icons")].index("controllers"))
     key(overlay, Qt.Key.Key_Return)
     until(lambda: cc.property("zone") == "panel")
-    assert [r["id"] for r in read(cc, "panelRows")] == ["pad:event30", "find"], "each pad the watcher reads, then Find Controllers"
+    assert [r["id"] for r in read(cc, "panelRows")] == ["pad:event30", "find", "controller"], (
+        "each pad the watcher reads, then Find Controllers and Controller Settings"
+    )
     shot(overlay, "cc-controllers")
     key(overlay, Qt.Key.Key_Return)
     until(lambda: fake.core.reconnects == ["event30"], "✕ on a pad reconnects it")
     key(overlay, Qt.Key.Key_Escape)
     until(lambda: api.home.open is False, "B closes the Control Center")
+    api.home.openDock()
+    until(lambda: cc.property("open") is True)
+    key(overlay, Qt.Key.Key_Down)
+    cc.setProperty("icon", [i["id"] for i in read(cc, "icons")].index("controllers"))
+    key(overlay, Qt.Key.Key_Return)
+    until(lambda: cc.property("zone") == "panel")
+    cc.setProperty("row", [r["id"] for r in read(cc, "panelRows")].index("controller"))
+    key(overlay, Qt.Key.Key_Return)
+    until(lambda: api.home.shown == "launcher" and api.home.open is False, "Controller Settings goes home")
+    shown.page("controllersPage")
 
 
 def test_the_game_hub_card_lands_on_the_games_hero_at_home(api, fake, ps5):

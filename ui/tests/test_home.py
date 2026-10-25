@@ -575,7 +575,8 @@ def test_the_dock_renders_over_a_running_game(api, fake, reprise, tmp_path):
     assert buttons.index("controllers") == buttons.index("shot") + 1, "Controllers right after Screenshot"
     dock.setProperty("index", buttons.index("controllers"))
     key(overlay, Qt.Key.Key_Return)
-    assert ids(read(dock, "current")["children"]) == ["pad:event30", "find"], "each pad the watcher reads, then Find controllers"
+    controllers = ids(read(dock, "current")["children"])
+    assert controllers == ["pad:event30", "find", "controller"], "each pad the watcher reads, then Find controllers and Controller settings"
     if os.environ.get("UNIVERSE_TEST_SHOTS"):
         settle(overlay)
         overlay.grabWindow().save(str(tmp_path / "dock-controllers.png"))
@@ -615,6 +616,16 @@ def test_the_dock_renders_over_a_running_game(api, fake, reprise, tmp_path):
     assert api.home.takeLanding() == "", "taken once"
     from_the_game_card("journal")
     look.page("journalPage")
+    api.home.toGame()
+    until(lambda: fake.core.game_shown is True)
+    open_dock(api, overlay)
+    dock.setProperty("index", buttons.index("controllers"))
+    key(overlay, Qt.Key.Key_Return)
+    dock.setProperty("sub", controllers.index("controller"))
+    key(overlay, Qt.Key.Key_Return)
+    until(lambda: api.home.shown == "launcher" and api.home.open is False, "Controller settings goes home")
+    settings = look.page("settingsPage")
+    until(lambda: read(settings, "sectionId") == "controller", "…and opens Settings on the controller")
     api.home.toGame()
     until(lambda: fake.core.game_shown is True)
     stop(api)

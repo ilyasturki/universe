@@ -376,7 +376,8 @@ class Home(QObject):
     def _fresh(self):
         return self._captured is not None and (self._captured_still or time.monotonic() - self._captured_at < FRESH_S)
 
-    # `landing` names the page the theme opens on the playing game once it is up: details, achievements, journal, recordings, screenshots.
+    # `landing` names the page the theme opens on the playing game once it is up: details, achievements, journal, recordings, screenshots;
+    # `controller` opens the launcher's controller page, whatever plays.
     @Slot()
     @Slot(str)
     def toLauncher(self, landing=""):

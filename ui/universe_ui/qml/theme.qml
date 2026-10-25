@@ -1546,6 +1546,10 @@ FocusScope {
     }
 
     function openLanding(landing) {
+        if (landing === "controller") {
+            openSettings("controller");
+            return;
+        }
         var game = landing !== "" ? api.allGames.byId(playingId) : null;
         if (!game)
             return;

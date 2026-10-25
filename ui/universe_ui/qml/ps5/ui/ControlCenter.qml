@@ -233,7 +233,7 @@ FocusScope {
                     kind: "value"
                 }
             ];
-        // Each pad the launcher reads, reconnected by ✕, then a look for pads it may have missed.
+        // Each pad the launcher reads, reconnected by ✕, then a look for pads it may have missed, then the launcher's Controllers page.
         if (id === "controllers")
             return api.screens.controller.devices.map(function (d) {
                 return {
@@ -241,13 +241,20 @@ FocusScope {
                     pad: d.id,
                     glyph: "gamepad",
                     label: d.name,
-                    kind: "action"
+                    kind: "action",
+                    value: "Reconnect"
                 };
             }).concat([
                 {
                     id: "find",
                     glyph: "search",
                     label: "Find Controllers",
+                    kind: "action"
+                },
+                {
+                    id: "controller",
+                    glyph: "sliders",
+                    label: "Controller Settings",
                     kind: "action"
                 }
             ]);
@@ -490,6 +497,10 @@ FocusScope {
         case "find":
             Sound.play("ok");
             api.screens.controller.rescan();
+            break;
+        case "controller":
+            Sound.play("ok");
+            api.home.toLauncher("controller");
             break;
         case "home":
             Sound.play("home");
@@ -1159,6 +1170,16 @@ FocusScope {
                                 color: Theme.textSecondary
                                 font.pixelSize: Theme.dp(Theme.fontSmall)
                             }
+                        }
+
+                        Label {
+                            visible: modelData.kind === "action" && !!modelData.value
+                            anchors.right: parent.right
+                            anchors.rightMargin: Theme.dp(18)
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: modelData.value || ""
+                            color: Theme.textSecondary
+                            font.pixelSize: Theme.dp(Theme.fontSmall)
                         }
 
                         Label {

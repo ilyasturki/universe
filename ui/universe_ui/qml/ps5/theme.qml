@@ -963,6 +963,10 @@ FocusScope {
 
     // What the dock asked for over the game: its details, trophies, captures, journal or log.
     function openLanding(landing) {
+        if (landing === "controller") {
+            push("pages/ControllersPage.qml", {});
+            return;
+        }
         var id = playingId;
         if (landing === "" || id === "")
             return;
