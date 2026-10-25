@@ -775,6 +775,8 @@ def test_the_reprise_bar_holds_the_library_and_power(look, api, fake):
     bar = look.find("tabBar")
     assert all(tab["icon"] for tab in read(bar, "tabs")), "every tab carries its glyph"
     look.home()
+    title = look.find("barTitle")
+    assert not (title.property("visible") and title.property("truncated")), "Home names nothing there, and nothing shows cut"
     look.press(Qt.Key.Key_E)
     page = look.page("libraryPage")
     assert root.property("tabIndex") == root.property("libraryTab") and bar.property("currentIndex") == root.property("libraryTab"), "a tab of its own, lit"
@@ -785,7 +787,6 @@ def test_the_reprise_bar_holds_the_library_and_power(look, api, fake):
     long = "Batman: Arkham Asylum Game of the Year Edition"
     fake.set(game_id(page), "title", long)
     api.universe.libraryChanged.emit([])
-    title = look.find("barTitle")
     until(lambda: title.property("text") == long)
     assert title.property("truncated") is False, "a long name shrinks to fit the bar, never cut"
     look.press(Qt.Key.Key_Up)

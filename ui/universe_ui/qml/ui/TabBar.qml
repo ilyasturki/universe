@@ -380,6 +380,7 @@ FocusScope {
         readonly property real roomRight: rightSide.x - Theme.dp(48)
 
         anchors.verticalCenter: labels.verticalCenter
+        visible: text !== ""
         x: Math.max(roomLeft, Math.min((root.width - width) / 2, roomRight - width))
         width: Math.min(implicitWidth, Math.max(0, roomRight - roomLeft))
         height: Theme.dp(64)
