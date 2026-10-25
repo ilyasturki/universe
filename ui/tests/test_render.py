@@ -723,6 +723,7 @@ def test_the_reprise_game_page_holds_the_games_tools_and_the_hero_its_page_and_m
     page = until(lambda: root.findChild(QObject, "detailPage"))
     bar = until(lambda: descendant(page, "hintBar"))
     until(lambda: read(page, "pills") == ["play", "favourite", "more"], "Play, the heart and ···: the game's other tools are in its menu")
+    until(lambda: page.property("activeFocus") is True)
     assert glyphs(read(bar, "hints")) == {"A", "Y", "Start", "B"}
     look.press(Qt.Key.Key_Right)
     assert page.property("action") == "favourite" and glyphs(read(bar, "hints")) == {"A", "Start", "B"}, "on the heart A favourites: no Y"
@@ -755,8 +756,7 @@ def test_the_reprise_game_page_holds_the_games_tools_and_the_hero_its_page_and_m
     look.press(Qt.Key.Key_Return)
     until(lambda: menu.property("open") is True and read(menu, "items")[1]["action"] == "details", "the hero's More is the game menu")
     look.press(Qt.Key.Key_Escape)
-    invoke(root, "openDetail", api.allGames.byId("batman-arkham-origins"))
-    until(lambda: page.property("game").property("id") == "batman-arkham-origins")
+    page = look.game_page("batman-arkham-origins")
     look.press(Qt.Key.Key_F1)
     until(lambda: menu.property("open") is True)
     look.press(Qt.Key.Key_Down, [i["action"] for i in read(menu, "items")].index("achievements"))

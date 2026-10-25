@@ -217,13 +217,19 @@ class Look:
         return {"gameId": game_id} if self.stacked else {"game": self.api.allGames.byId(game_id)}
 
     def game_page(self, game_id):
-        """The game's own page, open: Reprise's detail page, Switch 2's options, the PS5's Information."""
+        """The game's own page, open and taking keys: Reprise's detail page, Switch 2's options, the PS5's Information."""
         if self.stacked:
             return self.open("pages/SoftwareOptionsPage.qml" if self.name == "switch2" else "pages/SoftwareInfoPage.qml", {"gameId": game_id})
         root = self.root
         invoke(root, "openDetail", self.api.allGames.byId(game_id))
         return until(
-            lambda: (p := root.findChild(QObject, "detailPage")) is not None and (g := p.property("game")) is not None and g.property("id") == game_id and p,
+            lambda: (
+                (p := root.findChild(QObject, "detailPage")) is not None
+                and (g := p.property("game")) is not None
+                and g.property("id") == game_id
+                and p.property("activeFocus")
+                and p
+            ),
             f"{game_id}'s page",
         )
 
