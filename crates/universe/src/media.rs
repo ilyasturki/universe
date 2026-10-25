@@ -423,11 +423,10 @@ fn edition_key(title: &str) -> String {
     title_key(edition_base(title).unwrap_or(title))
 }
 
-/// `local`: found on the game's platform; `edition`: another edition of the game, whose store releases are not this one's.
+/// `edition`: another edition of the game, whose store releases are not this one's.
 #[derive(Debug)]
 struct Match {
     game: Value,
-    local: bool,
     edition: bool,
 }
 
@@ -450,7 +449,7 @@ fn gamesdb_match(items: &Value, title: &str, year: u32, platforms: &[&str]) -> O
     let local: Vec<&Value> = pool.iter().copied().filter(|g| on_platform(g)).collect();
     let pool = if local.is_empty() { pool } else { local };
     let pick = (year > 0).then(|| pool.iter().find(|g| gamesdb_year(g) == year)).flatten().or(pool.first())?;
-    Some(Match { game: (*pick).clone(), local: on_platform(pick), edition })
+    Some(Match { game: (*pick).clone(), edition })
 }
 
 fn libretro_system(platform: &str, ext: &str) -> Option<&'static str> {
@@ -1498,9 +1497,9 @@ mod tests {
     fn a_title_search_takes_the_same_name_on_the_games_platform() {
         let items = json_of("gamesdb-search-super-mario-world.json")["items"].clone();
         let m = gamesdb_match(&items, "Super Mario World", 0, &["snes"]).unwrap();
-        assert_eq!((gamesdb_year(&m.game), m.local, m.edition), (1990, true, false));
+        assert_eq!((gamesdb_year(&m.game), m.edition), (1990, false));
         let m = gamesdb_match(&items, "Super Mario World", 2001, &[]).unwrap();
-        assert_eq!((gamesdb_year(&m.game), m.local), (2001, false));
+        assert_eq!(gamesdb_year(&m.game), 2001);
         assert!(gamesdb_match(&items, "Super Mario", 0, &["snes"]).is_none(), "a fuzzy hit is no match");
 
         let found = |file: &str, title: &str, platforms: &[&str]| {
