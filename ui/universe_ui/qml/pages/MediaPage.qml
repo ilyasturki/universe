@@ -25,14 +25,44 @@ FocusScope {
     property bool lightbox: false
 
     readonly property var rows: store.rows
+    readonly property var filters: [
+        {
+            kind: "shot",
+            label: "Screenshots"
+        },
+        {
+            kind: "recording",
+            label: "Recordings"
+        },
+        {
+            kind: "journal",
+            label: "Journal"
+        }
+    ]
+    property var kinds: ["shot", "recording", "journal"]
+    property int filterIndex: 0
+    readonly property bool filtering: filterRow.activeFocus
+    readonly property var shown: rows.filter(function (r) {
+        return kinds.indexOf(r.kind) >= 0;
+    })
     property int index: 0
-    readonly property var current: index >= 0 && index < rows.length ? rows[index] : null
-    readonly property var shotRows: rows.filter(function (r) {
+    readonly property var current: index >= 0 && index < shown.length ? shown[index] : null
+    readonly property var shotRows: shown.filter(function (r) {
         return r.kind === "shot";
     })
     readonly property int shotIndex: current ? keyIndex(shotRows, current.key) : -1
 
-    readonly property var hints: menu.open ? menu.hints : lightbox ? [
+    readonly property var hints: menu.open ? menu.hints : filtering ? [
+        {
+            glyph: "A",
+            label: kinds.indexOf(filters[filterIndex].kind) >= 0 ? "Hide" : "Show",
+            dim: kinds.length === 1 && kinds[0] === filters[filterIndex].kind
+        },
+        {
+            glyph: "B",
+            label: "Back"
+        }
+    ] : lightbox ? [
         {
             glyph: "dpad",
             label: "Previous / next"
@@ -79,9 +109,9 @@ FocusScope {
     readonly property real inset: Theme.dp(12)
 
     Component.onCompleted: store.load()
-    onRowsChanged: {
-        if (index >= rows.length)
-            index = Math.max(0, rows.length - 1);
+    onShownChanged: {
+        if (index >= shown.length)
+            index = Math.max(0, shown.length - 1);
     }
 
     // The rows reach QML as copies, a new one each read: a row is found again by its key, never by identity.
@@ -96,19 +126,20 @@ FocusScope {
     }
 
     function step(d) {
-        index = Sound.stepped(index, d, rows.length);
+        index = Sound.stepped(index, d, shown.length);
     }
 
     function stepScreen(d) {
-        index = Sound.paged(index, d, columns, Math.floor(grid.height / cellHeight), rows.length);
+        index = Sound.paged(index, d, columns, Math.floor(grid.height / cellHeight), shown.length);
     }
 
     function stepRow(d) {
         var next = index + d * columns;
-        if (next < 0 || next >= rows.length) {
-            if (d < 0)
-                page.chromeRequested();
-            else
+        if (next < 0 || next >= shown.length) {
+            if (d < 0) {
+                Sound.tick();
+                filterRow.forceActiveFocus();
+            } else
                 Sound.edge();
             return;
         }
@@ -129,6 +160,22 @@ FocusScope {
         } else {
             page.journalRequested(currentGame, current.session);
         }
+    }
+
+    // One kind at least stays on: the grid is never filtered down to nothing to show.
+    function toggle(kind) {
+        var at = kinds.indexOf(kind);
+        if (at >= 0 && kinds.length === 1) {
+            Sound.edge();
+            return;
+        }
+        Sound.enter();
+        var next = kinds.slice();
+        if (at >= 0)
+            next.splice(at, 1);
+        else
+            next.push(kind);
+        kinds = next;
     }
 
     function openJournal() {
@@ -261,10 +308,107 @@ FocusScope {
         elide: Text.ElideRight
     }
 
+    Row {
+        id: filterRow
+
+        objectName: "mediaFilters"
+        anchors.top: titleText.bottom
+        anchors.topMargin: Theme.dp(18)
+        anchors.left: titleText.left
+        spacing: Theme.dp(14)
+
+        Keys.onPressed: function (event) {
+            if (event.isAutoRepeat && event.key !== Qt.Key_Left && event.key !== Qt.Key_Right)
+                return;
+            event.accepted = true;
+            if (api.keys.isAccept(event)) {
+                page.toggle(page.filters[page.filterIndex].kind);
+            } else if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
+                page.filterIndex = Sound.stepped(page.filterIndex, event.key === Qt.Key_Left ? -1 : 1, page.filters.length);
+            } else if (event.key === Qt.Key_Down) {
+                Sound.tick();
+                grid.forceActiveFocus();
+            } else if (event.key === Qt.Key_Up) {
+                page.chromeRequested();
+            } else {
+                event.accepted = false;
+            }
+        }
+
+        Repeater {
+            model: page.filters
+
+            Rectangle {
+                id: chip
+
+                readonly property bool on: page.kinds.indexOf(modelData.kind) >= 0
+                readonly property bool focused: filterRow.activeFocus && index === page.filterIndex
+
+                objectName: "mediaFilter"
+                height: Theme.dp(44)
+                width: chipContent.width + Theme.dp(36)
+                radius: height / 2
+                color: on ? Theme.surface : "transparent"
+                border.width: Math.max(1, Theme.dp(2))
+                border.color: Theme.surfaceBorder
+                scale: focused ? 1.04 : 1.0
+
+                Behavior on scale {
+                    Ease {
+                        duration: Theme.durQuick
+                    }
+                }
+
+                Pointer {
+                    current: chip.focused
+                    radius: chip.radius
+                    onPicked: {
+                        page.filterIndex = index;
+                        filterRow.forceActiveFocus();
+                    }
+                }
+
+                Loader {
+                    anchors.fill: parent
+                    active: chip.focused
+                    sourceComponent: FocusRing {
+                        cornerRadius: chip.radius
+                        gapWidth: Theme.dp(Theme.ringGap)
+                    }
+                }
+
+                Row {
+                    id: chipContent
+
+                    anchors.centerIn: parent
+                    spacing: Theme.dp(8)
+
+                    MenuGlyph {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Theme.dp(18)
+                        height: width
+                        visible: chip.on
+                        kind: "check"
+                        tint: Theme.text
+                    }
+
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: modelData.label
+                        color: chip.on ? Theme.text : Theme.textMuted
+                        font.family: Theme.sans
+                        font.weight: Font.Medium
+                        font.pixelSize: Theme.dp(20)
+                    }
+                }
+            }
+        }
+    }
+
     Text {
         anchors.centerIn: parent
-        visible: page.store.count === 0 && !page.store.loading
-        text: "Screenshots, recordings and journal entries land here as you play."
+        visible: page.shown.length === 0 && !page.store.loading
+        text: page.store.count === 0 ? "Screenshots, recordings and journal entries land here as you play." : "Nothing of these kinds yet."
         color: Theme.textSecondary
         font.family: Theme.sans
         font.pixelSize: Theme.dp(26)
@@ -278,8 +422,8 @@ FocusScope {
             rangeEnd: grid.height - Theme.dp(40)
         }
 
-        anchors.top: titleText.bottom
-        anchors.topMargin: Theme.dp(34) - page.inset
+        anchors.top: filterRow.bottom
+        anchors.topMargin: Theme.dp(26) - page.inset
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.right: parent.right
@@ -291,7 +435,7 @@ FocusScope {
         rightMargin: page.inset
         clip: true
         focus: true
-        model: page.rows
+        model: page.shown
         cellWidth: page.cellWidth
         cellHeight: page.cellHeight
         currentIndex: page.index
@@ -343,7 +487,7 @@ FocusScope {
                 } else if (arrow) {
                     var shots = page.shotRows;
                     var next = Sound.stepped(page.shotIndex, event.key === Qt.Key_Left ? -1 : 1, shots.length);
-                    page.index = page.keyIndex(page.rows, shots[next].key);
+                    page.index = page.keyIndex(page.shown, shots[next].key);
                 }
                 return;
             }
@@ -362,7 +506,7 @@ FocusScope {
             else if (screen)
                 page.stepScreen(screen);
             else if (api.keys.isFirst(event) || api.keys.isLast(event))
-                page.index = Sound.stepped(page.index, api.keys.isFirst(event) ? -page.rows.length : page.rows.length, page.rows.length);
+                page.index = Sound.stepped(page.index, api.keys.isFirst(event) ? -page.shown.length : page.shown.length, page.shown.length);
             else
                 event.accepted = false;
         }

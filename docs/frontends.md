@@ -1005,7 +1005,8 @@ does not show an old replay again.
 
 `pages/MediaPage.qml`, the second tab, is `api.screens.media` on one four-wide grid of
 `ui/MediaCard.qml` under the title of the game the cursor is on, as in the Library: nothing to
-filter or sort, the screenshots, recordings and journal entries of every game, newest first. A
+sort, the screenshots, recordings and journal entries of every game, newest first, with the kinds
+left on in the toggle row under the title (`mediaFilters`: Screenshots · Recordings · Journal). A
 cell is 16:9 and shaped by its kind so the three read apart at a glance: a screenshot is the
 picture alone, a recording its frame under a play disc with the length in a pill, a journal entry
 its words (a book glyph, the heading, the entry's `excerpt`, the session's length) with no
@@ -1013,9 +1014,12 @@ picture; nothing is written under a card. The pictures are the core's thumbnails
 originals, fitted whole (a capture off 16:9 gets bars, never a cut, as in every other screenshot
 frame): a shot's card shows a camera until its thumbnail lands, which the first open after a
 session fills in over a few seconds and every open after that has at once. ▲ from the top row is
-the tab bar. A opens the cell: a shot in the `Lightbox` (◀ ▶ step between the shots), a recording
-on the game's recordings page at that session (`recordingsRequested(game, session)`), an entry on
-its journal page (`journalRequested(game, session)`); Start is an `ActionMenu` with that, Details,
+the toggle row: ◀ ▶ move along it, A shows or hides a kind (the last one on stays on; every kind is
+on again at each start), ▼ is back on the grid and ▲ is the tab bar. The grid, its cursor and the
+lightbox's shots are the kinds shown, and the page finds a row again by its `key`. A opens the
+cell: a shot in the `Lightbox` (◀ ▶ step between the shots), a recording on the game's recordings
+page at that session (`recordingsRequested(game, session)`), an entry on its journal page
+(`journalRequested(game, session)`); Start is an `ActionMenu` with that, Details,
 the journal entry covering a shot or a recording, and Remove screenshot…; X and Y do the details
 and the entry straight away. The hints are View, Play or Read, More and Back. The shell opens each
 request as a sub-page over the tab, so B comes back to the grid where it was.

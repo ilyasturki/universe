@@ -11,6 +11,8 @@ A game's own screenshots, recordings and journal open from the **Media** button 
 
 ## The Media tab
 
+Up from the top row reaches the filters: Screenshots, Recordings and Journal. **A** shows or hides that kind. Several can be on, and one always stays on. Every kind is back on the next time Universe starts.
+
 - **A** on a screenshot shows it full screen, and Left and Right step through the others.
 - **A** on a recording plays it, and **A** on a journal entry opens it.
 - **X** opens the game's page, and **Y** jumps to the journal entry of a screenshot or a recording.

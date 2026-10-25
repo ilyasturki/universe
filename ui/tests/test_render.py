@@ -131,7 +131,40 @@ def test_the_media_tab_and_the_screenshots_page(look, api):
     until(lambda: not api.screens.media.loading and read(page, "rows"))
     rows = read(page, "rows")
     assert root.property("tabIndex") == root.property("mediaTab") and read(page, "current")["kind"] in ("shot", "recording", "journal")
-    assert {r["kind"] for r in rows} == {"shot", "recording", "journal"}, "one grid, every kind, no filter"
+    assert {r["kind"] for r in rows} == {r["kind"] for r in read(page, "shown")} == {"shot", "recording", "journal"}, "one grid, every kind on at first"
+
+    def kinds_shown():
+        return {r["kind"] for r in read(page, "shown")}
+
+    page.setProperty("index", 0)
+    settle(look.window)
+    trace = FocusTrace(look.window)
+    look.press(Qt.Key.Key_Up)
+    until(lambda: "mediaFilters" in focus_names(look.window), "▲ from the first row: the filters")
+    assert [f["kind"] for f in read(page, "filters")] == ["shot", "recording", "journal"] and page.property("filterIndex") == 0
+    assert {h["glyph"] for h in read(page, "hints")} == {"A", "B"}
+    look.press(Qt.Key.Key_Return)
+    until(lambda: kinds_shown() == {"recording", "journal"}, "A hides the screenshots")
+    look.press(Qt.Key.Key_Right)
+    look.press(Qt.Key.Key_Return)
+    until(lambda: kinds_shown() == {"journal"})
+    look.press(Qt.Key.Key_Right)
+    look.press(Qt.Key.Key_Return)
+    assert kinds_shown() == {"journal"}, "the last kind on stays on"
+    assert read(page, "current")["key"] == read(page, "shown")[0]["key"] and read(page, "current")["kind"] == "journal"
+    look.press(Qt.Key.Key_Left, 2)
+    look.press(Qt.Key.Key_Return)
+    until(lambda: kinds_shown() == {"shot", "journal"}, "several kinds at once")
+    look.press(Qt.Key.Key_Up)
+    until(lambda: "tabBar" in focus_names(look.window), "▲ again: the tab bar")
+    look.press(Qt.Key.Key_Down)
+    until(lambda: "mediaFilters" in focus_names(look.window))
+    look.press(Qt.Key.Key_Down)
+    until(lambda: focus_names(look.window)[-1] == "mediaPage", "▼ to the grid")
+    settle(look.window)
+    assert trace.stop().foreign("mediaPage", "tabBar") == [], "every frame of the way: the focus on the page or the tab bar"
+    page.setProperty("kinds", ["shot", "recording", "journal"])
+    until(lambda: len(read(page, "shown")) == len(rows))
     for i, r in enumerate(rows):
         page.setProperty("index", i)
         journal = ["Y"] if r.get("hasJournal") and r["kind"] != "journal" else []
