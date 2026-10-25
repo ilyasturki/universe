@@ -1290,7 +1290,8 @@ the source is signed out, run again once that sign-in succeeds) and `count` foll
 the short word ("Waiting…", "Adding…", "N games added", "Nothing new", "Not added", "Waiting for a
 sign-in") and `detail` the reason, `wraps` so it reads whole. The art of the games an import or a
 scan brought is fetched after they are in, as a `media` job over their ids (`mediaRefreshMany`); the
-client does the same for every `scan` and `install` job that ends with games. Under a read-only config, a
+client does the same for every `scan` and `install` job that ends with games, and 5 s after a start
+without a key script for the games no refresh has reached (`fetchUnfetched`, over `media_unfetched`). Under a read-only config, a
 launcher whose adoption needs a write (its source off, Heroic's folders missing from `scan_dirs`) is
 a `static` row whose `detail` says what to add where (home-manager when `config.toml` is a link into
 the Nix store, else `config.toml`). Other launchers are `static` rows ("No games", `quiet`; "N games ·

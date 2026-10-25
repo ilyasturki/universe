@@ -489,6 +489,9 @@ impl Core {
             c.media_refresh_many(&ids, force, p.as_deref_mut()).await
         })
     }
+    fn media_unfetched(&self, py: Python<'_>) -> Vec<String> {
+        self.run_infallible(py, |c| c.media_unfetched())
+    }
     fn media_cancel(&self) {
         self.core.media_cancel();
     }

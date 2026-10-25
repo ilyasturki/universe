@@ -681,6 +681,12 @@ class CoreClient(QObject):
         ids = [str(i) for i in ids]
         return self._job("media", "", lambda progress: "{}/{} updated".format(*self._core.media_refresh_many(ids, False, progress)))
 
+    @Slot(result=str)
+    def fetchUnfetched(self):
+        """At start: the games no refresh has reached get their art, details and shots as one media job; "" when none needs it."""
+        ids = self._guarded([], self._core.media_unfetched)
+        return self.mediaRefreshMany(ids) if ids else ""
+
     @Slot(str, result="QVariant")
     def mediaStatus(self, ident):
         return self._guarded([], self._core.media_status, ident)

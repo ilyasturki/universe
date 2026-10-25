@@ -599,6 +599,9 @@ class Api(QObject):
     def startVersionChecks(self):
         QTimer.singleShot(VERSIONS_AFTER_MS, lambda: self._client.checkVersions(""))
 
+    def startArtFetch(self):
+        QTimer.singleShot(VERSIONS_AFTER_MS, self._client.fetchUnfetched)
+
     @Slot(str)
     def updateGame(self, ident):
         """A game page's update action: its store's update through Downloads' job, else Mark as current."""

@@ -209,6 +209,14 @@ def test_a_scan_job_hands_its_games_over_and_their_art_comes_next(fake):
     assert [j["kind"] for j in fake.jobs()] == ["scan", "media"]
 
 
+def test_the_games_no_refresh_reached_get_their_art_as_a_media_job_once(fake):
+    finished = record(fake.jobFinished)
+    job = fake.fetchUnfetched()
+    assert job and [(j["kind"], j["target"]) for j in fake.jobs()] == [("media", "")]
+    until(lambda: finished)
+    assert fake.fetchUnfetched() == "", "a game refreshed once is not asked again"
+
+
 def test_an_install_that_lands_a_game_fetches_its_art(fake):
     fake.core.install = lambda source, game_id, progress=None: "dead-cells"
     fetched = []

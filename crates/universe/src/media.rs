@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -114,14 +115,23 @@ struct SyncCache {
     sources: BTreeMap<String, String>,
 }
 
-/// Where the requests go: the network, or (tests) saved answers by URL, any other URL a 404.
-pub(crate) enum Net {
+/// Where the requests go, and whether any server answered one (even with an error status).
+pub(crate) struct Net {
+    via: Via,
+    sent: AtomicBool,
+    answered: AtomicBool,
+}
+
+/// The network, or (tests) saved answers by URL, any other URL a 404, or no network at all.
+enum Via {
     Live,
     #[cfg(test)]
     Saved {
         answers: BTreeMap<String, Vec<u8>>,
         asked: Mutex<Vec<String>>,
     },
+    #[cfg(test)]
+    Unplugged,
 }
 
 fn client() -> crate::Result<&'static reqwest::Client> {
@@ -133,7 +143,7 @@ fn client() -> crate::Result<&'static reqwest::Client> {
 }
 
 static STORE_SENT: Mutex<VecDeque<Instant>> = Mutex::new(VecDeque::new());
-static LIVE: Net = Net::Live;
+static LIVE: Net = Net::new(Via::Live);
 
 /// `None` counts a request sent now; else how long until the window has room.
 fn store_slot(sent: &mut VecDeque<Instant>, now: Instant) -> Option<Duration> {
@@ -162,9 +172,19 @@ fn not_found(e: &crate::Error) -> bool {
 }
 
 impl Net {
+    const fn new(via: Via) -> Net {
+        Net { via, sent: AtomicBool::new(false), answered: AtomicBool::new(false) }
+    }
+
+    /// Requests went out and no server answered any.
+    fn offline(&self) -> bool {
+        self.sent.load(Ordering::Relaxed) && !self.answered.load(Ordering::Relaxed)
+    }
+
     async fn get(&self, url: &str, bearer: Option<&str>) -> crate::Result<Vec<u8>> {
-        match self {
-            Net::Live => {
+        self.sent.store(true, Ordering::Relaxed);
+        match &self.via {
+            Via::Live => {
                 if url.starts_with(STEAM_STORE) {
                     store_turn().await;
                 }
@@ -172,28 +192,43 @@ impl Net {
                 if let Some(b) = bearer {
                     req = req.bearer_auth(b);
                 }
-                let resp = req.send().await.and_then(|r| r.error_for_status()).map_err(|e| crate::Error::Io(format!("{url}: {e}")))?;
+                let resp = req.send().await.map_err(|e| crate::Error::Io(format!("{url}: {e}")))?;
+                self.answered.store(true, Ordering::Relaxed);
+                let resp = resp.error_for_status().map_err(|e| crate::Error::Io(format!("{url}: {e}")))?;
                 Ok(resp.bytes().await.map_err(|e| crate::Error::Io(format!("{url}: {e}")))?.to_vec())
             }
             #[cfg(test)]
-            Net::Saved { answers, asked } => {
+            Via::Saved { answers, asked } => {
+                self.answered.store(true, Ordering::Relaxed);
                 asked.lock().unwrap().push(url.to_string());
                 answers.get(url).cloned().ok_or_else(|| crate::Error::Io(format!("{url}: 404 Not Found")))
             }
+            #[cfg(test)]
+            Via::Unplugged => Err(crate::Error::Io(format!("{url}: error sending request"))),
         }
     }
 
     async fn exists(&self, url: &str) -> bool {
-        match self {
-            Net::Live => match client() {
-                Ok(c) => c.head(url).send().await.is_ok_and(|r| r.status().is_success()),
+        self.sent.store(true, Ordering::Relaxed);
+        match &self.via {
+            Via::Live => match client() {
+                Ok(c) => match c.head(url).send().await {
+                    Ok(r) => {
+                        self.answered.store(true, Ordering::Relaxed);
+                        r.status().is_success()
+                    }
+                    Err(_) => false,
+                },
                 Err(_) => false,
             },
             #[cfg(test)]
-            Net::Saved { answers, asked } => {
+            Via::Saved { answers, asked } => {
+                self.answered.store(true, Ordering::Relaxed);
                 asked.lock().unwrap().push(url.to_string());
                 answers.contains_key(url)
             }
+            #[cfg(test)]
+            Via::Unplugged => false,
         }
     }
 
@@ -1094,12 +1129,22 @@ fn wants_details(g: &Game) -> bool {
 
 /// A pick over a slot does not stop its default from being fetched; pins in game.toml win.
 pub async fn refresh(config: &Config, game: &Game, force: bool) -> crate::Result<bool> {
-    refresh_with(&LIVE, config, game, force).await
+    refresh_with(&Net::new(Via::Live), config, game, force).await
+}
+
+/// No refresh has reached the game yet (`fetched_at` empty): a frontend's start fetches its art, details and shots.
+pub fn unfetched(game: &Game) -> bool {
+    read_cache_in(&game.media_dir()).fetched_at.is_empty()
 }
 
 async fn refresh_with(net: &Net, config: &Config, game: &Game, force: bool) -> crate::Result<bool> {
     let mut g = Game::load(&game.toml_path())?;
     let mut look = Lookup::new(net, config, g.clone(), force);
+    // Browsing art caches misses too, under the matching of its day: the first refresh asks again.
+    if look.cache.fetched_at.is_empty() {
+        look.cache.gamesdb_miss = false;
+        look.cache.sgdb_miss = false;
+    }
     let mut changed = false;
     let dir = g.media_dir();
     std::fs::create_dir_all(&dir)?;
@@ -1197,7 +1242,10 @@ async fn refresh_with(net: &Net, config: &Config, game: &Game, force: bool) -> c
         g.metadata.steam_appid = appid;
         changed = true;
     }
-    look.cache.fetched_at = chrono::Local::now().to_rfc3339();
+    // Offline, the game stays unfetched for the next start to ask again.
+    if !net.offline() {
+        look.cache.fetched_at = chrono::Local::now().to_rfc3339();
+    }
     write_cache_in(&dir, &look.cache)?;
     if changed {
         g.save()?;
@@ -1419,13 +1467,13 @@ mod tests {
     }
 
     fn saved(answers: Vec<(String, Vec<u8>)>) -> Net {
-        Net::Saved { answers: answers.into_iter().collect(), asked: Mutex::new(Vec::new()) }
+        Net::new(Via::Saved { answers: answers.into_iter().collect(), asked: Mutex::new(Vec::new()) })
     }
 
     fn asked(net: &Net) -> Vec<String> {
-        match net {
-            Net::Saved { asked, .. } => asked.lock().unwrap().clone(),
-            Net::Live => unreachable!(),
+        match &net.via {
+            Via::Saved { asked, .. } => asked.lock().unwrap().clone(),
+            _ => unreachable!(),
         }
     }
 
@@ -1711,6 +1759,61 @@ mod tests {
         assert_eq!(sources(&game)["box_front"], "sgdb", "preferred, it leads");
         let page = candidates_with(&net, &keyed, &game, "box_front", 0).await.unwrap();
         assert_eq!(page.items.first().map(|c| c.provider.as_str()), Some("sgdb"));
+    }
+
+    #[tokio::test]
+    async fn the_games_no_refresh_reached_get_details_and_shots_once_and_keep_their_art() {
+        let _env = crate::paths::test_env();
+        let mut kh = Game::new("kingdom-hearts");
+        kh.title = "KINGDOM HEARTS HD 1.5+2.5 ReMIX (All Games)".into();
+        kh.source.kind = "lutris".into();
+        kh.save().unwrap();
+        let cover = kh.media_dir().join("box_front.jpg");
+        std::fs::create_dir_all(kh.media_dir()).unwrap();
+        std::fs::write(&cover, png(30, 45)).unwrap();
+        let mut xcx = Game::new("xenoblade-x");
+        xcx.title = "Xenoblade Chronicles X: Definitive Edition".into();
+        xcx.platform = "Nintendo Switch".into();
+        xcx.save().unwrap();
+        write_cache_in(&xcx.media_dir(), &SyncCache { gamesdb_miss: true, ..Default::default() }).unwrap();
+        let done = Game::new("refreshed");
+        done.save().unwrap();
+        write_cache_in(&done.media_dir(), &SyncCache { fetched_at: "2026-10-24T11:34:00+02:00".into(), ..Default::default() }).unwrap();
+        let core = crate::core::Core::open_with(Config::load().unwrap(), crate::host::Host::memory().0).await.unwrap();
+        let unfetched = || async { core.media_unfetched().await.into_iter().collect::<std::collections::BTreeSet<_>>() };
+        assert_eq!(unfetched().await, ["kingdom-hearts".to_string(), "xenoblade-x".to_string()].into(), "a refreshed game is skipped");
+
+        refresh_with(&Net::new(Via::Unplugged), &keyless(), &kh, false).await.unwrap();
+        assert!(unfetched().await.contains("kingdom-hearts"), "offline, it is asked again at the next start");
+
+        let kh_hit = json_of("gamesdb-search-kingdom-hearts.json")["items"][0].clone();
+        let mut xcx_hits = json_of("gamesdb-search-xenoblade-x.json");
+        xcx_hits["items"][0]["releases"].as_array_mut().unwrap().push(serde_json::json!({"platform_id": "steam", "external_id": "999"}));
+        let mut answers = gamesdb_answers(&kh_hit);
+        answers.extend(gamesdb_answers(&xcx_hits["items"][0]));
+        answers.extend([
+            (format!("{GAMESDB}/games?title={}", encode(&kh.title)), br#"{"items":[]}"#.to_vec()),
+            (format!("{GAMESDB}/games?title={}", encode("KINGDOM HEARTS HD 1.5+2.5 ReMIX")), fixture("gamesdb-search-kingdom-hearts.json")),
+            (format!("{GAMESDB}/games?title={}", encode(&xcx.title)), fixture("gamesdb-search-xenoblade-x-de.json")),
+            (format!("{GAMESDB}/games?title={}", encode("Xenoblade Chronicles X")), serde_json::to_vec(&xcx_hits).unwrap()),
+        ]);
+        let net = saved(answers);
+        for id in unfetched().await {
+            refresh_with(&net, &keyless(), &core.get(&id).await.unwrap().game, false).await.unwrap();
+        }
+        assert!(unfetched().await.is_empty(), "each is refreshed once");
+
+        let kh = Game::load(&kh.toml_path()).unwrap();
+        assert_eq!(kh.metadata.description, localized(&kh_hit["summary"]));
+        assert_eq!(kh.metadata.steam_appid, 2552430, "GamesDB's Steam release, for GAMEID");
+        assert_eq!(std::fs::read(&cover).unwrap(), png(30, 45), "the art it had is kept");
+        assert!(!asked(&net).iter().any(|u| u.contains("library_600x900") || Some(u) == gamesdb_image(&kh_hit, "box_front").as_ref()));
+        assert_eq!(sources(&kh).get("screenshots").map(String::as_str), Some("gamesdb"));
+        assert_eq!(std::fs::read_dir(kh.media_dir().join("screenshots")).unwrap().count(), 5);
+        let xcx = Game::load(&xcx.toml_path()).unwrap();
+        assert!(xcx.metadata.description.starts_with("Xenoblade Chronicles X is"), "the miss browsing cached is asked again");
+        assert_eq!(xcx.metadata.steam_appid, 0, "another edition's Steam release is not this game's");
+        assert!(read_cache_in(&xcx.media_dir()).gamesdb_edition);
     }
 
     #[tokio::test]

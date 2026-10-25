@@ -460,6 +460,7 @@ def run(argv=None):
     api.startRadios()
     if not args.keys:
         api.startVersionChecks()
+        api.startArtFetch()
 
     if args.keys:
         from .gamepad import KeyScript

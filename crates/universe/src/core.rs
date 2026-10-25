@@ -2579,6 +2579,12 @@ impl Core {
         self.refresh_media_of(&ids, force, progress, true).await
     }
 
+    /// The games no refresh has reached yet (`media::unfetched`), for a frontend's start to hand `media_refresh_many`.
+    pub async fn media_unfetched(&self) -> Vec<String> {
+        let games: Vec<Game> = self.games.read().await.iter().filter(|g| g.game.removed_at.is_empty()).map(|g| g.game.clone()).collect();
+        blocking(move || Ok(games.into_iter().filter(crate::media::unfetched).map(|g| g.id).collect())).await.unwrap_or_default()
+    }
+
     /// Several games' art in turn, what an import just added: `media_cancel` stops it between games.
     pub async fn media_refresh_many(&self, ids: &[String], force: bool, progress: Option<Progress<'_, '_>>) -> Result<(usize, usize)> {
         self.refresh_media_of(ids, force, progress, true).await

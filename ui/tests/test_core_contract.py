@@ -73,6 +73,7 @@ READS = {
     "media": ("media", "the-technomancer"),
     "screenshots": ("screenshots", "the-technomancer"),
     "media_status": ("media_status", "the-technomancer"),
+    "media_unfetched": ("media_unfetched",),
     "achievements": ("achievements", "dead-cells"),
     "controller_state": ("controller_state",),
     "discover": ("discover",),

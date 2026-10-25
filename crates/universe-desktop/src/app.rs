@@ -394,6 +394,25 @@ impl Application {
         true
     }
 
+    /// The games no refresh has reached get their art, details and shots, once; never in a scripted run, which stays off the
+    /// network.
+    pub fn fetch_unfetched(&self) {
+        if self.scripted() {
+            return;
+        }
+        let app = self.downgrade();
+        glib::spawn_future_local(async move {
+            let games = backend::pinned(|core| async move {
+                let ids = core.media_unfetched().await;
+                crate::jobs::titled(&core, ids).await
+            })
+            .await;
+            if let Some(app) = app.upgrade() {
+                app.fetch_art(games);
+            }
+        });
+    }
+
     /// The art of games just imported, `(id, title)`: an art job when none runs, else fetched quietly beside it.
     pub fn fetch_art(&self, games: Vec<(String, String)>) {
         if games.is_empty() {
@@ -685,6 +704,7 @@ impl Application {
             glib::timeout_future_seconds(5).await;
             if !app.windows().is_empty() {
                 app.check_updates(None);
+                app.fetch_unfetched();
             }
         });
     }

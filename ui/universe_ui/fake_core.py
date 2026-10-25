@@ -450,6 +450,7 @@ class FakeCore:
         self._closed = False
         self._installing, self._cancel = "", ""
         self._media_stop = False
+        self._fetched = set()
         self.library_calls = []
         self._backups = {}
         self._cloud = {
@@ -1897,12 +1898,18 @@ class FakeCore:
             if progress:
                 progress(i, len(games), game.get("title", game["id"]))
             time.sleep(STEP_S)
+            self._fetched.add(game["id"])
             media = game.get("media") or {}
             for path in (media.get(slot) for slot in SLOTS):
                 if path and os.path.exists(path):
                     os.replace(path, path + ".part")
                     os.replace(path + ".part", path)
         return (0, len(games))
+
+    def media_unfetched(self):
+        # The fixture keeps no fetch stamp: a game without a description stands for one never refreshed.
+        games = [g for g in self._data["games"] if not g.get("removed") and not (g.get("metadata") or {}).get("description")]
+        return [g["id"] for g in games if g["id"] not in self._fetched]
 
     def media_cancel(self):
         self._media_stop = True
