@@ -65,7 +65,12 @@ def test_a_switch_lands_once_on_the_new_look_s_themes_section(api, name):
     assert page.property("level") in (None, "section"), "on the section itself, not the list of sections"
     content = read(page, "content")
     rows = content["rows"] if isinstance(content, dict) else content
-    assert {"sound_dir", "affiliation"} <= {r.get("key") for r in rows}
+    keys = {r.get("key") for r in rows}
+    assert "sound_dir" in keys
+    assert ("affiliation" in keys) == (name != "reprise"), "the console look-alikes alone say they are not the consoles'"
+    if name == "reprise":
+        groups = {g["title"]: [rows[i]["key"] for i in g["rows"]] for g in content["groups"]}
+        assert groups == {"Look": ["theme", "more"], "Sounds": ["sound_dir"], "Startup": ["boot_intro"]}
     assert api.theme.landing == "", "taken once"
     shown.close()
 

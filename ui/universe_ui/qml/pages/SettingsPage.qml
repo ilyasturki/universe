@@ -423,14 +423,6 @@ FocusScope {
             });
             rows.push({
                 section: "Themes",
-                key: "affiliation",
-                label: api.theme.affiliation,
-                type: "info",
-                wraps: true,
-                detail: api.theme.trademarks
-            });
-            rows.push({
-                section: "Themes",
                 key: "boot_intro",
                 label: "Startup animation",
                 type: "bool",
@@ -459,15 +451,15 @@ FocusScope {
             });
             groups.push({
                 title: "Look",
-                rows: [0, 4, 1]
+                rows: [0, 3]
             });
             groups.push({
                 title: "Sounds",
-                rows: [3]
+                rows: [2]
             });
             groups.push({
                 title: "Startup",
-                rows: [2]
+                rows: [1]
             });
             return {
                 rows: rows,
