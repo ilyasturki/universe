@@ -382,11 +382,18 @@ FocusScope {
         anchors.verticalCenter: labels.verticalCenter
         x: Math.max(roomLeft, Math.min((root.width - width) / 2, roomRight - width))
         width: Math.min(implicitWidth, Math.max(0, roomRight - roomLeft))
+        height: Theme.dp(64)
         text: root.title
         color: Theme.text
         font.family: Theme.sans
         font.weight: Font.Bold
         font.pixelSize: Theme.dp(30)
+        fontSizeMode: Text.Fit
+        minimumPixelSize: Theme.dp(16)
+        wrapMode: Text.WordWrap
+        maximumLineCount: 2
+        horizontalAlignment: Text.AlignHCenter
+        verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
     }
 

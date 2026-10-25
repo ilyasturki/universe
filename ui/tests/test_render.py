@@ -769,7 +769,7 @@ def test_the_reprise_game_page_holds_the_games_tools_and_the_hero_its_page_and_m
 
 
 @reprise
-def test_the_reprise_bar_holds_the_library_and_power(look, api):
+def test_the_reprise_bar_holds_the_library_and_power(look, api, fake):
     root = look.root
     confirm = look.find("confirm")
     bar = look.find("tabBar")
@@ -782,6 +782,12 @@ def test_the_reprise_bar_holds_the_library_and_power(look, api):
     until(lambda: bar.property("title") == api.allGames.byId(first).title, "the bar names the focused game")
     look.press(Qt.Key.Key_Right)
     until(lambda: game_id(page) != first and bar.property("title") == api.allGames.byId(game_id(page)).title, "and follows the cursor")
+    long = "Batman: Arkham Asylum Game of the Year Edition"
+    fake.set(game_id(page), "title", long)
+    api.universe.libraryChanged.emit([])
+    title = look.find("barTitle")
+    until(lambda: title.property("text") == long)
+    assert title.property("truncated") is False, "a long name shrinks to fit the bar, never cut"
     look.press(Qt.Key.Key_Up)
     until(lambda: bar.property("activeFocus") is True)
     look.press(Qt.Key.Key_Right, bar.property("powerIndex") - bar.property("index"))
