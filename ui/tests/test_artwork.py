@@ -102,6 +102,11 @@ def test_overview_lays_the_library_out_as_games_by_slots(api, fake):
     settle(view)
     assert slot_of(view, "control", "logo")["kind"] == "missing" and view.missingGames == 1
 
+    fake.core._game("dishonored")["metadata"]["description"] = ""
+    view.load()
+    settle(view)
+    assert view.missingGames == 2, "a missing description counts as missing art"
+
 
 def test_the_library_fetch_reports_its_progress_and_stops_after_the_game_in_hand(api, fake):
     view = api.screens.artworkOverview

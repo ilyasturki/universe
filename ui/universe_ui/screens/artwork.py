@@ -360,7 +360,9 @@ class ArtworkOverview(AsyncScreen):
 
         def work():
             status = self._client.mediaStatus("")
-            hidden = {str(g.get("id") or "") for g in self._client.list() if g.get("hidden") or g.get("removed")}
+            games = self._client.list()
+            hidden = {str(g.get("id") or "") for g in games if g.get("hidden") or g.get("removed")}
+            described = {str(g.get("id") or "") for g in games if (g.get("metadata") or {}).get("description")}
             rows = []
             for g in status:
                 ident = str(g.get("id") or "")
@@ -368,7 +370,7 @@ class ArtworkOverview(AsyncScreen):
                     continue
                 by_slot = {str(s.get("slot") or ""): _slot_row(s) for s in g.get("slots") or []}
                 slots = [by_slot.get(slot) or _slot_row({"slot": slot}) for slot, *_ in SLOTS]
-                rows.append({"id": ident, "title": str(g.get("title") or ident), "slots": slots})
+                rows.append({"id": ident, "title": str(g.get("title") or ident), "slots": slots, "described": ident in described})
             return sorted(rows, key=lambda r: r["title"].casefold())
 
         def done(rows, error):
@@ -424,5 +426,7 @@ class ArtworkOverview(AsyncScreen):
 
     rows = Property(list, lambda self: [dict(r, slots=[dict(s) for s in r["slots"]]) for r in self._rows], notify=rowsChanged)
     columns = Property(list, lambda self: [{"slot": slot, "label": label, "aspect": aspect, "use": use} for slot, label, aspect, use in SLOTS], constant=True)
-    missingGames = Property(int, lambda self: sum(any(s["kind"] == "missing" for s in r["slots"]) for r in self._rows), notify=rowsChanged)
+    missingGames = Property(
+        int, lambda self: sum(not r["described"] or any(s["kind"] == "missing" for s in r["slots"]) for r in self._rows), notify=rowsChanged
+    )
     job = Property(QVARIANT, lambda self: dict(self._job) if self._job else None, notify=jobChanged)

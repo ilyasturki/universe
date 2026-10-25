@@ -766,10 +766,11 @@ def test_the_settings_artwork_button_asks_then_fetches_and_stops(look, api, fake
     from universe_ui import fake_core
 
     monkeypatch.setattr(fake_core, "STEP_S", 0.15)
-    fake.core._game("control")["media"].pop("logo")
+    fake.core._game("control")["metadata"]["description"] = ""
     page = look.settings("artwork")
     store = api.screens.artworkOverview
-    until(lambda: store.missingGames == 1)
+    until(lambda: store.missingGames == 1, "a description alone missing still offers the fetch")
+    assert all(s["kind"] != "missing" for r in store.rows for s in r["slots"])
     overview = until(lambda: page.findChild(QObject, "artworkOverview"))
     settle(look.window)
     look.press(Qt.Key.Key_Right)
