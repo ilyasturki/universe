@@ -75,7 +75,7 @@ look = "reprise"
 size = "1920x1080"
 kind = "still"
 keys = "Expect:grand-theft-auto-v X Wait:6 Shot:"
-alt = "A game page"
+alt = "A game page with its play time, its buttons, the description and a column of screenshots"
 
 [[take]]
 name = "look-universe"

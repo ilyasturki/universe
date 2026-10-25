@@ -210,6 +210,10 @@ class Game(QObject):
             return "mark-current"
         return ""
 
+    def _update_mark(self):
+        status = self._version.get("status")
+        return status if status in ("update", "likely") else ""
+
     def setCollections(self, model):
         self._collections = model
         self.changed.emit()
@@ -274,6 +278,7 @@ class Game(QObject):
     updateState = Property(str, _update_state, notify=changed)
     # `update` (its store applies it), `mark-current` (updated by hand) or empty: the game page's update action.
     updateAction = Property(str, _update_action, notify=changed)
+    updateMark = Property(str, _update_mark, notify=changed)
     # A store install under way (an `ArrivingGame`); -1 while the size is not known. A subclass cannot redefine a Property, so both live here.
     installing = Property(bool, lambda self: self._installing, constant=True)
     progress = Property(float, lambda self: self._progress, notify=progressChanged)

@@ -131,12 +131,12 @@ FocusScope {
         ]);
     }
 
+    readonly property string updateMark: game ? game.updateMark : ""
     readonly property var stats: {
         if (!game)
             return [];
         var last = Format.lastPlayed(game.lastPlayed), time = Format.playTime(game.playTime);
-        var version = [game.installedVersion && "Version " + game.installedVersion, game.updateState].filter(Boolean).join(" · ");
-        return [last === "Never played" ? last : "Last played " + last.toLowerCase(), time && "Played for " + time, Format.sessions(game.playCount), version].filter(Boolean);
+        return [last === "Never played" ? last : "Last played " + last.toLowerCase(), time && "Played for " + time, Format.updateMark(updateMark)].filter(Boolean);
     }
 
     function activate(index, row) {

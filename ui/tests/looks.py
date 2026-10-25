@@ -5,7 +5,7 @@ from PySide6.QtGui import QColor
 from PySide6.QtQml import QQmlApplicationEngine, QQmlComponent, QQmlEngine
 from PySide6.QtQuick import QQuickWindow  # noqa: F401  (rootObjects() down-cast, for grabWindow)
 from PySide6.QtTest import QTest
-from uitest import descendants, until
+from uitest import descendant, descendants, until
 
 from universe_ui import host
 
@@ -233,10 +233,28 @@ class Look:
         until(lambda: menu.property("open") is True, "the Options menu")
         return menu
 
+    def _game_menu(self):
+        """Reprise's game menu over its game page, opened by Start."""
+        self.press(Qt.Key.Key_F1)
+        menu = self.menu()
+        until(lambda: menu.property("open") is True, "the game menu")
+        return menu
+
+    def _manage(self, menu):
+        top = [i["action"] for i in read(menu, "items")]
+        self.press(Qt.Key.Key_Down, top.index("manage") - menu.property("index"))
+        self.press(Qt.Key.Key_Right)
+        until(lambda: len(read(menu, "stack")) == 1, "the Manage list")
+        return top, [i["action"] for i in read(menu, "items")]
+
     def game_actions(self, page):
-        """The keys of what a game page offers: Reprise's buttons, Switch 2's options, the PS5 Information's Options menu."""
+        """The keys of what a game page offers: Reprise's buttons and its game menu with Manage, Switch 2's options, the PS5 Information's Options menu."""
         if self.name == "reprise":
-            return read(page, "pills")
+            menu = self._game_menu()
+            top, manage = self._manage(menu)
+            self.press(Qt.Key.Key_Escape, 2)
+            until(lambda: menu.property("open") is False)
+            return read(page, "pills") + top + manage
         if self.name == "switch2":
             return [e["key"] for e in read(page, "entries")]
         menu = self._options()
@@ -247,8 +265,15 @@ class Look:
 
     def game_action(self, page, key):
         """Picks `key` of what a game page offers."""
-        if self.name == "reprise":
+        if self.name == "reprise" and key in read(page, "pills"):
             self.press(Qt.Key.Key_Right, read(page, "pills").index(key) - page.property("actionIndex"))
+            self.press(Qt.Key.Key_Return)
+        elif self.name == "reprise":
+            menu = self._game_menu()
+            items = [i["action"] for i in read(menu, "items")]
+            if key not in items:
+                _, items = self._manage(menu)
+            self.press(Qt.Key.Key_Down, items.index(key) - menu.property("index"))
             self.press(Qt.Key.Key_Return)
         elif self.name == "switch2":
             activate(page, read(page, "entries"), key=key)
@@ -256,6 +281,13 @@ class Look:
             menu = self._options()
             self.press(Qt.Key.Key_Down, [i["act"] for i in read(menu, "items")].index(key) - menu.property("index"))
             self.press(Qt.Key.Key_Return)
+
+    def update_mark(self, page):
+        """The update mark a game page draws, by key: Reprise's beside the play time, Switch 2's in its header; None on the PS5's
+        Information, which keeps its full fact sheet."""
+        if self.name == "reprise":
+            return read(page, "updateMark") if descendant(page, "updateMark").isVisible() else ""
+        return read(page, "updateMark") if self.name == "switch2" else None
 
     def settings(self, section):
         if self.stacked:

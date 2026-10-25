@@ -48,6 +48,10 @@ function bytes(n) {
     return Qt.locale("C").formattedDataSize(Math.max(0, n || 0), 1, QQ.Locale.DataSizeTraditionalFormat);
 }
 
+function updateMark(mark) {
+    return mark === "update" ? "Update available" : mark === "likely" ? "May be out of date" : "";
+}
+
 function sessions(count) {
     return count > 0 ? plural(count, "session", "sessions") : "";
 }

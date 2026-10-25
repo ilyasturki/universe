@@ -537,6 +537,11 @@ FocusScope {
             label: game.favorite ? "Remove from favourites" : "Add to favourites",
             action: "favourite"
         });
+        look.push({
+            icon: "sliders",
+            label: "Game settings",
+            action: "settings"
+        });
         if (game.achievementsTotal > 0)
             look.push({
                 icon: "trophy",
@@ -560,11 +565,6 @@ FocusScope {
         items = items.concat(look);
         var manage = [
             {
-                icon: "sliders",
-                label: "Game settings",
-                action: "settings"
-            },
-            {
                 icon: "image",
                 label: "Artwork",
                 action: "artwork"
@@ -578,7 +578,14 @@ FocusScope {
                 icon: "folder",
                 label: "Data and saves",
                 action: "data"
-            },
+            }
+        ].concat(game.updateAction === "mark-current" ? [
+            {
+                icon: "check",
+                label: "Mark as current",
+                action: "mark-current"
+            }
+        ] : []).concat([
             {
                 icon: "eye-off",
                 label: "Remove from library…",
@@ -586,7 +593,7 @@ FocusScope {
                 danger: true,
                 gap: true
             }
-        ];
+        ]);
         var openPage = function (action) {
             root.openGamePage(game, action);
         };
@@ -614,10 +621,14 @@ FocusScope {
             if (action === "media" || action === "manage") {
                 Sound.enter();
                 gameMenu.push(action === "media" ? media : manage, action === "media" ? "Media" : "Manage", function (picked) {
-                    if (picked === "remove")
+                    if (picked === "remove") {
                         askRemove();
-                    else
+                    } else if (picked === "mark-current") {
+                        root.restoreFocus();
+                        api.updateGame(game.id);
+                    } else {
                         openPage(picked);
+                    }
                 });
                 return;
             }
@@ -632,7 +643,7 @@ FocusScope {
                 root.stopSession();
             else if (action === "resume")
                 root.resumeSession();
-            else if (action === "achievements")
+            else if (action === "achievements" || action === "settings")
                 openPage(action);
         });
     }
@@ -653,19 +664,6 @@ FocusScope {
         restoreFocus();
         openSub("pages/" + gamePages[action] + ".qml", {
             game: game
-        });
-    }
-
-    // The game page's Media button: the menu's Media list beside it, or the one kind the game has.
-    function openMediaMenu(game, anchor) {
-        var media = mediaItems(game);
-        if (media.length === 1) {
-            openGamePage(game, media[0].action);
-            return;
-        }
-        Sound.panel();
-        gameMenu.show(media, anchor, Qt.rect(0, 0, anchor.width, anchor.height), "Media", function (picked) {
-            root.openGamePage(game, picked);
         });
     }
 
@@ -1140,9 +1138,6 @@ FocusScope {
             item.game = Qt.binding(function () {
                 return root.detailGame;
             });
-            item.media = Qt.binding(function () {
-                return root.detailGame ? root.mediaItems(root.detailGame) : [];
-            });
             item.overlayHints = Qt.binding(function () {
                 return root.overlayHints;
             });
@@ -1160,15 +1155,6 @@ FocusScope {
             }
             function onMenuRequested(game, anchor) {
                 root.openMenu(game, anchor);
-            }
-            function onSettingsRequested(game) {
-                root.openGamePage(game, "settings");
-            }
-            function onMediaRequested(game, anchor) {
-                root.openMediaMenu(game, anchor);
-            }
-            function onAchievementsRequested(game) {
-                root.openGamePage(game, "achievements");
             }
         }
 

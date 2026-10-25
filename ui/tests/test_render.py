@@ -666,28 +666,37 @@ def test_the_reprise_library_runs_in_homes_order_and_y_hearts_the_game_under_the
 
 
 @reprise
-def test_the_reprise_detail_page_shows_the_play_time_once_a_game_is_played(look, api):
-    def stats():
+def test_the_reprise_detail_page_has_one_line_of_play_and_the_screenshots_beside_the_description(look, api):
+    def facts():
         page = until(lambda: root.findChild(QObject, "detailPage"))
         row = until(lambda: descendant(page, "stats"))
-        cells = [text.property("text") for column in row.childItems() for text in column.childItems()]
-        return dict(zip(cells[::2], cells[1::2], strict=True)) if row.isVisible() else {}
+        return [f["key"] for f in read(row, "facts")] if row.isVisible() else []
 
     root = look.root
     game = api.allGames.byId("the-technomancer")
     invoke(root, "openDetail", game)
-    shown = until(lambda: len(stats()) == 3 and stats())
-    assert str(game.property("playCount")) in shown.values(), "the sessions it was played"
+    until(lambda: facts() == ["playTime", "lastPlayed"], "one line: the play time and the last session, no sessions count")
     page = root.findChild(QObject, "detailPage")
-    look.press(Qt.Key.Key_Down, 2)
-    until(lambda: page.property("scrollY") > 0, "down the page")
+    look.press(Qt.Key.Key_Down)
+    until(lambda: page.property("section") == 1 and page.property("scrollY") > 0, "down to the description")
+    look.press(Qt.Key.Key_Right)
+    assert (page.property("section"), page.property("shotIndex")) == (2, 0), "Right: the screenshots beside it"
+    look.press(Qt.Key.Key_Down)
+    assert page.property("shotIndex") == 1, "Down runs through them"
+    look.press(Qt.Key.Key_Left)
+    assert page.property("section") == 1, "Left: back to the description"
+    look.press(Qt.Key.Key_Right)
+    look.press(Qt.Key.Key_Return)
+    until(lambda: page.property("lightbox") is True, "A on a screenshot views it")
+    look.press(Qt.Key.Key_Escape)
+    until(lambda: page.property("lightbox") is False and page.property("section") == 2)
     look.press(Qt.Key.Key_Escape)
     assert root.property("detailOpen") is False and page.property("scrollY") > 0, "B fades the page out where it stands"
     invoke(root, "openDetail", game)
     assert page.property("scrollY") == 0 and page.property("section") == 0, "the same game opened again starts at the top"
     invoke(root, "closeDetail")
     invoke(root, "openDetail", api.allGames.byId("mirrors-edge"))
-    until(lambda: stats() == {}, "never played: no row")
+    until(lambda: facts() == [], "never played: no line")
 
 
 @reprise
@@ -707,30 +716,32 @@ def test_the_reprise_game_page_holds_the_games_tools_and_the_hero_its_page_and_m
     until(lambda: root.property("detailOpen") is True, "the hero's Game page")
     page = until(lambda: root.findChild(QObject, "detailPage"))
     bar = until(lambda: descendant(page, "hintBar"))
-    until(lambda: read(page, "pills") == ["play", "favourite", "settings", "media", "more"], "the game's tools, Media as it has some")
+    until(lambda: read(page, "pills") == ["play", "favourite", "more"], "Play, the heart and ···: the game's other tools are in its menu")
     assert glyphs(read(bar, "hints")) == {"A", "Y", "Start", "B"}
     look.press(Qt.Key.Key_Right)
     assert page.property("action") == "favourite" and glyphs(read(bar, "hints")) == {"A", "Start", "B"}, "on the heart A favourites: no Y"
     look.press(Qt.Key.Key_Right)
     look.press(Qt.Key.Key_Return)
+    until(lambda: menu.property("open") is True and read(menu, "items")[0]["action"] == "play", "··· is the game menu")
+    actions = [i["action"] for i in read(menu, "items")]
+    assert {"settings", "media"} <= set(actions), "Game settings at its top, Media as the game has some"
+    assert read(bar, "hints") == read(menu, "hints"), "the menu over the page has the bar"
+    look.press(Qt.Key.Key_Down, actions.index("settings"))
+    look.press(Qt.Key.Key_Return)
     sub = look.page("gameSettingsPage")
     until(lambda: sub.property("activeFocus") is True)
     look.press(Qt.Key.Key_Escape)
     until(lambda: root.property("subOpen") is False and page.property("activeFocus") is True)
-    look.press(Qt.Key.Key_Right)
-    look.press(Qt.Key.Key_Return)
+    look.press(Qt.Key.Key_F1)
     until(lambda: menu.property("open") is True)
-    assert [i["action"] for i in read(menu, "items")] == ["screenshots", "recordings", "journal"]
-    assert read(bar, "hints") == read(menu, "hints"), "the menu over the page has the bar"
+    look.press(Qt.Key.Key_Down, actions.index("media"))
+    look.press(Qt.Key.Key_Right)
+    until(lambda: [i["action"] for i in read(menu, "items")] == ["screenshots", "recordings", "journal"])
     look.press(Qt.Key.Key_Return)
     sub = look.page("screenshotsPage")
     until(lambda: sub.property("activeFocus") is True)
     look.press(Qt.Key.Key_Escape)
     until(lambda: root.property("subOpen") is False and page.property("activeFocus") is True)
-    look.press(Qt.Key.Key_Right)
-    look.press(Qt.Key.Key_Return)
-    until(lambda: menu.property("open") is True and read(menu, "items")[0]["action"] == "play", "··· is the game menu")
-    look.press(Qt.Key.Key_Escape)
     look.press(Qt.Key.Key_Escape)
     until(lambda: root.property("detailOpen") is False)
     until(lambda: home.property("onHero") is True)
@@ -739,8 +750,10 @@ def test_the_reprise_game_page_holds_the_games_tools_and_the_hero_its_page_and_m
     until(lambda: menu.property("open") is True and read(menu, "items")[1]["action"] == "details", "the hero's More is the game menu")
     look.press(Qt.Key.Key_Escape)
     invoke(root, "openDetail", api.allGames.byId("batman-arkham-origins"))
-    until(lambda: "achievements" in read(page, "pills"))
-    page.setProperty("actionIndex", read(page, "pills").index("achievements"))
+    until(lambda: page.property("game").property("id") == "batman-arkham-origins")
+    look.press(Qt.Key.Key_F1)
+    until(lambda: menu.property("open") is True)
+    look.press(Qt.Key.Key_Down, [i["action"] for i in read(menu, "items")].index("achievements"))
     look.press(Qt.Key.Key_Return)
     look.page("achievementsPage")
 
@@ -979,7 +992,7 @@ def test_a_reprise_list_that_fits_shows_every_row_without_scrolling(look, api):
     menu = look.find("gameMenu")
     look.press(Qt.Key.Key_F1)
     fits(menu, "a list beside its row")
-    look.press(Qt.Key.Key_Down, 3)
+    look.press(Qt.Key.Key_Down, [i["action"] for i in read(menu, "items")].index("media"))
     look.press(Qt.Key.Key_Return)
     until(lambda: len(read(menu, "stack")) == 1)
     fits(menu, "a titled list beside its row")
@@ -1098,7 +1111,7 @@ def test_the_reprise_game_menu_hides_the_media_a_game_has_none_of(look, api, fak
     look.press(Qt.Key.Key_F1)
     until(lambda: menu.property("open") is True)
     items = {i["action"]: i for i in read(menu, "items")}
-    assert set(items) == {"play", "details", "favourite", "media", "manage"}
+    assert set(items) == {"play", "details", "favourite", "settings", "media", "manage"}
     assert items["media"]["more"] is True and items["manage"]["more"] is True
     media = actions().index("media")
     look.press(Qt.Key.Key_Down, media)
@@ -1120,10 +1133,10 @@ def test_the_reprise_game_menu_hides_the_media_a_game_has_none_of(look, api, fak
     until(lambda: menu.property("open") is False)
 
     invoke(look.root, "openMenu", api.allGames.byId("mini-metro"), page.property("menuAnchor"))
-    until(lambda: menu.property("open") is True and set(actions()) == {"play", "details", "favourite", "manage"}, "nothing to browse: no Media row")
+    until(lambda: menu.property("open") is True and set(actions()) == {"play", "details", "favourite", "settings", "manage"}, "nothing to browse: no Media row")
     look.press(Qt.Key.Key_Down, actions().index("manage"))
     look.press(Qt.Key.Key_Return)
-    until(lambda: depth() == 1 and set(actions()) == {"settings", "artwork", "sessions", "data", "remove"})
+    until(lambda: depth() == 1 and set(actions()) == {"artwork", "sessions", "data", "remove"})
     remove = actions().index("remove")
     assert read(menu, "items")[remove]["danger"] is True
     look.press(Qt.Key.Key_Down, remove)
@@ -1569,16 +1582,26 @@ def test_the_hero_shows_the_focused_game_s_background_on_home_and_on_its_page(lo
 
 def test_a_game_page_offers_the_stores_update_or_mark_as_current_by_hand(look, api, fake):
     fake.core._game("control")["version"] = {"status": "update", "reason": "not-owned", "how": "manual", "store": "gog", "store_id": "2049187585"}
+    fake.core._game("the-technomancer")["version"] = {"status": "likely"}
     api.library.refresh("control")
-    offered = {
-        ident: {"update", "mark-current"} & set(look.game_actions(look.game_page(ident)))
-        for ident in ("mini-metro", "dishonored", "control", "the-technomancer")
-    }
-    assert offered == {"mini-metro": {"update"}, "dishonored": {"mark-current"}, "control": set(), "the-technomancer": set()}, "GOG refuses control"
+    api.library.refresh("the-technomancer")
+    offered, marks = {}, {}
+    for ident in ("mini-metro", "dishonored", "control", "the-technomancer", "dead-cells"):
+        page = look.game_page(ident)
+        offered[ident] = {"update", "mark-current"} & set(look.game_actions(page))
+        marks[ident] = look.update_mark(page)
+    assert offered == {"mini-metro": {"update"}, "dishonored": {"mark-current"}, "control": set(), "the-technomancer": set(), "dead-cells": set()}, (
+        "GOG refuses control"
+    )
+    if look.name != "ps5":
+        assert marks == {"mini-metro": "update", "dishonored": "update", "control": "update", "the-technomancer": "likely", "dead-cells": ""}, (
+            "one mark while upstream is ahead, none with no status"
+        )
     page = look.game_page("dishonored")
     look.game_action(page, "mark-current")
     until(lambda: "mark-current" not in look.game_actions(page), "marked, it is current")
     assert fake.game("dishonored")["version"]["status"] == "current"
+    assert look.update_mark(page) in ("", None), "current: no mark"
     page = look.game_page("mini-metro")
     look.game_action(page, "update")
     until(lambda: (api.screens.sources.job or {}).get("game") == "1434554947", "Downloads' job updates it")

@@ -41,8 +41,9 @@ A `Game` exposes `id`, `title`, `sortTitle`, `favorite` (writable), `hidden`, `p
 `description`, `summary`, `source`, `platform`, `runner`, `runnerName`, `tags`, `extra`, `raw`,
 `collections`, and `assets` (`boxFront`, `square`, `banner`, `background`, `logo`, `screenshotList`), plus
 `launch()`. `version` is the core's (`api.md` § Games), `installedVersion` its `installed`, `updateState` how it
-stands in words, and `updateAction` the game page's update action: `update` (its store applies it), `mark-current`
-(updated by hand) or empty. `api.updateGame(id)` runs it: the store's update as Downloads' job, told by a notice
+stands in words, `updateAction` the game page's update action: `update` (its store applies it), `mark-current`
+(updated by hand) or empty, and `updateMark` the one mark a game page shows: `update` or `likely` as the status says,
+empty for every other status. `api.updateGame(id)` runs the action: the store's update as Downloads' job, told by a notice
 wherever the player is, or `api.universe.markCurrent(id, title)`. Every look's game page asks
 `api.universe.checkVersions(id)` as it opens, and the host every game's 5 s after the start (not in a `--keys` run).
 
@@ -672,11 +673,12 @@ Start, A held 450 ms or Guide with no session opens `ui/ActionMenu.qml` beside t
 screen (`theme.qml` `openMenu`, fed by `focusTarget.currentGame` and `menuAnchor`; a page with an
 `openMenu()` of its own, the Media tab, gets that one instead): the everyday rows, the rest one
 list away. Play / Continue (Resume and Quit *title* for the running game), a hairline, then Details
-(dropped when the detail page is already open on it), the favourite toggle, Achievements (only
+(dropped when the detail page is already open on it), the favourite toggle, Game settings, Achievements (only
 when the game's `achievementsTotal` is not 0), Media › (only when the
 game has a screenshot, a recording or a journal entry) and Manage ›. Media › pushes the non-empty
-pages, Manage › Game settings, Artwork, Sessions and logs, Data and saves (see "Game data and
-storage") and, past a hairline, Remove from library…; either opens on A or Right, and B or Left comes back to the first.
+pages, Manage › Artwork, Sessions and logs, Data and saves (see "Game data and
+storage"), Mark as current (when the game's `updateAction` is `mark-current`, through `api.updateGame`) and, past a
+hairline, Remove from library…; either opens on A or Right, and B or Left comes back to the first.
 Remove asks in place (Keep it / Remove from the library) and goes through
 `api.universe.remove(id, false)`: the watcher drops the game, the detail page closes if it was on it. An item's `gap` draws the hairline above it, `detail` a
 secondary text at the right, `more` a chevron that Right opens; `push(list, heading, after)` stacks a list over the
@@ -868,16 +870,16 @@ row and the Options menu, with the same menu.
 
 ## Detail, recordings and journal
 
-The detail page is the game's logo over its background and a row of its tools (`pills`: Play, the
-heart, Game settings, Media when the game has a screenshot, a recording or a journal entry,
-Achievements when `achievementsTotal` is not 0, the game's `updateAction` when it names one, and ··· for the game
-menu), then the play time, when it was last played, the sessions, the version and its update state
-(`ui/StatRow.qml`, each left out while zero or empty), the
-description and the store's screenshots (`assets.screenshotList`), nothing else. Game settings and
-Achievements open their page, Media the menu's Media list beside the button (the page itself when
-the game has one kind), ··· and Start the game menu beside ···, its recordings, journal and
-screenshots under Media ›, the rest under Manage ›. B fades the page out where it stands; the same
-game opened again starts at the top. Home's hero holds the same entry points for the game under the
+The detail page is the game's logo over its background, one line of the play time and when it was last played
+(`ui/StatRow.qml`, its `facts` keyed `playTime` and `lastPlayed`, each left out while zero or empty) ending in the
+game's `updateMark` (Update available, May be out of date), and a row of buttons (`pills`: Play, the heart, Update
+when `updateAction` is `update`, and ··· for the game menu). Below, the description takes the left of the body and
+the store's screenshots (`assets.screenshotList`) a column on the right, a third of its width, nothing else. Down
+from the buttons reaches the description (the screenshots when there is none) and scrolls it, Right from it the
+screenshot already on screen, Up and Down step through them (Up from the first back to the buttons), Left returns to
+the description, A views one full screen. ··· and Start open the game menu beside ···: Game settings and
+Achievements at its top, the recordings, journal and screenshots under Media ›, Mark as current and the rest under
+Manage ›. B fades the page out where it stands; the same game opened again starts at the top. Home's hero holds the same entry points for the game under the
 cursor: Continue (or Play, Resume), Game page and ···, one press up from the rail.
 
 Every page about one game — Game settings, Artwork, Sessions and logs, Screenshots, Recordings,

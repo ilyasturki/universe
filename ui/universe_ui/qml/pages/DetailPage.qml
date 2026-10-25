@@ -11,29 +11,21 @@ FocusScope {
     focus: true
 
     property var game: null
-    // The game's screenshots, recordings and journal entries as the game menu lists them; set by the theme.
-    property var media: []
     // A menu or a question over the page: its hints take the bar.
     property var overlayHints: null
 
     signal launchRequested(var game)
     signal closeRequested
     signal menuRequested(var game, Item anchor)
-    signal settingsRequested(var game)
-    signal mediaRequested(var game, Item anchor)
-    signal achievementsRequested(var game)
 
-    readonly property string updateAction: game ? game.updateAction : ""
-    readonly property var pills: ["play", "favourite", "settings"].concat(media.length > 0 ? ["media"] : []).concat(game && game.achievementsTotal > 0 ? ["achievements"] : []).concat(updateAction ? [updateAction] : []).concat(["more"])
+    readonly property bool updatable: game !== null && game.updateAction === "update"
+    readonly property var pills: ["play", "favourite"].concat(updatable ? ["update"] : []).concat(["more"])
     readonly property string action: pills[Math.max(0, Math.min(actionIndex, pills.length - 1))]
     readonly property var actionLabels: ({
-            settings: "Game settings",
-            media: "Media",
-            achievements: "Achievements",
             update: "Update",
-            "mark-current": "Mark as current",
             more: "More"
         })
+    readonly property string updateMark: game ? game.updateMark : ""
     readonly property var session: api.universe.currentSession
     readonly property string playLabel: Format.playLabel(game, session && session.id !== undefined ? session.id : "")
 
@@ -100,17 +92,43 @@ FocusScope {
         pageScroll.place(0);
     }
 
-    function sectionTop(which) {
-        return which === 1 ? body.y + about.y - page.ledge : which === 2 ? body.y + shots.y - page.ledge : 0;
+    function bodyTop() {
+        return body.y - page.ledge;
+    }
+
+    function viewBottom() {
+        return pageScroll.heading() + flick.height - hintBar.height;
     }
 
     function scrollTo(y) {
         pageScroll.to(y);
     }
 
-    function goTo(which) {
-        section = which;
-        scrollTo(sectionTop(which));
+    function aboutScroll() {
+        var end = Math.max(bodyTop(), body.y + about.height + Theme.dp(40) - flick.height + hintBar.height);
+        return Math.max(bodyTop(), Math.min(end, pageScroll.heading()));
+    }
+
+    function revealShot() {
+        var card = shotCards.itemAt(shotIndex);
+        if (!card)
+            return;
+        var top = body.y + shots.y + card.y, bottom = top + card.height;
+        if (top < pageScroll.heading() + page.ledge)
+            scrollTo(top - page.ledge);
+        else if (bottom + Theme.dp(40) > viewBottom())
+            scrollTo(bottom + Theme.dp(40) - flick.height + hintBar.height);
+    }
+
+    // Into the column the shot the page already shows: entering it moves nothing on screen.
+    function enterShots() {
+        var top = pageScroll.heading() + page.ledge - body.y - shots.y;
+        var landing = 0;
+        while (landing < shotCards.count - 1 && shotCards.itemAt(landing).y + shotCards.itemAt(landing).height <= top)
+            landing++;
+        section = 2;
+        shotIndex = landing;
+        revealShot();
     }
 
     function stepDown(held) {
@@ -118,54 +136,78 @@ FocusScope {
             if (held)
                 return "";
             if (hasAbout) {
-                goTo(1);
+                section = 1;
+                scrollTo(bodyTop());
                 return "section";
             }
             if (hasShots) {
-                goTo(2);
+                enterShots();
                 return "section";
             }
             return "";
         }
         if (section === 1) {
-            var aboutBottom = body.y + about.y + about.height + Theme.dp(40);
-            var viewBottom = pageScroll.heading() + flick.height - hintBar.height;
-            if (aboutBottom > viewBottom + 1) {
+            var aboutBottom = body.y + about.height + Theme.dp(40);
+            if (aboutBottom > viewBottom() + 1) {
                 scrollTo(Math.min(pageScroll.heading() + Theme.dp(320), aboutBottom - flick.height + hintBar.height));
                 return "scroll";
             }
-            if (hasShots && !held) {
-                goTo(2);
-                return "section";
-            }
+            return "";
+        }
+        if (section === 2 && shotIndex < screenshots.length - 1) {
+            shotIndex++;
+            revealShot();
+            return "shot";
         }
         return "";
     }
 
     function stepUp(held) {
-        if (held && section !== 1)
-            return "";
         if (section === 2) {
-            goTo(hasAbout ? 1 : 0);
+            if (shotIndex > 0) {
+                shotIndex--;
+                revealShot();
+                return "shot";
+            }
+            if (held)
+                return "";
+            section = 0;
+            scrollTo(0);
             return "section";
         }
         if (section === 1) {
-            if (pageScroll.heading() > sectionTop(1) + 1) {
-                scrollTo(Math.max(sectionTop(1), pageScroll.heading() - Theme.dp(320)));
+            if (pageScroll.heading() > bodyTop() + 1) {
+                scrollTo(Math.max(bodyTop(), pageScroll.heading() - Theme.dp(320)));
                 return "scroll";
             }
             if (held)
                 return "";
-            goTo(0);
+            section = 0;
+            scrollTo(0);
             return "section";
         }
         return "";
     }
 
+    function stepAcross(step) {
+        if (section === 0) {
+            actionIndex = Sound.stepped(actionIndex, step, pills.length);
+        } else if (section === 1 && step > 0 && hasShots) {
+            enterShots();
+            Sound.panel();
+        } else if (section === 2 && step < 0 && hasAbout) {
+            section = 1;
+            scrollTo(aboutScroll());
+            Sound.panel();
+        } else {
+            Sound.edge();
+        }
+    }
+
     function stepSound(moved) {
         if (moved === "section")
             Sound.panel();
-        else if (moved === "scroll")
+        else if (moved === "scroll" || moved === "shot")
             Sound.tick();
         else
             Sound.edge();
@@ -223,10 +265,18 @@ FocusScope {
                     titleWidth: parent.width
                 }
 
+                StatRow {
+                    id: stats
+                    objectName: "stats"
+                    anchors.top: heroLogo.bottom
+                    anchors.topMargin: Theme.dp(22)
+                    game: page.game
+                }
+
                 Row {
                     id: actions
-                    anchors.top: heroLogo.bottom
-                    anchors.topMargin: Theme.dp(34)
+                    anchors.top: stats.visible ? stats.bottom : heroLogo.bottom
+                    anchors.topMargin: Theme.dp(stats.visible ? 30 : 34)
                     // Clears the focused pill's ring, which reaches 20 past its edge.
                     spacing: Theme.dp(36)
 
@@ -247,43 +297,13 @@ FocusScope {
                     }
 
                     PillButton {
+                        visible: page.updatable
                         ghost: true
-                        icon: "sliders"
-                        label: page.actionLabels.settings
-                        focused: actions.active && page.action === "settings"
-                        dimmed: actions.active && page.action !== "settings"
-                        onPicked: page.pointToAction("settings")
-                    }
-
-                    PillButton {
-                        id: mediaButton
-                        visible: page.pills.indexOf("media") >= 0
-                        ghost: true
-                        icon: "photos"
-                        label: page.actionLabels.media
-                        focused: actions.active && page.action === "media"
-                        dimmed: actions.active && page.action !== "media"
-                        onPicked: page.pointToAction("media")
-                    }
-
-                    PillButton {
-                        visible: page.pills.indexOf("achievements") >= 0
-                        ghost: true
-                        icon: "trophy"
-                        label: page.actionLabels.achievements
-                        focused: actions.active && page.action === "achievements"
-                        dimmed: actions.active && page.action !== "achievements"
-                        onPicked: page.pointToAction("achievements")
-                    }
-
-                    PillButton {
-                        visible: page.updateAction !== ""
-                        ghost: true
-                        icon: page.updateAction === "update" ? "download" : "check"
-                        label: page.actionLabels[page.updateAction] || ""
-                        focused: actions.active && visible && page.action === page.updateAction
-                        dimmed: actions.active && !focused
-                        onPicked: page.pointToAction(page.updateAction)
+                        icon: "download"
+                        label: page.actionLabels.update
+                        focused: actions.active && page.action === "update"
+                        dimmed: actions.active && page.action !== "update"
+                        onPicked: page.pointToAction("update")
                     }
 
                     RoundButton {
@@ -296,28 +316,22 @@ FocusScope {
                 }
             }
 
-            Column {
+            Item {
                 id: body
 
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.leftMargin: page.sideMargin
-                anchors.rightMargin: page.sideMargin
-                y: page.heroHeight + Theme.dp(44)
-                spacing: Theme.dp(48)
+                readonly property real shotsWidth: Math.round(width * 0.32)
 
-                StatRow {
-                    objectName: "stats"
-                    spacing: Theme.dp(74)
-                    game: page.game
-                }
+                x: page.sideMargin
+                y: page.heroHeight + Theme.dp(44)
+                width: parent.width - page.sideMargin * 2
+                height: Math.max(about.visible ? about.height : 0, shots.visible ? shots.height : 0)
 
                 Text {
                     id: about
 
                     readonly property bool focused: page.section === 1 && !page.lightbox
 
-                    width: Theme.dp(1080)
+                    width: body.width - body.shotsWidth - Theme.dp(100)
                     visible: page.hasAbout
                     text: page.description
                     color: about.focused ? Theme.text : Theme.textSecondary
@@ -339,18 +353,38 @@ FocusScope {
                     }
                 }
 
-                ScreenshotStrip {
+                Column {
                     id: shots
 
-                    label: ""
-                    width: parent.width
-                    images: page.screenshots
-                    index: page.shotIndex
-                    focused: page.section === 2 && !page.lightbox
-                    sideMargin: page.sideMargin
-                    onPointed: function (i) {
-                        page.section = 2;
-                        page.shotIndex = i;
+                    objectName: "shots"
+                    x: body.width - width
+                    width: body.shotsWidth
+                    spacing: Theme.dp(24)
+                    visible: page.hasShots
+
+                    readonly property bool active: page.section === 2 && !page.lightbox
+
+                    Repeater {
+                        id: shotCards
+
+                        model: page.screenshots
+
+                        ShotCard {
+                            width: shots.width
+                            height: Math.round(width * 9 / 16)
+                            source: modelData
+                            focused: shots.active && index === page.shotIndex
+                            dimmed: shots.active && index !== page.shotIndex
+
+                            Pointer {
+                                current: shots.active && index === page.shotIndex
+                                radius: Theme.dp(14)
+                                onPicked: {
+                                    page.section = 2;
+                                    page.shotIndex = index;
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -385,9 +419,9 @@ FocusScope {
         anchors.topMargin: page.ledge
         anchors.bottom: hintBar.top
         flickable: flick
-        shown: page.section === 1
-        from: page.sectionTop(1)
-        to: body.y + about.y + about.height
+        shown: page.section !== 0
+        from: page.bodyTop()
+        to: body.y + (page.section === 2 ? shots.height : about.height)
         window: flick.height - hintBar.height
     }
 
@@ -432,13 +466,7 @@ FocusScope {
                 page.launchRequested(page.game);
             } else if (page.action === "favourite") {
                 page.toggleFavourite();
-            } else if (page.action === "settings") {
-                page.settingsRequested(page.game);
-            } else if (page.action === "media") {
-                page.mediaRequested(page.game, mediaButton);
-            } else if (page.action === "achievements") {
-                page.achievementsRequested(page.game);
-            } else if (page.action === page.updateAction) {
+            } else if (page.action === "update") {
                 Sound.enter();
                 api.updateGame(page.game.id);
             } else {
@@ -454,13 +482,9 @@ FocusScope {
         } else if (event.key === Qt.Key_Up) {
             page.stepSound(page.stepUp(event.isAutoRepeat));
         } else if (arrow) {
-            var step = event.key === Qt.Key_Left ? -1 : 1;
-            if (page.section === 0)
-                page.actionIndex = Sound.stepped(page.actionIndex, step, page.pills.length);
-            else if (page.section === 2)
-                page.stepShot(step);
-            else
-                Sound.edge();
+            if (event.isAutoRepeat && page.section !== 0)
+                return;
+            page.stepAcross(event.key === Qt.Key_Left ? -1 : 1);
         } else if (api.keys.isMenu(event)) {
             if (!page.game)
                 return;

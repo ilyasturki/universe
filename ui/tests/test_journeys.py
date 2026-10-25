@@ -279,7 +279,7 @@ def test_arguments_set_on_the_games_page_reach_it_on_every_launch_after_a_restar
     look = journey.start()
     until(lambda: look.root.property("returnLaunches") == game)
     look.press(Qt.Key.Key_F1)
-    pick(look, look.menu(), "manage", "settings")
+    pick(look, look.menu(), "settings")
     page = look.page("gameSettingsPage")
     until(lambda: page.property("activeFocus") and read(page, "sections"))
     look.press(Qt.Key.Key_F)

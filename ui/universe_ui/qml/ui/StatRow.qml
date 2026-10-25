@@ -7,57 +7,72 @@ Row {
 
     property var game: null
 
-    visible: stats.count > 0
+    readonly property var facts: {
+        if (!game)
+            return [];
+        var out = [];
+        if (game.playTime > 0)
+            out.push({
+                key: "playTime",
+                text: Format.playTime(game.playTime) + " played"
+            });
+        if (game.lastPlayed)
+            out.push({
+                key: "lastPlayed",
+                text: "Last played " + Format.lastPlayed(game.lastPlayed).toLowerCase()
+            });
+        return out;
+    }
+    readonly property string mark: game ? game.updateMark : ""
 
-    Repeater {
-        id: stats
+    spacing: Theme.dp(14)
+    visible: facts.length > 0 || mark !== ""
 
-        model: {
-            if (!root.game)
-                return [];
-            var out = [];
-            if (root.game.playTime > 0)
-                out.push({
-                    label: "PLAY TIME",
-                    value: Format.playTime(root.game.playTime)
-                });
-            if (root.game.lastPlayed)
-                out.push({
-                    label: "LAST PLAYED",
-                    value: Format.lastPlayed(root.game.lastPlayed)
-                });
-            if (root.game.playCount > 0)
-                out.push({
-                    label: "SESSIONS",
-                    value: root.game.playCount.toString()
-                });
-            if (root.game.installedVersion !== "")
-                out.push({
-                    label: "VERSION",
-                    value: root.game.installedVersion
-                });
-            if (root.game.updateState !== "")
-                out.push({
-                    label: "UPDATES",
-                    value: root.game.updateState
-                });
-            return out;
+    Text {
+        id: line
+
+        anchors.verticalCenter: parent.verticalCenter
+        visible: text !== ""
+        text: root.facts.map(function (f) {
+            return f.text;
+        }).join("  ·  ")
+        color: Theme.textSecondary
+        font.family: Theme.sans
+        font.pixelSize: Theme.dp(24)
+    }
+
+    Text {
+        anchors.verticalCenter: parent.verticalCenter
+        visible: line.visible && markRow.visible
+        text: "·"
+        color: Theme.textSecondary
+        font.family: Theme.sans
+        font.pixelSize: Theme.dp(24)
+    }
+
+    Row {
+        id: markRow
+
+        objectName: "updateMark"
+        anchors.verticalCenter: parent.verticalCenter
+        visible: root.mark !== ""
+        spacing: Theme.dp(10)
+
+        Rectangle {
+            anchors.verticalCenter: parent.verticalCenter
+            width: Theme.dp(10)
+            height: width
+            radius: width / 2
+            color: Theme.accent
         }
 
-        Column {
-            spacing: Theme.dp(8)
-
-            CapsLabel {
-                text: modelData.label
-                tracking: 0.11
-            }
-            Text {
-                text: modelData.value
-                color: Theme.text
-                font.family: Theme.sans
-                font.weight: Font.DemiBold
-                font.pixelSize: Theme.dp(34)
-            }
+        Text {
+            anchors.verticalCenter: parent.verticalCenter
+            text: Format.updateMark(root.mark)
+            color: Theme.text
+            font.family: Theme.sans
+            font.weight: Font.DemiBold
+            font.pixelSize: Theme.dp(24)
         }
     }
 }
