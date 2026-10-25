@@ -59,12 +59,8 @@ fn prune(text: &[u8]) -> (Vec<u8>, usize) {
 
 /// Each registered font gone missing has every Wine process list its dir case-insensitively at start: /nix/store's, for seconds.
 pub fn prune_dead(prefix: &Path) -> std::io::Result<usize> {
-    // A running wineserver writes its own copy of the registry back over the files.
-    if crate::data::wine_running(prefix) {
-        return Ok(0);
-    }
     let pfx = crate::saves::wine_prefix(prefix);
-    let mut total = 0;
+    let mut pruned = Vec::new();
     for name in ["user.reg", "system.reg"] {
         let path = pfx.join(name);
         let mut file = match std::fs::File::open(&path) {
@@ -77,9 +73,17 @@ pub fn prune_dead(prefix: &Path) -> std::io::Result<usize> {
         file.read_to_end(&mut text)?;
         let (kept, dropped) = prune(&text);
         if dropped > 0 {
-            crate::config::replace(&path, &kept, Some(&read))?;
-            total += dropped;
+            pruned.push((path, kept, read, dropped));
         }
+    }
+    // A running wineserver writes its own copy of the registry back over the files.
+    if pruned.is_empty() || crate::data::wine_running(prefix) {
+        return Ok(0);
+    }
+    let mut total = 0;
+    for (path, kept, read, dropped) in pruned {
+        crate::config::replace(&path, &kept, Some(&read))?;
+        total += dropped;
     }
     Ok(total)
 }

@@ -305,7 +305,7 @@ impl Core {
         if let Some(prefix) = plan.env.get("WINEPREFIX").map(std::path::PathBuf::from) {
             match crate::core::blocking(move || Ok(crate::wine_fonts::prune_dead(&prefix)?)).await {
                 Ok(0) => {}
-                Ok(n) => tracing::info!("{id}: dropped {n} fonts its prefix registered from /nix/store files now gone"),
+                Ok(n) => tracing::info!("{id}: dropped {n} font registry entries its prefix made from /nix/store files now gone"),
                 Err(e) => tracing::warn!("{id}: prefix fonts: {e}"),
             }
         }

@@ -547,15 +547,18 @@ pub fn migrate(path: &Path) -> crate::Result<bool> {
 /// the file at the same moment reads the old one or the new one whole. `read`, the target's metadata when it was read, leaves a file changed since as it is.
 pub(crate) fn replace(path: &Path, text: &[u8], read: Option<&std::fs::Metadata>) -> std::io::Result<()> {
     use std::io::Write;
+    use std::os::unix::fs::MetadataExt;
+    static WRITES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let target = std::fs::canonicalize(path)?;
     let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let tmp = target.with_file_name(format!(".{name}.{}.tmp", std::process::id()));
+    let n = WRITES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let tmp = target.with_file_name(format!(".{name}.{}.{n}.tmp", std::process::id()));
     let kept = std::fs::File::create(&tmp)
         .and_then(|mut f| f.write_all(text).and_then(|()| f.sync_all()))
         .and_then(|()| std::fs::metadata(&target))
         .and_then(|now| {
             if let Some(was) = read {
-                if (was.len(), was.modified()?) != (now.len(), now.modified()?) {
+                if (was.dev(), was.ino(), was.len(), was.modified()?) != (now.dev(), now.ino(), now.len(), now.modified()?) {
                     return Err(std::io::Error::other(format!("{} changed while being rewritten", target.display())));
                 }
             }
