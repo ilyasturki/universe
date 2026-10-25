@@ -137,9 +137,15 @@ def test_the_media_tab_and_the_screenshots_page(look, api):
         journal = ["Y"] if r.get("hasJournal") and r["kind"] != "journal" else []
         assert {h["glyph"] for h in read(page, "hints")} == {"A", "X", *journal, "Start", "B"}, "Y reads the item's journal entry when it has one"
     assert any(r.get("hasJournal") and r["kind"] != "journal" for r in rows) and not all(r.get("hasJournal") for r in rows)
-    page.setProperty("index", next(i for i, r in enumerate(rows) if r["kind"] == "shot" and r["gameId"] == "the-technomancer"))
+    shots = [r["key"] for r in read(page, "shotRows")]
+    picked = next(r["key"] for r in rows if r["kind"] == "shot" and r["gameId"] == "the-technomancer" and r["key"] not in (shots[0], shots[-1]))
+    page.setProperty("index", [r["key"] for r in rows].index(picked))
     page.open()
     until(lambda: page.property("lightbox") is True and page.property("modal") is True)
+    assert page.property("shotIndex") == shots.index(picked), "the lightbox opens on the shot picked"
+    look.press(Qt.Key.Key_Right)
+    assert read(page, "current")["key"] == shots[shots.index(picked) + 1], "▶ steps to the next shot"
+    look.press(Qt.Key.Key_Left)
     page.setProperty("lightbox", False)
     game = page.property("currentGame")
     assert game is not None and game.property("id") == "the-technomancer"

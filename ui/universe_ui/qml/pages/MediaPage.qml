@@ -30,7 +30,7 @@ FocusScope {
     readonly property var shotRows: rows.filter(function (r) {
         return r.kind === "shot";
     })
-    readonly property int shotIndex: current ? shotRows.indexOf(current) : -1
+    readonly property int shotIndex: current ? keyIndex(shotRows, current.key) : -1
 
     readonly property var hints: menu.open ? menu.hints : lightbox ? [
         {
@@ -82,6 +82,13 @@ FocusScope {
     onRowsChanged: {
         if (index >= rows.length)
             index = Math.max(0, rows.length - 1);
+    }
+
+    // The rows reach QML as copies, a new one each read: a row is found again by its key, never by identity.
+    function keyIndex(list, key) {
+        return list.findIndex(function (r) {
+            return r.key === key;
+        });
     }
 
     function leave() {
@@ -336,7 +343,7 @@ FocusScope {
                 } else if (arrow) {
                     var shots = page.shotRows;
                     var next = Sound.stepped(page.shotIndex, event.key === Qt.Key_Left ? -1 : 1, shots.length);
-                    page.index = page.rows.indexOf(shots[next]);
+                    page.index = page.keyIndex(page.rows, shots[next].key);
                 }
                 return;
             }
