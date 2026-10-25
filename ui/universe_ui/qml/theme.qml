@@ -1403,12 +1403,16 @@ FocusScope {
                     return;
                 }
         }
-        // The row stays under the mouse while the page fades in: a cover's right click there is the page's B.
-        function onDetailRequested(game) {
-            if (root.detailOpen)
-                root.closeDetail();
-            else
-                root.openDetail(api.allGames.byId(game.id) || game);
+        // The menu's backdrop lets a right click through to the cover under it: there it closes the menu, as B does.
+        function onMenuRequested(pick) {
+            if (root.menuOpen) {
+                Sound.cancel();
+                gameMenu.hide();
+                gameMenu.dismissed();
+                return;
+            }
+            pick();
+            root.pageMenu();
         }
     }
 

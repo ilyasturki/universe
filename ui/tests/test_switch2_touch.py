@@ -63,7 +63,7 @@ def test_a_tap_on_the_row_takes_the_focus_back_from_the_bar(deck):
     assert home.property("index") == 0 and root.property("launching") is False, "the tile had the cursor but not the focus: no A"
 
 
-def test_a_long_press_on_a_tile_opens_its_options(deck):
+def test_a_long_press_or_a_right_click_on_a_tile_opens_its_options(deck):
     window, root = deck
     home = root.findChild(QQuickItem, "homePage")
     row = home.findChild(QQuickItem, "homeRow")
@@ -71,6 +71,12 @@ def test_a_long_press_on_a_tile_opens_its_options(deck):
     until(lambda: root.property("depth") == 1, "held, the tile is picked and gets +")
     assert home.property("index") == 2 and root.property("launching") is False
     assert root.property("topPage").objectName() == "softwareOptionsPage", "held, the tile is picked and gets +"
+    QTest.keyClick(window, Qt.Key.Key_Escape)
+    until(lambda: root.property("depth") == 0)
+    p = QPointF(*centre(row_item(row, 1)))
+    QTest.mouseClick(window, Qt.MouseButton.RightButton, Qt.KeyboardModifier.NoModifier, p.toPoint())
+    until(lambda: root.property("depth") == 1, "a right click is the long press")
+    assert home.property("index") == 1 and root.property("topPage").objectName() == "softwareOptionsPage"
 
 
 def test_a_swipe_scrolls_the_home_row_and_picks_nothing(deck):

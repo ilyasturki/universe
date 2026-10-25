@@ -1,5 +1,5 @@
 import pytest
-from looks import Look
+from looks import Look, read
 from PySide6.QtCore import Q_ARG, Q_RETURN_ARG, QMetaObject, QPointF, Qt
 from uitest import until
 
@@ -58,20 +58,23 @@ def test_a_finger_is_the_pads_glyphs_and_no_cursor(api, reprise):
     assert window.cursor().shape() == Qt.CursorShape.BlankCursor
 
 
-def test_a_right_click_on_a_cover_opens_its_page_and_another_closes_it(reprise, fake):
+def test_a_right_click_on_a_cover_opens_its_menu_and_another_closes_it(reprise, fake):
     from PySide6.QtCore import QPoint
     from PySide6.QtTest import QTest
 
     home = reprise.home()
     root = reprise.root
-    first = until(lambda: game_id(home))
+    menu = reprise.menu()
+    until(lambda: game_id(home))
     x, y = tile_centre(home, 1)
     QTest.mouseClick(reprise.window, Qt.MouseButton.RightButton, Qt.KeyboardModifier.NoModifier, QPoint(int(x), int(y)))
-    until(lambda: root.property("detailOpen"))
-    shown = root.property("detailGame").property("id")
-    assert shown != first and game_id(home) == shown, "the ring moves to the cover clicked"
+    until(lambda: root.property("menuOpen"), "a right click opens the game menu, as Start does")
+    assert home.property("focusIndex") == 1, "the ring moves to the cover clicked"
+    actions = [i["action"] for i in read(menu, "items")]
+    assert actions[0] == "play" and "details" in actions
     QTest.qWait(300)
-    assert root.property("detailOpen"), "the root's right click, B, does not close the page it opened"
-    assert fake.currentSession is None
+    assert root.property("menuOpen"), "the root's right click, B, does not close the menu it opened"
     QTest.mouseClick(reprise.window, Qt.MouseButton.RightButton, Qt.KeyboardModifier.NoModifier, QPoint(int(x), int(y)))
-    until(lambda: not root.property("detailOpen"), "on the game page a right click is B")
+    until(lambda: not root.property("menuOpen"), "a right click through the menu's backdrop closes it")
+    QTest.qWait(300)
+    assert not root.property("menuOpen") and not root.property("detailOpen") and fake.currentSession is None

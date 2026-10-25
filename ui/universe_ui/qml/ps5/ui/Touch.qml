@@ -1,6 +1,6 @@
 import QtQuick
 
-// At the release: `action` on the `current` or a `direct` item, only a pick elsewhere; held with `menu`, a pick and +.
+// At the release: `action` on the `current` or a `direct` item, only a pick elsewhere; held or right-clicked with `menu`, a pick and +.
 Item {
     id: touch
 
@@ -28,6 +28,17 @@ Item {
                 api.keys.press(touch.action);
         }
         onLongPressed: {
+            if (!touch.current)
+                touch.picked();
+            api.keys.press("Menu");
+        }
+    }
+    TapHandler {
+        enabled: touch.menu
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+        acceptedButtons: Qt.RightButton
+        gesturePolicy: TapHandler.ReleaseWithinBounds
+        onTapped: {
             if (!touch.current)
                 touch.picked();
             api.keys.press("Menu");

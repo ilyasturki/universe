@@ -1,6 +1,8 @@
 import pytest
 from looks import call, invoke, read
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Q_ARG, Q_RETURN_ARG, QMetaObject, Qt
+from PySide6.QtQuick import QQuickItem
+from PySide6.QtTest import QTest
 from uitest import until
 
 pytestmark = pytest.mark.parametrize("look", ["ps5"], indirect=True)
@@ -51,13 +53,19 @@ def test_the_gamelists_tab_lists_them_favourites_first_and_opens_one(look, libra
     until(lambda: library.property("openList") == "" and library.property("showingLists") is True)
 
 
-def test_start_on_a_game_opens_its_menu(look, library):
+def test_start_or_a_right_click_on_a_game_opens_its_menu(look, library):
     assert library.property("zone") == "grid"
     look.press(Qt.Key.Key_F1)
     until(lambda: look.root.property("modal") is True, "Options brings the game's menu up")
     assert {"info", "settings", "remove"} <= {i["act"] for i in read(look.menu(), "items")}
     look.press(Qt.Key.Key_Escape)
     until(lambda: look.root.property("modal") is False)
+    grid = library.findChild(QQuickItem, "grid")
+    view = next(v for v in grid.childItems() if v.metaObject().className().startswith("QQuickGridView"))
+    cell = QMetaObject.invokeMethod(view, "itemAtIndex", Q_RETURN_ARG("QQuickItem*"), Q_ARG(int, 1))
+    QTest.mouseClick(look.window, Qt.MouseButton.RightButton, Qt.KeyboardModifier.NoModifier, cell.mapToScene(cell.boundingRect().center()).toPoint())
+    until(lambda: look.root.property("modal") is True, "a right click is the long press: the game picked, its menu up")
+    assert grid.property("index") == 1
 
 
 def test_left_of_the_grid_is_the_rail_with_its_drawer_and_up_the_tabs(look, library):

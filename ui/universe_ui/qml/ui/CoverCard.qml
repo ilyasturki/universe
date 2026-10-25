@@ -75,19 +75,18 @@ Item {
                 wash: 0
                 onPicked: root.picked()
 
-                // An exclusive grab: the root's right click, B, never sees this one's release and closes the page it opened.
+                // An exclusive grab: the root's right click, B, never sees this one's release and closes the menu it opened.
                 TapHandler {
                     enabled: root.game !== null
                     acceptedButtons: Qt.RightButton
                     // A touch point has no buttons: unfiltered, this one would take a finger from the Pointer's own handler.
                     acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
                     gesturePolicy: TapHandler.ReleaseWithinBounds
-                    onTapped: {
+                    onTapped: Theme.menuRequested(function () {
                         Theme.pointed(pointed.parent);
                         if (!root.current)
                             root.picked();
-                        Theme.detailRequested(root.game);
-                    }
+                    })
                 }
             }
         }
