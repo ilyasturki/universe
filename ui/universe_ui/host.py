@@ -452,7 +452,10 @@ def run(argv=None):
             return 1
         window = cast("QQuickWindow", layer)
         api.keys.watch(window)
-        api.home.attachOverlay(window)
+        # Never shown, it would still hold the pads: out, so `universe overlay` runs the macros' watcher instead.
+        if not api.home.attachOverlay(window):
+            print("universe-ui: the game's display is no gamescope to draw over", file=sys.stderr)
+            return 1
         client.sessionEnded.connect(lambda *_: app.quit())
     else:
         engine.load(QUrl.fromLocalFile(str(QML_DIR / "main.qml")))
