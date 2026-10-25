@@ -233,3 +233,18 @@ def test_the_controllers_page_picks_a_pad_and_its_models_layout(look, api, fake)
     look.press(Qt.Key.Key_Down)
     look.press(Qt.Key.Key_Return)
     until(lambda: fake.config()["controller"]["layout"] == {"xbox-elite": "positional"}, "the model's layout set from its card")
+
+
+def test_the_controller_page_tests_the_vibration_of_a_pad_that_has_it(look, api, fake):
+    watcher = FakeWatcher("dualsense-edge,8bitdo-pro-3", still={"8bitdo-pro-3"})
+    api.screens.controller.start(watcher)
+    page = look.settings("controller") if look.name == "reprise" else look.open("pages/ControllersPage.qml")
+
+    def rows():
+        return content_rows(page) if look.name == "reprise" else read(page, "entries")
+
+    until(lambda: any(r.get("key") == "rumble" for r in rows()), "no Test vibration for the DualSense")
+    activate(page, rows(), key="rumble")
+    until(lambda: watcher.commands[-1:] == [{"cmd": "rumble", "id": "event30", "ms": 500}])
+    api.screens.controller.setCurrent("event31")
+    until(lambda: any(r.get("key") == "walk" for r in rows()) and not any(r.get("key") == "rumble" for r in rows()), "none for a pad without rumble")

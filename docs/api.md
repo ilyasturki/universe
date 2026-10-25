@@ -1764,7 +1764,7 @@ real pad is connected, so the pad shown is the one with its own family and extra
 game, SDL or Proton reads the same node untouched), rescans every 2 s (hotplug, and pads
 InputPlumber hides by chmod 000 are dropped while hidden), and with `--json` speaks one object per
 line: out — `{"event":"ready"}`, `{"event":"device","id":"event30","name","family","family_name",
-"bus","vendor","product","slots":{"<slot>":{"code","bound"}},"axes":{"<role>":"ABS_Z"},"sdl":{"<slot>":"b3"},"sdl_axes":{"<role>":"a2"},"layout","printed_layout","address","battery"}`
+"bus","vendor","product","slots":{"<slot>":{"code","bound"}},"axes":{"<role>":"ABS_Z"},"sdl":{"<slot>":"b3"},"sdl_axes":{"<role>":"a2"},"layout","printed_layout","address","battery","rumble"}`
 (`layout` is `[controller.layout]`'s choice for the pad's family, empty when its print decides, and `printed_layout` the
 print's, `positional` for A on the right; `address` is BlueZ's for a pad on Bluetooth, empty on a cable;
 `axes` names the evdev axis behind `lx ly rx ry lt rt`, by the pad's shape — Z/RZ are triggers next
@@ -1773,7 +1773,7 @@ thrown backwards; `sdl`/`sdl_axes` number the same as SDL's Linux joystick does,
 axis; `battery {percent, charging}` when the watcher reads it itself, since the kernel keeps no
 supply for the pad — an 8BitDo's from byte 14 of its HID report, a Bluetooth pad's from the GATT
 Battery Service BlueZ reads (`org.bluez.Battery1`, an Xbox pad in BLE mode: no charging state, so
-`charging` false) — else null), `gone {id}`, `button {id, slot, code, pressed}`,
+`charging` false) — else null; `rumble` whether the node takes `FF_RUMBLE`), `gone {id}`, `button {id, slot, code, pressed}`,
 `battery {id, percent, charging}` (on change, and when BlueZ's service turns up after the pad),
 `unknown {id, code}` (a key no slot owns), `macro {id, slot, trigger, action, keys, command}`,
 `hud {shown, title}` (after a `mangohud` fire: `shown` null when no game runs), `learned {family, slot, code, from}` or `learned {family, axis, code}`, `learn_timeout`, `waiting` / `busy` (the lock), `error
@@ -1782,7 +1782,7 @@ Battery Service BlueZ reads (`org.bluez.Battery1`, an Xbox pad in BLE mode: no c
 `resume`, `axes {on}` (stream the sticks and triggers: the page's test mode), `reload` (config
 changed), `learn {id, slot}` or `learn {id, axis}` (a role `lx ly rx ry lt rt`, taken from the axis
 held past 40 % for 150 ms, the furthest thrown when several: `ABS_Z`, or `ABS_Z-` when it went the other way; `except`, a list of
-axis names, keeps those from answering — the walk names the stick it has already placed), `cancel`, `rumble {id}`, `run {action, keys, command}` (fire an action as a
+axis names, keeps those from answering — the walk names the stick it has already placed), `cancel`, `rumble {id, ms?}` (a buzz of `ms`, 180 by default, at most 2000), `run {action, keys, command}` (fire an action as a
 macro would — `mangohud`, `keys` with a combo, `screenshot`…: the launcher's home menu types
 through the watcher, the process that owns the key typist, and only once the game is thawed), `rescan`
 or `rescan {id}` (every pad, or the one, closed and opened again, and every event node passed over

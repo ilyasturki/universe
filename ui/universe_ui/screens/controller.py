@@ -56,6 +56,8 @@ LAYOUT_VALUES = ("", "positional", "xbox")
 LAYOUT_CHOICES = ("As printed", "A on the right", "A at the bottom")
 LAYOUT_PRINTED = {"positional": "on the right", "xbox": "at the bottom"}
 LAYOUT_DETAIL = "Where A sits in Nintendo games on every {name}. As printed, A is {printed}."
+# Long enough to feel; the watcher's stop cue is 180 ms.
+RUMBLE_TEST_MS = 500
 # What a reconnect came to, by the core's outcome.
 RECONNECTED = {
     "back": "{name} is back",
@@ -80,10 +82,12 @@ class Watcher(Stream):
 class FakeWatcher(QObject):
     received = Signal(object)
 
-    def __init__(self, family="dualsense-edge", unbound=(), parent=None):
+    # `still`: the families that read with no rumble, as an 8BitDo in D-input mode does.
+    def __init__(self, family="dualsense-edge", unbound=(), still=(), parent=None):
         super().__init__(parent)
         self._family = family
         self._unbound = set(unbound)
+        self._still = set(still)
         self._families = {}
         self.ident = "event30"
         self.commands = []
@@ -114,6 +118,7 @@ class FakeWatcher(QObject):
             "bus": bus,
             "slots": slots,
             "printed_layout": "positional" if east == "A" else "xbox",
+            "rumble": family not in self._still,
         }
 
     # A rescan closes every pad and opens it again, as the watcher does.
@@ -266,6 +271,7 @@ class ControllerScreen(AdvancedRows, QObject):
             "sdl_axes": dict(line.get("sdl_axes") or {}),
             "printed_layout": str(line.get("printed_layout") or "xbox"),
             "battery": dict(line["battery"]) if isinstance(line.get("battery"), dict) else None,
+            "rumble": bool(line.get("rumble")),
         }
 
     # The SDL mapper reads the pad as the watcher does, lettered buttons by their letters.
@@ -656,6 +662,10 @@ class ControllerScreen(AdvancedRows, QObject):
                 row = _row(name, "walk", "Set up the buttons", "action", "Press each one in turn")
                 row.update(display="", family=device["family"], icon="gamepad", action="Start")
                 rows.append(row)
+                if device["rumble"]:
+                    row = _row(name, "rumble", "Test vibration", "action", "")
+                    row.update(display="", family=device["family"], icon="gamepad", action="Start")
+                    rows.append(row)
             rows.append(self._layout_row(device, name, config))
             for slot in slots:
                 binding = device["slots"].get(slot["id"]) or {}
@@ -790,6 +800,14 @@ class ControllerScreen(AdvancedRows, QObject):
         self._learning = slot
         self.statusChanged.emit()
         return bool(self._watcher.send({"cmd": "learn", "id": device["id"], "slot": slot}))
+
+    @Slot(result=bool)
+    def rumble(self):
+        device = self._device()
+        if device is None or self._watcher is None or self._passive or self._status != "ready":
+            self.message.emit(PASSIVE_DETAIL if self._passive else "No controller connected")
+            return False
+        return bool(self._watcher.send({"cmd": "rumble", "id": device["id"], "ms": RUMBLE_TEST_MS}))
 
     @Slot()
     def cancelLearn(self):

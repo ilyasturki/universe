@@ -71,7 +71,7 @@ FocusScope {
         var out = [], source = controller.rows, buttons = [];
         for (var i = 0; i < source.length; i++) {
             var r = source[i];
-            if (r.key === "test" || r.key === "walk")
+            if (r.key === "test" || r.key === "walk" || r.key === "rumble")
                 out.push({
                     key: r.key,
                     label: r.label,
@@ -277,6 +277,11 @@ FocusScope {
                 Sound.play("edge");
         } else if (row.key === "walk") {
             startWalk();
+        } else if (row.key === "rumble") {
+            if (controller.rumble())
+                Sound.play("ok");
+            else
+                Sound.play("edge");
         } else if (row.key === "device") {
             Sound.play("ok");
             var choices = row.choices || [];

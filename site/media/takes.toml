@@ -182,7 +182,7 @@ look = "reprise"
 size = "1920x1080"
 kind = "still"
 keys = "Wait:4 Up Wait:1 Up Wait:1 Left Wait:1 Left Wait:2 Expect: Return Wait:3 Type:controller Wait:3 Expect: Return Wait:2 Expect: Return Wait:6 Shot:"
-alt = "Settings, Controller: the controller Universe reads, and its buttons"
+alt = "Settings, Controller: the controller Universe reads, its tests and its buttons"
 fake = true
 
 [[take]]

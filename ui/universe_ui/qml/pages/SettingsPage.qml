@@ -1248,6 +1248,11 @@ FocusScope {
                     Sound.enter();
                 else
                     Sound.edge();
+            } else if (row.key === "rumble") {
+                if (controller.rumble())
+                    Sound.enter();
+                else
+                    Sound.edge();
             } else if (row.type === "enum" || row.type === "int") {
                 Sound.panel();
                 editor.edit(row, function (value) {

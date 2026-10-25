@@ -90,8 +90,12 @@ async fn take_lock(wait: bool, out: &Out) -> crate::Result<Option<std::fs::File>
     Ok(Some(file))
 }
 
+/// The stop macro's cue; a frontend's test asks for longer.
+const RUMBLE_MS: u16 = 180;
+const RUMBLE_MAX_MS: u16 = 2000;
+
 enum PadCmd {
-    Rumble,
+    Rumble(u16),
     Close,
 }
 
@@ -171,6 +175,7 @@ struct Pad {
     thrown: BTreeSet<u16>,
     axis_last: BTreeMap<&'static str, i32>,
     battery: Option<(u8, bool)>,
+    rumble: bool,
     /// BlueZ's address for the pad on Bluetooth, empty on a cable
     address: String,
     cmd: mpsc::Sender<PadCmd>,
@@ -361,6 +366,7 @@ impl Pad {
             "vendor": self.vendor, "product": self.product, "slots": slots_json(&self.slots), "axes": axes, "sdl": sdl, "sdl_axes": sdl_axes,
             "layout": self.layout, "printed_layout": self.family.printed_layout(), "address": self.address,
             "battery": self.battery.map(|(percent, charging)| serde_json::json!({"percent": percent, "charging": charging})),
+            "rumble": self.rumble,
         })
     }
 
@@ -413,6 +419,11 @@ struct Caps {
     ranges: BTreeMap<u16, (i32, i32)>,
     /// the kernel's uniq: a Bluetooth pad's address
     uniq: String,
+    rumble: bool,
+}
+
+fn rumbles(dev: &Device) -> bool {
+    dev.supported_ff().is_some_and(|ff| ff.contains(evdev::FFEffectCode::FF_RUMBLE))
 }
 
 fn describe(dev: &Device) -> Caps {
@@ -422,7 +433,7 @@ fn describe(dev: &Device) -> Caps {
     let family = detect_family_on(crate::deck::model().is_some(), id.vendor(), id.product(), &name, &keys);
     let axes: Vec<u16> = dev.supported_absolute_axes().map(|a| a.iter().map(|c| c.0).collect()).unwrap_or_default();
     let ranges = dev.get_absinfo().map(|it| it.map(|(c, i)| (c.0, (i.minimum(), i.maximum()))).collect()).unwrap_or_default();
-    Caps { name, family, vendor: id.vendor(), product: id.product(), keys, axes, ranges, uniq: dev.unique_name().unwrap_or("").to_string() }
+    Caps { name, family, vendor: id.vendor(), product: id.product(), keys, axes, ranges, uniq: dev.unique_name().unwrap_or("").to_string(), rumble: rumbles(dev) }
 }
 
 fn pad_of(id: String, path: PathBuf, bus: String, c: Caps, cfg: &ControllerConfig, cmd: mpsc::Sender<PadCmd>) -> Pad {
@@ -447,6 +458,7 @@ fn pad_of(id: String, path: PathBuf, bus: String, c: Caps, cfg: &ControllerConfi
         thrown: BTreeSet::new(),
         axis_last: BTreeMap::new(),
         battery: None,
+        rumble: c.rumble,
         cmd,
     };
     pad.resolve(cfg);
@@ -490,7 +502,6 @@ fn record_of(id: &str, path: &Path, dev: &Device) -> serde_json::Value {
         .get_absinfo()
         .map(|it| it.map(|(code, i)| (format!("{code:?}"), serde_json::json!([i.minimum(), i.maximum(), i.fuzz(), i.flat()]))).collect())
         .unwrap_or_default();
-    let rumble = dev.supported_ff().is_some_and(|ff| ff.contains(evdev::FFEffectCode::FF_RUMBLE));
     let device = device_of(Path::new("/sys"), path);
     let driver = device.as_ref().and_then(|d| std::fs::read_link(d.join("driver")).ok()).and_then(|l| l.file_name().map(|f| f.to_string_lossy().into_owned()));
     let descriptor = device.as_ref().and_then(|d| std::fs::read(d.join("report_descriptor")).ok()).filter(|d| !d.is_empty());
@@ -510,7 +521,7 @@ fn record_of(id: &str, path: &Path, dev: &Device) -> serde_json::Value {
             "version": format!("{:04x}", input.version()),
             "keys": c.keys.iter().map(|k| keys::key_name(*k)).collect::<Vec<_>>(),
             "abs": abs,
-            "ff": rumble,
+            "ff": c.rumble,
         },
         "device": device.map(|d| d.to_string_lossy().into_owned()).unwrap_or_default(),
     });
@@ -666,6 +677,9 @@ fn pad_task(
         }
         .unwrap_or_else(|| Box::pin(futures_util::stream::pending()));
         let mut battery = None;
+        // Held while it plays: dropping it erases the effect.
+        let mut rumble: Option<evdev::FFEffect> = None;
+        let mut rumble_end = tokio::time::Instant::now();
         loop {
             let read = tokio::select! {
                 ev = stream.next_event() => match ev {
@@ -676,21 +690,24 @@ fn pad_task(
                 // BlueZ tells no charging state: a pad on the cable reads as draining.
                 percent = bluez.next() => match percent { Some(p) => Some((p, false)), None => { bluez = Box::pin(futures_util::stream::pending()); None } },
                 cmd = cmds.recv() => match cmd {
-                    Some(PadCmd::Rumble) => {
+                    Some(PadCmd::Rumble(ms)) => {
+                        rumble = None;
                         let data = evdev::FFEffectData {
                             direction: 0,
                             trigger: evdev::FFTrigger { button: 0, interval: 0 },
-                            replay: evdev::FFReplay { length: 180, delay: 0 },
+                            replay: evdev::FFReplay { length: ms, delay: 0 },
                             kind: evdev::FFEffectKind::Rumble { strong_magnitude: 0x9000, weak_magnitude: 0x5000 },
                         };
                         if let Ok(mut effect) = stream.device_mut().upload_ff_effect(data) {
                             let _ = effect.play(1);
-                            tokio::time::sleep(Duration::from_millis(250)).await;
+                            rumble = Some(effect);
+                            rumble_end = tokio::time::Instant::now() + Duration::from_millis(u64::from(ms) + 70);
                         }
                         continue;
                     }
                     Some(PadCmd::Close) | None => return,
                 },
+                () = tokio::time::sleep_until(rumble_end), if rumble.is_some() => { rumble = None; continue; }
             };
             if let Some((percent, charging)) = read.filter(|read| Some(*read) != battery) {
                 battery = Some((percent, charging));
@@ -1073,7 +1090,7 @@ impl Watcher {
             }
             "stop" => {
                 if let Some(p) = self.pads.get(&id) {
-                    let _ = p.cmd.try_send(PadCmd::Rumble);
+                    let _ = p.cmd.try_send(PadCmd::Rumble(RUMBLE_MS));
                 }
                 tokio::spawn(async move {
                     if let Err(e) = core.stop("").await {
@@ -1157,7 +1174,8 @@ impl Watcher {
             "cancel" => self.learning = None,
             "rumble" => {
                 if let Some(p) = self.pads.get(v["id"].as_str().unwrap_or("")) {
-                    let _ = p.cmd.try_send(PadCmd::Rumble);
+                    let ms = v["ms"].as_u64().map_or(RUMBLE_MS, |ms| ms.min(u64::from(RUMBLE_MAX_MS)) as u16);
+                    let _ = p.cmd.try_send(PadCmd::Rumble(ms));
                 }
             }
             "run" => {
@@ -1391,6 +1409,7 @@ mod tests {
             axes: vec![0, 1, 2, 3, 4, 5, 16, 17],
             ranges: [(0, (-32768, 32767)), (1, (-32768, 32767)), (2, (0, 1023)), (3, (-32768, 32767)), (4, (-32768, 32767)), (5, (0, 1023))].into(),
             uniq: String::new(),
+            rumble: true,
         };
         pad_of("pad".into(), PathBuf::new(), "usb".into(), caps, &ControllerConfig::default(), cmd)
     }
@@ -1409,6 +1428,7 @@ mod tests {
                 axes: vec![],
                 ranges: BTreeMap::new(),
                 uniq: "aa:bb:cc:00:00:01".into(),
+                rumble: false,
             };
             pad_of("pad".into(), PathBuf::new(), "bluetooth".into(), caps, &cfg, cmd).json()
         };
@@ -1435,7 +1455,8 @@ mod tests {
             let e = &pad.entry;
             let (vendor, product, keys) = (pad.id_field("vendor"), pad.id_field("product"), pad.keys());
             let family = detect_family_on(false, vendor, product, pad.name(), &keys);
-            let caps = Caps { name: pad.name().into(), family, vendor, product, keys, axes: pad.axes(), ranges: pad.ranges(), uniq: String::new() };
+            let rumble = e["evdev"]["ff"].as_bool().unwrap();
+            let caps = Caps { name: pad.name().into(), family, vendor, product, keys, axes: pad.axes(), ranges: pad.ranges(), uniq: String::new(), rumble };
             let (cmd, _rx) = mpsc::channel(1);
             let seen = pad_of("pad".into(), PathBuf::new(), e["bus"].as_str().unwrap().into(), caps, &cfg, cmd).json();
             assert_eq!(seen["family"], e["family"], "{}", pad.id);
@@ -1447,6 +1468,7 @@ mod tests {
             let faces: BTreeSet<&str> = ["south", "east", "west", "north"].iter().map(|s| seen["slots"][*s]["code"].as_str().unwrap()).collect();
             assert_eq!(faces.len(), 4, "{}: two face buttons on one code", pad.id);
             assert_eq!(seen["axes"], e["axes"], "{}: sticks and triggers", pad.id);
+            assert_eq!(seen["rumble"], e["evdev"]["ff"], "{}: rumble", pad.id);
             if family.slots().take(4).any(|s| e["print"][s.id] != s.label) {
                 misprinted.push(pad.id.clone());
             }

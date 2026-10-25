@@ -1438,12 +1438,12 @@ position. The hint glyphs follow the same rule (`PadNames.hintSlot`). The screen
 `current`, `family` (the current pad's, else the last one seen or the one `setFamily(id)` chose, kept in `api.memory` as
 `controllerFamily`, `xbox` until then: the button glyphs of every look follow it), `families` (`{id, name}`), `connected`, `status` (`off`, `waiting`, `ready`), `passive`, `learning`,
 `testing`, the `rows`/`groups` of one card, titled with the pad's name and nothing under it (a Controller picker row when two pads are connected,
-a "Test the buttons" and a "Set up the buttons" row while the watcher is `ready`, a "Nintendo games" enum row whose `key` is
+a "Test the buttons" and a "Set up the buttons" row while the watcher is `ready`, then a "Test vibration" row (`rumble`) for a pad whose device says `rumble`, a "Nintendo games" enum row whose `key` is
 `controller.layout.<family>` (choices as printed, A on the right, A at the bottom; `choiceValues` `""`, `positional`, `xbox`;
 its detail naming the printed side from the device's `printed_layout`; Switch 2 opens it in the full picker), then a row per button of the family — each
 with its `slot` and `family`, so the row draws the button's glyph, and its `press` and `hold`
 macros, each carrying its `label` — the extras (back buttons, Fn) first, then the standard
-buttons) and `bind`, `unbind`, `learn`, `cancelLearn`, `setTesting`, `startWalk`, `finishWalk`, `cancelWalk`,
+buttons) and `bind`, `unbind`, `learn`, `cancelLearn`, `setTesting`, `rumble` (the watcher's `rumble` for 500 ms on the current pad), `startWalk`, `finishWalk`, `cancelWalk`,
 `skipStep`, `backStep`, `declineWalk`, `suspend`, `resume`, `rescan` (the watcher's `rescan`, and `rescanRequested`, which
 the host hands the gamepad thread: it lets SDL go and lists the pads again; the watcher's `rescanned`
 comes back as a `macroNotice` saying how many pads it found) and `reconnect(id)` (the core's
