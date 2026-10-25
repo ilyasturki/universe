@@ -309,9 +309,11 @@ impl Core {
                 Runtime::at_launch(&r.effective, gamescope_pid != 0, &cfg.launch),
             )
         };
-        // Over a gamescope of the game's own, the overlay connects to the display splash records.
-        let overlay = plan.gamescope.then(|| crate::runners::on_path(OVERLAY_PROGRAM)).flatten().map(|ui| (ui, display_file(&session_id)));
-        if let Some((_, file)) = &overlay {
+        // Over a gamescope of the game's own, the overlay connects to the display splash records. A launcher's watcher already
+        // holding the pads (Big Screen in a window) answers HOME itself, and the overlay's would wait on it for good.
+        let overlay =
+            (plan.gamescope && crate::runners::on_path(OVERLAY_PROGRAM).is_some() && !crate::controller::watch::lock_held()).then(|| display_file(&session_id));
+        if let Some(file) = &overlay {
             plan.env.insert(crate::splash::DISPLAY_FILE_ENV.into(), file.to_string_lossy().into());
         }
         for (path, text) in plan.mangohud_conf.iter().chain(&plan.mangoapp_conf) {
@@ -364,7 +366,7 @@ impl Core {
             }
         }
         let overlaid = match &overlay {
-            Some((ui, file)) => self.spawn_overlay(&session_id, &unit, ui, file).await.inspect_err(|e| tracing::warn!("overlay: {e}")).is_ok(),
+            Some(file) => self.spawn_overlay(&session_id, &unit, file).await.inspect_err(|e| tracing::warn!("overlay: {e}")).is_ok(),
             None => false,
         };
         // The overlay's own watcher reads the pads: a second one would hold the lock it waits on, and HOME would never reach it.
@@ -486,7 +488,7 @@ impl Core {
     }
 
     /// Big Screen's overlay alone over the game's own gamescope: the dock on HOME, unlocks, the shot's flash and the volume level.
-    async fn spawn_overlay(&self, session_id: &str, game_unit: &str, program: &Path, display: &Path) -> Result<()> {
+    async fn spawn_overlay(&self, session_id: &str, game_unit: &str, display: &Path) -> Result<()> {
         let mut env = passthrough_env();
         // gamescope's display replaces the desktop's: the core inside asks the desktop about its windows through these.
         for var in crate::desktop::HOST_VARS {
@@ -497,13 +499,31 @@ impl Core {
         let spec = UnitSpec {
             name: format!("universe-overlay-{session_id}"),
             description: "Universe overlay".into(),
-            program: program.to_string_lossy().to_string(),
-            args: vec!["--overlay".into(), display.to_string_lossy().to_string()],
+            program: paths::self_exe().to_string_lossy().to_string(),
+            args: vec!["overlay".into(), display.to_string_lossy().to_string()],
             env,
             bind_to: Some(game_unit.into()),
             ..Default::default()
         };
         self.host.units.start(&spec).await
+    }
+
+    /// `universe overlay`: universe-ui over the game's own gamescope. Gone while the game runs (it never came up, or died), the
+    /// pads' macros carry on in its stead.
+    pub async fn run_overlay(self: std::sync::Arc<Self>, display: std::path::PathBuf) -> Result<()> {
+        match crate::runners::on_path(OVERLAY_PROGRAM) {
+            Some(ui) => match tokio::process::Command::new(&ui).arg("--overlay").arg(&display).status().await {
+                Ok(status) if status.success() => {}
+                Ok(status) => tracing::warn!("{OVERLAY_PROGRAM}: {status}"),
+                Err(e) => tracing::warn!("{}: {e}", ui.display()),
+            },
+            None => tracing::warn!("{OVERLAY_PROGRAM} not found"),
+        }
+        if self.current().await.is_none() || !self.config.read().await.controller.enabled {
+            return Ok(());
+        }
+        tracing::warn!("the overlay is gone while the game runs: the pads' macros carry on without it");
+        crate::controller::watch::watch(self, crate::controller::watch::WatchOptions { json: false, wait: true }).await
     }
 
     /// The desktop's idle inhibitor for the session: a unit of its own, since the inhibit stands only as long as the connection holding it.
@@ -813,8 +833,8 @@ pub(crate) mod tests {
         assert_eq!(game.program, bin.join("gamescope").to_string_lossy());
         let display = game.env.get(crate::splash::DISPLAY_FILE_ENV).expect("splash is told where to record gamescope's display");
         let overlay = memory.spec(&format!("universe-overlay-{sid}")).expect("the overlay");
-        assert_eq!(overlay.program, bin.join(OVERLAY_PROGRAM).to_string_lossy());
-        assert_eq!(overlay.args, ["--overlay", display.as_str()]);
+        assert_eq!(overlay.program, paths::self_exe().to_string_lossy());
+        assert_eq!(overlay.args, ["overlay", display.as_str()]);
         assert_eq!(overlay.bind_to.as_deref(), Some(unit.as_str()), "it goes down with the game");
         assert_eq!(overlay.env[&crate::desktop::host_var("XDG_CURRENT_DESKTOP")], "GNOME", "the desktop is still asked about its windows");
         assert!(memory.spec(&format!("universe-controller-{sid}")).is_none(), "the overlay's own watcher reads the pads");
@@ -823,6 +843,47 @@ pub(crate) mod tests {
         memory.finish(&unit, 0);
         core.session_end("sample", &sid, None, None).await.unwrap();
         assert!(!Path::new(display).exists(), "the record goes with the session");
+
+        let lock = std::fs::File::create(crate::controller::watch::lock_path()).unwrap();
+        lock.lock().unwrap();
+        core.launch("sample", "", "").await.unwrap();
+        let started = |unit: &str| memory.calls().iter().filter(|c| c.starts_with(&format!("unit:start {unit}-"))).count();
+        assert_eq!(started("universe-overlay"), 1, "a launcher in a window already reads the pads and has HOME");
+        assert_eq!(started("universe-controller"), 1);
+    }
+
+    #[test]
+    fn the_pads_macros_carry_on_when_the_overlay_goes_before_the_game() {
+        let sb = sandbox();
+        let dir = sb._env.path();
+        let (bin, input) = (dir.join("bin"), dir.join("input"));
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::create_dir_all(&input).unwrap();
+        let ui = bin.join(OVERLAY_PROGRAM);
+        std::fs::write(&ui, b"#!/bin/sh\nexit 1\n").unwrap();
+        std::fs::set_permissions(&ui, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+        let path_was = std::env::var_os("PATH").unwrap_or_default();
+        std::env::set_var("PATH", std::env::join_paths(std::iter::once(bin.clone()).chain(std::env::split_paths(&path_was))).unwrap());
+        std::env::set_var("UNIVERSE_INPUT_DIR", &input);
+        // The watcher reads stdin on a blocking thread that never returns: the runtime is left behind rather than waited for.
+        let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        let took = runtime.block_on(async {
+            let (core, _memory) = open().await;
+            let core = std::sync::Arc::new(core);
+            let display = dir.join("display");
+            core.clone().run_overlay(display.clone()).await.unwrap();
+            assert!(!crate::controller::watch::lock_held(), "no game left: nothing reads the pads");
+            core.launch("sample", "", "").await.unwrap();
+            let overlay = tokio::spawn(core.clone().run_overlay(display));
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+            while !crate::controller::watch::lock_held() && std::time::Instant::now() < deadline {
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+            overlay.abort();
+            crate::controller::watch::lock_held()
+        });
+        runtime.shutdown_background();
+        assert!(took, "the game still runs: the macros' watcher takes the pads");
     }
 
     #[tokio::test]

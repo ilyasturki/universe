@@ -172,6 +172,20 @@ fn an_older_config_gives_up_its_all_games_xbox_layout_and_a_game_keeps_its_own()
     assert!(std::fs::read_to_string(&config).unwrap().starts_with("schema = 2\n"));
 }
 
+#[test]
+fn the_overlay_unit_runs_universe_ui_over_the_display_splash_records_and_ends_with_no_game() {
+    let dir = no_desktop();
+    let bin = dir.path().join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    let ui = bin.join("universe-ui");
+    std::fs::write(&ui, format!("#!/bin/sh\necho \"$@\" > {}\n", dir.path().join("ui-args").display())).unwrap();
+    std::fs::set_permissions(&ui, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap_or_default());
+    let out = universe(&dir, &["overlay", "/run/user/1000/universe/display-x"], &[("PATH", &path), NO_BUS]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert_eq!(std::fs::read_to_string(dir.path().join("ui-args")).unwrap(), "--overlay /run/user/1000/universe/display-x\n");
+}
+
 // A node that would not open is passed over, then left alone until something asks: Find controllers is that ask.
 #[test]
 fn a_rescan_tries_again_the_nodes_the_watcher_passed_over() {
@@ -521,7 +535,7 @@ fn generate_markdown_writes_a_page_per_visible_command_and_the_global_options_on
     for page in ["universe.md", "ls.md", "launch-keys.md", "media.md", "controller.md"] {
         assert!(names.iter().any(|n| n == page), "no {page}: {names:?}");
     }
-    for hidden in ["__generate.md", "__complete.md", "osd.md", "session-end.md", "splash.md"] {
+    for hidden in ["__generate.md", "__complete.md", "osd.md", "session-end.md", "splash.md", "overlay.md"] {
         assert!(!names.iter().any(|n| n == hidden), "{hidden} is hidden: {names:?}");
     }
     let read = |name: &str| std::fs::read_to_string(pages.join(name)).unwrap();

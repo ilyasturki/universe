@@ -71,6 +71,12 @@ fn record_active(path: &Path, device: &Path) -> std::io::Result<()> {
     std::fs::rename(tmp, path)
 }
 
+/// Another watcher has the pads: a launcher's own, which answers HOME itself.
+pub fn lock_held() -> bool {
+    let file = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(lock_path());
+    file.is_ok_and(|f| matches!(f.try_lock(), Err(std::fs::TryLockError::WouldBlock)))
+}
+
 async fn take_lock(wait: bool, out: &Out) -> crate::Result<Option<std::fs::File>> {
     let path = lock_path();
     if let Some(p) = path.parent() {

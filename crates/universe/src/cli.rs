@@ -385,6 +385,12 @@ pub enum Cmd {
         #[arg(default_value = "")]
         screen: String,
     },
+    /// The overlay's unit over a game in its own gamescope: universe-ui, then the pads' macros if it goes before the game
+    #[command(hide = true)]
+    Overlay {
+        /// Where splash writes that gamescope's display
+        display: std::path::PathBuf,
+    },
     /// gamescope's primary child: the keep-alive window, then the game (universe splash [--image P] -- <cmd…>)
     #[command(hide = true)]
     Splash {
@@ -2137,6 +2143,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             println!("{t}");
         }
         Cmd::Controller { action } => return controller(core, action, json).await,
+        Cmd::Overlay { display } => std::sync::Arc::new(core).run_overlay(display).await?,
         Cmd::Rescan => {
             let report = core.rescan().await?;
             let added: Vec<String> = report.imported.iter().map(|f| f.id.clone()).collect();

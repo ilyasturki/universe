@@ -62,11 +62,12 @@ whatever has the focus.
 
 *--overlay* _FILE_
 	The dock alone over a game in a gamescope of its own, without the launcher:
-	what a launch from Universe Desktop starts, bound to the game. It waits for
+	what *universe overlay* runs for a launch from Universe Desktop. It waits for
 	*universe splash* to write that gamescope's display to _FILE_, then shows
 	the look's dock on HOME, unlocks, the screenshot flash and the volume level.
-	There is no Pause on HOME, and Home brings up the app that launched the
-	game. It quits when the game ends, and quitting it leaves the game running.
+	There is no Pause on HOME, and Home brings up the window of the app that
+	launched the game, when it has one. It quits when the game ends, and
+	quitting it leaves the game running.
 
 *--fake*
 	A fixture library instead of the core, for UI work.

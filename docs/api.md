@@ -50,9 +50,11 @@ operation; a dash means the surface doesn't expose it.
   UI starts one for its lifetime, `launch` starts one bound to the game's unit
   (`universe-controller-<session>`, `BindsTo=` the game), and a lock (`$XDG_RUNTIME_DIR/universe/
   controller.lock`) hands the pads over between them. Over a game in a gamescope of its own,
-  `launch` starts `universe-ui --overlay <file>` instead when universe-ui is on `PATH`
-  (`universe-overlay-<session>`, `BindsTo=` the game): the dock alone over the game, whose own
-  watcher takes the pads (frontends.md, "HOME and the dock"). Once both are gone nothing runs. It notes the
+  `launch` starts `universe overlay <file>` instead (`universe-overlay-<session>`, `BindsTo=` the
+  game), when universe-ui is on `PATH` and no watcher holds the lock yet (a launcher in a window
+  has the pads and HOME): it runs `universe-ui --overlay <file>`, the dock alone over the game,
+  whose own watcher takes the pads (frontends.md, "HOME and the dock"), and runs the watcher itself
+  once universe-ui is gone while the game still runs. Once both are gone nothing runs. It notes the
   pad a button was last pressed on in `$XDG_RUNTIME_DIR/universe/active-pad` (the sysfs device its
   evdev node hangs off), the pad the controls module makes player 1. The launcher's
   `universe network watch` and `universe bluetooth watch` live with it the same way (see Network

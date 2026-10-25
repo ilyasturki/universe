@@ -502,14 +502,15 @@ overlay window (the launcher on the desktop) `openDock` is `toLauncher`, and onl
 thaws: a game window raised from the desktop's own switcher stays frozen until Resume.
 
 A game started from Universe Desktop (or `universe play`) in a gamescope of its own gets the
-overlay alone: the core starts `universe-ui --overlay <file>` as its own unit, bound to the game's
-(see api.md), and `universe splash` writes that gamescope's display to the file. The host waits
+overlay alone: the core's `universe overlay` unit, bound to the game's, runs `universe-ui --overlay
+<file>` (see api.md), and `universe splash` writes that gamescope's display to the file. The host waits
 for it (`join_display`, up to 30 s), joins that display and loads `overlay.qml` and nothing else,
 with `api.home.overlayOnly` set: no main window, no scope adopted, no radios or version checks,
 the pad thread and its watcher as usual. With no launcher under the game, `overlay.qml` answers
 `pressed()` itself (the dock opens and closes; a look without one, Switch 2's, calls
 `toLauncher`). `toLauncher`, whatever its landing, closes the dock and raises the window of the
-app that launched (`summonApp()`, the core's `summon_app`); `stop()` stops the game where it is;
+app that launched, when it has one (`summonApp()`, the core's `summon_app`; `universe play`'s has
+none); `stop()` stops the game where it is;
 no frame is taken. `FreezeUnit` on the game's unit would freeze the gamescope painting the dock,
 so `pausable` is false and nothing pauses. The process quits on `sessionEnded`, and its own end
 stops no game.

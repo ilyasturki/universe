@@ -339,16 +339,18 @@ def mark_done(code):
 
 def join_display(path, wait_s=READY_S):
     """The game's gamescope as this process's display, once `universe splash` has written it; False when it never comes."""
+    log = logging.getLogger("universe.host")
     deadline = time.monotonic() + wait_s
     while True:
         with contextlib.suppress(OSError):
             found = dict(line.split("=", 1) for line in Path(path).read_text().splitlines() if "=" in line)
             break
         if time.monotonic() > deadline:
-            logging.getLogger("universe.host").warning("no display in %s within %d s: no overlay", path, wait_s)
+            log.warning("no display in %s within %d s: no overlay", path, wait_s)
             return False
         time.sleep(0.1)
     if not found.get("GAMESCOPE_WAYLAND_DISPLAY") or not found.get("DISPLAY"):
+        log.warning("%s names no gamescope display: no overlay", path)
         return False
     os.environ["DISPLAY"] = found["DISPLAY"]
     os.environ["GAMESCOPE_WAYLAND_DISPLAY"] = found["GAMESCOPE_WAYLAND_DISPLAY"]
