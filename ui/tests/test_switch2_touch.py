@@ -1,5 +1,5 @@
 import pytest
-from looks import Look, call, invoke
+from looks import Look, call, invoke, settle
 from PySide6.QtCore import Q_ARG, Q_RETURN_ARG, QMetaObject, QPointF, Qt
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QTest
@@ -30,6 +30,12 @@ def shown(modal):
 
 def bar_icon(bar, i):
     return (bar.property("endPad") + i * bar.property("pitch") + bar.property("iconSize") / 2) / bar.width()
+
+
+def at_rest(window, item):
+    before = centre(item)
+    settle(window)
+    return centre(item) == before
 
 
 def tap(window, point, hold_ms=0):
@@ -63,20 +69,20 @@ def test_a_tap_on_the_row_takes_the_focus_back_from_the_bar(deck):
     assert home.property("index") == 0 and root.property("launching") is False, "the tile had the cursor but not the focus: no A"
 
 
-def test_a_long_press_or_a_right_click_on_a_tile_opens_its_options(deck):
+def test_a_right_click_or_a_long_press_on_a_tile_opens_its_options(deck):
     window, root = deck
     home = root.findChild(QQuickItem, "homePage")
     row = home.findChild(QQuickItem, "homeRow")
+    QTest.mouseClick(window, Qt.MouseButton.RightButton, Qt.KeyboardModifier.NoModifier, QPointF(*centre(row_item(row, 1))).toPoint())
+    until(lambda: root.property("depth") == 1, "a right click is the long press")
+    assert home.property("index") == 1 and root.property("topPage").objectName() == "softwareOptionsPage"
+    QTest.keyClick(window, Qt.Key.Key_Escape)
+    until(lambda: root.property("depth") == 0 and home.property("activeFocus"))
+    until(lambda: at_rest(window, row_item(row, 2)), "home back in place under the finger")
     tap(window, centre(row_item(row, 2)), hold_ms=600)
     until(lambda: root.property("depth") == 1, "held, the tile is picked and gets +")
     assert home.property("index") == 2 and root.property("launching") is False
     assert root.property("topPage").objectName() == "softwareOptionsPage", "held, the tile is picked and gets +"
-    QTest.keyClick(window, Qt.Key.Key_Escape)
-    until(lambda: root.property("depth") == 0)
-    p = QPointF(*centre(row_item(row, 1)))
-    QTest.mouseClick(window, Qt.MouseButton.RightButton, Qt.KeyboardModifier.NoModifier, p.toPoint())
-    until(lambda: root.property("depth") == 1, "a right click is the long press")
-    assert home.property("index") == 1 and root.property("topPage").objectName() == "softwareOptionsPage"
 
 
 def test_a_swipe_scrolls_the_home_row_and_picks_nothing(deck):
