@@ -1009,8 +1009,9 @@ sort, the screenshots, recordings and journal entries of every game, newest firs
 left on in the toggle row under the title (`mediaFilters`: Screenshots · Recordings · Journal). A
 cell is 16:9 and shaped by its kind so the three read apart at a glance: a screenshot is the
 picture alone, a recording its frame under a play disc with the length in a pill, a journal entry
-its words (a book glyph, the heading, the entry's `excerpt`, the session's length) with no
-picture; nothing is written under a card. The pictures are the core's thumbnails, never the 4K
+its first picture (the row's `thumb`) under a scrim with a book disc and its heading, or its words
+when it has none (a book glyph, the heading, the entry's `excerpt`, the session's length); nothing
+is written under a card. The pictures are the core's thumbnails, never the 4K
 originals, fitted whole (a capture off 16:9 gets bars, never a cut, as in every other screenshot
 frame): a shot's card shows a camera until its thumbnail lands, which the first open after a
 session fills in over a few seconds and every open after that has at once. ▲ from the top row is

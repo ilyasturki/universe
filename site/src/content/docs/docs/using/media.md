@@ -11,6 +11,8 @@ A game's own screenshots, recordings and journal open from the **Media** button 
 
 ## The Media tab
 
+A journal entry shows its first screenshot under a book mark, or its first lines when it has none.
+
 Up from the top row reaches the filters: Screenshots, Recordings and Journal. **A** shows or hides that kind. Several can be on, and one always stays on. Every kind is back on the next time Universe starts.
 
 - **A** on a screenshot shows it full screen, and Left and Right step through the others.

@@ -1,9 +1,11 @@
 import QtQuick
 import "../core"
 
-// One cell of the Media grid, shaped by its kind: a screenshot is the picture, a recording the frame under a play disc and its length, a journal entry its words.
+// One cell of the Media grid, shaped by its kind: a screenshot is the picture, a recording the frame under a play disc and its length, a journal entry its first picture under its heading, or its words when it has none.
 Item {
     id: root
+
+    objectName: "mediaCard"
 
     // "shot" | "recording" | "journal"
     property string kind: "shot"
@@ -15,7 +17,8 @@ Item {
     property bool dimmed: false
 
     readonly property real radius: Theme.dp(14)
-    readonly property bool words: kind === "journal"
+    readonly property bool words: kind === "journal" && source === ""
+    readonly property bool pictured: kind === "journal" && source !== ""
 
     scale: focused ? 1.0 : 0.96
     opacity: dimmed ? Theme.idleOpacity : 1.0
@@ -54,8 +57,9 @@ Item {
         }
 
         Image {
+            objectName: "mediaPicture"
             anchors.fill: parent
-            source: root.words ? "" : root.source
+            source: root.source
             fillMode: Image.PreserveAspectFit
             asynchronous: true
             sourceSize.width: 960
@@ -115,6 +119,58 @@ Item {
                     font.weight: Font.DemiBold
                     font.pixelSize: Theme.dp(17)
                 }
+            }
+        }
+
+        Item {
+            anchors.fill: parent
+            visible: root.pictured
+
+            Rectangle {
+                anchors.fill: parent
+                gradient: Gradient {
+                    GradientStop {
+                        position: 0.35
+                        color: Qt.rgba(0.02, 0.02, 0.03, 0.0)
+                    }
+                    GradientStop {
+                        position: 1.0
+                        color: Qt.rgba(0.02, 0.02, 0.03, 0.82)
+                    }
+                }
+            }
+
+            Rectangle {
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.margins: Theme.dp(12)
+                width: Theme.dp(40)
+                height: width
+                radius: width / 2
+                color: Qt.rgba(0, 0, 0, 0.62)
+
+                MenuGlyph {
+                    anchors.centerIn: parent
+                    width: Theme.dp(20)
+                    height: width
+                    kind: "book"
+                    tint: "#f2f3f5"
+                }
+            }
+
+            Text {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.margins: Theme.dp(18)
+                text: root.heading
+                color: "#f2f3f5"
+                font.family: Theme.sans
+                font.weight: Font.DemiBold
+                font.pixelSize: Theme.dp(24)
+                wrapMode: Text.WordWrap
+                maximumLineCount: 2
+                elide: Text.ElideRight
             }
         }
 

@@ -133,6 +133,13 @@ def test_the_media_tab_and_the_screenshots_page(look, api):
     assert root.property("tabIndex") == root.property("mediaTab") and read(page, "current")["kind"] in ("shot", "recording", "journal")
     assert {r["kind"] for r in rows} == {r["kind"] for r in read(page, "shown")} == {"shot", "recording", "journal"}, "one grid, every kind on at first"
 
+    until(
+        lambda: any(
+            c.property("kind") == "journal" and descendants(c, "mediaPicture")[0].property("source").toString() for c in descendants(page, "mediaCard")
+        ),
+        "a journal entry's card shows its first picture",
+    )
+
     def kinds_shown():
         return {r["kind"] for r in read(page, "shown")}
 
