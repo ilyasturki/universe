@@ -433,7 +433,8 @@ fn describe(dev: &Device) -> Caps {
     let family = detect_family_on(crate::deck::model().is_some(), id.vendor(), id.product(), &name, &keys);
     let axes: Vec<u16> = dev.supported_absolute_axes().map(|a| a.iter().map(|c| c.0).collect()).unwrap_or_default();
     let ranges = dev.get_absinfo().map(|it| it.map(|(c, i)| (c.0, (i.minimum(), i.maximum()))).collect()).unwrap_or_default();
-    Caps { name, family, vendor: id.vendor(), product: id.product(), keys, axes, ranges, uniq: dev.unique_name().unwrap_or("").to_string(), rumble: rumbles(dev) }
+    let uniq = dev.unique_name().unwrap_or("").to_string();
+    Caps { name, family, vendor: id.vendor(), product: id.product(), keys, axes, ranges, uniq, rumble: rumbles(dev) }
 }
 
 fn pad_of(id: String, path: PathBuf, bus: String, c: Caps, cfg: &ControllerConfig, cmd: mpsc::Sender<PadCmd>) -> Pad {
