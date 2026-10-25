@@ -23,6 +23,7 @@ FocusScope {
     readonly property real scrimMid: 0.74
     readonly property real scrimBottom: 0.95
     readonly property Item menuAnchor: grid.focusedArtItem
+    readonly property string barTitle: currentGame ? currentGame.title : onAddTile ? (empty ? "Add your first game" : "Add a game") : ""
     property bool menuOpen: false
 
     readonly property var session: api.universe.currentSession
@@ -60,7 +61,7 @@ FocusScope {
         }
     ]
 
-    readonly property int columns: 8
+    readonly property int columns: 9
     readonly property real gap: Theme.dp(28)
     readonly property real sideMargin: Theme.dp(80)
     readonly property real gridMargin: sideMargin - gap / 2
@@ -92,28 +93,11 @@ FocusScope {
         }
     }
 
-    Text {
-        id: titleText
-
-        anchors.top: parent.top
-        anchors.topMargin: Theme.dp(34)
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.leftMargin: page.sideMargin
-        anchors.rightMargin: page.sideMargin
-        text: page.currentGame ? page.currentGame.title : page.onAddTile ? (page.empty ? "Add your first game" : "Add a game") : ""
-        color: Theme.text
-        font.family: Theme.sans
-        font.weight: Font.Bold
-        font.pixelSize: Theme.dp(58)
-        elide: Text.ElideRight
-    }
-
     CoverGrid {
         id: grid
 
-        anchors.top: titleText.bottom
-        anchors.topMargin: Theme.dp(34) - grid.inset
+        anchors.top: parent.top
+        anchors.topMargin: Theme.dp(20) - grid.inset
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.right: parent.right

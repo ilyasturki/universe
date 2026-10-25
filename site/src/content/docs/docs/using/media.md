@@ -15,6 +15,8 @@ A journal entry shows its first screenshot under a book mark, or its first lines
 
 Up from the top row reaches the filters: Screenshots, Recordings and Journal. **A** shows or hides that kind. Several can be on, and one always stays on. Every kind is back on the next time Universe starts.
 
+The focused item's game is named in the middle of the tab bar.
+
 - **A** on a screenshot shows it full screen, and Left and Right step through the others.
 - **A** on a recording plays it, and **A** on a journal entry opens it.
 - **X** opens the game's page, and **Y** jumps to the journal entry of a screenshot or a recording.

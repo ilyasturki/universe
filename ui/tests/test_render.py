@@ -776,8 +776,12 @@ def test_the_reprise_bar_holds_the_library_and_power(look, api):
     assert all(tab["icon"] for tab in read(bar, "tabs")), "every tab carries its glyph"
     look.home()
     look.press(Qt.Key.Key_E)
-    look.page("libraryPage")
+    page = look.page("libraryPage")
     assert root.property("tabIndex") == root.property("libraryTab") and bar.property("currentIndex") == root.property("libraryTab"), "a tab of its own, lit"
+    first = until(lambda: game_id(page))
+    until(lambda: bar.property("title") == api.allGames.byId(first).title, "the bar names the focused game")
+    look.press(Qt.Key.Key_Right)
+    until(lambda: game_id(page) != first and bar.property("title") == api.allGames.byId(game_id(page)).title, "and follows the cursor")
     look.press(Qt.Key.Key_Up)
     until(lambda: bar.property("activeFocus") is True)
     look.press(Qt.Key.Key_Right, bar.property("powerIndex") - bar.property("index"))
@@ -789,6 +793,13 @@ def test_the_reprise_bar_holds_the_library_and_power(look, api):
     look.press(Qt.Key.Key_Escape)
     home = look.home()
     until(lambda: root.property("tabIndex") == 0 and home.property("activeFocus") is True, "B on another tab's bar goes home, not back to that tab")
+
+
+def nine_games(api, fake):
+    """The fixture's hidden game shown too: nine games and the add tile, past the Universe look's first row of nine."""
+    fake.set("cyberpunk-2077", "hidden", "false")
+    api.universe.libraryChanged.emit([])
+    until(lambda: api.allGames.count == 9)
 
 
 def library(look):
@@ -822,7 +833,7 @@ def test_the_reprise_library_s_covers_come_in_reading_order(look, api):
     assert came == sorted(came), "top row first, left to right"
 
 
-def test_the_right_stick_pages_the_library_from_a_clamp_at_its_top(look):
+def test_the_right_stick_pages_the_library_from_a_clamp_at_its_top(look, api, fake):
     def cursor():
         if not look.stacked:
             return game_id(page)
@@ -830,6 +841,7 @@ def test_the_right_stick_pages_the_library_from_a_clamp_at_its_top(look):
         return current.property("id") if isinstance(current, QObject) else (read(grid, "current") or {}).get("id")
 
     warnings = record(look.engine.warnings)
+    nine_games(api, fake)
     page = library(look)
     grid = page.findChild(QObject, "grid")
     first = until(cursor)
@@ -843,10 +855,10 @@ def test_the_right_stick_pages_the_library_from_a_clamp_at_its_top(look):
 
 
 @reprise
-def test_down_past_the_last_reprise_library_row_lands_on_the_add_tile_and_back_on_its_column(look):
+def test_down_past_the_last_reprise_library_row_lands_on_the_add_tile_and_back_on_its_column(look, api, fake):
+    nine_games(api, fake)
     page = library(look)
     first = until(lambda: game_id(page))
-    # Eight games on eight columns: the add tile alone on the second row.
     look.press(Qt.Key.Key_Right, 3)
     look.press(Qt.Key.Key_BracketRight)
     until(lambda: page.property("onAddTile") is True, "down past the last game's row lands on the last cell")

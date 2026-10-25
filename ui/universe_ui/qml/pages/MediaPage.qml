@@ -16,6 +16,7 @@ FocusScope {
 
     readonly property var store: api.screens.media
     readonly property var currentGame: current ? api.allGames.byId(current.gameId) : null
+    readonly property string barTitle: current ? current.gameTitle : ""
     readonly property bool ownsBackdrop: false
     readonly property real backdropBlur: 24
     readonly property real scrimTop: 0.62
@@ -291,30 +292,14 @@ FocusScope {
             grid.forceActiveFocus();
     }
 
-    Text {
-        id: titleText
-
-        anchors.top: parent.top
-        anchors.topMargin: Theme.dp(34)
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.leftMargin: page.sideMargin
-        anchors.rightMargin: page.sideMargin
-        text: page.current ? page.current.gameTitle : "Media"
-        color: Theme.text
-        font.family: Theme.sans
-        font.weight: Font.Bold
-        font.pixelSize: Theme.dp(58)
-        elide: Text.ElideRight
-    }
-
     Row {
         id: filterRow
 
         objectName: "mediaFilters"
-        anchors.top: titleText.bottom
-        anchors.topMargin: Theme.dp(18)
-        anchors.left: titleText.left
+        anchors.top: parent.top
+        anchors.topMargin: Theme.dp(20)
+        anchors.left: parent.left
+        anchors.leftMargin: page.sideMargin
         spacing: Theme.dp(14)
 
         Keys.onPressed: function (event) {

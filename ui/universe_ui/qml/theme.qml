@@ -895,6 +895,7 @@ FocusScope {
             anchors.left: parent.left
             anchors.right: parent.right
             tabs: root.tabs
+            title: root.activePage && root.activePage.barTitle !== undefined ? root.activePage.barTitle : ""
             currentIndex: root.tabIndex
             focus: root.focusOwner === "chrome"
             opacity: root.chromeReveal

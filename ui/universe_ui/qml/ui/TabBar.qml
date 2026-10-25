@@ -7,6 +7,7 @@ FocusScope {
 
     property var tabs: []
     property int currentIndex: 0
+    property string title: ""
     // Runs past the tabs: the search glass, the power button, then the running game's badge.
     property int index: 0
 
@@ -369,6 +370,24 @@ FocusScope {
                 easing.type: Easing.OutQuint
             }
         }
+    }
+
+    Text {
+        id: titleText
+        objectName: "barTitle"
+
+        readonly property real roomLeft: labels.x + labels.width + Theme.dp(48)
+        readonly property real roomRight: rightSide.x - Theme.dp(48)
+
+        anchors.verticalCenter: labels.verticalCenter
+        x: Math.max(roomLeft, Math.min((root.width - width) / 2, roomRight - width))
+        width: Math.min(implicitWidth, Math.max(0, roomRight - roomLeft))
+        text: root.title
+        color: Theme.text
+        font.family: Theme.sans
+        font.weight: Font.Bold
+        font.pixelSize: Theme.dp(30)
+        elide: Text.ElideRight
     }
 
     Row {
