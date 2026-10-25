@@ -189,7 +189,7 @@ Item {
         anchors.verticalCenter: band.verticalCenter
         height: band.height - Theme.dp(22)
         width: height
-        source: !row.hasImage && row.iconIsFile ? Qt.resolvedUrl("../" + row.entry.icon) : ""
+        source: !row.hasImage && row.iconIsFile ? row.entry.icon : ""
         asynchronous: true
         fillMode: Image.PreserveAspectFit
         sourceSize.height: 128
@@ -314,7 +314,7 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 height: Theme.dp(row.compact ? 28 : 30)
                 width: height
-                source: row.entry.valueIcon != null && String(row.entry.valueIcon) !== "" ? Qt.resolvedUrl("../" + row.entry.valueIcon) : ""
+                source: row.entry.valueIcon != null ? row.entry.valueIcon : ""
                 asynchronous: true
                 fillMode: Image.PreserveAspectFit
                 sourceSize.height: 128

@@ -26,6 +26,7 @@ from PySide6.QtTest import QTest
 from uitest import descendant, descendants, own, pump, record, until
 
 from universe_ui import host
+from universe_ui.screens.settings import runner_logo
 from universe_ui.themes import THEMES
 
 
@@ -243,6 +244,19 @@ def test_the_tab_bar_search_finds_the_settings_under_the_games(look, api):
         lambda: {"page": "section", "id": "about", "key": "", "module": ""} in [r["target"] for r in search.results],
         "Quit lives in About: its word finds About",
     )
+    overlay.setProperty("query", "")
+    for ch in "dolphin":
+        QTest.keyClick(look.window, ch)
+    until(lambda: overlay.property("query") == "dolphin")
+    logo = runner_logo("dolphin")
+
+    def images(item):
+        for child in item.childItems():
+            if child.property("progress") is not None and child.property("source") is not None:
+                yield child
+            yield from images(child)
+
+    until(lambda: any(i.property("source").toString() == logo and i.property("progress") == 1 for i in images(overlay)), "a runner's hit shows its logo")
     overlay.setProperty("query", "vrr")
     until(lambda: overlay.property("hasSettings") is True and overlay.property("hasGames") is False)
     overlay.toResults()

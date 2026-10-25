@@ -245,12 +245,12 @@ Modal {
                             tint: row.item.danger ? Theme.danger : Theme.text
                         }
 
-                        // A file (a runner's logo), from the qml root.
+                        // A runner's logo, a file URL.
                         Image {
                             id: logo
                             anchors.fill: parent
                             visible: row.item.icon !== undefined && row.item.icon !== "" && row.item.check !== true
-                            source: visible ? Qt.resolvedUrl("../../" + row.item.icon) : ""
+                            source: visible ? row.item.icon : ""
                             asynchronous: true
                             fillMode: Image.PreserveAspectFit
                             sourceSize.height: 128

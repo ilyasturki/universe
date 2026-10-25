@@ -189,7 +189,7 @@ Modal {
                     anchors.verticalCenter: parent.verticalCenter
                     width: picker.hasIcons ? Theme.dp(48) : 0
                     height: Theme.dp(48)
-                    source: picker.icons[index] ? Qt.resolvedUrl("../../" + picker.icons[index]) : ""
+                    source: picker.icons[index] || ""
                     asynchronous: true
                     fillMode: Image.PreserveAspectFit
                     sourceSize.height: 128

@@ -385,7 +385,7 @@ FocusScope {
                 anchors.verticalCenter: parent.verticalCenter
                 height: parent.height - Theme.dp(24)
                 width: height
-                source: card.group.icon ? Qt.resolvedUrl("../" + card.group.icon) : ""
+                source: card.group.icon || ""
                 asynchronous: true
                 fillMode: Image.PreserveAspectFit
                 sourceSize.height: 128

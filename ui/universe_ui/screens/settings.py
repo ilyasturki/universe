@@ -13,6 +13,7 @@ import json
 import os
 import re
 from collections.abc import Callable
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from PySide6.QtCore import QObject, Signal, Slot
@@ -23,7 +24,7 @@ if TYPE_CHECKING:
     from ..universe_client import CoreClient
 
 ASSETS = os.path.join(os.path.dirname(os.path.dirname(__file__)), "qml", "assets", "runners")
-LOGOS = {os.path.splitext(f)[0]: f"assets/runners/{f}" for f in sorted(os.listdir(ASSETS))}
+LOGOS = {os.path.splitext(f)[0]: Path(ASSETS, f).as_uri() for f in sorted(os.listdir(ASSETS))}
 
 ADVANCED_KEY = "advanced"
 ADVANCED_DETAIL = "Settings for power users: sync modes, scaling, upscaler upgrades, programs and folders."

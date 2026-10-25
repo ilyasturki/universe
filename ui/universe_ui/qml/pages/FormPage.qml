@@ -337,7 +337,7 @@ FocusScope {
             anchors.verticalCenter: parent.verticalCenter
             height: parent.height
             width: height
-            source: page.info && page.info.icon ? Qt.resolvedUrl("../" + page.info.icon) : ""
+            source: page.info && page.info.icon ? page.info.icon : ""
             asynchronous: true
             fillMode: Image.PreserveAspectFit
             sourceSize.height: 256

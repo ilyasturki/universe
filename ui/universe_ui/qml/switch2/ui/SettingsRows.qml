@@ -427,7 +427,7 @@ FocusScope {
                             anchors.verticalCenter: parent.verticalCenter
                             width: Theme.dp(44)
                             height: width
-                            source: !row.iconIsFile ? "" : String(row.entry.icon).indexOf("://") >= 0 ? row.entry.icon : Qt.resolvedUrl("../../" + row.entry.icon)
+                            source: row.iconIsFile ? row.entry.icon : ""
                             asynchronous: true
                             fillMode: Image.PreserveAspectFit
                             sourceSize.height: 128
@@ -520,7 +520,7 @@ FocusScope {
                             anchors.verticalCenter: parent.verticalCenter
                             width: Theme.dp(44)
                             height: width
-                            source: row.entry.valueIcon !== undefined && row.entry.valueIcon !== null && String(row.entry.valueIcon) !== "" ? Qt.resolvedUrl("../../" + row.entry.valueIcon) : ""
+                            source: row.entry.valueIcon !== undefined && row.entry.valueIcon !== null ? row.entry.valueIcon : ""
                             asynchronous: true
                             fillMode: Image.PreserveAspectFit
                             sourceSize.height: 128
