@@ -143,6 +143,13 @@ UPSTREAMS = (
         version=r"re:^KytyPS5-(\d{4}-\d{2}-\d{2}-[0-9a-f]+)-Linux",
     ),
     Upstream(
+        "sharpemu",
+        "SharpEmu",
+        "emulator",
+        "github:sharpemu/sharpemu",
+        (Pick(r"^sharpemu-[\w.-]+-linux-x64\.tar\.gz$", program="SharpEmu"),),
+    ),
+    Upstream(
         "vita3k",
         "Vita3K",
         "emulator",

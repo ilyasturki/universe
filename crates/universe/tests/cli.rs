@@ -97,7 +97,7 @@ fn discover_on_a_bare_home_finds_nothing() {
 }
 
 #[test]
-fn a_ps5_dump_in_an_emulators_game_folder_is_discovered_and_rescanned_and_one_elsewhere_added_by_hand() {
+fn a_ps5_dump_in_each_ps5_emulators_game_folder_is_discovered_and_rescanned_and_one_elsewhere_added_by_hand() {
     let dir = tempfile::tempdir().unwrap();
     let dump = |at: &str, id: &str| {
         let d = dir.path().join(at);
@@ -108,16 +108,25 @@ fn a_ps5_dump_in_an_emulators_game_folder_is_discovered_and_rescanned_and_one_el
         d
     };
     dump("ps5/Kyty games/PPSA01234", "PPSA01234");
+    dump("SharpEmu games/PPSA09999", "PPSA09999");
     let elsewhere = dump("elsewhere/PPSA05678", "PPSA05678");
     let kyty = dir.path().join("apps/Kyty");
     std::fs::create_dir_all(&kyty).unwrap();
     std::fs::write(kyty.join("kyty_emulator"), b"#!/bin/sh\n").unwrap();
     std::fs::create_dir_all(dir.path().join(".config/Kyty")).unwrap();
     std::fs::write(dir.path().join(".config/Kyty/Kyty.ini"), format!("[Launcher]\ngame_dirs={}\n", dir.path().join("ps5").display())).unwrap();
+    let sharpemu = dir.path().join("apps/SharpEmu");
+    std::fs::create_dir_all(&sharpemu).unwrap();
+    std::fs::write(sharpemu.join("SharpEmu"), b"#!/bin/sh\n").unwrap();
+    std::fs::write(sharpemu.join("gui-settings.json"), format!(r#"{{"GameFolders": ["{}"]}}"#, dir.path().join("SharpEmu games").display())).unwrap();
     std::fs::create_dir_all(dir.path().join("config")).unwrap();
     std::fs::write(
         dir.path().join("config/config.toml"),
-        format!("schema = 1\n[desktop]\nprofile = \"none\"\n[runners.kytyps5]\nexe = \"{}\"\n", kyty.join("kyty_emulator").display()),
+        format!(
+            "schema = 1\n[desktop]\nprofile = \"none\"\n[runners.kytyps5]\nexe = \"{}\"\n[runners.sharpemu]\nexe = \"{}\"\n",
+            kyty.join("kyty_emulator").display(),
+            sharpemu.join("SharpEmu").display()
+        ),
     )
     .unwrap();
     let json = |args: &[&str]| -> serde_json::Value {
@@ -127,11 +136,11 @@ fn a_ps5_dump_in_an_emulators_game_folder_is_discovered_and_rescanned_and_one_el
     };
     let report = json(&["discover", "--json"]);
     let roms = report["launchers"].as_array().unwrap().iter().find(|l| l["id"] == "roms").unwrap().clone();
-    assert_eq!((roms["found"].as_bool(), roms["games"].as_u64()), (Some(true), Some(1)), "{roms}");
+    assert_eq!((roms["found"].as_bool(), roms["games"].as_u64()), (Some(true), Some(2)), "{roms}");
     let rescan = json(&["rescan", "--json"]);
     let imported: Vec<(&str, &str)> =
         rescan["imported"].as_array().unwrap().iter().map(|f| (f["id"].as_str().unwrap(), f["runner"].as_str().unwrap())).collect();
-    assert_eq!(imported, [("title-ppsa01234", "kytyps5")]);
+    assert_eq!(imported, [("title-ppsa01234", "kytyps5"), ("title-ppsa09999", "sharpemu")]);
     let added = json(&["add", &elsewhere.join("eboot.bin").to_string_lossy(), "--runner", "kytyps5", "--json"]);
     let effective = &added["effective"];
     assert_eq!((effective["runner"].as_str(), effective["platform"].as_str()), (Some("kytyps5"), Some("Sony PlayStation 5")));

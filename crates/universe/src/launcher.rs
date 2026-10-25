@@ -794,20 +794,23 @@ mod tests {
     }
 
     #[test]
-    fn a_ps5_emulator_keeps_its_saves_out_of_the_build_slot_an_update_prunes() {
+    fn the_ps5_emulators_keep_their_saves_out_of_the_build_slot_an_update_prunes() {
         let env = crate::paths::test_env();
         let data = env.path().join("home/.local/share");
         let own = env.path().join("Kyty/kyty_emulator");
         let ours = crate::components::root().join("kytyps5/2026-10-25-83f8bfd/kyty_emulator");
-        for program in [&own, &ours] {
+        let own_sharp = env.path().join("SharpEmu/SharpEmu");
+        let ours_sharp = crate::components::root().join("sharpemu/0.0.6-mono/SharpEmu");
+        for program in [&own, &ours, &own_sharp, &ours_sharp] {
             std::fs::create_dir_all(program.parent().unwrap()).unwrap();
             std::fs::write(program, b"#!/bin/sh\n").unwrap();
         }
         let dump = env.path().join("games/PPSA01234");
         std::fs::create_dir_all(&dump).unwrap();
+        let eboot: String = dump.join("eboot.bin").to_string_lossy().into();
         let cfg = Config::default();
-        let planned = |program: &Path, working_dir: &str| {
-            let mut g = game(&dump, "eboot.bin", "kytyps5");
+        let planned = |runner: &str, program: &Path, working_dir: &str| {
+            let mut g = game(&dump, "eboot.bin", runner);
             g.launch.runner_exe = program.to_string_lossy().into();
             g.launch.working_dir = working_dir.into();
             g.launch.gamescope = Some(false);
@@ -816,12 +819,19 @@ mod tests {
             assert_eq!(r.effective.working_dir, p.cwd.to_string_lossy(), "the folder shown is the one it starts in");
             p
         };
-        let p = planned(&own, "");
+        let p = planned("kytyps5", &own, "");
         assert_eq!(p.cwd, own.parent().unwrap().canonicalize().unwrap(), "the player's own Kyty saves beside itself, as its launcher has it");
-        assert!(p.args.ends_with(&["--fullscreen".into(), "--game".into(), dump.join("eboot.bin").to_string_lossy().into()]), "{:?}", p.args);
-        assert_eq!(planned(&ours, "").cwd, data.join("KytyPS5"), "Universe's build saves out of its slot");
+        assert!(p.args.ends_with(&["--fullscreen".into(), "--game".into(), eboot.clone()]), "{:?}", p.args);
+        assert_eq!(planned("kytyps5", &ours, "").cwd, data.join("KytyPS5"), "Universe's build saves out of its slot");
         assert!(data.join("KytyPS5").is_dir(), "made before it starts there");
-        assert_eq!(planned(&ours, "/elsewhere").cwd, Path::new("/elsewhere"), "the game's own folder wins");
+        assert_eq!(planned("kytyps5", &ours, "/elsewhere").cwd, Path::new("/elsewhere"), "the game's own folder wins");
+
+        let p = planned("sharpemu", &own_sharp, "");
+        assert!(p.args.ends_with(&["--window-mode=borderless".into(), eboot]), "{:?}", p.args);
+        assert!(!p.env.contains_key("SHARPEMU_USER_DIR"), "the player's own SharpEmu keeps its own data folder");
+        assert_eq!(p.cwd, dump, "SharpEmu finds its data by its variable, not its working directory");
+        let p = planned("sharpemu", &ours_sharp, "");
+        assert_eq!(p.env.get("SHARPEMU_USER_DIR").map(String::as_str), data.join("SharpEmu").to_str(), "Universe's build saves out of its slot");
     }
 
     #[test]

@@ -77,6 +77,12 @@ fn folders_under(config: &Config, cfg: &Path, data: &Path) -> Vec<Folder> {
             "cemu" => xml_entries(&cfg.join("Cemu/settings.xml"), "GamePaths").into_iter().map(|d| (d, true)).collect(),
             "shadps4" => toml_dirs(&cfg.join("shadPS4/config.toml"), "GUI", "installDirs").into_iter().map(|d| (d, false)).collect(),
             "kytyps5" => kyty_dirs(&cfg.join("Kyty/Kyty.ini")).into_iter().map(|d| (d, true)).collect(),
+            "sharpemu" => runners::home(spec, Path::new(&program), data)
+                .map(|home| json_dirs(&home.dir.join("gui-settings.json"), "GameFolders"))
+                .unwrap_or_default()
+                .into_iter()
+                .map(|d| (d, true))
+                .collect(),
             "flycast" => ini_value(&cfg.join("flycast/emu.cfg"), "config", "Dreamcast.ContentPath")
                 .map(|v| v.split(';').filter(|s| !s.trim().is_empty()).map(|s| (PathBuf::from(s.trim()), true)).collect())
                 .unwrap_or_default(),
@@ -184,7 +190,7 @@ fn collect(spec: &RunnerSpec, dir: &Path, recursive: bool, out: &mut Vec<PathBuf
                 }
             }
         }
-        "kytyps5" => ps5_dumps(dir, out),
+        "kytyps5" | "sharpemu" => ps5_dumps(dir, out),
         _ => collect_files(spec, dir, recursive, out),
     }
 }
@@ -250,7 +256,7 @@ fn title_for(spec: &RunnerSpec, path: &Path) -> String {
             })
         }),
         "shadps4" => path.parent().and_then(|p| sfo_title(&p.join("sce_sys/param.sfo")).or_else(|| Some(crate::core::title_of(p)))),
-        "kytyps5" if extension(path) == "bin" => path
+        "kytyps5" | "sharpemu" if extension(path) == "bin" => path
             .parent()
             .map(|p| ps5_param(&p.join("sce_sys/param.json")).map(|(title, _)| title).filter(|t| !t.is_empty()).unwrap_or_else(|| crate::core::title_of(p))),
         "cemu" if extension(path) == "rpx" => path.parent().and_then(|p| p.parent()).and_then(|title| {
@@ -692,7 +698,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn a_folder_both_playstation_emulators_list_gives_each_its_own_games() {
+    fn a_folder_the_playstation_emulators_share_gives_each_its_own_games() {
         let env = crate::paths::test_env();
         let d = env.path();
         let (cfg, data) = (d.join("home/.config"), d.join("home/.local/share"));
@@ -708,13 +714,20 @@ pub(crate) mod tests {
         touch(&d.join("ps/PPSA01234/eboot.bin"));
         touch(&d.join("ps/PPSA01234/sce_sys/param.json"));
         std::fs::write(d.join("ps/PPSA01234/sce_sys/param.json"), r#"{"localizedParameters": {"en-US": {"titleName": "Astro Bot"}}}"#).unwrap();
+        let sharpemu = crate::components::root().join("sharpemu/0.0.6-mono/SharpEmu");
+        touch(&sharpemu);
+        touch(&data.join("SharpEmu/gui-settings.json"));
+        std::fs::write(data.join("SharpEmu/gui-settings.json"), format!(r#"{{"GameFolders": ["{}", "{}"]}}"#, d.join("ps").display(), d.join("ps5").display()))
+            .unwrap();
+        touch(&d.join("ps5/Yotei/eboot.bin"));
+        touch(&d.join("ps5/Yotei/sce_sys/param.json"));
         let mut config = Config::default();
-        for id in ["shadps4", "kytyps5"] {
-            config.runners.insert(id.into(), [("exe".to_string(), toml::Value::String(emu.to_string_lossy().into()))].into_iter().collect());
+        for (id, exe) in [("shadps4", &emu), ("kytyps5", &emu), ("sharpemu", &sharpemu)] {
+            config.runners.insert(id.into(), [("exe".to_string(), toml::Value::String(exe.to_string_lossy().into()))].into_iter().collect());
         }
         let report = scan_under(&config, &[], &cfg, &data);
         let found: Vec<(&str, &str)> = report.imported.iter().map(|f| (f.id.as_str(), f.runner.as_str())).collect();
-        assert_eq!(found, [("bloodborne", "shadps4"), ("astro-bot", "kytyps5")], "{report:?}");
+        assert_eq!(found, [("bloodborne", "shadps4"), ("astro-bot", "kytyps5"), ("yotei", "sharpemu")], "{report:?}");
     }
 
     #[test]

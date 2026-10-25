@@ -21,6 +21,7 @@ projects; they are shown here to name the runner, as the projects show them in t
 | `xenia.png` | Xenia | github.com/xenia-canary/xenia-canary, `assets/icon/128.png` | BSD-3-Clause |
 | `shadps4.png` | shadPS4 | github.com/shadps4-emu/shadPS4, `.github/shadps4.png` | GPL-2.0-or-later |
 | `kytyps5.svg` | KytyPS5 | github.com/KytyPS5/KytyPS5, `src/launcher/icons/kyty.svg` | GPL-2.0 |
+| `sharpemu.png` | SharpEmu | github.com/sharpemu/sharpemu, `assets/images/logo.png` | GPL-2.0-or-later |
 | `mupen64plus.svg` | Mupen64Plus | github.com/mupen64plus/mupen64plus-ui-console, `data/icons/scalable/apps/mupen64plus.svg` | GPL-2.0-or-later |
 | `flycast.png` | Flycast | github.com/flyinghead/flycast, `shell/linux/flycast.png` | GPL-2.0-or-later |
 | `scummvm.svg` | ScummVM | github.com/scummvm/scummvm, `icons/scummvm.svg` | GPL-3.0-or-later |

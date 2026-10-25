@@ -335,6 +335,20 @@ pub const RUNNERS: &[RunnerSpec] = &[
         term_twice: true,
     },
     RunnerSpec {
+        id: "sharpemu",
+        name: "SharpEmu",
+        kind: Kind::Emulator,
+        aliases: &[],
+        binaries: &["SharpEmu", "sharpemu"],
+        platforms: &["Sony PlayStation 5"],
+        extensions: &["bin", "zar"],
+        file_flag: &[],
+        options: &[bool_opt("fullscreen", true, "Fullscreen", "--window-mode=borderless", "--window-mode=windowed")],
+        via_proton: false,
+        file_required: true,
+        term_twice: true,
+    },
+    RunnerSpec {
         id: "mupen64plus",
         name: "Mupen64Plus",
         kind: Kind::Emulator,
@@ -598,7 +612,7 @@ pub fn file_args(spec: &RunnerSpec, file: &Path) -> Vec<String> {
 /// The emulators that write their saves and caches beside themselves or into their working directory: the folder under
 /// `$XDG_DATA_HOME` that holds them for Universe's build, whose slot an update prunes, and the variable that points the
 /// program there (none: its working directory does).
-const HOMES: &[(&str, &str, &str)] = &[("kytyps5", "KytyPS5", "")];
+const HOMES: &[(&str, &str, &str)] = &[("kytyps5", "KytyPS5", ""), ("sharpemu", "SharpEmu", "SHARPEMU_USER_DIR")];
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Home {
