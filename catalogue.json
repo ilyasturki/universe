@@ -278,6 +278,20 @@
       {
        "arch": "x86_64",
        "format": "appimage",
+       "sha256": "c5e6f045f6a242082fcafa9f02d56ad895e233b942728788d232ad0c0c765c24",
+       "size": 93323552,
+       "url": "https://github.com/stenzek/duckstation/releases/download/v0.1-12083/DuckStation-x64.AppImage"
+      }
+     ],
+     "channel": "rolling",
+     "date": "2026-10-13T05:31:37Z",
+     "version": "0.1-12083"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "appimage",
        "sha256": "c2fd26257ac5cfefe4f77b61b04b8fe299f9c4e0cf6b851fc5259c815979466a",
        "size": 92725536,
        "url": "https://github.com/stenzek/duckstation/releases/download/v0.1-11894/DuckStation-x64.AppImage"
@@ -1202,6 +1216,20 @@
       {
        "arch": "x86_64",
        "format": "appimage",
+       "sha256": "54783f122dc0be929427c8c384a630e9651c3f18f09da60aeff3c586d637c0b3",
+       "size": 83145335,
+       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-8b9ee60569753db8406b66d135cce112156172a1/rpcs3-v0.0.43-20397-8b9ee605_linux64.AppImage"
+      }
+     ],
+     "channel": "rolling",
+     "date": "2026-10-24T21:54:25Z",
+     "version": "0.0.43-20397-8b9ee605"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "appimage",
        "sha256": "8c285b087d57f2744cedcd9248b85a60007077d14a2348f6f049c8c66012fe96",
        "size": 83114459,
        "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-77f595c31c452aab54bb7f2a3ff14eaff3ec240f/rpcs3-v0.0.43-20389-77f595c3_linux64.AppImage"
@@ -1266,20 +1294,6 @@
      "channel": "rolling",
      "date": "2026-10-19T14:31:22Z",
      "version": "0.0.43-20344-58317c93"
-    },
-    {
-     "assets": [
-      {
-       "arch": "x86_64",
-       "format": "appimage",
-       "sha256": "541649aed66a70600b14b33bbb343f3c57a3bbe1fa08cfd62101cac91c672a71",
-       "size": 94685878,
-       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-1b1b7dea308e8385a636ddf208c77498b01bc061/rpcs3-v0.0.43-20337-1b1b7dea_linux64.AppImage"
-      }
-     ],
-     "channel": "rolling",
-     "date": "2026-10-19T07:38:24Z",
-     "version": "0.0.43-20337-1b1b7dea"
     }
    ],
    "homepage": "https://github.com/RPCS3/rpcs3-binaries-linux",
@@ -1527,21 +1541,21 @@
       {
        "arch": "x86_64",
        "format": "appimage",
-       "sha256": "48a43cafd32fd9e4650e117d59167b31b0742163c758bafc917219c0f3accc6c",
-       "size": 78672241,
+       "sha256": "2edb3cd84c7cac97563dd096671112672af892458910d361a4f9e1a7926fc067",
+       "size": 78678272,
        "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-x86_64.AppImage"
       },
       {
        "arch": "aarch64",
        "format": "appimage",
-       "sha256": "c1f25382b51f551c3cab1c2c209cb25968a78aaab51d19d62e66a105cae22fb9",
-       "size": 78221563,
+       "sha256": "f8df55a9ea64917e9626f3f1a82f3b8f7d1f6a7f6cd90e33f4f4f05ae0baf5f7",
+       "size": 78229607,
        "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-aarch64.AppImage"
       }
      ],
      "channel": "rolling",
-     "date": "2026-10-24T05:03:06Z",
-     "version": "2026.10.24"
+     "date": "2026-10-25T02:37:01Z",
+     "version": "2026.10.25"
     }
    ],
    "homepage": "https://github.com/Vita3K/Vita3K",
@@ -1759,6 +1773,6 @@
    "name": "xemu"
   }
  },
- "generated_at": "2026-10-24T09:38:34Z",
+ "generated_at": "2026-10-25T09:56:49Z",
  "schema": 1
 }
