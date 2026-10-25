@@ -121,7 +121,7 @@ def build_runners(runners, games, listing, row_of):
 
     card("", found)
     card(NOT_INSTALLED, [row for _, row in sorted(offered, key=lambda o: o[0])], meta=NOT_INSTALLED_META)
-    card(NO_BUILD if loaded else NOT_FOUND, none, meta=NO_BUILD_META if loaded else "", off=True)
+    card(NO_BUILD if loaded else NOT_FOUND, none, meta=NO_BUILD_META if loaded else "", unavailable=True)
     card(TOOLS, [{**row_of(c), "section": TOOLS} for c in tools], meta=f"{sum(1 for c in tools if c.get('in_use'))} of {len(tools)} installed")
     if groups:
         groups[0]["warning"] = catalogue_warning(listing)

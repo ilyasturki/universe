@@ -118,6 +118,7 @@ def test_modules_list(api, fake):
     described = next(m for m in fake.modules() if m["id"] == "capture")["description"].replace("`", "")
     assert capture["detail"] == described, "a working module's caption says what it does"
     assert journal["value"] is False and "ffmpeg" in journal["warning"]
+    assert capture["switch"] is True and journal["switch"] is False, "an unavailable module reads so, not as a switch"
     next(m for m in fake.core._data["modules"] if m["id"] == "capture").update(available=False, missing=["gsr-cli"])
     form.load()
     capture = form.rows[form.indexOf("capture")]

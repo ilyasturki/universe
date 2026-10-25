@@ -64,7 +64,7 @@ def _plural(n, word):
     return f"{n} {word}{'' if n == 1 else 's'}"
 
 
-def _group(title, rows, meta="", warning="", caps=False, control=-1, off=False, advanced=False):
+def _group(title, rows, meta="", warning="", caps=False, control=-1, off=False, advanced=False, unavailable=False):
     return {
         "title": title,
         "meta": meta,
@@ -72,6 +72,7 @@ def _group(title, rows, meta="", warning="", caps=False, control=-1, off=False, 
         "caps": caps,
         "control": control,
         "off": off,
+        "unavailable": unavailable,
         "advanced": advanced,
         "home": "",
         "rows": list(rows),
@@ -691,6 +692,7 @@ class ListForm(RowsForm):
             row = _row(self.section, "module", name, "action", enabled, module=ident)
             row.update(
                 display="Unavailable" if warning else "Set it up" if setup else "On" if enabled else "Off",
+                switch=not warning and not setup,
                 action="Open",
                 runner="",
                 meta=_meta(entry),

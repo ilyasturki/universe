@@ -23,7 +23,7 @@ from PySide6.QtCore import QCoreApplication, QEvent, QObject, Qt
 from PySide6.QtGui import QKeyEvent
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QTest
-from uitest import descendant, own, pump, record, until
+from uitest import descendant, descendants, own, pump, record, until
 
 from universe_ui import host
 from universe_ui.themes import THEMES
@@ -1362,7 +1362,7 @@ def test_the_sound_section_plays_through_the_output_picked(look, fake):
     until(lambda: current() == other, "the output picked plays")
 
 
-def test_a_module_row_toggles_on_its_hinted_button_and_draws_no_switch(look, api, fake):
+def test_a_module_row_toggles_on_its_hinted_button(look, api, fake):
     glyph, key = ("Y", Qt.Key.Key_F) if not look.stacked else ("X", Qt.Key.Key_I)
 
     def hinted():
@@ -1375,7 +1375,6 @@ def test_a_module_row_toggles_on_its_hinted_button_and_draws_no_switch(look, api
     page = look.settings("modules")
     if look.stacked:
         look.press(Qt.Key.Key_Right)
-    assert not any("switch" in r for r in content_rows(page)), "a row A opens draws no switch"
     until(lambda: capture() is True and hinted(), f"{glyph} is hinted on the running module under the cursor")
     look.press(key)
     until(lambda: capture() is False, f"{glyph} turns it off")
@@ -1384,6 +1383,37 @@ def test_a_module_row_toggles_on_its_hinted_button_and_draws_no_switch(look, api
     if not look.stacked:
         look.press(Qt.Key.Key_Left)
         until(lambda: "settingsSections" in focus_names(look.window), "Left from the cards goes back to the sections")
+
+
+@reprise
+def test_off_reads_as_off_and_only_what_cannot_be_used_is_dimmed(look, fake):
+    def shown(page, key):
+        return {read(r, "entry").get(key): r for r in descendant_rows(page)}
+
+    def descendant_rows(page):
+        return [r for r in descendants(page, "settingsRow") if r.isVisible()]
+
+    def card(item):
+        while item.objectName() != "settingsCard":
+            item = item.parentItem()
+        return item
+
+    page = look.settings("sources")
+    gog, epic = until(lambda: (rows := shown(page, "module")).get("epic") and (rows["gog"], rows["epic"]))
+    for row, on in ((gog, True), (epic, False)):
+        (switch,) = [t for t in descendants(row, "settingsToggle") if t.isVisible()]
+        assert switch.property("on") is on, "each store's row shows its state as a switch"
+    until(lambda: card(epic).property("opacity") == 1 and epic.property("opacity") == 1, "a store turned off is drawn whole, its switch saying off")
+
+    page = look.settings("components")
+    until(lambda: page.property("sectionId") == "runners")
+    unavailable = until(lambda: [c for c in descendants(page, "settingsCard") if read(c, "group").get("unavailable")])
+    until(lambda: all(c.property("opacity") < 1 for c in unavailable), "a runner with no build to get stays dimmed")
+
+    fake.core._backups["the-technomancer"] = []
+    data = look.open("pages/DataPage.qml", look.game("the-technomancer"))
+    restore = until(lambda: shown(data, "key").get("restore"))
+    until(lambda: restore.property("opacity") < 1, "a row that cannot be used now stays dimmed")
 
 
 @pytest.fixture

@@ -2,7 +2,7 @@ import QtQuick
 import "../core"
 import "../sound"
 
-// groups: { title, meta, warning, caps, control, off, rows, icon, wide, divider, dividers }; `rows` and `control` index the flat
+// groups: { title, meta, warning, caps, control, off, unavailable, rows, icon, wide, divider, dividers }; `rows` and `control` index the flat
 // list; a `wide` card spans the columns; the rows from `divider` on are the card's advanced ones, each folded card ruled off
 // under its label ([{ at, label }]).
 FocusScope {
@@ -329,6 +329,7 @@ FocusScope {
 
     component SettingsCard: Item {
         id: card
+        objectName: "settingsCard"
 
         property var group: ({})
         readonly property bool hasIcon: group.icon != null && String(group.icon) !== "" && logo.status === Image.Ready
@@ -339,7 +340,7 @@ FocusScope {
         readonly property color onFocus: Qt.rgba(0.063, 0.067, 0.086, 0.6)
 
         height: cards.cardHeight(group)
-        opacity: group.off && !headerFocused ? 0.55 : 1.0
+        opacity: group.unavailable && !headerFocused ? 0.55 : 1.0
 
         Behavior on opacity {
             Ease {

@@ -3,6 +3,7 @@ import "../core"
 
 Item {
     id: row
+    objectName: "settingsRow"
 
     property var entry: ({})
     property bool focused: false
@@ -322,9 +323,17 @@ Item {
                 visible: row.hasValueMark
             }
 
+            // A row A opens whose value is on or off: its state as a switch, Y flipping it.
+            SettingsToggle {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: row.entry.switch === true
+                on: row.entry.value === true
+                focused: row.focused
+            }
+
             Text {
                 anchors.verticalCenter: parent.verticalCenter
-                visible: text !== ""
+                visible: text !== "" && row.entry.switch !== true
                 text: row.value
                 color: row.focused ? row.onFocus : row.entry.accent === true || row.changed ? Theme.accent : Theme.textSecondary
                 font.family: Theme.sans

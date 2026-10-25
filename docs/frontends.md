@@ -1078,10 +1078,12 @@ every row.
 
 `api.screens.modules` is Settings › Features and `api.screens.sourceList` Settings › Stores, the
 same list (`screens/settings.py`'s `ListForm`): one `action` row per entry (`module` its id, its
-name, `value` whether it runs, `display` On / Off / Set it up / Unavailable, drawn as text ahead of
-the chevron since A opens a page, `detail` the entry's description, or what is missing or waiting,
-`meta` an add-on's version and where it came from, `warning` what is missing, `source` which list it
-is), the ones running first, the others in an "Off" card. No row draws a switch: A opens the
+name, `value` whether it runs, `display` On / Off / Set it up / Unavailable, `switch` true for On and
+Off, `detail` the entry's description, or what is missing or waiting, `meta` an add-on's version and
+where it came from, `warning` what is missing, `source` which list it is), the ones running first, the
+others in an "Off" card (`off: true`). The Universe look draws a `switch` row's state as a switch
+ahead of the chevron (`ui/SettingsToggle.qml`: the accent track when on, a solid outlined one when
+off) and the Off card whole, as bright as the others; the consoles draw `display` as text. A opens the
 entry's page, which starts with its Enabled switch; Y in the Universe look, X in the consoles'
 (each hinted) toggles it in the list (`toggle(index)`, refused with a warning while it is off).
 `indexOf(id)` finds an entry's row for the cursor to land on again, and the cursor follows a toggled
@@ -1141,7 +1143,7 @@ for what to do (Update X, Install X for that newer build, Needed when a game
 waits on it, Installing…, Updated) with `accent`, the download's `size`, `progress` while its job
 runs, and `component`, the one the tag is about. The cards: the runners found; "Not installed",
 those Universe can download, a runner a game waits on first; a dimmed "No download" for the others
-(before the listing is in, a dimmed "Not found" holds both); and a "Tools" card at the foot for the
+(before the listing is in, a dimmed "Not found" holds both: `unavailable: true`, every look dims it); and a "Tools" card at the foot for the
 components that are no runner — gogdl, legendary, comet, butler, and the system's gamescope, MangoHud
 and gpu-screen-recorder (`meta` "N of M installed"), whose row is the component's (`key:
 "component"`, no `runner`) and whose A opens its options. `load()` builds the list at once and asks

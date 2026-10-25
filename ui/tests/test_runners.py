@@ -32,12 +32,12 @@ def test_runners_list_each_runner_with_its_builds_and_the_tools_last(api, fake):
     assert [ids(form, g) for g in form.groups] == [["proton", "eden", "dolphin", "linux", "melonds", "wine", "xemu"], ["rpcs3", "mame"]], (
         "before the catalogue: the runners found by the games on them, then their hours, then the name; the others"
     )
-    assert form.groups[1]["off"] is True
+    assert form.groups[1]["unavailable"] is True and form.groups[1]["off"] is False, "unavailable, not turned off: drawn dimmed"
     settle(api.screens.components)
     found, offered, none, tools = until(lambda: len(form.groups) == 4 and form.groups)
     assert ids(form, found) == ["proton", "eden", "dolphin", "linux", "melonds", "wine", "xemu"]
-    assert ids(form, offered) == ["rpcs3"] and offered["off"] is False, "Universe can install it, and a game waits on it"
-    assert ids(form, none) == ["mame"] and none["off"] is True, "no build to download"
+    assert ids(form, offered) == ["rpcs3"] and offered["unavailable"] is False, "Universe can install it, and a game waits on it"
+    assert ids(form, none) == ["mame"] and none["unavailable"] is True, "no build to download"
     assert ids(form, tools) == ["gpu-screen-recorder", "gamescope"], "what to install first; umu-run sits on Proton's page"
     rows = {r.get("runner") or r["component"]: r for r in form.rows}
     assert rows["proton"]["component"] == "ge-proton", "the Proton build in use"

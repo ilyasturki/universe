@@ -391,7 +391,7 @@ FocusScope {
                     iconSlot: true,
                     display: run.tag && run.tag !== "Updated" ? run.tag : run.display,
                     detail: run.detail,
-                    dim: g.off === true
+                    dim: g.unavailable === true
                 };
             });
         if (sectionId === "launch")
