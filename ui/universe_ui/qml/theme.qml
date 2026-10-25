@@ -90,18 +90,22 @@ FocusScope {
     readonly property var tabs: [
         {
             name: "Home",
+            icon: "home",
             source: "pages/HomePage.qml"
         },
         {
             name: "Library",
+            icon: "grid",
             source: "pages/LibraryPage.qml"
         },
         {
             name: "Media",
+            icon: "photos",
             source: "pages/MediaPage.qml"
         },
         {
             name: "Settings",
+            icon: "gear",
             source: "pages/SettingsPage.qml"
         }
     ]
@@ -890,9 +894,7 @@ FocusScope {
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
-            tabs: root.tabs.map(function (t) {
-                return t.name;
-            })
+            tabs: root.tabs
             currentIndex: root.tabIndex
             focus: root.focusOwner === "chrome"
             opacity: root.chromeReveal

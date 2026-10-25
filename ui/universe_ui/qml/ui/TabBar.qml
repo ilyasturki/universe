@@ -276,18 +276,40 @@ FocusScope {
                 frame.retarget();
             }
 
-            Text {
+            Item {
+                id: tab
+
                 readonly property bool active: index === root.currentIndex
+                property color tint: active ? Theme.text : Theme.textTab
 
-                text: modelData
-                color: active ? Theme.text : Theme.textTab
-                font.family: Theme.sans
-                font.weight: active ? Font.DemiBold : Font.Medium
-                font.pixelSize: Theme.dp(25)
+                width: tabContent.width
+                height: tabContent.height
 
-                Behavior on color {
+                Behavior on tint {
                     ColorEase {
                         duration: Theme.durBase
+                    }
+                }
+
+                Row {
+                    id: tabContent
+
+                    spacing: Theme.dp(10)
+
+                    MenuGlyph {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Theme.dp(24)
+                        height: Theme.dp(24)
+                        kind: modelData.icon
+                        tint: tab.tint
+                    }
+
+                    Text {
+                        text: modelData.name
+                        color: tab.tint
+                        font.family: Theme.sans
+                        font.weight: tab.active ? Font.DemiBold : Font.Medium
+                        font.pixelSize: Theme.dp(25)
                     }
                 }
 

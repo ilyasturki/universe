@@ -773,6 +773,7 @@ def test_the_reprise_bar_holds_the_library_and_power(look, api):
     root = look.root
     confirm = look.find("confirm")
     bar = look.find("tabBar")
+    assert all(tab["icon"] for tab in read(bar, "tabs")), "every tab carries its glyph"
     look.home()
     look.press(Qt.Key.Key_E)
     look.page("libraryPage")
