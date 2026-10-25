@@ -16,11 +16,9 @@ const WS_DISABLED: u32 = 0x0800_0000;
 pub const DISPLAY_FILE_ENV: &str = "UNIVERSE_DISPLAY_FILE";
 
 /// What gamescope set for its child, `KEY=value` lines, renamed into place whole.
-fn record_display(path: &Path) -> std::io::Result<()> {
+fn record_display(path: &Path) -> crate::Result<()> {
     let text: String = ["DISPLAY", "GAMESCOPE_WAYLAND_DISPLAY"].iter().filter_map(|k| std::env::var(k).ok().map(|v| format!("{k}={v}\n"))).collect();
-    let tmp = path.with_extension("tmp");
-    std::fs::write(&tmp, text)?;
-    std::fs::rename(tmp, path)
+    crate::game::atomic_write(path, text.as_bytes())
 }
 
 /// `<width> <height>\n` then width×height×4 bytes of Qt's `Format_RGB32` (X's depth-24 ZPixmap, little-endian).

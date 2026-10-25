@@ -402,7 +402,6 @@ pub fn plan(
         _ => (program, args),
     };
     let mut mangoapp_conf = None;
-    let own_gamescope = gamescope.is_some();
     let (program, args) = match &gamescope {
         Some(bin) => {
             let mut wrap = gamescope_args(
@@ -463,7 +462,7 @@ pub fn plan(
         post_command: g.launch.post_command.clone(),
         mangohud_conf,
         mangoapp_conf,
-        gamescope: own_gamescope,
+        gamescope: gamescope.is_some(),
     })
 }
 
