@@ -426,8 +426,8 @@ colours stripped, non-UTF-8 lines dropped) with the launched command line as a f
 session's `command`, which survives the journal. `universe logs <name>` prints the newest session's
 (or the running one's), `universe logs <name> <session>` an older one's, `-f` follows the running
 one, `--json` the rows; `universe sessions` and `status` carry the `End` column, and a failed
-`universe play` points at `logs`. In the UI a game's Sessions (the Universe look: the Sessions pill on its
-details, or More → Sessions and logs; Switch 2: Software Options → Play Log) lists every session
+`universe play` points at `logs`. In the UI a game's Sessions (the Universe look: the game menu's Manage ›
+Sessions and logs; Switch 2: Software Options → Play Log) lists every session
 with its end and opens the log's last 400 lines, the running session first.
 
 `launch.debug_log` (global or per game, Proton and Wine only, off by default) adds the runners'

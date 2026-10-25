@@ -105,7 +105,7 @@ and `currentSessionChanged`; the running session leads as a `live` row with an e
 `openLog(session)` reads that session's last 400 journal lines off the UI thread (`session_log`)
 into `log` (`time` as a clock, `source`, `message`, `error`, `warning`) with `logSession`,
 `logLoading` and `logError` beside it; `closeLog()` drops it. The Universe look's `pages/SessionsPage.qml`
-(the Sessions pill of the details page, More → Sessions and logs) lists the rows on the left and the
+(the game menu's Manage › Sessions and logs) lists the rows on the left and the
 highlighted one's log on the right, A scrolling the log; Switch 2's `pages/PlayLogPage.qml`
 (Software Options → Play Log) lists them and A pushes `pages/SessionLogPage.qml`.
 `api.screens.shots` maps the player's own screenshots to rows — `name`, `path`, `url`,
