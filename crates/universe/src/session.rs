@@ -302,6 +302,13 @@ impl Core {
         for (path, text) in plan.mangohud_conf.iter().chain(&plan.mangoapp_conf) {
             std::fs::write(path, text)?;
         }
+        if let Some(prefix) = plan.env.get("WINEPREFIX").map(std::path::PathBuf::from) {
+            match crate::core::blocking(move || Ok(crate::wine_fonts::prune_dead(&prefix)?)).await {
+                Ok(0) => {}
+                Ok(n) => tracing::info!("{id}: dropped {n} fonts its prefix registered from /nix/store files now gone"),
+                Err(e) => tracing::warn!("{id}: prefix fonts: {e}"),
+            }
+        }
         if let Some(spec) = crate::runners::spec(&r.effective.runner) {
             let dir = paths::session_log_dir(id, &session_id);
             let kind = if spec.via_proton { crate::runners::Kind::Proton } else { spec.kind };
@@ -986,6 +993,60 @@ pub(crate) mod tests {
             assert_eq!((row.session.crashed, sessions::end_of(&row.session)), (crash, if crash { "crashed" } else { "quit" }), "umu-run exits 0 either way");
             assert_eq!(row.debug_log, crash.then(|| dir.to_string_lossy().into_owned()), "an empty dir goes, a report stays readable");
         }
+    }
+
+    #[tokio::test]
+    async fn a_launch_drops_the_fonts_its_prefix_registered_from_store_files_now_gone() {
+        use std::os::unix::fs::PermissionsExt;
+        let _sb = sandbox();
+        let prefix = paths::state_home().join("compatdata/620");
+        let pfx = prefix.join("pfx");
+        std::fs::create_dir_all(pfx.join("drive_c")).unwrap();
+        let mut g = Game::load(&Game::new("Sample").toml_path()).unwrap();
+        g.launch.runner = "proton".into();
+        g.launch.runner_exe.clear();
+        g.launch.prefix = prefix.to_string_lossy().into();
+        g.save().unwrap();
+        // Two games: two launches within a second share a session id.
+        Game { id: "again".into(), ..g }.save().unwrap();
+        let live = pfx.join("drive_c/Live.ttf");
+        std::fs::write(&live, b"").unwrap();
+        let z = |p: &str| format!("Z:{}", p.replace('/', r"\\"));
+        let (gone, usr, live) =
+            (z("/nix/store/00000000000000000000000000000000-gone/share/fonts/Gone.ttf"), z("/usr/share/fonts/TTF/Usr.ttf"), z(&live.to_string_lossy()));
+        let dead = format!("\"Gone (TrueType)\"=\"{gone}\"\n");
+        let reg = |keys: &[&str]| {
+            let mut text = String::from("WINE REGISTRY Version 2\n;; All keys relative to \\\\Machine\n\n#arch=win64\n");
+            for key in keys {
+                text += &format!("\n[{key}] 1792921511\n#time=1dc45a1b2c3d4e5\n{dead}\"Usr (TrueType)\"=\"{usr}\"\n\"Live (TrueType)\"=\"{live}\"\n");
+            }
+            text + &format!("\n[Software\\\\Wine\\\\Fonts\\\\Replacements] 1747721663\n\"Gone\"=\"{gone}\"\n")
+        };
+        let user = reg(&[r"Software\\Wine\\Fonts\\External Fonts"]);
+        let system = reg(&[r"Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts", r"Software\\Microsoft\\Windows\\CurrentVersion\\Fonts"]);
+        std::fs::write(pfx.join("user.reg"), &user).unwrap();
+        std::fs::write(pfx.join("system.reg"), &system).unwrap();
+        std::fs::set_permissions(pfx.join("user.reg"), std::fs::Permissions::from_mode(0o600)).unwrap();
+        let read = |name: &str| std::fs::read_to_string(pfx.join(name)).unwrap();
+
+        let server = paths::state_home().join(crate::data::server_dir_name(&pfx).unwrap());
+        std::fs::create_dir_all(&server).unwrap();
+        let wineserver = paths::state_home().join("wineserver");
+        std::fs::write(&wineserver, "#!/bin/sh\nread _\n").unwrap();
+        std::fs::set_permissions(&wineserver, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let mut running = std::process::Command::new(&wineserver).current_dir(&server).stdin(std::process::Stdio::piped()).spawn().unwrap();
+        let (core, memory) = open().await;
+        let sid = core.launch("sample", "", "").await.unwrap();
+        assert_eq!((read("user.reg"), read("system.reg")), (user.clone(), system.clone()), "a running wineserver's registry is left to it");
+        memory.finish(&format!("universe-game-sample-{sid}.service"), 0);
+        core.session_end("sample", &sid, Some(0), None).await.unwrap();
+        running.kill().unwrap();
+        running.wait().unwrap();
+
+        core.launch("again", "", "").await.unwrap();
+        assert_eq!(read("user.reg"), user.replace(&dead, ""), "only the store font now gone goes; /usr/share's and other keys' values stay");
+        assert_eq!(read("system.reg"), system.replace(&dead, ""));
+        assert_eq!(std::fs::metadata(pfx.join("user.reg")).unwrap().permissions().mode() & 0o777, 0o600);
     }
 
     #[tokio::test]

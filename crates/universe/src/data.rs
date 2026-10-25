@@ -511,7 +511,7 @@ impl Core {
 const TOOL_UP_WAIT: Duration = Duration::from_secs(60);
 
 /// Wine names a prefix's server dir `server-<dev>-<ino>` after the prefix, in whichever `/tmp` the server sees (umu's sandbox keeps its own).
-fn server_dir_name(prefix: &Path) -> Option<String> {
+pub(crate) fn server_dir_name(prefix: &Path) -> Option<String> {
     use std::os::unix::fs::MetadataExt;
     std::fs::metadata(prefix).ok().map(|m| format!("server-{:x}-{:x}", m.dev(), m.ino()))
 }
@@ -528,6 +528,16 @@ fn wineservers(proc: &Path, dirs: &[String]) -> Vec<i32> {
     pids
 }
 
+fn server_dirs(prefix: &Path) -> Vec<String> {
+    let mut dirs: Vec<String> = [prefix.to_path_buf(), prefix.join("pfx")].iter().filter_map(|p| server_dir_name(p)).collect();
+    dirs.dedup();
+    dirs
+}
+
+pub(crate) fn wine_running(prefix: &Path) -> bool {
+    !wineservers(Path::new("/proc"), &server_dirs(prefix)).is_empty()
+}
+
 fn alive(pid: i32) -> bool {
     std::fs::read_to_string(format!("/proc/{pid}/stat")).is_ok_and(|s| s.rsplit(')').next().and_then(|r| r.split_whitespace().next()) != Some("Z"))
 }
@@ -535,9 +545,7 @@ fn alive(pid: i32) -> bool {
 /// What `wineserver -k` does, from outside any sandbox: SIGINT has the server kill its programs, save the registry and exit; SIGKILL if it hangs on.
 async fn stop_wine(prefix: &Path) -> Result<usize> {
     use rustix::process::{kill_process, Pid, Signal};
-    let mut dirs: Vec<String> = [prefix.to_path_buf(), prefix.join("pfx")].iter().filter_map(|p| server_dir_name(p)).collect();
-    dirs.dedup();
-    let servers = wineservers(Path::new("/proc"), &dirs);
+    let servers = wineservers(Path::new("/proc"), &server_dirs(prefix));
     let signal = |sig: Signal| {
         for pid in servers.iter().filter_map(|p| Pid::from_raw(*p)) {
             let _ = kill_process(pid, sig);

@@ -539,18 +539,29 @@ pub fn migrate(path: &Path) -> crate::Result<bool> {
         }
     }
     doc["schema"] = toml_edit::value(SCHEMA);
-    replace(path, &doc.to_string())?;
+    replace(path, doc.to_string().as_bytes(), None)?;
     Ok(true)
 }
 
 /// Through a symlink to its target, so a config kept in a dotfiles repository stays linked; by a rename, so a process opening
-/// the file at the same moment reads the old one or the new one whole.
-fn replace(path: &Path, text: &str) -> std::io::Result<()> {
+/// the file at the same moment reads the old one or the new one whole. `read`, the target's metadata when it was read, leaves a file changed since as it is.
+pub(crate) fn replace(path: &Path, text: &[u8], read: Option<&std::fs::Metadata>) -> std::io::Result<()> {
+    use std::io::Write;
     let target = std::fs::canonicalize(path)?;
     let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     let tmp = target.with_file_name(format!(".{name}.{}.tmp", std::process::id()));
-    std::fs::write(&tmp, text)?;
-    let kept = std::fs::metadata(&target).and_then(|m| std::fs::set_permissions(&tmp, m.permissions())).and_then(|()| std::fs::rename(&tmp, &target));
+    let kept = std::fs::File::create(&tmp)
+        .and_then(|mut f| f.write_all(text).and_then(|()| f.sync_all()))
+        .and_then(|()| std::fs::metadata(&target))
+        .and_then(|now| {
+            if let Some(was) = read {
+                if (was.len(), was.modified()?) != (now.len(), now.modified()?) {
+                    return Err(std::io::Error::other(format!("{} changed while being rewritten", target.display())));
+                }
+            }
+            std::fs::set_permissions(&tmp, now.permissions())
+        })
+        .and_then(|()| std::fs::rename(&tmp, &target));
     if kept.is_err() {
         let _ = std::fs::remove_file(&tmp);
     }

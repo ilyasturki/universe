@@ -52,6 +52,7 @@ pub mod timeline;
 pub mod tools;
 pub mod upstream;
 pub mod versions;
+pub mod wine_fonts;
 
 #[cfg(test)]
 mod testbus;
