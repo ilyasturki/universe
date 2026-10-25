@@ -1131,8 +1131,8 @@ the AppImage inside the archive in turn. The program: `program`, else `AppRun` f
 `bin/wine` for Wine, the build's folder for Proton (its `proton` script), the tool's name for a tool.
 
 **NixOS.** A downloaded build expects an FHS: on NixOS the launch runs it as `universe-fhs <program>
-…`, a bubblewrap environment of appimage-run's libraries, plus the ones catalogue AppImages expect
-of the host (libpng16, glibmm, libXv), the flake puts on Universe's PATH (and an AppImage is
+…`, a bubblewrap environment of appimage-run's libraries, plus the ones catalogue builds expect
+of the host (libpng16, glibmm, libXv, and ICU and SDL3 for SharpEmu), the flake puts on Universe's PATH (and an AppImage is
 unpacked inside it), so nothing is asked of the system's configuration — no nix-ld, no
 binfmt, no steam-run. `doctor`'s `components-fhs` fails when Universe holds such a build and
 `universe-fhs` is not on PATH. A stop leaves its shell and its bwrap alone: signalled, bwrap's

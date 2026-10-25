@@ -231,7 +231,7 @@
         pkgs.appimageTools.defaultFhsEnvArgs
         // {
           name = "universe-fhs";
-          # Host libraries catalogue AppImages expect beyond appimageTools' list: flycast libpng16, snes9x glibmm and libXv.
+          # Host libraries catalogue builds expect beyond appimageTools' list: flycast libpng16, snes9x glibmm and libXv, SharpEmu ICU and SDL3.
           targetPkgs =
             p:
             pkgs.appimageTools.defaultFhsEnvArgs.targetPkgs p
@@ -239,6 +239,8 @@
               p.libpng
               (p.glibmm_2_4 or p.glibmm)
               p.libxv
+              p.icu
+              p.sdl3
             ];
           runScript = pkgs.writeShellScript "universe-fhs-run" ''exec "$@"'';
         }
