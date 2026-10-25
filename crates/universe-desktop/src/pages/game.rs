@@ -90,6 +90,8 @@ mod imp {
         #[template_child]
         pub shots: TemplateChild<gtk::Box>,
         #[template_child]
+        pub body: TemplateChild<adw::ViewStack>,
+        #[template_child]
         pub achievements_row: TemplateChild<adw::ActionRow>,
         #[template_child]
         pub achievements_count: TemplateChild<gtk::Label>,
@@ -305,30 +307,17 @@ impl GamePage {
             let resolved = backend::pinned(move |core| async move {
                 let r = core.get(&id).await?;
                 let shots = core.screenshots(&id).await.map(|s| s.len()).unwrap_or(0);
-                Ok::<_, universe::Error>((r, shots))
-            })
-            .await;
-            let Ok((r, shots)) = resolved else { return };
-            let Some(this) = page.upgrade() else { return };
-            let achievable = this.imp().details.borrow().achievable;
-            this.imp().details.replace(Details::of(&r, shots, achievable));
-            this.show_details();
-            this.refresh();
-            // `sources()` may ask the stores: the details show before it answers.
-            let source = (r.game.source.id.clone(), r.game.source.kind.clone());
-            let achievable = backend::pinned(move |core| async move {
-                !source.0.is_empty()
-                    && core
-                        .sources()
-                        .await
-                        .iter()
-                        .any(|s| s["id"] == source.1.as_str() && s["capabilities"].as_array().is_some_and(|c| c.iter().any(|c| c == "achievements")))
+                let achievable = !r.game.source.id.is_empty() && core.source(&r.game.source.kind).await.is_ok_and(|s| s.can("achievements"));
+                Ok::<_, universe::Error>((r, shots, achievable))
             })
             .await;
             let Some(this) = page.upgrade() else { return };
-            if std::mem::replace(&mut this.imp().details.borrow_mut().achievable, achievable) != achievable {
+            if let Ok((r, shots, achievable)) = resolved {
+                this.imp().details.replace(Details::of(&r, shots, achievable));
                 this.show_details();
+                this.refresh();
             }
+            this.imp().body.set_visible_child_name("details");
         });
     }
 

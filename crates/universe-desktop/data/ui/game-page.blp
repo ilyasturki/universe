@@ -200,171 +200,190 @@ template $UniverseGamePage: Adw.NavigationPage {
                 }
               }
 
-              Adw.PreferencesGroup {
-                title: _("Your Play");
+              Adw.ViewStack body {
+                vhomogeneous: false;
 
-                Adw.ActionRow achievements_row {
-                  title: _("Achievements");
-                  activatable: true;
-                  action-name: "page.achievements";
-                  visible: false;
+                Adw.ViewStackPage {
+                  name: "loading";
 
-                  [prefix]
-                  Image {
-                    icon-name: "trophy-symbolic";
-                  }
-
-                  [suffix]
-                  Label achievements_count {
-                    styles [
-                      "dimmed",
-                    ]
-                  }
-
-                  [suffix]
-                  Image {
-                    icon-name: "go-next-symbolic";
-                  }
+                  child: Box {};
                 }
 
-                Adw.ActionRow shots_row {
-                  title: _("Screenshots");
-                  activatable: true;
-                  action-name: "page.screenshots";
-                  visible: false;
+                Adw.ViewStackPage {
+                  name: "details";
 
-                  [prefix]
-                  Image {
-                    icon-name: "camera-photo-symbolic";
-                  }
+                  child: Box {
+                    orientation: vertical;
+                    spacing: 36;
 
-                  [suffix]
-                  Label shots_count {
-                    styles [
-                      "dimmed",
-                    ]
-                  }
+                    Adw.PreferencesGroup {
+                      title: _("Your Play");
 
-                  [suffix]
-                  Image {
-                    icon-name: "go-next-symbolic";
-                  }
-                }
+                      Adw.ActionRow achievements_row {
+                        title: _("Achievements");
+                        activatable: true;
+                        action-name: "page.achievements";
+                        visible: false;
 
-                Adw.ActionRow recordings_row {
-                  title: _("Recordings");
-                  activatable: true;
-                  action-name: "page.recordings";
-                  visible: false;
+                        [prefix]
+                        Image {
+                          icon-name: "trophy-symbolic";
+                        }
 
-                  [prefix]
-                  Image {
-                    icon-name: "camera-video-symbolic";
-                  }
+                        [suffix]
+                        Label achievements_count {
+                          styles [
+                            "dimmed",
+                          ]
+                        }
 
-                  [suffix]
-                  Label recordings_count {
-                    styles [
-                      "dimmed",
-                    ]
-                  }
+                        [suffix]
+                        Image {
+                          icon-name: "go-next-symbolic";
+                        }
+                      }
 
-                  [suffix]
-                  Image {
-                    icon-name: "go-next-symbolic";
-                  }
-                }
+                      Adw.ActionRow shots_row {
+                        title: _("Screenshots");
+                        activatable: true;
+                        action-name: "page.screenshots";
+                        visible: false;
 
-                Adw.ActionRow journal_row {
-                  title: _("Journal");
-                  activatable: true;
-                  action-name: "page.journal";
-                  visible: false;
+                        [prefix]
+                        Image {
+                          icon-name: "camera-photo-symbolic";
+                        }
 
-                  [prefix]
-                  Image {
-                    icon-name: "text-x-generic-symbolic";
-                  }
+                        [suffix]
+                        Label shots_count {
+                          styles [
+                            "dimmed",
+                          ]
+                        }
 
-                  [suffix]
-                  Label journal_count {
-                    styles [
-                      "dimmed",
-                    ]
-                  }
+                        [suffix]
+                        Image {
+                          icon-name: "go-next-symbolic";
+                        }
+                      }
 
-                  [suffix]
-                  Image {
-                    icon-name: "go-next-symbolic";
-                  }
-                }
+                      Adw.ActionRow recordings_row {
+                        title: _("Recordings");
+                        activatable: true;
+                        action-name: "page.recordings";
+                        visible: false;
 
-                Adw.ActionRow sessions_row {
-                  title: _("Sessions and Logs");
-                  activatable: true;
-                  action-name: "page.sessions";
-                  visible: false;
+                        [prefix]
+                        Image {
+                          icon-name: "camera-video-symbolic";
+                        }
 
-                  [prefix]
-                  Image {
-                    icon-name: "document-open-recent-symbolic";
-                  }
+                        [suffix]
+                        Label recordings_count {
+                          styles [
+                            "dimmed",
+                          ]
+                        }
 
-                  [suffix]
-                  Label sessions_count {
-                    styles [
-                      "dimmed",
-                    ]
-                  }
+                        [suffix]
+                        Image {
+                          icon-name: "go-next-symbolic";
+                        }
+                      }
 
-                  [suffix]
-                  Image {
-                    icon-name: "go-next-symbolic";
-                  }
-                }
+                      Adw.ActionRow journal_row {
+                        title: _("Journal");
+                        activatable: true;
+                        action-name: "page.journal";
+                        visible: false;
 
-                Adw.ActionRow {
-                  title: _("Saves and Storage");
-                  activatable: true;
-                  action-name: "page.data";
+                        [prefix]
+                        Image {
+                          icon-name: "text-x-generic-symbolic";
+                        }
 
-                  [prefix]
-                  Image {
-                    icon-name: "drive-harddisk-symbolic";
-                  }
+                        [suffix]
+                        Label journal_count {
+                          styles [
+                            "dimmed",
+                          ]
+                        }
 
-                  [suffix]
-                  Image {
-                    icon-name: "go-next-symbolic";
-                  }
-                }
-              }
+                        [suffix]
+                        Image {
+                          icon-name: "go-next-symbolic";
+                        }
+                      }
 
-              Adw.PreferencesGroup about {
-                title: _("About");
-                visible: false;
+                      Adw.ActionRow sessions_row {
+                        title: _("Sessions and Logs");
+                        activatable: true;
+                        action-name: "page.sessions";
+                        visible: false;
 
-                Label description {
-                  wrap: true;
-                  xalign: 0;
-                  selectable: true;
+                        [prefix]
+                        Image {
+                          icon-name: "document-open-recent-symbolic";
+                        }
 
-                  styles [
-                    "body",
-                  ]
-                }
-              }
+                        [suffix]
+                        Label sessions_count {
+                          styles [
+                            "dimmed",
+                          ]
+                        }
 
-              Adw.PreferencesGroup shots_group {
-                title: _("Gallery");
-                visible: false;
+                        [suffix]
+                        Image {
+                          icon-name: "go-next-symbolic";
+                        }
+                      }
 
-                ScrolledWindow {
-                  vscrollbar-policy: never;
+                      Adw.ActionRow {
+                        title: _("Saves and Storage");
+                        activatable: true;
+                        action-name: "page.data";
 
-                  child: Box shots {
-                    spacing: 12;
-                    margin-bottom: 12;
+                        [prefix]
+                        Image {
+                          icon-name: "drive-harddisk-symbolic";
+                        }
+
+                        [suffix]
+                        Image {
+                          icon-name: "go-next-symbolic";
+                        }
+                      }
+                    }
+
+                    Adw.PreferencesGroup about {
+                      title: _("About");
+                      visible: false;
+
+                      Label description {
+                        wrap: true;
+                        xalign: 0;
+                        selectable: true;
+
+                        styles [
+                          "body",
+                        ]
+                      }
+                    }
+
+                    Adw.PreferencesGroup shots_group {
+                      title: _("Gallery");
+                      visible: false;
+
+                      ScrolledWindow {
+                        vscrollbar-policy: never;
+
+                        child: Box shots {
+                          spacing: 12;
+                          margin-bottom: 12;
+                        };
+                      }
+                    }
                   };
                 }
               }
