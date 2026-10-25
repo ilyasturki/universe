@@ -666,6 +666,58 @@
    "kind": "tool",
    "name": "heroic-gogdl"
   },
+  "kytyps5": {
+   "builds": [
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "tar.gz",
+       "program": "kyty_emulator",
+       "sha256": "c502309441cd674afbe82a0e03d10bc1b143bd5fa6ab66f99a46d0224651b82f",
+       "size": 77241278,
+       "url": "https://github.com/KytyPS5/KytyPS5/releases/download/KytyPS5-2026-10-25-b2c9ec7/KytyPS5-2026-10-25-b2c9ec7-Linux-x86_64.tar.gz"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-10-25T18:10:03Z",
+     "version": "2026-10-25-b2c9ec7"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "tar.gz",
+       "program": "kyty_emulator",
+       "sha256": "1a4f32946995b1b550e49a65bb701e0d417c4ae02a7a5b73b52773fa39109a25",
+       "size": 77241053,
+       "url": "https://github.com/KytyPS5/KytyPS5/releases/download/KytyPS5-2026-10-25-99044c7/KytyPS5-2026-10-25-99044c7-Linux-x86_64.tar.gz"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-10-25T17:52:15Z",
+     "version": "2026-10-25-99044c7"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "tar.gz",
+       "program": "kyty_emulator",
+       "sha256": "737ea99ea0022adae2b63f07b5bd1e708c8aa2acdd1a77f83531494b48b6d7e9",
+       "size": 77240321,
+       "url": "https://github.com/KytyPS5/KytyPS5/releases/download/KytyPS5-2026-10-25-83f8bfd/KytyPS5-2026-10-25-83f8bfd-Linux-x86_64.tar.gz"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-10-25T00:43:27Z",
+     "version": "2026-10-25-83f8bfd"
+    }
+   ],
+   "homepage": "https://github.com/KytyPS5/KytyPS5",
+   "kind": "emulator",
+   "name": "KytyPS5"
+  },
   "legendary": {
    "bin": "legendary",
    "builds": [
@@ -1216,6 +1268,20 @@
       {
        "arch": "x86_64",
        "format": "appimage",
+       "sha256": "c3331ba8725762315a26d5d7894d39132679850ad5d397f15e578bf7b3ccdef6",
+       "size": 83142328,
+       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-d00d80231af3f9b0286f38fd72f7513583f1a9d4/rpcs3-v0.0.43-20402-d00d8023_linux64.AppImage"
+      }
+     ],
+     "channel": "rolling",
+     "date": "2026-10-25T16:17:51Z",
+     "version": "0.0.43-20402-d00d8023"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "appimage",
        "sha256": "54783f122dc0be929427c8c384a630e9651c3f18f09da60aeff3c586d637c0b3",
        "size": 83145335,
        "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-8b9ee60569753db8406b66d135cce112156172a1/rpcs3-v0.0.43-20397-8b9ee605_linux64.AppImage"
@@ -1280,20 +1346,6 @@
      "channel": "rolling",
      "date": "2026-10-21T08:41:44Z",
      "version": "0.0.43-20364-4b1a801f"
-    },
-    {
-     "assets": [
-      {
-       "arch": "x86_64",
-       "format": "appimage",
-       "sha256": "02d8cc2e1f410ff3d58304268e57f0a935f026980e4e57f539f130b1ae6ceba3",
-       "size": 94689764,
-       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-58317c9350983d71f18df2b0a346433161d6b13c/rpcs3-v0.0.43-20344-58317c93_linux64.AppImage"
-      }
-     ],
-     "channel": "rolling",
-     "date": "2026-10-19T14:31:22Z",
-     "version": "0.0.43-20344-58317c93"
     }
    ],
    "homepage": "https://github.com/RPCS3/rpcs3-binaries-linux",
@@ -1381,6 +1433,58 @@
    "homepage": "https://github.com/shadps4-emu/shadPS4",
    "kind": "emulator",
    "name": "shadPS4"
+  },
+  "sharpemu": {
+   "builds": [
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "tar.gz",
+       "program": "SharpEmu",
+       "sha256": "dc7edfaa983bb40c6f4022faa2ca2eb4c6f831f8b297f10d2e3c132099137f57",
+       "size": 66392090,
+       "url": "https://github.com/sharpemu/sharpemu/releases/download/v0.0.6-mono/sharpemu-0.0.6-mono-linux-x64.tar.gz"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-10-18T23:16:53Z",
+     "version": "0.0.6-mono"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "tar.gz",
+       "program": "SharpEmu",
+       "sha256": "0e238c8377119b67047042f1ff2f3e4c94960feaedf49a066467a72756e134f0",
+       "size": 61956575,
+       "url": "https://github.com/sharpemu/sharpemu/releases/download/v0.0.5-nexus-release.2/sharpemu-0.0.5-nexus-release.2-linux-x64.tar.gz"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-10-08T22:58:53Z",
+     "version": "0.0.5-nexus-release.2"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "tar.gz",
+       "program": "SharpEmu",
+       "sha256": "af9e7dbc3605c32b81b8031109e429fba721dad6c5c6522568f9ab34d92d4d1e",
+       "size": 61909199,
+       "url": "https://github.com/sharpemu/sharpemu/releases/download/v0.0.5-nexus/sharpemu-0.0.5-nexus-linux-x64.tar.gz"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-10-03T02:20:42Z",
+     "version": "0.0.5-nexus"
+    }
+   ],
+   "homepage": "https://github.com/sharpemu/sharpemu",
+   "kind": "emulator",
+   "name": "SharpEmu"
   },
   "snes9x": {
    "builds": [
@@ -1773,6 +1877,6 @@
    "name": "xemu"
   }
  },
- "generated_at": "2026-10-25T09:56:49Z",
+ "generated_at": "2026-10-25T22:49:59Z",
  "schema": 1
 }
