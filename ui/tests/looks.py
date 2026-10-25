@@ -223,7 +223,8 @@ class Look:
         root = self.root
         invoke(root, "openDetail", self.api.allGames.byId(game_id))
         return until(
-            lambda: (p := root.findChild(QObject, "detailPage")) is not None and p.property("game").property("id") == game_id and p, f"{game_id}'s page"
+            lambda: (p := root.findChild(QObject, "detailPage")) is not None and (g := p.property("game")) is not None and g.property("id") == game_id and p,
+            f"{game_id}'s page",
         )
 
     def _options(self):
