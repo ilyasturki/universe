@@ -32,6 +32,6 @@ A game's **Recordings** page plays them: Left and Right seek and **X** goes full
 
 After each session, the journal writes an entry from its recording and your screenshots: a title, a few paragraphs, and a **NEXT UP** line on where you left off. It needs a writing model first ([Play journal](/docs/add-ons/play-journal/)).
 
-A game's **Journal** page lists every session. **A** reads its entry, or writes a missing one with **Write it**. **Start** adds **Write it again** and **Remove entry…**, which keeps your screenshots.
+A game's **Journal** page lists every session. **A** reads its entry, or writes a missing one with **Write it**. The entry's screenshots sit under its title: press Up from the top of the text to reach them. The recording sits below the text. **Start** adds **Write it again** and **Remove entry…**, which keeps your screenshots.
 
 The Switch 2 and PS5 looks keep media in other places: see [Looks](/docs/using/looks/).

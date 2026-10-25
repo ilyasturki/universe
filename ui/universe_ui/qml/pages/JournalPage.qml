@@ -144,13 +144,16 @@ FocusScope {
         index = Sound.paged(index, d, 1, pitch > 0 ? Math.floor(list.height / pitch) : 1, rows.length);
     }
 
+    // Past the text's top edge are the screenshots, past its bottom edge the recording card.
     function scroll(d, held) {
         if (articleScroll.by(d * Theme.dp(260)))
             Sound.tick();
-        else if (d > 0 && !held)
-            recording ? openRecordingCard() : openShots();
-        else
+        else if (held)
             Sound.edge();
+        else if (d < 0)
+            openShots();
+        else
+            recording ? openRecordingCard() : Sound.edge();
     }
 
     function openShots() {
@@ -160,7 +163,7 @@ FocusScope {
         }
         Sound.panel();
         mode = 2;
-        articleScroll.to(articleScroll.high());
+        articleScroll.to(0);
     }
 
     function openRecordingCard() {
@@ -358,9 +361,9 @@ FocusScope {
         } else if (api.keys.isMenu(event)) {
             openMenu();
         } else if (event.key === Qt.Key_Up) {
-            if (mode === 2 && recording) {
-                openRecordingCard();
-            } else if (mode >= 2) {
+            if (mode === 2) {
+                Sound.edge();
+            } else if (mode === 3) {
                 Sound.panel();
                 mode = 1;
             } else if (mode === 1) {
@@ -369,11 +372,12 @@ FocusScope {
                 step(-1);
             }
         } else if (event.key === Qt.Key_Down) {
-            if (mode === 3)
-                openShots();
-            else if (mode === 2)
+            if (mode === 3) {
                 Sound.edge();
-            else if (mode === 1)
+            } else if (mode === 2) {
+                Sound.panel();
+                mode = 1;
+            } else if (mode === 1)
                 scroll(1, event.isAutoRepeat);
             else
                 step(1);
@@ -543,6 +547,20 @@ FocusScope {
                 tracking: 0.11
             }
 
+            ScreenshotStrip {
+                id: shots
+
+                width: parent.width
+                images: page.images
+                index: page.shotIndex
+                focused: page.mode === 2 && !page.lightbox
+                sideMargin: page.sideMargin
+                onPointed: function (i) {
+                    page.mode = 2;
+                    page.shotIndex = i;
+                }
+            }
+
             Text {
                 width: parent.width
                 visible: text !== ""
@@ -618,20 +636,6 @@ FocusScope {
                 dimmed: page.mode === 2 && !page.lightbox
                 onPicked: page.mode = 3
             }
-
-            ScreenshotStrip {
-                id: shots
-
-                width: parent.width
-                images: page.images
-                index: page.shotIndex
-                focused: page.mode === 2 && !page.lightbox
-                sideMargin: page.sideMargin
-                onPointed: function (i) {
-                    page.mode = 2;
-                    page.shotIndex = i;
-                }
-            }
         }
     }
 
@@ -664,6 +668,7 @@ FocusScope {
         anchors.bottom: flick.bottom
         flickable: flick
         shown: page.mode === 1
+        from: shots.visible ? shots.y + shots.height : 0
         to: recordingCard.y
     }
 

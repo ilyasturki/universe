@@ -368,6 +368,30 @@ def test_a_held_arrow_keeps_stepping_down_a_game_s_list(look, api, source):
 
 
 @reprise
+def test_the_journal_s_screenshots_sit_above_its_text(look, api):
+    page = look.open("pages/JournalPage.qml", {"game": api.allGames.byId("the-technomancer"), "session": ""})
+    rows = until(lambda: read(page, "rows"))
+    page.setProperty("index", next(i for i, r in enumerate(rows) if r["state"] == "written" and len(r["images"]) > 1 and r.get("hasRecording")))
+    look.press(Qt.Key.Key_Return)
+    until(lambda: page.property("mode") == 1, "A reads the entry, from its top")
+    held(look.window, Qt.Key.Key_Up)
+    assert page.property("mode") == 1, "a held ▲ stops at the top of the text"
+    look.press(Qt.Key.Key_Up)
+    until(lambda: page.property("mode") == 2, "▲ from the top of the text: the screenshots")
+    assert page.property("shotIndex") == 0
+    look.press(Qt.Key.Key_Right)
+    assert page.property("shotIndex") == 1
+    look.press(Qt.Key.Key_Up)
+    assert page.property("mode") == 2, "nothing above the screenshots"
+    look.press(Qt.Key.Key_Down)
+    until(lambda: page.property("mode") == 1, "▼ back to the text")
+    look.press(Qt.Key.Key_Return)
+    until(lambda: page.property("mode") == 3, "the recording card stays below the text")
+    look.press(Qt.Key.Key_Up)
+    until(lambda: page.property("mode") == 1)
+
+
+@reprise
 def test_a_held_arrow_keeps_stepping_down_the_game_menu(look):
     menu = look.find("gameMenu")
     look.home()

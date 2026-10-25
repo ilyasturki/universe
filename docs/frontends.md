@@ -899,10 +899,12 @@ on a pending row) through `api.screens.journal.remove`, which cancels a pending 
 before trashing; the offer to take the recording along works the other way round.
 
 The two pages preview each other for the session under the cursor, so a jump (Y, `jumpRequested`)
-is a choice and not a guess. The journal article ends with a RECORDING card (`ui/RecordingCard.qml`)
-between NEXT UP and the screenshots — ▼ from the end of the text lands on it, A opens the recordings
-page on that session. Under the recordings pane a JOURNAL block shows the entry's title and first
-paragraph; ▼ from the video focuses it, A reads it. Each page loads the other's store for the game
+is a choice and not a guess. The journal article shows its screenshots right under the title and
+date — ▲ from the top of the text lands on them, ◀ ▶ step, A a `Lightbox`, ▼ is back on the text —
+and ends with a RECORDING card (`ui/RecordingCard.qml`) under NEXT UP — ▼ from the end of the text
+lands on it, A opens the recordings page on that session. A held arrow stops at either edge.
+Under the recordings pane a JOURNAL block shows the entry's title and first paragraph; ▼ from the
+video focuses it, A reads it. Each page loads the other's store for the game
 unless it already holds it, so the jump finds them warm.
 
 Media › Screenshots in the game menu (when `screenshots(id)` lists any) opens
