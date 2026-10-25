@@ -278,7 +278,7 @@ saves, where the title's id is cheap to read:
 |---|---|---|
 | RPCS3 | `TITLE_ID` of `PS3_GAME/PARAM.SFO` | `~/.config/rpcs3/dev_hdd0/home/*/savedata/<id>*` |
 | shadPS4 | `TITLE_ID` of `sce_sys/param.sfo` | `~/.local/share/shadPS4/home/*/savedata/<id>`, `…/user/savedata/*/<id>` |
-| KytyPS5 | `titleId` of `sce_sys/param.json`, else the one in its `contentId` | `<home>/_SaveData/<id>` |
+| KytyPS5 | `titleId` of `sce_sys/param.json`, else the one in its `contentId` | `<home>/_SaveData/<id>` (under the game's own `working_dir` when it sets one) |
 | SharpEmu | the same | `<home>/user/savedata/<id>` |
 | Vita3K | the game's exe, a title id | `<pref-path>/ux0/user/00/savedata/<id>` (`config.yml`'s `pref-path`, else `~/.local/share/Vita3K/Vita3K`) |
 | Cemu | `title_id` of `meta/meta.xml` (an `.rpx`'s) | `<mlc>/usr/save/<high>/<low>` (the `mlc` option, `settings.xml`'s `mlc_path`, else `~/.local/share/Cemu/mlc01`) |

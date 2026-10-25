@@ -118,11 +118,10 @@ pub fn prefix_of(g: &crate::game::Game, config: &Config) -> PathBuf {
     }
 }
 
-/// The folder `program` starts in: the game's own, else the runner's home when the working directory is where it writes its saves, else the game file's folder.
-pub fn working_dir(g: &crate::game::Game, spec: Option<&crate::runners::RunnerSpec>, program: &str) -> PathBuf {
-    let data = crate::paths::xdg("XDG_DATA_HOME", ".local/share");
-    match spec.and_then(|s| crate::runners::home(s, Path::new(program), &data)) {
-        Some(home) if home.var.is_empty() && g.launch.working_dir.is_empty() => home.dir,
+/// The folder the game starts in: its own, else the runner's `home` when the working directory is where it writes its saves, else the game file's folder.
+pub fn working_dir(g: &crate::game::Game, home: Option<&crate::runners::Home>) -> PathBuf {
+    match home {
+        Some(home) if home.var.is_empty() && g.launch.working_dir.is_empty() => home.dir.clone(),
         _ => g.working_dir(),
     }
 }
@@ -324,6 +323,7 @@ pub fn plan(
     let hook_args = shell_words::split(&hook_args).map_err(|e| crate::Error::Invalid(format!("{}: {HOOK_GAME_ARGS}: {e}", g.id)))?;
     env.extend(config.launch.env.clone());
     let file = exe.to_string_lossy().to_string();
+    let home = runners::home(spec, Path::new(&r.effective.runner_path), &crate::paths::xdg("XDG_DATA_HOME", ".local/share"));
     let (program, mut args) = match spec.kind {
         Kind::Proton => {
             proton_env(g, r, config, &mut env)?;
@@ -345,12 +345,10 @@ pub fn plan(
             if r.effective.runner_path.is_empty() {
                 return Err(crate::Error::Unavailable(format!("{}: {} not found (install it or set runners.{}.exe)", g.id, spec.name, spec.id)));
             }
-            if let Some(home) = runners::home(spec, Path::new(&r.effective.runner_path), &crate::paths::xdg("XDG_DATA_HOME", ".local/share")) {
-                if home.stable {
-                    std::fs::create_dir_all(&home.dir)?;
-                    if !home.var.is_empty() {
-                        env.entry(home.var.into()).or_insert_with(|| home.dir.to_string_lossy().into());
-                    }
+            if let Some(home) = home.as_ref().filter(|h| h.stable) {
+                std::fs::create_dir_all(&home.dir)?;
+                if !home.var.is_empty() {
+                    env.entry(home.var.into()).or_insert_with(|| home.dir.to_string_lossy().into());
                 }
             }
             if spec.via_proton {
@@ -456,7 +454,7 @@ pub fn plan(
     Ok(Plan {
         program,
         args,
-        cwd: working_dir(g, Some(spec), &r.effective.runner_path),
+        cwd: working_dir(g, home.as_ref()),
         env,
         pre_command: g.launch.pre_command.clone(),
         post_command: g.launch.post_command.clone(),
@@ -825,6 +823,10 @@ mod tests {
         assert_eq!(planned("kytyps5", &ours, "").cwd, data.join("KytyPS5"), "Universe's build saves out of its slot");
         assert!(data.join("KytyPS5").is_dir(), "made before it starts there");
         assert_eq!(planned("kytyps5", &ours, "/elsewhere").cwd, Path::new("/elsewhere"), "the game's own folder wins");
+        let linked = env.path().join("bin/kyty_emulator");
+        std::fs::create_dir_all(linked.parent().unwrap()).unwrap();
+        std::os::unix::fs::symlink(&ours, &linked).unwrap();
+        assert_eq!(planned("kytyps5", &linked, "").cwd, data.join("KytyPS5"), "a link to Universe's build saves out of its slot too");
 
         let p = planned("sharpemu", &own_sharp, "");
         assert!(p.args.ends_with(&["--window-mode=borderless".into(), eboot]), "{:?}", p.args);

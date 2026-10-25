@@ -85,8 +85,8 @@ fn emulator_under(game: &Game, config: &Config, cfg: &Path, data: &Path) -> Opti
         }
         "kytyps5" | "sharpemu" => {
             let program = crate::library::runner_path(game, Some(spec), |s| runners::locate(s, config).program);
-            let home = runners::home(spec, Path::new(&program), data)?.dir;
-            let folder = if spec.id == "kytyps5" { home.join("_SaveData") } else { home.join("user/savedata") };
+            let home = runners::home(spec, Path::new(&program), data)?;
+            let folder = if spec.id == "kytyps5" { crate::launcher::working_dir(game, Some(&home)).join("_SaveData") } else { home.dir.join("user/savedata") };
             let id = exe.parent().and_then(|d| crate::roms::ps5_param(&d.join("sce_sys/param.json"))).map(|(_, id)| id).unwrap_or_default();
             let files = if id.is_empty() { vec![] } else { vec![literal(&folder.join(&id))] };
             (folder, id, files)
@@ -547,6 +547,9 @@ pub(crate) mod tests {
         own.launch.runner_exe = kyty.join("kyty_emulator").to_string_lossy().into();
         let saves = emulator_under(&own, &config, &cfg, &data).unwrap();
         assert_eq!(saves.folder, kyty.canonicalize().unwrap().join("_SaveData").to_string_lossy(), "the player's own Kyty saves beside itself");
+        own.launch.working_dir = "/elsewhere".into();
+        let saves = emulator_under(&own, &config, &cfg, &data).unwrap();
+        assert_eq!(saves.folder, "/elsewhere/_SaveData", "Kyty saves in the folder the game starts in");
         let saves = emulator_under(&game("sharpemu", &ps5.join("eboot.bin")), &config, &cfg, &data).unwrap();
         assert_eq!(saves.files, [format!("{}/SharpEmu/user/savedata/PPSA01234", data.display())]);
 

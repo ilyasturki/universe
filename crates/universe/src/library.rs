@@ -237,7 +237,8 @@ pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Modu
     let runner = game.runner_id();
     let spec = crate::runners::spec(&runner);
     let runner_path = runner_path(&game, spec, |s| located.entry(s.id.into()).or_insert_with(|| crate::runners::locate(s, config).program).clone());
-    let working_dir = crate::launcher::working_dir(&game, spec, &runner_path).to_string_lossy().into_owned();
+    let home = spec.and_then(|s| crate::runners::home(s, Path::new(&runner_path), &paths::xdg("XDG_DATA_HOME", ".local/share")));
+    let working_dir = crate::launcher::working_dir(&game, home.as_ref()).to_string_lossy().into_owned();
     let options = spec.map(|s| s.merged_options(config, Some(&game))).unwrap_or_default();
     let gamescope = game
         .launch
@@ -303,7 +304,6 @@ pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Modu
     Resolved { game, stats, sessions, media, screenshots, journal_count, achievements, effective, version: Default::default(), check: Default::default() }
 }
 
-/// The program `game` starts with: its own runner program, the build it pins, else the one `locate` finds for its runner.
 pub fn runner_path(game: &Game, spec: Option<&crate::runners::RunnerSpec>, locate: impl FnOnce(&crate::runners::RunnerSpec) -> String) -> String {
     let own_build = spec
         .filter(|_| !game.launch.runner_build.is_empty())

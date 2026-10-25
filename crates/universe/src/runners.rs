@@ -625,7 +625,9 @@ pub struct Home {
 /// Where `program` keeps its saves and caches: under `data` (`$XDG_DATA_HOME`) for Universe's build, else the program's own folder when it can write there.
 pub fn home(spec: &RunnerSpec, program: &Path, data: &Path) -> Option<Home> {
     let &(_, name, var) = HOMES.iter().find(|(id, _, _)| *id == spec.id)?;
-    let own = std::fs::canonicalize(program).ok().filter(|_| !program.starts_with(crate::components::root())).and_then(|p| p.parent().map(Path::to_path_buf));
+    let root = crate::components::root();
+    let ours = |p: &Path| p.starts_with(&root) || std::fs::canonicalize(&root).is_ok_and(|r| p.starts_with(r));
+    let own = std::fs::canonicalize(program).ok().filter(|p| !ours(program) && !ours(p)).and_then(|p| p.parent().map(Path::to_path_buf));
     match own.filter(|d| rustix::fs::access(d, rustix::fs::Access::WRITE_OK).is_ok()) {
         Some(dir) => Some(Home { dir, var, stable: false }),
         None => Some(Home { dir: data.join(name), var, stable: true }),
