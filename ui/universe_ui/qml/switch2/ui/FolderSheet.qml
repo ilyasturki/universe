@@ -29,7 +29,7 @@ Modal {
         });
         out.push({
             glyph: "B",
-            label: browser.atRoot ? "Cancel" : "Up"
+            label: "Cancel"
         });
         out.push({
             glyph: "A",
@@ -132,10 +132,7 @@ Modal {
             activate();
         } else if (api.keys.isCancel(event)) {
             Sound.play("back");
-            if (browser.up())
-                index = 0;
-            else
-                finish(null);
+            finish(null);
         } else if (api.keys.isDetails(event)) {
             if (files)
                 Sound.play("edge");

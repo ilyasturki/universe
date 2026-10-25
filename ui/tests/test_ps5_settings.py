@@ -1,7 +1,6 @@
 import pytest
-from looks import FocusTrace, Look, invoke
+from looks import Look, invoke
 from looks import read as value
-from looks import settle as drawn
 from PySide6.QtCore import Q_ARG, QMetaObject, QObject, Qt
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QTest
@@ -231,19 +230,3 @@ def test_the_controllers_page_names_an_unknown_button_and_b_leaves_the_test_on_i
     assert inputs[3]["dt"] is None and all(e["dt"] is not None for e in inputs[:3])
     click(window, Qt.Key.Key_Escape)
     until(lambda: not screen.testing and (focused_row(page) or {}).get("key") == "test", "B leaves the test on its row")
-
-
-def test_b_on_the_folder_chips_closes_the_sheet_however_deep_it_opened(ps5, tmp_path):
-    window, root, _warnings = ps5
-    page = push(root, "pages/SettingsPage.qml", {})
-    deep = tmp_path / "a" / "b" / "c"
-    deep.mkdir(parents=True)
-    invoke(root, "browse", {"path": str(deep)}, None)
-    folder = until(lambda: (f := window.findChild(QObject, "folder")) and f.property("activeFocus") and f)
-    click(window, Qt.Key.Key_Up)
-    assert folder.property("zone") == "chips"
-    trace = FocusTrace(window)
-    click(window, Qt.Key.Key_Escape)
-    until(lambda: folder.property("open") is False and page.property("activeFocus") is True, "one B gives the focus back to the page")
-    drawn(window)
-    assert trace.stop().foreign("folder", "settingsPage") == [], "every frame of the way out: the focus in the sheet or on the page"

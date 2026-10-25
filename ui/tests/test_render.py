@@ -1119,6 +1119,22 @@ def test_the_folder_sheet_follows_the_chip_past_the_screen_edge(look, tmp_path, 
     until(lambda: chip.property("x") + chip.property("width") <= chips.property("contentX") + chips.property("width"), "the last chip is in view")
 
 
+@stacked
+def test_b_on_the_folder_chips_closes_the_sheet_however_deep_it_opened(look, tmp_path):
+    page = look.open("pages/SettingsPage.qml")
+    deep = tmp_path / "a" / "b" / "c"
+    deep.mkdir(parents=True)
+    invoke(look.root, "browse", {"path": str(deep)}, None)
+    folder = until(lambda: (f := look.find("folder")).property("activeFocus") and f)
+    look.press(Qt.Key.Key_Up)
+    assert folder.property("zone") == "chips"
+    trace = FocusTrace(look.window)
+    look.press(Qt.Key.Key_Escape)
+    until(lambda: folder.property("open") is False and page.property("activeFocus") is True, "one B gives the focus back to the page")
+    settle(look.window)
+    assert trace.stop().foreign("folder", "settingsPage") == [], "every frame of the way out: the focus in the sheet or on the page"
+
+
 @reprise
 def test_a_section_switch_lights_no_row_where_the_cursor_was(look, api):
     page = look.settings("sources")
