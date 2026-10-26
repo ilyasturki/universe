@@ -63,7 +63,7 @@ pub fn channel_of(runner: &str) -> &'static str {
 pub fn checked(field: &str, value: &str) -> Result<String> {
     let value = value.trim();
     match field {
-        "pin" | "seen" => Ok(value.into()),
+        "pin" | "seen" | "seen_installed" => Ok(value.into()),
         "final" if matches!(value, "" | "true" | "false") => Ok(value.into()),
         "final" => Err(Error::Invalid("version.final takes true or false".into())),
         "switch_title_id" if value.is_empty() || is_title_id(value) => Ok(value.to_ascii_lowercase()),

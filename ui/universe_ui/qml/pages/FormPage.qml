@@ -9,13 +9,15 @@ FocusScope {
     objectName: "formPage"
     focus: true
 
-    // { runner } | { module } | { source }: one runner's, one module's or one source's settings (a game's is GameSettingsPage);
+    // { runner } | { module } | { source } | { updates }: one runner's, one module's or one source's settings (a game's is
+    // GameSettingsPage), or the games with an update;
     // `key` (and a module setting's `settingModule`) lands the cursor on that row, Advanced turned on if it sits behind it;
     // `returnGame` on the row of that game, back from its settings.
     property var args: ({})
     readonly property string runner: args.runner || ""
     readonly property string module: args.module || ""
     readonly property string source: args.source || ""
+    readonly property bool updates: args.updates === true
     readonly property var form: formOf(args)
     readonly property var info: form.info === undefined ? null : form.info
     readonly property var login: api.screens.login
@@ -23,7 +25,7 @@ FocusScope {
     property string landModule: ""
 
     function formOf(a) {
-        return a.runner ? api.screens.runner : a.source ? api.screens.source : api.screens.module;
+        return a.runner ? api.screens.runner : a.source ? api.screens.source : a.updates ? api.screens.updates : api.screens.module;
     }
 
     signal closeRequested
@@ -45,7 +47,9 @@ FocusScope {
             "Options": "sliders",
             "Games": "library",
             "Settings": "sliders",
-            "Sign-in": "user"
+            "Sign-in": "user",
+            "Updates available": "download",
+            "Can't tell": "info"
         })
 
     readonly property var row: body.currentRow
@@ -106,15 +110,19 @@ FocusScope {
     readonly property bool hasLogo: info !== null && info.icon !== undefined && String(info.icon) !== "" && logo.status === Image.Ready
 
     // A runner's form reloads on every library change; unloaded once its page is gone.
-    Component.onDestruction: if (page.runner !== "")
-        api.screens.runner.load("")
+    Component.onDestruction: {
+        if (page.runner !== "")
+            api.screens.runner.load("");
+        if (page.updates)
+            api.screens.updates.close();
+    }
 
     // The derived runner/module/source are still stale here: read the args themselves. The cursor settles once the page is
     // laid out: the row a game's settings were opened from comes back, a search hit lands, anything else starts on the sidebar.
     onArgsChanged: {
         var id = args.runner || args.module || args.source || "";
         // The next page's args, handed over as this one goes.
-        if (id === "")
+        if (id === "" && args.updates !== true)
             return;
         landKey = args.returnGame ? "" : args.key || "";
         landModule = args.settingModule || "";
@@ -262,6 +270,16 @@ FocusScope {
             menu.show(gameActions(row), cards, cards.focusRect, row.label, function (action) {
                 page.gameAction(row, action);
             });
+        } else if (row.key === "update_game" && row.how === "mark") {
+            Sound.panel();
+            dialog.ask(row.confirm, function (yes) {
+                if (yes)
+                    api.updateGame(row.gameId);
+                cards.forceActiveFocus();
+            });
+        } else if (row.key === "update_game") {
+            Sound.enter();
+            api.updateGame(row.gameId);
         } else if (row.key === "component") {
             componentMenu(row.component, api.screens.components.actions(row.component), row.label);
         } else if (row.type === "bool") {
@@ -355,7 +373,7 @@ FocusScope {
             spacing: Theme.dp(4)
 
             CapsLabel {
-                text: page.runner !== "" ? "RUNNER" : page.source !== "" ? "SOURCE" : "MODULE"
+                text: page.runner !== "" ? "RUNNER" : page.source !== "" ? "SOURCE" : page.updates ? "GAME DEFAULTS" : "MODULE"
             }
 
             Text {

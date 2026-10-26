@@ -21,6 +21,17 @@ Row {
                 key: "lastPlayed",
                 text: "Last played " + Format.lastPlayed(game.lastPlayed).toLowerCase()
             });
+        var status = game.version.status;
+        if ((status === "current" || status === "update") && game.installedVersion)
+            out.push({
+                key: "version",
+                text: "Version " + game.installedVersion
+            });
+        if (status === "current")
+            out.push({
+                key: "upToDate",
+                text: "Up to date"
+            });
         return out;
     }
     readonly property string mark: game ? game.updateMark : ""

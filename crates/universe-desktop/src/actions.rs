@@ -141,7 +141,6 @@ mod tests {
         assert_eq!(offered(store("update", "manual", "not-owned")), none, "the store refuses it, and its build is the install's own");
         let steam = |status, markable| Check { status, how: "manual", markable, ..Default::default() };
         assert_eq!(offered(steam("update", true)), ["mark-current"]);
-        assert_eq!(offered(steam("likely", true)), ["mark-current"]);
         assert_eq!(offered(steam("unknown", true)), ["mark-current"], "upstream's build gives it a baseline");
         assert_eq!(offered(steam("current", true)), none);
         assert_eq!(offered(steam("untracked", false)), none, "nothing upstream to ask");

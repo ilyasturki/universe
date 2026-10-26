@@ -49,7 +49,7 @@ function bytes(n) {
 }
 
 function updateMark(mark) {
-    return mark === "update" ? "Update available" : mark === "likely" ? "May be out of date" : "";
+    return mark === "update" ? "Update available" : "";
 }
 
 function sessions(count) {

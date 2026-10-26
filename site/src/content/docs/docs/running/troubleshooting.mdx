@@ -38,7 +38,7 @@ A Proton game that crashed may still read **Quit** when Proton filed no report.
 
 [`universe info <game>`](/docs/reference/cli/info/) prints the installed version, as the game's files give it: a Windows program's version, a Unity game's own, a PS3 disc's, the update a Switch emulator applies or a ROM's name. When the files say nothing or the wrong thing, set **Installed version** in Game settings (Show advanced), or run `universe set <game> version.pin=1.2`.
 
-[`universe update --all`](/docs/reference/cli/update/) puts each game's version next to the newest one out. A PC game is checked against its latest build on Steam, so it needs its Steam app id (`universe set <game> metadata.steam_appid=<id>`). A Switch game is checked against titledb's list of updates, a PS3 game against Sony's, a GOG game against GOG. `universe update` alone lists only the games behind. Universe can't update a repack or a ROM, so you update it yourself and then run `universe update <game> --mark-current`.
+[`universe update --all`](/docs/reference/cli/update/) puts each game's version next to the newest one out. A PC game is checked against its latest build on Steam, so it needs its Steam app id (`universe set <game> metadata.steam_appid=<id>`). A Switch game is checked against titledb's list of updates, a PS3 game against Sony's, a GOG game against GOG. `universe update` alone lists only the games behind. Universe can't update a repack or a ROM, so you update it yourself, then confirm it in [Game updates](/docs/settings/game-defaults/#game-updates) or with `universe update <game> --mark-current`.
 
 ## Prefix tools
 

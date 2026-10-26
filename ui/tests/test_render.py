@@ -1650,9 +1650,21 @@ def test_the_hero_shows_the_focused_game_s_background_on_home_and_on_its_page(lo
     until(lambda: art_shown(root, ident, "background"), "the game page's hero")
 
 
+UNSURE = {
+    "status": "unknown",
+    "reason": "no-baseline",
+    "how": "manual",
+    "markable": True,
+    "channel": "pc",
+    "installed": "1.0.3",
+    "latest": "300",
+    "latest_date": "2020-11-06",
+}
+
+
 def test_a_game_page_offers_the_stores_update_or_mark_as_current_by_hand(look, api, fake):
     fake.core._game("control")["version"] = {"status": "update", "reason": "not-owned", "how": "manual", "store": "gog", "store_id": "2049187585"}
-    fake.core._game("the-technomancer")["version"] = {"status": "likely"}
+    fake.core._game("the-technomancer")["version"] = dict(UNSURE)
     api.library.refresh("control")
     api.library.refresh("the-technomancer")
     offered, marks = {}, {}
@@ -1660,19 +1672,49 @@ def test_a_game_page_offers_the_stores_update_or_mark_as_current_by_hand(look, a
         page = look.game_page(ident)
         offered[ident] = {"update", "mark-current"} & set(look.game_actions(page))
         marks[ident] = look.update_mark(page)
-    assert offered == {"mini-metro": {"update"}, "dishonored": {"mark-current"}, "control": set(), "the-technomancer": set(), "dead-cells": set()}, (
-        "GOG refuses control"
+    by_hand = set() if look.name == "reprise" else {"mark-current"}
+    assert offered == {"mini-metro": {"update"}, "dishonored": by_hand, "control": set(), "the-technomancer": by_hand, "dead-cells": set()}, (
+        "GOG refuses control; Reprise marks a game current from Game updates"
     )
     if look.name != "ps5":
-        assert marks == {"mini-metro": "update", "dishonored": "update", "control": "update", "the-technomancer": "likely", "dead-cells": ""}, (
-            "one mark while upstream is ahead, none with no status"
+        assert marks == {"mini-metro": "update", "dishonored": "update", "control": "update", "the-technomancer": "", "dead-cells": ""}, (
+            "one mark while upstream is ahead, none when it can't tell"
         )
-    page = look.game_page("dishonored")
-    look.game_action(page, "mark-current")
-    until(lambda: "mark-current" not in look.game_actions(page), "marked, it is current")
-    assert fake.game("dishonored")["version"]["status"] == "current"
-    assert look.update_mark(page) in ("", None), "current: no mark"
+    if look.name != "reprise":
+        page = look.game_page("dishonored")
+        look.game_action(page, "mark-current")
+        until(lambda: "mark-current" not in look.game_actions(page), "marked, it is current")
+        assert fake.game("dishonored")["version"]["status"] == "current"
+        assert look.update_mark(page) in ("", None), "current: no mark"
     page = look.game_page("mini-metro")
     look.game_action(page, "update")
     until(lambda: (api.screens.sources.job or {}).get("game") == "1434554947", "Downloads' job updates it")
     until(lambda: "update" not in look.game_actions(page), "updated, it is current")
+
+
+@pytest.mark.parametrize("look", ["reprise"], indirect=True)
+def test_game_updates_lists_the_games_behind_and_behind_y_the_ones_to_confirm(look, api, fake):
+    fake.core._game("the-technomancer")["version"] = dict(UNSURE)
+    fake.core._game("dead-cells")["version"] = {"status": "current", "how": "manual", "installed": "3.4"}
+    api.library.refresh("the-technomancer")
+    api.library.refresh("dead-cells")
+    facts = lambda ident: [f["key"] for f in read(look.game_page(ident).findChild(QObject, "stats"), "facts")]
+    assert {"version", "upToDate"} & set(facts("the-technomancer")) == set(), "nothing said while it can't tell"
+    assert "version" in facts("dishonored") and "upToDate" not in facts("dishonored")
+    assert {"version", "upToDate"} <= set(facts("dead-cells"))
+
+    settings = look.settings("launch")
+    activate(settings, content_rows(settings), key="game_updates")
+    page = look.page("formPage")
+    form = api.screens.updates
+    shown = lambda: [form.rows[i]["gameId"] for g in form.groups for i in g["rows"] if form.rows[i].get("gameId")]
+    until(lambda: shown() == ["dishonored", "mini-metro"], "the games behind")
+    look.press(Qt.Key.Key_F)
+    until(lambda: "the-technomancer" in shown(), "Y shows the ones it can't tell")
+    row = next(i for i, r in enumerate(form.rows) if r.get("gameId") == "the-technomancer")
+    invoke(page, "activate", row, form.rows[row])
+    dialog = page.findChild(QObject, "dialog")
+    until(lambda: dialog.property("open") is True, "it asks before taking it as the latest")
+    look.press(Qt.Key.Key_Return)
+    until(lambda: fake.game("the-technomancer")["version"]["status"] == "current")
+    until(lambda: "the-technomancer" not in shown(), "confirmed, it leaves the list")

@@ -203,7 +203,7 @@ class Game(QObject):
             return f"Update available, not owned on {SOURCE_NAMES.get(store, store)}"
         if status == "unknown":
             return "Not checked yet" if reason == "no-answer" else "Can't tell if it's up to date"
-        return {"update": "Update available", "likely": "Likely out of date", "current": "Up to date"}.get(status, "")
+        return {"update": "Update available", "current": "Up to date"}.get(status, "")
 
     # Mark as current also before any update: upstream's build then gives the game a baseline.
     def _update_action(self):
@@ -215,8 +215,7 @@ class Game(QObject):
         return ""
 
     def _update_mark(self):
-        status = self._version.get("status")
-        return status if status in ("update", "likely") else ""
+        return "update" if self._version.get("status") == "update" else ""
 
     def setCollections(self, model):
         self._collections = model

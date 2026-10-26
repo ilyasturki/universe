@@ -54,7 +54,7 @@ GAME = {
     "desktop": {"hide_cursor": None},
     "metadata": dict.fromkeys(("sgdb_id", "gamesdb_id", "steam_appid", "metacritic", "players"), 0)
     | {"developers": [], "publishers": [], "genres": [], "summary": "", "description": "", "playstation": ""},
-    "version": {"pin": "", "probe": "", "switch_title_id": "", "seen": "", "final": False, "newer": 0, "markable": False}
+    "version": {"pin": "", "probe": "", "switch_title_id": "", "seen": "", "seen_installed": "", "final": False, "newer": 0, "markable": False}
     | dict.fromkeys(("installed", "from", "channel", "title_id", "build", "modified"), "")
     | dict.fromkeys(("status", "reason", "how", "store", "store_id", "latest", "latest_date"), ""),
     "modules": {},
@@ -1857,7 +1857,7 @@ class FakeCore:
         if not shown.get("markable"):
             raise UniverseError("Invalid", f"{id} has no upstream build to take")
         seen = build or shown.get("latest") or ""
-        self._game(id).setdefault("version", {}).update(seen=seen, status="current", reason="", newer=0)
+        self._game(id).setdefault("version", {}).update(seen=seen, seen_installed=shown.get("installed") or "", status="current", reason="", newer=0)
         return seen
 
     def scan(self, source, progress=None):

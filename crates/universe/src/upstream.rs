@@ -366,9 +366,9 @@ pub(crate) async fn newest(net: &Net, game: &Game, read: &Installed) -> Result<S
 /// How a game's installed version stands against upstream's newest.
 #[derive(Debug, Clone, Default, Serialize, PartialEq)]
 pub struct Check {
-    /// `current`, `update`, `likely`, `unknown`, `final`, `untracked`; empty for a game no update channel reaches.
+    /// `current`, `update`, `unknown`, `final`, `untracked`; empty for a game no update channel reaches.
     pub status: &'static str,
-    /// `no-answer`, `no-baseline`, `dates-rewritten`, `none-listed`, `not-owned`, or empty.
+    /// `no-answer`, `no-baseline`, `none-listed`, `not-owned`, or empty.
     pub reason: &'static str,
     /// `apply` when its store updates it, `manual` when it is updated by hand; empty when no update applies.
     pub how: &'static str,
@@ -399,7 +399,7 @@ pub fn check(game: &Game, read: &Installed, up: &Upstream) -> Check {
             None => Check { store: store.into(), store_id: id.into(), ..manual("unknown", "no-answer") },
         },
         None => match read.channel {
-            "pc" => by_steam(game, read, up),
+            "pc" => by_steam(game, up),
             "switch" => by_titledb(game, read, up),
             "ps3" => by_sony(read, up),
             "gog" => manual("unknown", "no-answer"),
@@ -412,6 +412,19 @@ pub fn check(game: &Game, read: &Installed, up: &Upstream) -> Check {
     }
     c.markable = mark_refusal(game, read, &c.store).is_none() && if read.channel == "pc" { game.metadata.steam_appid != 0 } else { !read.title_id.is_empty() };
     c
+}
+
+/// The new `seen` of a PC game whose version moved off `seen_installed` (updated by hand), or of one marked before it was kept.
+pub(crate) fn rebase(game: &Game, read: &Installed, c: &Check) -> Option<String> {
+    let v = &game.version;
+    if read.channel != "pc" || !c.store.is_empty() || v.seen.is_empty() || read.installed.is_empty() || read.installed == v.seen_installed {
+        return None;
+    }
+    match c.status {
+        "update" if !v.seen_installed.is_empty() => Some(c.latest.clone()),
+        "current" if v.seen_installed.is_empty() => Some(v.seen.clone()),
+        _ => None,
+    }
 }
 
 /// Why `mark_current` refuses the game, whatever build it is given.
@@ -453,7 +466,7 @@ fn by_store(game: &Game, read: &Installed, list: &Store, store: &str, id: &str) 
     }
 }
 
-fn by_steam(game: &Game, read: &Installed, up: &Upstream) -> Check {
+fn by_steam(game: &Game, up: &Upstream) -> Check {
     let appid = game.metadata.steam_appid;
     if appid == 0 {
         return manual("untracked", "");
@@ -464,13 +477,8 @@ fn by_steam(game: &Game, read: &Installed, up: &Upstream) -> Check {
         ("current", "")
     } else if !seen.is_empty() {
         ("update", "")
-    } else if read.modified.is_empty() || s.date.is_empty() {
-        ("unknown", "no-baseline")
-    // Steam builds a branch after the program in it was compiled: a program dated after the build had its dates rewritten.
-    } else if read.modified < s.date {
-        ("likely", "")
     } else {
-        ("unknown", "dates-rewritten")
+        ("unknown", "no-baseline")
     };
     Check { latest: s.build.clone(), latest_date: s.date.clone(), newer: usize::from(!seen.is_empty() && *seen != s.build), ..manual(status, reason) }
 }
@@ -581,7 +589,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_pc_game_stands_by_steams_build_its_seen_build_else_its_programs_date() {
+    async fn a_pc_game_stands_by_steams_build_and_its_seen_build() {
         let env = paths::test_env();
         let games = env.path().join("games");
         let old = program(&games.join("Old/old.exe"), "2020-01-01");
@@ -590,8 +598,8 @@ mod tests {
         game("Current", "proton", &old, |g| (g.metadata.steam_appid, g.version.seen) = (1, "100".into()));
         game("Behind", "wine", &old, |g| (g.metadata.steam_appid, g.version.seen) = (2, "99".into()));
         game("Held", "proton", &old, |g| (g.metadata.steam_appid, g.version.seen, g.version.r#final) = (2, "99".into(), true));
-        game("Likely", "proton", &old, |g| g.metadata.steam_appid = 3);
-        game("Rewritten", "proton", &new, |g| g.metadata.steam_appid = 3);
+        game("Older", "proton", &old, |g| g.metadata.steam_appid = 3);
+        game("Newer", "proton", &new, |g| g.metadata.steam_appid = 3);
         game("Missing", "proton", &games.join("Gone/gone.exe"), |g| g.metadata.steam_appid = 3);
         game("Silent", "proton", &old, |g| g.metadata.steam_appid = 4);
         let net = saved(vec![steam(1, "100"), steam(2, "200"), steam(3, "300")]);
@@ -608,11 +616,11 @@ mod tests {
             "the build's day, not the store page's"
         );
         assert_eq!((of(&v, "held"), v["held"]["newer"].as_u64()), (("final", "", "", "200"), Some(1)));
-        assert_eq!(of(&v, "likely"), ("likely", "", "manual", "300"), "a program older than Steam's build");
-        assert_eq!(of(&v, "rewritten"), ("unknown", "dates-rewritten", "manual", "300"));
+        assert_eq!(of(&v, "older"), ("unknown", "no-baseline", "manual", "300"), "a program's date says nothing of its build");
+        assert_eq!(of(&v, "newer"), ("unknown", "no-baseline", "manual", "300"));
         assert_eq!(of(&v, "missing"), ("unknown", "no-baseline", "manual", "300"));
         assert_eq!(of(&v, "silent"), ("unknown", "no-answer", "manual", ""));
-        assert_eq!(markable(&v), ["behind", "current", "held", "likely", "missing", "rewritten", "silent"], "every game Steam can be asked about");
+        assert_eq!(markable(&v), ["behind", "current", "held", "missing", "newer", "older", "silent"], "every game Steam can be asked about");
         let urls = [1, 2, 3, 4].map(|id| format!("{STEAM}{id}"));
         assert_eq!(asked(&net), urls, "an app id is asked once");
 
@@ -622,11 +630,39 @@ mod tests {
 
         assert_eq!(core.mark_current_with(&net, "behind", "").await.unwrap(), "200", "Steam asked anew");
         assert_eq!(asked(&net).last().unwrap(), &format!("{STEAM}2"));
-        assert_eq!(core.mark_current_with(&net, "likely", "300").await.unwrap(), "300");
+        assert_eq!(core.mark_current_with(&net, "older", "300").await.unwrap(), "300");
         let v = judged(&core).await;
-        assert_eq!((of(&v, "behind").0, of(&v, "likely").0, v["likely"]["seen"].as_str()), ("current", "current", Some("300")));
+        assert_eq!((of(&v, "behind").0, of(&v, "older").0, v["older"]["seen"].as_str()), ("current", "current", Some("300")));
         assert!(core.mark_current_with(&net, "untracked", "").await.is_err(), "no app id to ask Steam about");
-        assert!(core.mark_current_with(&net, "likely", "v1.2").await.is_err());
+        assert!(core.mark_current_with(&net, "older", "v1.2").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn a_pc_game_updated_by_hand_is_current_once_its_version_moves() {
+        let env = paths::test_env();
+        let exe = program(&env.path().join("games/Sekiro/sekiro.exe"), "2021-06-21");
+        game("Sekiro", "proton", &exe, |g| g.metadata.steam_appid = 2);
+        game("Marked", "proton", &exe, |g| (g.metadata.steam_appid, g.version.seen) = (1, "100".into()));
+        let core = open().await;
+        let net = saved(vec![steam(1, "100"), steam(2, "200")]);
+        core.check_versions_with(&net, "").await.unwrap();
+        assert_eq!(judged(&core).await["marked"]["seen_installed"], "1.0.3", "a game marked before the version was kept");
+        assert_eq!(core.mark_current_with(&net, "sekiro", "").await.unwrap(), "200");
+        assert_eq!(judged(&core).await["sekiro"]["seen_installed"], "1.0.3");
+
+        let patched = saved(vec![steam(1, "100"), steam(2, "201")]);
+        std::fs::remove_file(Upstream::file()).unwrap();
+        core.check_versions_with(&patched, "").await.unwrap();
+        assert_eq!(of(&judged(&core).await, "sekiro"), ("update", "", "manual", "201"), "the same version once a patch ships");
+
+        Exe { strings: &[("ProductVersion", "1.0.4")], ..Default::default() }.write(&exe);
+        core.reload_game("sekiro").await.unwrap();
+        core.check_versions_with(&patched, "").await.unwrap();
+        let v = judged(&core).await;
+        assert_eq!(
+            (of(&v, "sekiro").0, &v["sekiro"]["seen"], &v["sekiro"]["seen_installed"]),
+            ("current", &serde_json::json!("201"), &serde_json::json!("1.0.4"))
+        );
     }
 
     #[tokio::test]

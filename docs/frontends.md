@@ -42,8 +42,8 @@ A `Game` exposes `id`, `title`, `sortTitle`, `favorite` (writable), `hidden`, `p
 `collections`, and `assets` (`boxFront`, `square`, `banner`, `background`, `logo`, `screenshotList`), plus
 `launch()`. `version` is the core's (`api.md` § Games), `installedVersion` its `installed`, `updateState` how it
 stands in words, `updateAction` the game page's update action: `update` (its store applies it), `mark-current`
-(updated by hand) or empty, and `updateMark` the one mark a game page shows: `update` or `likely` as the status says,
-empty for every other status. `api.updateGame(id)` runs the action: the store's update as Downloads' job, told by a notice
+(updated by hand) or empty, and `updateMark` the one mark a game page shows: `update` while upstream is ahead, empty
+for every other status. `api.updateGame(id)` runs the action: the store's update as Downloads' job, told by a notice
 wherever the player is, or `api.universe.markCurrent(id, title)`. Every look's game page asks
 `api.universe.checkVersions(id)` as it opens, and the host every game's 5 s after the start (not in a `--keys` run).
 
@@ -1205,6 +1205,16 @@ and the same page as `switch2/pages/FormPage.qml`, pushed on its stack, PS5 like
 settings page's Launch group follows the runner: a Runner picker (names shown, ids written), then
 the rows the runner takes.
 
+In the Universe look, Game defaults' Updates card ends in a Game updates row (`game_updates`, added by
+`pages/SettingsPage.qml`, not the core's form) that opens `pages/FormPage.qml` with `{ updates: true }` on
+`api.screens.updates` (`screens/updates.py`): one `update_game` row per game not hidden whose status is `update`,
+by title (a "No update available" info row when none is), then behind Y an advanced Can't tell card of the
+`unknown` games `markable` takes. A row's `how` is `apply` (A runs the store's update) or `mark` (A asks first with
+its `confirm` spec: the installed version and the day of upstream's newest build, then `api.updateGame(id)` marks it
+current); a game updated by hand that is not markable is an info row. The page follows `libraryChanged` while open.
+Its game page no longer offers Mark as current; its facts line adds the installed version while the status is
+`current` or `update`, and Up to date while it is `current`.
+
 A component row's A is its options, on a runner's page and in Tools alike: the Universe look's page and
 section `componentMenu(id, …)` over their `menu.show` and `ConfirmDialog`, Switch 2's and PS5's
 `componentOptions(id, title)` on the shell, over `shell.menu` and `dialogAsk`. The rows' tags in Switch
@@ -1640,8 +1650,8 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
   a bar under every page (`playing_bar`, the window's own `NowPlaying`) whenever the sidebar's foot is
   out of sight: folded, hidden with F9, or under a page pushed over the home.
 - **Game page** (`pages/game.rs`): the library's row alone draws the hero at once (the byline, the
-  facts line with the runner, the achievement count left to its row below), and under the title only an update mark (Update available for `update`, May be out
-  of date for `likely`, nothing otherwise and never the version). The body under the hero (Your
+  facts line with the runner, the achievement count left to its row below), and under the title only an update mark (Update available for `update`, nothing
+  otherwise and never the version). The body under the hero (Your
   Play, About, the Gallery of the store's pictures) waits in a `loading` stack child until the
   details land (`get`, the screenshots' count and whether the source's manifest lists achievements,
   read without asking the stores), so it shows in one frame and nothing already drawn moves; the

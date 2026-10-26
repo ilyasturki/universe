@@ -133,6 +133,8 @@ pub struct Version {
     pub switch_title_id: String,
     /// The upstream build taken as the installed one: a Steam build id, a Switch title version.
     pub seen: String,
+    /// The installed version when `seen` was taken: another one later means the game was updated to upstream's newest.
+    pub seen_installed: String,
     pub r#final: bool,
 }
 

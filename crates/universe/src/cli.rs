@@ -180,7 +180,8 @@ pub enum Cmd {
         name: String,
         /// key=value; launch keys (`universe launch-keys`) need no `launch.` prefix, a runner option is options.<key>; the installed
         /// version is version.pin (said by hand), version.probe (@<file> or @<file>:<regex>, where the files hold it),
-        /// version.switch_title_id, version.seen (the upstream build taken as installed) and version.final=true (no update flagged)
+        /// version.switch_title_id, version.seen (the upstream build taken as installed), version.seen_installed (the version installed then)
+        /// and version.final=true (no update flagged)
         pairs: Vec<String>,
     },
     /// The launch keys: what `set` and `config set launch.*` take, with each one's type, default and scope
@@ -943,7 +944,6 @@ fn update_table<'a>(games: impl IntoIterator<Item = &'a Value>) -> Table {
             latest = format!("{latest} ({})", s(v, "latest_date"));
         }
         let mut status = match s(v, "status").as_str() {
-            "likely" => "likely outdated".to_string(),
             "untracked" => "not tracked".to_string(),
             other => other.to_string(),
         };
@@ -955,7 +955,7 @@ fn update_table<'a>(games: impl IntoIterator<Item = &'a Value>) -> Table {
         }
         let how = match s(v, "how").as_str() {
             "apply" => s(v, "store"),
-            "manual" if matches!(s(v, "status").as_str(), "update" | "likely") => "by hand".into(),
+            "manual" if s(v, "status") == "update" => "by hand".into(),
             _ => String::new(),
         };
         let dash = |x: String| Cell::new(if x.is_empty() { "-".to_string() } else { x });
@@ -1380,7 +1380,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 return print_json(&update_row(&g));
             }
             println!("{}", update_table([&g]));
-            if s(v, "how") == "manual" && matches!(s(v, "status").as_str(), "update" | "likely") {
+            if s(v, "how") == "manual" && s(v, "status") == "update" {
                 if v["markable"] == true {
                     anyhow::bail!("update it by hand, then: universe update {id} --mark-current");
                 }
@@ -1391,7 +1391,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             core.check_versions("").await?;
             let mut games = core.list().await;
             games.sort_by_cached_key(|g| s(g, "title").to_lowercase());
-            let pending = |g: &Value| g["hidden"] != true && matches!(g["version"]["status"].as_str(), Some("update" | "likely"));
+            let pending = |g: &Value| g["hidden"] != true && g["version"]["status"] == "update";
             let shown: Vec<&Value> = games.iter().filter(|g| all || pending(g)).collect();
             if json {
                 return print_json(&shown.iter().map(|g| update_row(g)).collect::<Vec<_>>());
@@ -2938,6 +2938,7 @@ fn game_keys() -> Vec<String> {
             "version.probe=",
             "version.switch_title_id=",
             "version.seen=",
+            "version.seen_installed=",
             "version.final=",
             "capture.cursor=",
         ]

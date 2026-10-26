@@ -394,7 +394,7 @@ FocusScope {
     }
 
     function openSub(source, args) {
-        if (!args.game && !args.runner && !args.module && !args.source && !args.add && !args.setup)
+        if (!args.game && !args.runner && !args.module && !args.source && !args.add && !args.setup && !args.updates)
             return;
         Sound.enter();
         showSub(source, args);
@@ -582,14 +582,7 @@ FocusScope {
                 icon: "folder",
                 label: "Data and saves",
                 action: "data"
-            }
-        ].concat(game.updateAction === "mark-current" ? [
-            {
-                icon: "check",
-                label: "Mark as current",
-                action: "mark-current"
-            }
-        ] : []).concat([
+            },
             {
                 icon: "eye-off",
                 label: "Remove from library…",
@@ -597,7 +590,7 @@ FocusScope {
                 danger: true,
                 gap: true
             }
-        ]);
+        ];
         var openPage = function (action) {
             root.openGamePage(game, action);
         };
@@ -627,9 +620,6 @@ FocusScope {
                 gameMenu.push(action === "media" ? media : manage, action === "media" ? "Media" : "Manage", function (picked) {
                     if (picked === "remove") {
                         askRemove();
-                    } else if (picked === "mark-current") {
-                        root.restoreFocus();
-                        api.updateGame(game.id);
                     } else {
                         openPage(picked);
                     }
@@ -1010,6 +1000,11 @@ FocusScope {
                         function onSourceRequested(source) {
                             root.openSub("pages/FormPage.qml", {
                                 source: source
+                            });
+                        }
+                        function onUpdatesRequested() {
+                            root.openSub("pages/FormPage.qml", {
+                                updates: true
                             });
                         }
                         function onSetupRequested() {

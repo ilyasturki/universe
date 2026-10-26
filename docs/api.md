@@ -148,7 +148,7 @@ looked for from the program's folder up. `channel` follows the runner, not the s
 `title_id` is the Switch title id (the ROM name's `[0100…]`, else `switch_title_id`), the PS3 `TITLE_ID` or the GOG
 game id; `build` the GOG `buildId` or the Switch title version (`update << 16`) the emulator or the name gives;
 `modified` the day the file read last changed. `seen` (the upstream build taken as installed: a Steam build id, a Switch
-title version) and `final` are the player's.
+title version) and `final` are the player's; `seen_installed` is `installed` when `seen` was taken.
 
 The rest is how the game stands by the answers `check_versions` kept. A game is judged by its store when that source
 is on: the one it came from (by `source.kind` and `source.id`), else GOG for a `gog` install (by its game id); until
@@ -157,18 +157,22 @@ the store has answered it is `unknown`. That store's `update` row decides: `curr
 own game it does not list is `current`. Its
 `local_version`, when it names the installed build, shows as `installed` with `from` the store's id. Without a store,
 the channel decides: `pc` by Steam's public branch (`api.steamcmd.net/v1/info/<metadata.steam_appid>`): `current` when
-`seen` is its build id, `update` when `seen` is another, else `likely` when `modified` is before the branch's build
-day, `unknown` otherwise; `switch` by titledb's `versions.json` (downloaded once a day): the title version the emulator
+`seen` is its build id, `update` when `seen` is another, else `unknown` (a program's date says nothing of its
+build); `switch` by titledb's `versions.json` (downloaded once a day): the title version the emulator
 or the ROM's name gives, else `seen`, against titledb's newest; `ps3` by Sony's update feed for the `TITLE_ID`
 against `installed`; `final` is `final`. Steam and Sony answers and a store's list are asked again after four hours, a
-missing one at the next check. `status` is `current`, `update`, `likely`, `unknown`, `final` (also whenever `final`
+missing one at the next check. `status` is `current`, `update`, `unknown`, `final` (also whenever `final`
 is set) or `untracked` (no Steam app id, Switch title id or `TITLE_ID` to ask about), empty without a channel.
 `reason` says why when it helps: `no-answer` (nothing kept from upstream), `no-baseline` (no installed build to
-compare), `dates-rewritten` (the program is dated after Steam's build), `none-listed` (upstream lists no update),
+compare), `none-listed` (upstream lists no update),
 `not-owned` (the store would refuse the update). `how` is `apply` when the store updates it (`source_update(store,
 store_id)`), `manual` when it is updated by hand then `mark_current`, empty for a final game. `latest` is upstream's
 newest as it names it (the store's version name, Sony's version, titledb's title version, Steam's build id) and
 `latest_date` its day; `newer` counts upstream's builds past the installed one (titledb's versions above it, else 1). `markable` says `mark_current(id)` takes the game: no store judges it, and it has a Steam app id, or a Switch title id and no title version from its emulator or its ROM's name.
+`mark_current` also keeps `installed` as `seen_installed`. A `pc` game no store judges whose `installed` then moves off
+it was updated by hand: once Steam is ahead of `seen`, `check_versions` takes Steam's build as `seen` and the new
+`installed` as `seen_installed`, so it is `current` again. A `current` game marked before `seen_installed` was kept gets
+it at the next check.
 
 `effective` is what the launch will use: the game's own keys over the global defaults, the runner
 resolved (`runner_path` empty when its program was not found), the platform the runner implies when

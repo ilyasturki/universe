@@ -113,7 +113,6 @@ impl Row {
 pub fn update_mark(row: &Row) -> String {
     match row.check.status {
         "update" => gettext("Update available"),
-        "likely" => gettext("May be out of date"),
         _ => String::new(),
     }
 }
@@ -250,7 +249,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_an_update_or_a_likely_one_is_marked_and_never_with_a_version() {
+    fn only_an_update_is_marked_and_never_with_a_version() {
         let mark = |status: &'static str, reason: &'static str| {
             let check = universe::upstream::Check { status, reason, how: "apply", latest: "1.42".into(), version_name: "1.41".into(), ..Default::default() };
             update_mark(&Row { check, ..Default::default() })
@@ -258,10 +257,9 @@ mod tests {
         for (status, reason) in [("current", ""), ("unknown", "no-answer"), ("unknown", "no-baseline"), ("final", ""), ("untracked", ""), ("", "")] {
             assert_eq!(mark(status, reason), "", "{status} {reason}");
         }
-        let marked = [mark("update", ""), mark("update", "not-owned"), mark("likely", "")];
+        let marked = [mark("update", ""), mark("update", "not-owned")];
         assert!(marked.iter().all(|m| !m.is_empty() && !m.contains("1.4")), "{marked:?}");
         assert_eq!(marked[0], marked[1], "whoever owns it, an update reads the same");
-        assert_ne!(marked[0], marked[2]);
     }
 
     #[test]

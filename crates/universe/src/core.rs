@@ -2513,8 +2513,16 @@ impl Core {
         let mut up = crate::upstream::Upstream::load().with_sources(&active);
         up.absorb(fresh);
         up.save();
+        let mut rebased = Vec::new();
         for r in self.games.write().await.iter_mut() {
             r.check = crate::upstream::check(&r.game, &r.version, &up);
+            if let Some(seen) = crate::upstream::rebase(&r.game, &r.version, &r.check) {
+                rebased.push((r.game.id.clone(), seen, r.version.installed.clone()));
+            }
+        }
+        for (id, seen, installed) in rebased {
+            self.set(&id, "version.seen", &seen).await?;
+            self.set(&id, "version.seen_installed", &installed).await?;
         }
         Ok(())
     }
@@ -2536,6 +2544,7 @@ impl Core {
             b => return Err(Error::Invalid(format!("{b}: a build is a number"))),
         };
         self.set(id, "version.seen", &build).await?;
+        self.set(id, "version.seen_installed", &r.version.installed).await?;
         Ok(build)
     }
 

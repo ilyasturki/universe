@@ -22,6 +22,7 @@ from .search import SettingsSearch
 from .sessions import SessionsList
 from .settings import GameSettingsForm, ModuleForm, ModulesForm, SourceForm, SourcesForm
 from .sources import LoginFlow, SourcesBrowser
+from .updates import UpdatesForm
 
 
 class Screens(QObject):
@@ -73,6 +74,7 @@ class Screens(QObject):
         self._storage = Storage(client, self)
         self._onboarding = Onboarding(client, memory, games, self._login, self._controller, self._components, self._network, self)
         self._changelog = Changelog(client, self)
+        self._updates = UpdatesForm(client, self)
 
     def shutdown(self):
         self._thumbs.shutdown()
@@ -107,6 +109,7 @@ class Screens(QObject):
     controller = Property(QObject, lambda self: self._controller, constant=True)
     runners = Property(QObject, lambda self: self._runners, constant=True)
     runner = Property(QObject, lambda self: self._runner, constant=True)
+    updates = Property(QObject, lambda self: self._updates, constant=True)
     components = Property(QObject, lambda self: self._components, constant=True)
     artwork = Property(QObject, lambda self: self._artwork, constant=True)
     artworkOverview = Property(QObject, lambda self: self._artworkOverview, constant=True)

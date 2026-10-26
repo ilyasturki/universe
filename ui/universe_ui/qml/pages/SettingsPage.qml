@@ -21,6 +21,7 @@ FocusScope {
     signal runnerRequested(string runner)
     signal moduleRequested(string module)
     signal sourceRequested(string source)
+    signal updatesRequested
     signal setupRequested
     signal changelogRequested
     signal powerRequested
@@ -287,11 +288,27 @@ FocusScope {
                 rows: listForm.rows,
                 groups: listForm.groups
             };
-        if (sectionId === "launch")
+        if (sectionId === "launch") {
+            var at = launch.rows.length;
             return {
-                rows: launch.rows,
-                groups: launch.groups
+                rows: launch.rows.concat([
+                    {
+                        section: "Updates",
+                        key: "game_updates",
+                        label: "Game updates",
+                        type: "action",
+                        display: "",
+                        detail: "The games with an update, and the ones Universe can't check.",
+                        action: "Open"
+                    }
+                ]),
+                groups: launch.groups.map(function (g) {
+                    return g.title === "Updates" && !g.advanced ? Object.assign({}, g, {
+                        rows: g.rows.concat([at])
+                    }) : g;
+                })
             };
+        }
         if (sectionId === "runners")
             return {
                 rows: runners.rows,
@@ -1103,6 +1120,9 @@ FocusScope {
             cards.forceActiveFocus();
             openedSource = row.module;
             page.sourceRequested(row.module);
+        } else if (sectionId === "launch" && row.key === "game_updates") {
+            cards.forceActiveFocus();
+            page.updatesRequested();
         } else if (sectionId === "launch") {
             if (row.type === "bool") {
                 launch.toggle(index);
