@@ -334,7 +334,7 @@ class ObjectListModel(QAbstractListModel):
     def roleNames(self):
         return dict(self._roles)
 
-    @Slot(int, result=QObject)
+    @Slot(int, result=QVARIANT)
     def get(self, row):
         return self._objects[row] if 0 <= row < len(self._objects) else None
 
@@ -375,7 +375,7 @@ class GameListModel(ObjectListModel):
     def rowOf(self, game):
         return next((i for i, g in enumerate(self._objects) if g is game), -1)
 
-    @Slot(str, result=QObject)
+    @Slot(str, result=QVARIANT)
     def byId(self, ident):
         return next((g for g in self._objects if g.id == ident), None)
 
@@ -447,7 +447,7 @@ class GameProxy(QSortFilterProxyModel):
         game = source.data(source.index(source_row, 0), MODEL_DATA_ROLE)
         return game is not None and self.acceptsGame(game, source_row)
 
-    @Slot(int, result=QObject)
+    @Slot(int, result=QVARIANT)
     def get(self, row):
         if not (0 <= row < self.rowCount()):
             return None
@@ -774,7 +774,7 @@ class HeadedGames(QAbstractListModel):
     def roleNames(self):
         return dict(self._roles)
 
-    @Slot(int, result=QObject)
+    @Slot(int, result=QVARIANT)
     def get(self, row):
         return self._object_at(row)
 

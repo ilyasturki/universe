@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING, Any, TypeVar
 
 # PySide6 registers these by name and no Python type maps to them: object becomes PyObjectWrapper, int is 32-bit
+# Also the result of a slot that may return None: Qt 6.12 segfaults when a QObject result reaches QML null
 QVARIANT: Any = "QVariant"
 QULONGLONG: Any = "qulonglong"
 
