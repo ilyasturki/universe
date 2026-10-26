@@ -1,0 +1,320 @@
+{
+  "version": "0.0.14",
+  "takes": {
+    "home": {
+      "name": "home",
+      "kind": "gamescope-clip",
+      "files": {
+        "av1": "home.av1.mp4",
+        "h264": "home.h264.mp4",
+        "poster": "home.poster.webp"
+      },
+      "w": 1920,
+      "h": 1080,
+      "alt": "Moving along the home row, through the library and a game page, searching for Dead Cells, playing it, then quitting from HOME",
+      "version": "0.0.14",
+      "hash": "4e00c6f2d85d"
+    },
+    "home-over-game": {
+      "name": "home-over-game",
+      "kind": "gamescope-clip",
+      "files": {
+        "av1": "home-over-game.av1.mp4",
+        "h264": "home-over-game.h264.mp4",
+        "poster": "home-over-game.poster.webp"
+      },
+      "w": 1920,
+      "h": 1080,
+      "alt": "Dead Cells running, then HOME over it: the dock, MangoHud turned on, back in the game and the volume level",
+      "version": "0.0.14",
+      "hash": "41b1d91a694a"
+    },
+    "library": {
+      "name": "library",
+      "kind": "still",
+      "files": {
+        "avif": "library.avif",
+        "webp": "library.webp"
+      },
+      "w": 1920,
+      "h": 1080,
+      "alt": "The library grid",
+      "version": "0.0.14",
+      "hash": "871e03e01589"
+    },
+    "game-page": {
+      "name": "game-page",
+      "kind": "still",
+      "files": {
+        "avif": "game-page.avif",
+        "webp": "game-page.webp"
+      },
+      "w": 1920,
+      "h": 1080,
+      "alt": "A game page with its play time, its buttons, the description and a column of screenshots",
+      "version": "0.0.14",
+      "hash": "3220998284ad"
+    },
+    "look-universe": {
+      "name": "look-universe",
+      "kind": "still",
+      "files": {
+        "avif": "look-universe.avif",
+        "webp": "look-universe.webp"
+      },
+      "w": 1920,
+      "h": 1080,
+      "alt": "The Universe look's home",
+      "version": "0.0.14",
+      "hash": "8b100b8cc1a2"
+    },
+    "look-switch2": {
+      "name": "look-switch2",
+      "kind": "still",
+      "files": {
+        "avif": "look-switch2.avif",
+        "webp": "look-switch2.webp"
+      },
+      "w": 1920,
+      "h": 1080,
+      "alt": "The Switch 2 look",
+      "version": "0.0.14",
+      "hash": "f31573cf368b"
+    },
+    "look-ps5": {
+      "name": "look-ps5",
+      "kind": "still",
+      "files": {
+        "avif": "look-ps5.avif",
+        "webp": "look-ps5.webp"
+      },
+      "w": 1920,
+      "h": 1080,
+      "alt": "The PS5 look",
+      "version": "0.0.14",
+      "hash": "e3ae434afafb"
+    },
+    "deck-home": {
+      "name": "deck-home",
+      "kind": "still",
+      "files": {
+        "avif": "deck-home.avif",
+        "webp": "deck-home.webp"
+      },
+      "w": 1920,
+      "h": 1200,
+      "alt": "The home on a Steam Deck's screen",
+      "version": "0.0.14",
+      "hash": "d56dcf6c3268"
+    },
+    "library-browse": {
+      "name": "library-browse",
+      "kind": "clip",
+      "files": {
+        "av1": "library-browse.av1.mp4",
+        "h264": "library-browse.h264.mp4",
+        "poster": "library-browse.poster.webp"
+      },
+      "w": 1920,
+      "h": 1080,
+      "alt": "Moving through the library grid",
+      "version": "0.0.14",
+      "hash": "5643066df0d5"
+    },
+    "desktop-library": {
+      "name": "desktop-library",
+      "kind": "still",
+      "files": {
+        "avif": "desktop-library.avif",
+        "webp": "desktop-library.webp"
+      },
+      "w": 1920,
+      "h": 1080,
+      "alt": "Universe Desktop's library",
+      "version": "0.0.14",
+      "hash": "33be63dd53dd"
+    },
+    "search": {
+      "name": "search",
+      "kind": "still",
+      "files": {
+        "avif": "search.avif",
+        "webp": "search.webp"
+      },
+      "w": 1920,
+      "h": 1080,
+      "alt": "Search over the home screen: the games whose title matches, and the settings that do",
+      "version": "0.0.14",
+      "hash": "47fd85575f6f"
+    },
+    "power-menu": {
+      "name": "power-menu",
+      "kind": "still",
+      "files": {
+        "avif": "power-menu.avif",
+        "webp": "power-menu.webp"
+      },
+      "w": 1920,
+      "h": 1080,
+      "alt": "The Power menu: Quit Universe, Suspend, Reboot, Power off and Stay",
+      "version": "0.0.14",
+      "hash": "a83d8a1d460e"
+    },
+    "game-menu": {
+      "name": "game-menu",
+      "kind": "still",
+      "files": {
+        "avif": "game-menu.avif",
+        "webp": "game-menu.webp"
+      },
+      "w": 1920,
+      "h": 1080,
+      "alt": "The game menu, opened with Start on a game of the home row",
+      "version": "0.0.14",
+      "hash": "58b51e2ea44e"
+    },
+    "settings-stores": {
+      "name": "settings-stores",
+      "kind": "still",
+      "files": {
+        "avif": "settings-stores.avif",
+        "webp": "settings-stores.webp"
+      },
+      "w": 1920,
+      "h": 1080,
+      "alt": "Settings, Stores: the store that is on, the ones that are off, and Get more",
+      "version": "0.0.14",
+      "hash": "749e15e019f2"
+    },
+    "settings-downloads": {
+      "name": "settings-downloads",
+      "kind": "still",
+      "files": {
+        "avif": "settings-downloads.avif",
+        "webp": "settings-downloads.webp"
+      },
+      "w": 1920,
+      "h": 1080,
+      "alt": "Settings, Downloads: installs in progress, updates, and the games each store has on this PC",
+      "version": "0.0.14",
+      "hash": "77d7afd9a71a"
+    },
+    "settings-controller": {
+      "name": "settings-controller",
+      "kind": "still",
+      "files": {
+        "avif": "settings-controller.avif",
+        "webp": "settings-controller.webp"
+      },
+      "w": 1920,
+      "h": 1080,
+      "alt": "Settings, Controller: the controller Universe reads, its tests and its buttons",
+      "version": "0.0.14",
+      "hash": "4f092279d634"
+    },
+    "settings-game-defaults": {
+      "name": "settings-game-defaults",
+      "kind": "still",
+      "files": {
+        "avif": "settings-game-defaults.avif",
+        "webp": "settings-game-defaults.webp"
+      },
+      "w": 1920,
+      "h": 1080,
+      "alt": "Settings, Game defaults: display, overlay, saves and updates for every game",
+      "version": "0.0.14",
+      "hash": "7a1df5218c2e"
+    },
+    "settings-emulators-proton": {
+      "name": "settings-emulators-proton",
+      "kind": "still",
+      "files": {
+        "avif": "settings-emulators-proton.avif",
+        "webp": "settings-emulators-proton.webp"
+      },
+      "w": 1920,
+      "h": 1080,
+      "alt": "Settings, Emulators & Proton: the runners found, the ones Universe can install, and the tools",
+      "version": "0.0.14",
+      "hash": "880f31cdea39"
+    },
+    "settings-features": {
+      "name": "settings-features",
+      "kind": "still",
+      "files": {
+        "avif": "settings-features.avif",
+        "webp": "settings-features.webp"
+      },
+      "w": 1920,
+      "h": 1080,
+      "alt": "Settings, Features: the modules that are on, the ones that are off, and Get more",
+      "version": "0.0.14",
+      "hash": "e4835271ed98"
+    },
+    "settings-artwork": {
+      "name": "settings-artwork",
+      "kind": "still",
+      "files": {
+        "avif": "settings-artwork.avif",
+        "webp": "settings-artwork.webp"
+      },
+      "w": 1920,
+      "h": 1080,
+      "alt": "Settings, Artwork: the art each game is missing, and Fetch missing art",
+      "version": "0.0.14",
+      "hash": "5a2b29dac541"
+    },
+    "settings-appearance": {
+      "name": "settings-appearance",
+      "kind": "still",
+      "files": {
+        "avif": "settings-appearance.avif",
+        "webp": "settings-appearance.webp"
+      },
+      "w": 1920,
+      "h": 1080,
+      "alt": "Settings, Appearance: the look, its sounds and the startup animation",
+      "version": "0.0.14",
+      "hash": "e523d5efeb4d"
+    },
+    "settings-storage": {
+      "name": "settings-storage",
+      "kind": "still",
+      "files": {
+        "avif": "settings-storage.avif",
+        "webp": "settings-storage.webp"
+      },
+      "w": 1920,
+      "h": 1080,
+      "alt": "Settings, Storage: Universe's folders, the games by size, and what no game holds any more",
+      "version": "0.0.14",
+      "hash": "e1d0e245ac07"
+    },
+    "settings-system-check": {
+      "name": "settings-system-check",
+      "kind": "still",
+      "files": {
+        "avif": "settings-system-check.avif",
+        "webp": "settings-system-check.webp"
+      },
+      "w": 1920,
+      "h": 1080,
+      "alt": "Settings, System check: the checks that pass and the ones that need attention",
+      "version": "0.0.14",
+      "hash": "32c1882ca9d3"
+    },
+    "settings-about": {
+      "name": "settings-about",
+      "kind": "still",
+      "files": {
+        "avif": "settings-about.avif",
+        "webp": "settings-about.webp"
+      },
+      "w": 1920,
+      "h": 1080,
+      "alt": "Settings, About: the version, what's new, first-run setup and power",
+      "version": "0.0.14",
+      "hash": "06a5d890c7af"
+    }
+  }
+}

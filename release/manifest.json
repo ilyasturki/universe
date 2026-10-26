@@ -1,0 +1,17 @@
+{
+  "version": "0.0.14",
+  "takes": {
+    "library": {
+      "hash": "871e03e01589",
+      "files": [
+        "library.webp"
+      ]
+    },
+    "game-page": {
+      "hash": "3220998284ad",
+      "files": [
+        "game-page.webp"
+      ]
+    }
+  }
+}
