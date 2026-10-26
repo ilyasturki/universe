@@ -216,6 +216,7 @@ def build_runner(client, ident, screen_mode, listing=None, row_of: Callable[[dic
                 "action": "Options",
                 "gameId": str(game.get("id")),
                 "image": file_url(art).toString(),
+                "banner": file_url(media.get("banner")).toString(),
                 "installed": isinstance(source, dict) and bool(source.get("dir")),
             }
         )

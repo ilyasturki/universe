@@ -78,6 +78,7 @@ def test_a_runners_page_holds_its_program_its_builds_and_its_games_and_writes_to
     assert card_of(form, "game") == card_of(form, "add_file") and rows["add_file"]["runner"] == "dolphin"
     game = rows["game"]
     assert game["gameId"] == "lego-batman" and game["image"].startswith("file://") and game["installed"] is False
+    assert "/media/banner.png" in game["banner"], "a game's row carries its banner"
     assert rows["exe"]["inherited"] is True and rows["exe"]["origin"] == "found" and not form.resettable(rows["exe"])
     assert rows["exe"]["value"].endswith("dolphin-emu") and rows["exe"]["display"] == rows["exe"]["value"], "the found program is the value shown"
     assert rows["gamescope"]["inherited"] is True and rows["gamescope"]["origin"] == "default"

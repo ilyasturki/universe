@@ -51,6 +51,7 @@ def test_the_index_spans_every_page(api, fake):
     assert rows[1]["expanded"] is True and len(rows) == 2 + head["count"] and all(r["kind"] == "gamerow" for r in rows[2:])
     assert rows[2]["target"] == target("game", "the-technomancer", "launch.wayland") and rows[2]["inherited"] is True
     assert all(r["image"].startswith("file://") for r in rows[2:] if r["image"]), "the game's art on its row"
+    assert all("/media/banner.png" in r["banner"] for r in rows[2:]) and "banner" not in rows[0], "a game's row carries its banner, a setting's none"
     search.expand(1)
     assert len(search.results) == 2 and search.results[1]["expanded"] is False
 

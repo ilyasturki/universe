@@ -568,6 +568,7 @@ def test_an_installed_game_the_library_lacks_offers_to_add_it_or_delete_it(look,
     menu = page.findChild(QObject, "settingsMenu") if look.name == "reprise" else look.menu()
     if look.name == "reprise":
         until(lambda: any(r.get("key") == "game" and r["row"] == at for r in content_rows(page)))
+        until(lambda: any("/media/banner.png" in a.property("source").toString() for a in descendants(page, "rowArt")), "a library game's row draws its banner")
         activate(page, content_rows(page), key="game", row=at)
         until(lambda: menu.property("open") is True and [i["action"] for i in read(menu, "items")] == ["adopt", "trash"], "add it, or delete its files")
     elif look.name == "ps5":

@@ -12,7 +12,7 @@ from .media import _month, _size
 from .settings import AsyncScreen, login_words
 
 
-def _source_row(game, updates, art, job):
+def _source_row(game, updates, art, banner, job):
     pending = game.get("id") in updates
     installed = bool(game.get("installed"))
     disk, download = int(game.get("disk_size") or 0), int(game.get("download_size") or 0)
@@ -38,6 +38,7 @@ def _source_row(game, updates, art, job):
         "title": str(game.get("title") or ""),
         "game_id": str(game.get("game_id") or ""),
         "image": art(game.get("game_id")) or str(game.get("image") or ""),
+        "banner": banner(game.get("game_id")),
         "owned": bool(game.get("owned")),
         "linked": linked,
         "dir": found,
@@ -131,10 +132,14 @@ class SourcesBrowser(AsyncScreen):
             return ""
         return next((u.toString() for u in (game.assets.square, game.assets.boxFront) if not u.isEmpty()), "")
 
+    def _banner(self, game_id):
+        game = self._games_model.byId(game_id) if game_id else None
+        return game.assets.banner.toString() if game is not None else ""
+
     def _show(self, games):
         pending = {u.get("id") for u in self._updates}
         self._shown = games
-        self._rows = [_source_row(g, pending, self._art, self._job) for g in games]
+        self._rows = [_source_row(g, pending, self._art, self._banner, self._job) for g in games]
         self.rowsChanged.emit()
 
     @Slot()

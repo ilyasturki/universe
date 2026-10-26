@@ -335,6 +335,7 @@ FocusScope {
                     pending: g.pending,
                     gameId: g.game_id,
                     image: g.image,
+                    banner: g.banner,
                     action: "Options",
                     size: g.sizeText,
                     accent: g.busy || g.pending,

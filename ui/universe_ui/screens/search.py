@@ -187,6 +187,7 @@ def word_score(token, words):
 class Entry:
     __slots__ = (
         "advanced",
+        "banner",
         "detail",
         "detail_n",
         "display",
@@ -208,11 +209,25 @@ class Entry:
     made = 0
 
     def __init__(
-        self, label, path, target, kind="setting", detail="", display="", key="", module="", advanced=False, games=None, image="", icon="", synonyms=()
+        self,
+        label,
+        path,
+        target,
+        kind="setting",
+        detail="",
+        display="",
+        key="",
+        module="",
+        advanced=False,
+        games=None,
+        image="",
+        icon="",
+        synonyms=(),
+        banner=None,
     ):
         self.label, self.path, self.target, self.kind = str(label), list(path), dict(target), kind
         self.detail, self.display, self.key, self.module, self.advanced = str(detail or ""), str(display or ""), key, module, bool(advanced)
-        self.games, self.image, self.icon = games if games is not None else [], image, icon
+        self.games, self.image, self.icon, self.banner = games if games is not None else [], image, icon, banner
         self.words = normal(label).split()
         short = key.split(".")[-1]
         self.keywords = [normal(s) for s in list(synonyms) + SYNONYMS.get(short, []) + ([short.replace("_", " ")] if short else [])]
@@ -262,6 +277,8 @@ class Entry:
             "image": self.image,
             "icon": self.icon,
         }
+        if self.banner is not None:
+            row["banner"] = self.banner
         return row
 
 
@@ -474,7 +491,8 @@ class SettingsSearch(QObject):
                 continue
             media = game.get("media") or {}
             art = file_url(next((p for p in (media.get("square"), media.get("box_front")) if p), "")).toString()
-            games.append({"id": game_id, "title": title, "image": art})
+            banner = file_url(media.get("banner")).toString()
+            games.append({"id": game_id, "title": title, "image": art, "banner": banner})
             entries.append(
                 Entry(
                     title,
@@ -482,6 +500,7 @@ class SettingsSearch(QObject):
                     {"page": "game", "id": game_id, "key": "", "module": ""},
                     kind="game",
                     image=art,
+                    banner=banner,
                     detail="Game settings",
                     synonyms=["game", "settings"],
                 )
@@ -512,6 +531,7 @@ class SettingsSearch(QObject):
                             "id": game_id,
                             "title": title,
                             "image": art,
+                            "banner": banner,
                             "display": str(row.get("display") or ""),
                             # A game overrides a key only where a global value exists to override.
                             "own": not row.get("inherited", False) if row.get("reach") else None,
@@ -629,7 +649,7 @@ class SettingsSearch(QObject):
             row = entry.row()
             # Under its head the row is the game; filtered to a game it is the setting.
             if picked is None:
-                row.update(label=game["title"], path="", image=game["image"], detail="")
+                row.update(label=game["title"], path="", image=game["image"], banner=game["banner"], detail="")
             else:
                 row.update(label=entry.label, path=game["title"])
             row.update(

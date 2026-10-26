@@ -19,7 +19,10 @@ Item {
     // A pad button reads its macros by name, the hold one marked, and nothing without one; with no code it keeps "Unbound".
     readonly property bool button: entry.bound === true && entry.home !== true
     readonly property string value: button ? [entry.press && entry.press.label, entry.hold && "Hold · " + entry.hold.label].filter(Boolean).join(" · ") : entry.display || ""
-    readonly property bool hasImage: entry.image != null && String(entry.image) !== ""
+    // A game's row (one carrying `banner`, even empty) draws its art banner-wide, so its list lines up.
+    readonly property bool wideArt: entry.banner != null
+    readonly property bool showsBanner: wideArt && String(entry.banner) !== ""
+    readonly property bool hasImage: showsBanner || entry.image != null && String(entry.image) !== ""
     readonly property bool hasGlyph: entry.slot !== undefined && String(entry.slot) !== "" && entry.family !== undefined
     // An icon naming a file (a runner's logo) is drawn whole in a square; a bare name is a menu glyph.
     readonly property bool iconIsFile: entry.icon != null && String(entry.icon).indexOf("/") >= 0
@@ -113,7 +116,7 @@ Item {
         anchors.leftMargin: Theme.dp(10)
         anchors.verticalCenter: band.verticalCenter
         height: band.height - Theme.dp(12)
-        width: height
+        width: row.wideArt ? Math.round(height * 920 / 430) : height
         active: row.hasImage
 
         sourceComponent: RoundedMask {
@@ -126,10 +129,12 @@ Item {
 
             Image {
                 id: art
+                objectName: "rowArt"
                 anchors.fill: parent
-                source: row.entry.image
+                source: row.showsBanner ? row.entry.banner : row.entry.image
                 asynchronous: true
-                fillMode: Image.PreserveAspectCrop
+                // A square or a box front in the banner's frame stays whole rather than losing its title to the crop.
+                fillMode: row.wideArt && !row.showsBanner ? Image.PreserveAspectFit : Image.PreserveAspectCrop
                 sourceSize.height: 256
                 smooth: true
             }
