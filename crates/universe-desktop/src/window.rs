@@ -659,7 +659,6 @@ impl Window {
             "favorite" => self.set_flag(game, "favorite", true),
             "unfavorite" => self.set_flag(game, "favorite", false),
             "update" => self.update(game),
-            "mark-current" => self.mark_current(game),
             "uninstall" => self.confirm_uninstall(game),
             "remove" => self.remove(game),
             "remove-purge" => self.confirm_purge(game),
@@ -677,7 +676,7 @@ impl Window {
         }
     }
 
-    fn mark_current(&self, game: &GameObject) {
+    pub fn mark_current(&self, game: &GameObject) {
         let (id, title, win) = (game.id(), game.title(), self.downgrade());
         glib::spawn_future_local(async move {
             let target = id.clone();

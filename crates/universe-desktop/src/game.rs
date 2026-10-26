@@ -39,6 +39,10 @@ pub struct Row {
     pub has_prefix: bool,
     pub has_install: bool,
     pub check: universe::upstream::Check,
+    /// As `Resolved::installed` gives it: the store's name of the build over what the files say.
+    pub installed_version: String,
+    /// `Installed::channel`: `pc` takes Steam's newest build as current, `switch` titledb's.
+    pub channel: &'static str,
 }
 
 /// What `Application::defer` holds a removal from the library under.
@@ -97,6 +101,8 @@ impl Row {
                 && universe::launcher::prefix_sharer(g, games, config).is_none(),
             has_install: !g.source.dir.is_empty() && universe::paths::expand(&g.source.dir).is_dir(),
             check: r.check.clone(),
+            installed_version: r.installed().0.to_string(),
+            channel: r.version.channel,
         }
     }
 
@@ -115,6 +121,18 @@ pub fn update_mark(row: &Row) -> String {
         "update" => gettext("Update available"),
         _ => String::new(),
     }
+}
+
+/// What the game page's facts line says of the version: nothing while Universe can't tell where it stands.
+pub fn version_facts(row: &Row) -> Vec<String> {
+    let mut facts = Vec::new();
+    if matches!(row.check.status, "current" | "update") && !row.installed_version.is_empty() {
+        facts.push(gettext("Version {}").replace("{}", &row.installed_version));
+    }
+    if row.check.status == "current" {
+        facts.push(gettext("Up to date"));
+    }
+    facts
 }
 
 mod imp {
@@ -147,11 +165,11 @@ mod imp {
         pub has_install: Cell<bool>,
         #[property(get)]
         pub update_mark: RefCell<String>,
+        #[property(get)]
+        pub version_facts: RefCell<String>,
         /// Its store has a newer build of it.
         #[property(get)]
         pub updatable: Cell<bool>,
-        #[property(get)]
-        pub markable: Cell<bool>,
         #[property(get, set)]
         pub playing: Cell<bool>,
         #[property(get, set)]
@@ -229,6 +247,7 @@ impl GameObject {
         text(&imp.source, &row.source, "source");
         text(&imp.cover, &row.cover, "cover");
         text(&imp.update_mark, &update_mark(&row), "update-mark");
+        text(&imp.version_facts, &version_facts(&row).join(" · "), "version-facts");
         let flag = |cell: &Cell<bool>, value: bool, name: &str| {
             if cell.replace(value) != value {
                 self.notify(name);
@@ -240,7 +259,6 @@ impl GameObject {
         flag(&imp.has_prefix, row.has_prefix, "has-prefix");
         flag(&imp.has_install, row.has_install, "has-install");
         flag(&imp.updatable, row.updatable(), "updatable");
-        flag(&imp.markable, row.markable(), "markable");
     }
 }
 

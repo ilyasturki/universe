@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use adw::prelude::*;
 use gettextrs::{gettext, ngettext};
-use gtk::glib;
+use gtk::{gio, glib};
 use serde_json::Value;
 use universe::forms::Form;
 
@@ -25,7 +25,7 @@ fn list(v: &Value, key: &str) -> Vec<String> {
 pub struct ListPage {
     pub page: adw::PreferencesPage,
     groups: RefCell<Vec<adw::PreferencesGroup>>,
-    rows: RefCell<Vec<crate::components::Keyed>>,
+    pub(crate) rows: RefCell<Vec<crate::components::Keyed>>,
 }
 
 impl ListPage {
@@ -45,7 +45,7 @@ impl ListPage {
     }
 
     /// `row` found again by `key` after a rebuild, the focus with it.
-    fn keep(&self, key: &str, row: &impl IsA<gtk::Widget>) {
+    pub(crate) fn keep(&self, key: &str, row: &impl IsA<gtk::Widget>) {
         self.rows.borrow_mut().push((key.to_string(), row.clone().upcast()));
     }
 
@@ -126,6 +126,7 @@ pub fn present(win: &Window, page: &str) {
     launch.page.set_title(&gettext("Game Defaults"));
     launch.page.set_icon_name(Some("media-playback-start-symbolic"));
     dialog.add(&launch.page);
+    launch.add_head(&game_updates_group(&dialog, win), "Updates");
     launch.load();
 
     let runners = ListPage::new("runners", &gettext("Emulators & Proton"), "system-run-symbolic");
@@ -177,6 +178,29 @@ pub fn present(win: &Window, page: &str) {
         });
         crate::addons::present(&dialog, kind, changed);
     }
+}
+
+/// Game Defaults' row to Game Updates, under its Updates card; the dialog's `prefs.game-updates` opens it from anywhere.
+fn game_updates_group(dialog: &adw::PreferencesDialog, win: &Window) -> adw::PreferencesGroup {
+    let open = gio::SimpleAction::new("game-updates", None);
+    let (weak_dialog, weak_win) = (dialog.downgrade(), win.downgrade());
+    open.connect_activate(move |_, _| {
+        let (Some(dialog), Some(win)) = (weak_dialog.upgrade(), weak_win.upgrade()) else { return };
+        dialog.set_visible_page_name("launch");
+        dialog.push_subpage(&crate::dialogs::game_updates::page(&win));
+    });
+    let actions = gio::SimpleActionGroup::new();
+    actions.add_action(&open);
+    dialog.insert_action_group("prefs", Some(&actions));
+    let row = crate::rows::plain(
+        adw::ActionRow::builder().activatable(true).action_name("prefs.game-updates").build(),
+        gettext("Game Updates"),
+        gettext("The games with an update, and the ones Universe can't check"),
+    );
+    row.add_suffix(&chevron());
+    let group = adw::PreferencesGroup::new();
+    group.add(&row);
+    group
 }
 
 /// The Deck's own controls but the backlight, which the desktop sets.

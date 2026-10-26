@@ -183,7 +183,7 @@ impl GamePage {
             page.upgrade().inspect(|page| page.refresh());
         };
         let mut handlers = imp.handlers.take();
-        for prop in ["title", "cover", "playing", "launching", "installed", "favorite", "update-mark"] {
+        for prop in ["title", "cover", "playing", "launching", "installed", "favorite", "update-mark", "version-facts"] {
             handlers.push(game.connect_notify_local(Some(prop), refresh.clone()));
         }
         let page = self.downgrade();
@@ -379,6 +379,7 @@ fn facts(row: &crate::game::Row, playing: bool, now: chrono::DateTime<chrono::Lo
         facts.push(gettext("Last played {}").replace("{}", &format::relative(row.last_played, now)));
     }
     facts.push(format::played(row.hours));
+    facts.extend(crate::game::version_facts(row));
     facts.retain(|f| !f.is_empty());
     facts
 }
@@ -400,7 +401,19 @@ mod tests {
         };
         assert_eq!(facts(&row, false, chrono::Local::now())[..2], ["Windows", "Proton"], "the runner is there before the details land");
         assert_eq!(byline(&row), ["Larian", "2023"], "a publisher that is the developer is named once");
-        let published = crate::game::Row { publisher: "Bandai Namco".into(), ..row };
+        let published = crate::game::Row { publisher: "Bandai Namco".into(), ..row.clone() };
         assert_eq!(byline(&published), ["Larian", "Bandai Namco", "2023"]);
+        let checked = |status: &'static str| {
+            let check = universe::upstream::Check { status, ..Default::default() };
+            facts(&crate::game::Row { installed_version: "1.6.0.0".into(), check, ..row.clone() }, false, chrono::Local::now())
+        };
+        let unchecked = facts(&row, false, chrono::Local::now());
+        assert!(checked("update").iter().any(|f| f.contains("1.6.0.0")));
+        assert_eq!(checked("update").len(), unchecked.len() + 1, "its update mark sits under the title");
+        assert_eq!(checked("current")[..checked("update").len()], checked("update"));
+        assert_eq!(checked("current").len(), unchecked.len() + 2, "up to date, said");
+        for status in ["unknown", "untracked", "final", ""] {
+            assert_eq!(checked(status), unchecked, "{status}: nothing while Universe can't tell");
+        }
     }
 }

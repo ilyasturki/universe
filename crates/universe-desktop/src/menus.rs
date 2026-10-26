@@ -2,8 +2,7 @@ use gettextrs::gettext;
 use gtk::gio;
 use gtk::prelude::*;
 
-const SHOWN_WHEN_ENABLED: [&str; 8] =
-    ["game.favorite", "game.unfavorite", "game.hide", "game.unhide", "game.update", "game.mark-current", "game.uninstall", "game.remove-purge"];
+const SHOWN_WHEN_ENABLED: [&str; 7] = ["game.favorite", "game.unfavorite", "game.hide", "game.unhide", "game.update", "game.uninstall", "game.remove-purge"];
 
 thread_local! {
     static MAIN: gio::Menu = sections();
@@ -24,7 +23,6 @@ thread_local! {
             None,
             &section(&[
                 (gettext("_Update"), "game.update"),
-                (gettext("_Mark as Current"), "game.mark-current"),
                 (gettext("U_ninstall…"), "game.uninstall"),
                 (gettext("_Remove From Library"), "game.remove"),
                 (gettext("Remove With Wine _Prefix…"), "game.remove-purge"),

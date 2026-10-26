@@ -40,6 +40,11 @@ pub fn ago(unix: i64, now: chrono::DateTime<chrono::Local>) -> String {
     }
 }
 
+/// `2020-11-06` as `6 Nov 2020`; anything else as written.
+pub fn day(text: &str) -> String {
+    chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d").map_or_else(|_| text.to_string(), |d| d.format("%-d %b %Y").to_string())
+}
+
 /// A running clock: `4:05`, `1:02:03`.
 pub fn clock(secs: i64) -> String {
     let secs = secs.max(0);
@@ -85,6 +90,7 @@ mod tests {
         assert_eq!(relative(ago(14), now), "2 weeks ago");
         assert_eq!(relative(ago(60), now), "29 July");
         assert_eq!(relative(ago(400), now), "23 August 2025");
+        assert_eq!((day("2020-11-06"), day("someday")), ("6 Nov 2020".to_string(), "someday".to_string()));
     }
 
     #[test]

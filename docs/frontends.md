@@ -1654,8 +1654,9 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
   a bar under every page (`playing_bar`, the window's own `NowPlaying`) whenever the sidebar's foot is
   out of sight: folded, hidden with F9, or under a page pushed over the home.
 - **Game page** (`pages/game.rs`): the library's row alone draws the hero at once (the byline, the
-  facts line with the runner, the achievement count left to its row below), and under the title only an update mark (Update available for `update`, nothing
-  otherwise and never the version). The body under the hero (Your
+  facts line with the runner, then the installed version while the status is `current` or `update` and
+  Up to date while it is `current`; the achievement count left to its row below), and under the title only an update mark (Update available for `update`, nothing
+  otherwise and never the version). The game's menus offer Update for a store update and no Mark as Current. The body under the hero (Your
   Play, About, the Gallery of the store's pictures) waits in a `loading` stack child until the
   details land (`get`, the screenshots' count and whether the source's manifest lists achievements,
   read without asking the stores), so it shows in one frame and nothing already drawn moves; the
@@ -1678,7 +1679,12 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
   size (a row opens the game's page with its Saves and Storage over it) and the leftovers, each with Move to Trash behind a question.
 - **The main menu** (`menus.rs`, built once and held by every page's header; the Store's adds Find
   Installed Games on top). Preferences keeps Launch, Runners, Stores, Modules and Controller (System
-  too on a Deck). Stores and Modules list each one with its whole
+  too on a Deck). Launch (Game Defaults) ends its Updates card in a Game Updates row whose
+  `prefs.game-updates` (the dialog's own action) pushes `dialogs/game_updates.rs`: the games not hidden whose status
+  is `update`, by title, with Update (`how == "apply"`), I Have the Latest Version (markable, asking first with the
+  installed version and the day of upstream's newest build, then `mark_current`) or Update it by hand; then the
+  `unknown` games `markable` takes in a collapsed Games Universe Can't Check expander. It fills again on every library
+  change. Stores and Modules list each one with its whole
   description, its Markdown drawn (`rows::marked`), or what keeps it from working (a setting it waits
   on by its label), Off beside the chevron when it is off: the switch is on its page, and coming back
   reads the list again in place, the focus kept. An unlisted extension says Unlisted there. Both end

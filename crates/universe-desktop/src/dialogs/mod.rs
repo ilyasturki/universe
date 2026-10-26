@@ -2,6 +2,7 @@ pub mod add_game;
 pub mod artwork;
 pub mod controller;
 pub mod game_settings;
+pub mod game_updates;
 pub mod library_artwork;
 pub mod onboarding;
 pub mod preferences;
