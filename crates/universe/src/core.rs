@@ -15,6 +15,8 @@ use crate::{Error, Result};
 
 // gamescope encodes its screenshot png on one thread: a launcher frame takes ~450 ms at 4K, a busy game's ~4 s.
 const FRAME_WAIT: std::time::Duration = std::time::Duration::from_millis(5000);
+/// Sekiro minimizes 20 ms after its thaw; a game busier coming back takes longer.
+const THAW_SETTLE: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// The module that writes the entries: the core starts it again for a retry or a rewrite.
 pub const JOURNAL_MODULE: &str = "journal";
@@ -777,7 +779,10 @@ impl Core {
     pub async fn focus_session(&self) -> Result<()> {
         let Some(c) = self.current().await else { return Err(Error::NotFound("no session running".into())) };
         if c.gamescope_pid != 0 {
-            return self.nest_or()?.show(c.launcher_pid, true, Some(&c.unit));
+            let n = self.nest_or()?;
+            n.show(c.launcher_pid, true, Some(&c.unit))?;
+            self.unminimize_game(n);
+            return Ok(());
         }
         let w = self.session_window().await?.ok_or_else(|| Error::NotFound("the game has no window yet".into()))?;
         match crate::desktop::activate_window(self.desktop().await, &w.id).await {
@@ -864,7 +869,32 @@ impl Core {
         let n = self.nest_or()?;
         n.set_card(window, "STEAM_OVERLAY", 1)?;
         n.set_card(window, "STEAM_INPUT_FOCUS", u32::from(input))?;
-        n.set_card(window, "_NET_WM_WINDOW_OPACITY", opacity)
+        n.set_card(window, "_NET_WM_WINDOW_OPACITY", opacity)?;
+        if !input {
+            self.unminimize_game(n);
+        }
+        Ok(())
+    }
+
+    fn unminimize_game(&self, n: &crate::nest::Nest) {
+        let Some(marker) = crate::session::read_marker() else { return };
+        if let Err(e) = n.unminimize(self.launcher_pid(), &marker.current.unit) {
+            tracing::debug!("nest: unminimize: {e}");
+        }
+    }
+
+    /// Its own connection: the events it waits on would pile up on the shared one.
+    pub(crate) fn keep_game_unminimized(&self) {
+        let Some(marker) = crate::session::read_marker() else { return };
+        if self.nest().is_none() {
+            return;
+        }
+        let launcher = self.launcher_pid();
+        std::thread::spawn(move || {
+            if let Err(e) = crate::nest::Nest::open().and_then(|n| n.keep_unminimized(launcher, &marker.current.unit, THAW_SETTLE)) {
+                tracing::debug!("nest: unminimize: {e}");
+            }
+        });
     }
 
     /// The game as gamescope last painted it, without the overlay: `state/frame.png`, or `None` when nothing was painted in time.

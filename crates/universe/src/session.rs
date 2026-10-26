@@ -686,6 +686,9 @@ impl Core {
             return Err(Error::NotFound("no session running".into()));
         }
         self.host.units.freeze(&marker.current.unit, on).await?;
+        if !on {
+            self.keep_game_unminimized();
+        }
         self.session_hooks(marker, if on { "freeze" } else { "thaw" }).await;
         Ok(())
     }

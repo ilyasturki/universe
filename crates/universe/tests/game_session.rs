@@ -8,7 +8,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 use universe::core::Core;
 use universe::session::Runtime;
 use x11rb::connection::Connection as _;
-use x11rb::protocol::xproto::{AtomEnum, ConnectionExt as _, PropMode};
+use x11rb::protocol::xproto::{AtomEnum, ConnectionExt as _, CreateWindowAux, PropMode, WindowClass};
 use x11rb::wrapper::ConnectionExt as _;
 use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{ObjectPath, OwnedObjectPath, OwnedValue};
@@ -87,7 +87,11 @@ async fn run_game(conn: zbus::Connection, units: Shared, name: String, props: Ve
     if let Some(cwd) = cwd {
         cmd.current_dir(cwd);
     }
-    let mut child = cmd.spawn().unwrap();
+    let cgroup = testbus::systemd::Cgroup::named(&name);
+    let mut child = match &cgroup {
+        Some(cgroup) => cgroup.spawn(&mut cmd),
+        None => cmd.spawn().unwrap(),
+    };
     units.lock().unwrap().loaded.get_mut(&name).unwrap().pid = child.id();
     let status = child.wait().await.unwrap();
     let (code, why) = match std::os::unix::process::ExitStatusExt::signal(&status) {
@@ -248,6 +252,32 @@ impl Gamescope {
 
     fn filter(&self) -> (Option<u32>, Option<u32>) {
         (self.card("GAMESCOPE_SCALING_FILTER"), self.card("GAMESCOPE_FSR_SHARPNESS"))
+    }
+
+    fn window(&self) -> u32 {
+        let window = self.conn.generate_id().unwrap();
+        self.conn.create_window(0, window, self.root, 0, 0, 64, 64, 0, WindowClass::INPUT_OUTPUT, 0, &CreateWindowAux::new()).unwrap().check().unwrap();
+        window
+    }
+
+    /// Listed among gamescope's focusable windows, as `pid`'s.
+    fn focusable(&self, pid: u32) -> u32 {
+        let window = self.window();
+        self.conn.change_property32(PropMode::REPLACE, self.root, self.atom("GAMESCOPE_FOCUSABLE_WINDOWS"), AtomEnum::CARDINAL, &[window, 0, pid]).unwrap();
+        self.conn.flush().unwrap();
+        window
+    }
+
+    /// As gamescope answers a client's WM_CHANGE_STATE to IconicState.
+    fn minimize(&self, window: u32) {
+        let wm_state = self.atom("WM_STATE");
+        self.conn.change_property32(PropMode::REPLACE, window, wm_state, wm_state, &[3, 0]).unwrap().check().unwrap();
+    }
+
+    fn minimized(&self, window: u32) -> bool {
+        let wm_state = self.atom("WM_STATE");
+        let reply = self.conn.get_property(false, window, wm_state, wm_state, 0, 2).unwrap().reply().unwrap();
+        reply.value32().and_then(|mut v| v.next()) == Some(3)
     }
 }
 
@@ -419,6 +449,25 @@ fn hud_limit_and_filter_changed_in_game_last_the_session_and_leave_the_settings_
         assert!(unit.starts_with(&format!("universe-game-{id}-")) && argv[0] == mangohud.to_str().unwrap(), "{unit}: {argv:?}");
         assert_eq!(core.runtime().await.unwrap(), runtime(true, "60", "nis", Some(7)), "the game's HUD and limit, the filter the launcher's gamescope holds");
         assert_eq!(gamescope.filter(), (None, None), "the launcher's gamescope keeps the filter it was started with");
+
+        let pid = until("the game runs", || units.lock().unwrap().loaded.get(&unit).and_then(|u| u.pid)).await;
+        if universe::nest::in_unit(&std::fs::read_to_string(format!("/proc/{pid}/cgroup")).unwrap(), &unit) {
+            let (window, dock) = (gamescope.focusable(pid), gamescope.window());
+            gamescope.minimize(window);
+            core.nest_overlay(dock, false, 0).unwrap();
+            until("the dock gone, the game is back up", || (!gamescope.minimized(window)).then_some(())).await;
+            gamescope.minimize(window);
+            core.focus_session().await.unwrap();
+            until("back from the launcher, the game is up", || (!gamescope.minimized(window)).then_some(())).await;
+            core.freeze(true).await.unwrap();
+            gamescope.minimize(window);
+            core.freeze(false).await.unwrap();
+            until("the thaw brings the game up", || (!gamescope.minimized(window)).then_some(())).await;
+            gamescope.minimize(window);
+            until("and again when it minimizes on the focus it lost while frozen", || (!gamescope.minimized(window)).then_some(())).await;
+        } else {
+            eprintln!("skipped the game's minimized window: its process is in no cgroup of the unit's name");
+        }
 
         assert!(!core.set_mangohud(Some(false)).await.unwrap(), "the dock hides the HUD");
         let mut watcher = Watcher::start().await;

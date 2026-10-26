@@ -2,7 +2,8 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use x11rb::connection::Connection;
-use x11rb::protocol::xproto::{AtomEnum, ConnectionExt, MapState, PropMode};
+use x11rb::protocol::xproto::{AtomEnum, ChangeWindowAttributesAux, ConnectionExt, EventMask, MapState, PropMode, Property};
+use x11rb::protocol::Event;
 use x11rb::rust_connection::RustConnection;
 use x11rb::wrapper::ConnectionExt as _;
 
@@ -10,6 +11,9 @@ use crate::{Error, Result};
 
 /// gamescope's fixed screenshot path; a new mtime is a new shot.
 const SCREENSHOT_PATH: &str = "/tmp/gamescope.png";
+
+const NORMAL_STATE: u32 = 1;
+const ICONIC_STATE: u32 = 3;
 
 /// gamescope-control's `screenshot_type`: the game alone at its render size, or with the overlay layers (mangoapp's HUD, a visible dock).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -218,6 +222,47 @@ impl Nest {
             self.set_card(window, "STEAM_GAME", value)?;
         }
         Ok(())
+    }
+
+    /// gamescope never restores a minimized window, which Wine and SDL do once its WM_STATE is set back to normal.
+    pub fn unminimize(&self, launcher: u32, game_unit: &str) -> Result<()> {
+        let (windows, steam_app) = self.candidates(launcher, Some(game_unit), true)?;
+        let wm_state = self.atom("WM_STATE")?;
+        for w in game_windows(&windows, launcher, steam_app) {
+            self.restore(w.window, wm_state)?;
+        }
+        Ok(())
+    }
+
+    /// A thawed game minimizes only then, on the focus it lost while frozen.
+    pub fn keep_unminimized(&self, launcher: u32, game_unit: &str, settle: Duration) -> Result<()> {
+        let deadline = Instant::now() + settle;
+        let (windows, steam_app) = self.candidates(launcher, Some(game_unit), true)?;
+        let watch = ChangeWindowAttributesAux::new().event_mask(EventMask::PROPERTY_CHANGE);
+        for w in game_windows(&windows, launcher, steam_app) {
+            self.conn.change_window_attributes(w.window, &watch).map_err(x)?;
+        }
+        let wm_state = self.atom("WM_STATE")?;
+        self.unminimize(launcher, game_unit)?;
+        while Instant::now() < deadline {
+            match self.conn.poll_for_event().map_err(x)? {
+                Some(Event::PropertyNotify(e)) if e.atom == wm_state && e.state == Property::NEW_VALUE => self.restore(e.window, wm_state)?,
+                Some(_) => {}
+                None => std::thread::sleep(Duration::from_millis(10)),
+            }
+        }
+        Ok(())
+    }
+
+    fn restore(&self, window: u32, wm_state: u32) -> Result<()> {
+        let Ok(reply) = self.conn.get_property(false, window, wm_state, wm_state, 0, 2).map_err(x)?.reply() else { return Ok(()) };
+        let mut state: Vec<u32> = reply.value32().map(|v| v.collect()).unwrap_or_default();
+        if state.first() != Some(&ICONIC_STATE) {
+            return Ok(());
+        }
+        state[0] = NORMAL_STATE;
+        self.conn.change_property32(PropMode::REPLACE, window, wm_state, wm_state, &state).map_err(x)?;
+        self.conn.flush().map_err(x)
     }
 
     /// Keeps the window of `class` titled `title` (else the class's newest) the one gamescope may show among that class's

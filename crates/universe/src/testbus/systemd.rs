@@ -31,12 +31,17 @@ impl Cgroup {
     /// `None`, the reason printed, where the test process may not make one: a build sandbox, a container, an ssh or TTY login's root-owned session scope.
     pub fn new() -> Option<Cgroup> {
         static NEXT: AtomicU32 = AtomicU32::new(0);
+        Cgroup::named(&format!("universe-test-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::SeqCst)))
+    }
+
+    /// Under a unit's name, the process's cgroup names the unit as systemd's would.
+    pub fn named(name: &str) -> Option<Cgroup> {
         let cgroups = std::fs::read_to_string("/proc/self/cgroup").unwrap_or_default();
         let Some(own) = cgroups.lines().find_map(|l| l.strip_prefix("0::")) else {
             eprintln!("skipped: no cgroup v2 hierarchy in /proc/self/cgroup");
             return None;
         };
-        let path = format!("{}/universe-test-{}-{}", own.trim_end_matches('/'), std::process::id(), NEXT.fetch_add(1, Ordering::SeqCst));
+        let path = format!("{}/{name}", own.trim_end_matches('/'));
         let dir = PathBuf::from("/sys/fs/cgroup").join(path.trim_start_matches('/'));
         match std::fs::create_dir(&dir) {
             Ok(()) => Some(Cgroup { path, dir }),
