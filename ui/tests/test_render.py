@@ -1258,12 +1258,12 @@ def test_back_from_a_runner_games_settings_lands_on_its_row(look, api):
 
 @pytest.mark.parametrize("look", LOOKS, indirect=True)
 def test_back_from_a_page_shows_the_focus_on_no_third_item(look):
+    home = look.home()
     page = look.open("pages/GameSettingsPage.qml", look.game("the-technomancer"))
     until(lambda: page.property("activeFocus") is True)
     settle(look.window)
     trace = FocusTrace(look.window)
     look.press(Qt.Key.Key_Escape)
-    home = look.home()
     until(lambda: home.property("activeFocus") is True, "home has the focus back")
     settle(look.window)
     assert trace.stop().foreign("gameSettingsPage", "homePage") == [], "every frame of the way back: the focus on the page left or home"
