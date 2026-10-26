@@ -16,6 +16,7 @@ qt_log_ignore = [
   "No audio device detected",
   "PulseAudioService: pa_context_connect\\(\\) failed",
   "Couldn't (load|resolve) pipewire-0\\.3",
+  "Failed to connect to pipewire instance",
   # The fixture's store rows carry GOG's own image URLs; the sandbox has no network.
   "QML Image: .*images\\.gog-statics\\.com",
 ]
