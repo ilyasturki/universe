@@ -26,7 +26,7 @@ jobs:
       # A pull request opened with the workflow token starts no ci run, so the checks run here and a red one opens it as a draft
       - id: build
         continue-on-error: true
-        run: nix build .#universe .#universe-ui --no-link -L
+        run: nix build .#universe .#universe-ui .#universe-desktop --no-link -L
       - id: check
         continue-on-error: true
         shell: bash
@@ -41,7 +41,7 @@ jobs:
         run: |
           failed=()
           [ "$FMT" = success ] || failed+=("\`tools/fmt\`")
-          [ "$BUILD" = success ] || failed+=("\`nix build .#universe .#universe-ui\`")
+          [ "$BUILD" = success ] || failed+=("\`nix build .#universe .#universe-ui .#universe-desktop\`")
           if [ "$CHECK" != success ]; then
             # -a: a segfaulting test writes binary into the log, and grep then names nothing
             drvs=$(grep -aoE "(Cannot build|builder for) '/nix/store/[a-z0-9]{32}-[^']+\.drv'" "$RUNNER_TEMP/check.log" | sed -E "s|.*/nix/store/[a-z0-9]{32}-||; s|\.drv'$||" | sort -u || true)
