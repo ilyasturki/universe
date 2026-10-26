@@ -12,8 +12,6 @@ Summary:        Gamepad-first game launcher: a Rust core, a PySide6 UI, games in
 License:        MIT
 URL:            https://github.com/ilyasturki/universe
 Source0:        %{url}/archive/v%{version}/%{name}-%{version}.tar.gz
-# the flake's galaxyServiceStub
-Source1:        https://github.com/imLinguin/comet/releases/download/v0.3.2/GalaxyCommunication-dummy.exe
 ExclusiveArch:  x86_64
 
 # cargo fetches the crates: the COPR project builds with the network on
@@ -113,7 +111,6 @@ for kind in modules sources; do
   cp -r $kind/. %{buildroot}%{_datadir}/universe/$kind
   rm -rf %{buildroot}%{_datadir}/universe/$kind/*/tests %{buildroot}%{_datadir}/universe/$kind/conftest.py %{buildroot}%{_datadir}/universe/$kind/test_*.py
 done
-install -Dm644 %{SOURCE1} %{buildroot}%{_datadir}/universe/sources/gog/GalaxyCommunication.exe
 install -Dm644 extension/metadata.json extension/extension.js -t %{buildroot}%{_datadir}/gnome-shell/extensions/%{extension}
 install -Dm644 gen/man/*.1 -t %{buildroot}%{_mandir}/man1
 install -Dm644 gen/universe.fish %{buildroot}%{_datadir}/fish/vendor_completions.d/universe.fish

@@ -825,8 +825,8 @@ files each unlock of this session with `achievement-unlocked`; `session-end` sto
 the next run when offline. Without comet installed, or without the SDK in the game, the hooks do
 nothing; `doctor`'s `gog-comet` check says when the setting is on and comet is missing. Some SDKs
 (Cuphead's) talk only once a `GalaxyCommunication` Windows service is registered, so for a Proton or
-Wine game `pre-launch` first copies comet's do-nothing stand-in (`GalaxyCommunication.exe` in the
-source's folder, fetched from comet's release by the flake) to
+Wine game `pre-launch` first copies comet's do-nothing stand-in (`GalaxyCommunication.exe`, fetched
+once from comet's release into the source's data folder and checked against its pinned SHA-256) to
 `C:\ProgramData\GOG.com\Galaxy\redists\` in the prefix, then runs `sc create GalaxyCommunication`
 and sets `HKLM\SOFTWARE\WOW6432Node\GOG.com\GalaxyClient\paths` through the game's runner
 (`PROTON_VERB=run`) in a `systemd-run --user --wait` unit, since bwrap refuses the capabilities a

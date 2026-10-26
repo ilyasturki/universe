@@ -61,7 +61,7 @@ case "$ID" in
     fedora)
         run=(sudo diffutils findutils python3 python3.14 tzdata libxkbcommon-x11 mesa-libGL mesa-libEGL fontconfig dbus-libs pulseaudio-libs glib2 krb5-libs
             xcb-util-cursor dejavu-sans-fonts dbus-daemon util-linux)
-        build=(rpm-build rpmdevtools gcc rust cargo python3-devel git tar zstd scdoc libxkbcommon-devel gtk4-devel libadwaita-devel blueprint-compiler xorg-x11-server-Xvfb pipewire pipewire-utils wireplumber)
+        build=(rpm-build gcc rust cargo python3-devel git tar zstd scdoc libxkbcommon-devel gtk4-devel libadwaita-devel blueprint-compiler xorg-x11-server-Xvfb pipewire pipewire-utils wireplumber)
         [ "$mode" != user ] || build=()
         dnf install -y -q "${run[@]}" "${build[@]}" > /dev/null
         ;;

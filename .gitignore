@@ -9,6 +9,5 @@ __pycache__/
 /.dev-*
 /.crawl
 /.claude/settings.local.json
-/sources/gog/GalaxyCommunication.exe
 /site/src/assets/media/
 /site/public/media/

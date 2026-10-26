@@ -2,6 +2,7 @@
 import contextlib
 import fcntl
 import getpass
+import hashlib
 import json
 import os
 import queue
@@ -43,7 +44,11 @@ GALAXY_LIBS = {"galaxy.dll", "galaxy64.dll", "libgalaxy.so", "libgalaxy64.so"}
 GALAXY_DEPTH = 4  # Unity keeps it under <Game>_Data/Plugins/x86_64/
 GALAXY_SERVICE_EXE = r"C:\ProgramData\GOG.com\Galaxy\redists\GalaxyCommunication.exe"
 GALAXY_PATHS_KEY = r"HKLM\SOFTWARE\WOW6432Node\GOG.com\GalaxyClient\paths"
-WINE_STEP_S = 10  # two steps, a token refresh and comet's start fit the pre-launch timeout_s, which cancels the launch
+# comet's release, not nixpkgs' comet-gog: that package ships no Windows side.
+GALAXY_SERVICE_URL = "https://github.com/imLinguin/comet/releases/download/v0.3.2/GalaxyCommunication-dummy.exe"
+GALAXY_SERVICE_SHA256 = "c7695267da363a861af99db95cafe68b732ae743e5830b4feea1bc7ee745f99d"
+GALAXY_SERVICE_FETCH_S = 5
+WINE_STEP_S = 10  # two steps, the stub's fetch, a token refresh and comet's start fit the pre-launch timeout_s, which cancels the launch
 GOGDL_JSON_TIMEOUT_S = 120
 KILL_GRACE_S = 10
 PROGRESS_INTERVAL_S = 1.0
@@ -116,10 +121,10 @@ def fetch(url, token=None, headers=None, timeout=HTTP_TIMEOUT_S):
         raise SourceError(f"GET {url.split('?')[0]}: {exc}") from exc
 
 
-def fetch_bytes(url):
+def fetch_bytes(url, timeout=HTTP_TIMEOUT_S):
     request = urllib.request.Request(url, headers=request_headers(None, None))
     try:
-        with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_S) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             return response.read()
     except OSError as exc:
         raise SourceError(f"GET {url.split('?')[0]}: {exc}") from exc
@@ -863,6 +868,19 @@ def wine_step(program, env, *args):
     return True
 
 
+def galaxy_service_stub():
+    stub = data_dir() / "GalaxyCommunication.exe"
+    if stub.is_file():
+        return stub
+    data = fetch_bytes(GALAXY_SERVICE_URL, timeout=GALAXY_SERVICE_FETCH_S)
+    if hashlib.sha256(data).hexdigest() != GALAXY_SERVICE_SHA256:
+        raise SourceError(f"{GALAXY_SERVICE_URL} does not match its pinned hash")
+    part = stub.with_suffix(".part")
+    part.write_bytes(data)
+    part.replace(stub)
+    return stub
+
+
 # Some games talk to comet only once Galaxy's service is registered in their prefix: comet ships a stand-in that does nothing.
 def install_galaxy_service():
     game = json.loads(os.environ.get("UNIVERSE_GAME_JSON") or "{}")
@@ -870,15 +888,16 @@ def install_galaxy_service():
     if program is None:
         return
     prefix = Path(env["WINEPREFIX"])
-    stub = Path(os.environ.get("SOURCE_DIR", "")) / "GalaxyCommunication.exe"
-    if not stub.is_file():
-        log(f"{stub} is missing: no Galaxy service for games that look for one")
-        return
     if not (prefix / "drive_c" / "windows").is_dir():
         log("the prefix is not made yet: the Galaxy service comes with the next launch")
         return
     target = prefix / "drive_c" / "ProgramData" / "GOG.com" / "Galaxy" / "redists" / "GalaxyCommunication.exe"
     if not target.exists():
+        try:
+            stub = galaxy_service_stub()
+        except SourceError as exc:
+            log(f"{exc}: no Galaxy service for games that look for one")
+            return
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(stub, target)
     try:

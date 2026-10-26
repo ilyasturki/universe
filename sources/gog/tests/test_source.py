@@ -1,4 +1,5 @@
 import contextlib
+import hashlib
 import json
 import os
 import shutil
@@ -545,13 +546,11 @@ def test_pre_launch_goes_on_when_comet_fails(src, hooks):
 
 
 @pytest.fixture
-def prefix(src, hooks, monkeypatch, tmp_path):
+def prefix(src, hooks, web, monkeypatch, tmp_path):
     pfx = tmp_path / "pfx"
     (pfx / "drive_c" / "windows").mkdir(parents=True)
-    source_dir = tmp_path / "source"
-    source_dir.mkdir()
-    (source_dir / "GalaxyCommunication.exe").write_bytes(b"MZ stub")
-    monkeypatch.setenv("SOURCE_DIR", str(source_dir))
+    web.answers[src.GALAXY_SERVICE_URL] = b"MZ stub"
+    monkeypatch.setattr(src, "GALAXY_SERVICE_SHA256", hashlib.sha256(b"MZ stub").hexdigest())
     game = {
         "effective": {"runner_kind": "proton", "runner_path": "/nix/bin/umu-run", "proton_path": "/nix/proton-ge", "prefix": str(pfx), "umu_id": "umu-578330"},
         "launch": {"umu_id": "", "arch": ""},
@@ -560,7 +559,7 @@ def prefix(src, hooks, monkeypatch, tmp_path):
     return pfx
 
 
-def test_pre_launch_registers_galaxys_service_in_the_prefix(src, hooks, prefix, capsys):
+def test_pre_launch_registers_galaxys_service_in_the_prefix(src, hooks, prefix, web, capsys):
     assert src.main(["pre-launch"]) == 0
     sc, reg, _stop, start = hooks["ran"]
     assert sc[:4] == ["systemd-run", "--user", "--wait", "--pipe"], "through the user manager: gamescope's capabilities stop at the hook"
@@ -571,8 +570,13 @@ def test_pre_launch_registers_galaxys_service_in_the_prefix(src, hooks, prefix, 
         "the GAMEID the game launches with"
     )
     assert env["PATH"] == os.environ["PATH"]
-    assert (prefix / "drive_c/ProgramData/GOG.com/Galaxy/redists/GalaxyCommunication.exe").read_bytes() == b"MZ stub"
+    service = prefix / "drive_c/ProgramData/GOG.com/Galaxy/redists/GalaxyCommunication.exe"
+    assert service.read_bytes() == b"MZ stub"
     assert start[0] == "systemd-run"
+    service.unlink()
+    assert src.main(["pre-launch"]) == 0
+    assert service.read_bytes() == b"MZ stub"
+    assert [url for url, _ in web.seen if url == src.GALAXY_SERVICE_URL] == [src.GALAXY_SERVICE_URL], "fetched from comet's release once, then kept"
 
 
 def test_pre_launch_leaves_a_registered_prefix_alone(src, hooks, prefix, capsys):
@@ -583,16 +587,17 @@ def test_pre_launch_leaves_a_registered_prefix_alone(src, hooks, prefix, capsys)
     assert [cmd[0] for cmd in hooks["ran"]] == ["systemctl", "systemd-run"]
 
 
-@pytest.mark.parametrize("case", ["unmade-prefix", "linux", "no-stub"])
-def test_pre_launch_skips_the_service_yet_starts_comet(src, hooks, prefix, monkeypatch, capsys, case):
+@pytest.mark.parametrize("case", ["unmade-prefix", "linux", "offline", "tampered"])
+def test_pre_launch_skips_the_service_yet_starts_comet(src, hooks, prefix, web, monkeypatch, capsys, case):
     if case == "unmade-prefix":
         (prefix / "drive_c" / "windows").rmdir()
     elif case == "linux":
         monkeypatch.setenv("UNIVERSE_GAME_JSON", json.dumps({"effective": {"runner_kind": "linux", "prefix": ""}}))
     else:
-        (Path(os.environ["SOURCE_DIR"]) / "GalaxyCommunication.exe").unlink()
+        web.answers[src.GALAXY_SERVICE_URL] = OSError("offline") if case == "offline" else b"MZ other"
     assert src.main(["pre-launch"]) == 0
     assert [cmd[0] for cmd in hooks["ran"]] == ["systemctl", "systemd-run"]
+    assert not (hooks["data"] / "GalaxyCommunication.exe").exists(), "no stub is kept without a fetch that matches its hash"
 
 
 def test_pre_launch_starts_comet_when_wine_hangs(src, hooks, prefix, monkeypatch, capsys):

@@ -20,9 +20,7 @@ pkgbase = universe-git
 	options = !lto
 	options = !debug
 	source = universe::git+https://github.com/ilyasturki/universe.git
-	source = GalaxyCommunication-comet-0.3.2.exe::https://github.com/imLinguin/comet/releases/download/v0.3.2/GalaxyCommunication-dummy.exe
 	sha256sums = SKIP
-	sha256sums = c7695267da363a861af99db95cafe68b732ae743e5830b4feea1bc7ee745f99d
 
 pkgname = universe-git
 	depends = libgcc

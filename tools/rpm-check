@@ -14,7 +14,7 @@ the RPMs removed. The RPMs are kept in DISTRO_OUT/rpm.
 
 As the user ci with sudo, where tools/ci-deps set things up
 (tools/container fedora). Needs the network: dnf fetches the build
-dependencies, cargo the crates, spectool the GOG source's Galaxy service stub.
+dependencies, cargo the crates.
 USAGE
 }
 
@@ -33,7 +33,6 @@ echo "── build"
 version="$(rpmspec -q --srpm --qf '%{version}' "$spec")"
 tar -C "$repo" --exclude=./target --exclude=./.git --exclude=./.venv --exclude='./.dev*' --exclude=./.claude \
     --transform "s,^\.,universe-$version," -czf "$top/SOURCES/universe-$version.tar.gz" .
-spectool --get-files --source 1 --directory "$top/SOURCES" "$spec" > /dev/null
 sudo dnf builddep -y -q "$spec" > /dev/null
 rpmbuild --quiet --define "_topdir $top" -ba "$spec"
 rm -f "$out"/rpm/*.rpm
@@ -48,7 +47,6 @@ cmp "$repo/packaging/system/70-universe.rules" /usr/lib/udev/rules.d/70-universe
 cmp "$repo/packaging/system/universe.conf" /usr/lib/modules-load.d/universe.conf
 cmp "$repo/packaging/system/io.github.ilyasturki.universe.policy" /usr/share/polkit-1/actions/io.github.ilyasturki.universe.policy
 /usr/lib/universe/universe-system-install bash 2> /dev/null && { echo "rpm-check: the install helper took bash" >&2; exit 1; }
-[ -s /usr/share/universe/sources/gog/GalaxyCommunication.exe ] || { echo "rpm-check: no GOG Galaxy service stub" >&2; exit 1; }
 
 echo "── cli"
 universe --version
