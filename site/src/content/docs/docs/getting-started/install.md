@@ -30,7 +30,7 @@ sudo dnf install universe universe-desktop
 
 ## SteamOS, Bazzite and other distributions
 
-The installer puts Universe in `~/.local`. It needs Python 3.11 to 3.14.
+The installer puts Universe in `~/.local`. It needs Python 3.11 to 3.14, and SDL3 for your controller: SteamOS 3.8 and Bazzite have it, Ubuntu 24.04 and older don't.
 
 ```sh
 curl -fsSL https://github.com/ilyasturki/universe/releases/latest/download/install.sh | sh

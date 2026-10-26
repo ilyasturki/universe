@@ -39,7 +39,6 @@ BuildRequires:  pkgconfig(libadwaita-1) >= 1.9
 Requires:       hicolor-icon-theme
 Requires:       python3
 Requires:       python3-pyside6 >= 6.11
-Requires:       python3-pysdl2
 Requires:       python3-qrcode
 Requires:       python3-xkbcommon
 Requires:       qt6-qt5compat
@@ -48,7 +47,7 @@ Requires:       qt6-qtimageformats
 Requires:       qt6-qtmultimedia
 Requires:       qt6-qtsvg
 Requires:       qt6-qtwayland
-Requires:       SDL2
+Requires:       SDL3
 Requires:       systemd
 Recommends:     gamescope
 Suggests:       mangohud

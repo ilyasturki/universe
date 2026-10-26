@@ -30,7 +30,7 @@ mode="${1:-}"
 
 case "$ID" in
     arch)
-        run=(sudo diffutils python tzdata libxkbcommon libxkbcommon-x11 sdl2 fontconfig libglvnd nss libpulse xcb-util-cursor ttf-dejavu dbus)
+        run=(sudo diffutils python tzdata libxkbcommon libxkbcommon-x11 sdl3 fontconfig libglvnd nss libpulse xcb-util-cursor ttf-dejavu dbus)
         build=(base-devel rust git scdoc glib2-devel gtk4 libadwaita blueprint-compiler xorg-server-xvfb pipewire wireplumber)
         [ "$mode" != user ] || build=()
         pacman -Sy --noconfirm archlinux-keyring > /dev/null

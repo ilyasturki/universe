@@ -40,7 +40,7 @@ whatever has the focus.
 	Settings › Appearance, the Universe look at first.
 
 *--no-gamepad*
-	Do not open the SDL2 gamepad; keyboard only.
+	Do not open the SDL gamepad; keyboard only.
 
 *--boot*, *--no-boot*
 	Open on the startup animation, or not, for this run. By default only a

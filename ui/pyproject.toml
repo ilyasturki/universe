@@ -8,7 +8,7 @@ version = "0.0.13"
 description = "Gamepad-first launcher UI for Universe (PySide6 host; the Universe, Switch 2 and PS5 looks)"
 requires-python = ">=3.11"
 license = "MIT"
-dependencies = ["PySide6>=6.11", "pysdl2", "qrcode", "universe-core"]
+dependencies = ["PySide6>=6.11", "qrcode", "universe-core"]
 
 [project.optional-dependencies]
 # an sdist only, built against libxkbcommon's headers; without it the on-screen keyboard is qwerty

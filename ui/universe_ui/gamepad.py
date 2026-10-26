@@ -1,6 +1,8 @@
+import ctypes
 import functools
 import logging
 import os
+import struct
 import subprocess
 import sys
 import threading
@@ -11,7 +13,7 @@ from PySide6.QtGui import QGuiApplication, QKeyEvent, QMouseEvent, QWheelEvent
 
 log = logging.getLogger("universe.gamepad")
 
-# SDL_GameControllerButton and SDL_GameControllerAxis values, so the mapper imports no SDL.
+# SDL_GamepadButton and SDL_GamepadAxis values: positional, SOUTH first.
 BTN_A, BTN_B, BTN_X, BTN_Y, BTN_BACK, BTN_GUIDE, BTN_START = 0, 1, 2, 3, 4, 5, 6
 BTN_LEFTSTICK, BTN_RIGHTSTICK, BTN_LEFTSHOULDER, BTN_RIGHTSHOULDER = 7, 8, 9, 10
 BTN_DPAD_UP, BTN_DPAD_DOWN, BTN_DPAD_LEFT, BTN_DPAD_RIGHT = 11, 12, 13, 14
@@ -78,6 +80,47 @@ def mapping_fields(sdl, axes, labels):
         if axes.get(role):
             fields[name] = axes[role]
     return ",".join(f"{name}:{element}" for name, element in fields.items())
+
+
+INIT_GAMEPAD = 0x2000
+EVENT_GAMEPAD_AXIS_MOTION, EVENT_GAMEPAD_BUTTON_DOWN, EVENT_GAMEPAD_BUTTON_UP, EVENT_GAMEPAD_ADDED, EVENT_GAMEPAD_REMOVED = 0x650, 0x651, 0x652, 0x653, 0x654
+EVENT_SIZE = 128
+# SDL_Event's type, its gamepad events' joystick id and button or axis, then an axis event's value.
+EVENT_HEAD, EVENT_VALUE = struct.Struct("<I12xIB"), struct.Struct("<24xh")
+
+
+class _GUID(ctypes.Structure):
+    _fields_ = [("data", ctypes.c_uint8 * 16)]
+
+
+_P = ctypes.c_void_p
+_SIGNATURES = {
+    "SDL_SetHint": (ctypes.c_bool, [ctypes.c_char_p, ctypes.c_char_p]),
+    "SDL_Init": (ctypes.c_bool, [ctypes.c_uint32]),
+    "SDL_Quit": (None, []),
+    "SDL_InitSubSystem": (ctypes.c_bool, [ctypes.c_uint32]),
+    "SDL_QuitSubSystem": (None, [ctypes.c_uint32]),
+    "SDL_GetError": (ctypes.c_char_p, []),
+    "SDL_PollEvent": (ctypes.c_bool, [_P]),
+    "SDL_WaitEventTimeout": (ctypes.c_bool, [_P, ctypes.c_int32]),
+    "SDL_GetJoystickGUIDForID": (_GUID, [ctypes.c_uint32]),
+    "SDL_GetJoystickNameForID": (ctypes.c_char_p, [ctypes.c_uint32]),
+    "SDL_GetJoystickVendorForID": (ctypes.c_uint16, [ctypes.c_uint32]),
+    "SDL_GetJoystickProductForID": (ctypes.c_uint16, [ctypes.c_uint32]),
+    "SDL_AddGamepadMapping": (ctypes.c_int, [ctypes.c_char_p]),
+    "SDL_OpenGamepad": (_P, [ctypes.c_uint32]),
+    "SDL_CloseGamepad": (None, [_P]),
+    "SDL_GetGamepadName": (ctypes.c_char_p, [_P]),
+}
+
+
+def load_sdl():
+    lib = ctypes.CDLL("libSDL3.so.0")
+    for name, (restype, argtypes) in _SIGNATURES.items():
+        fn = getattr(lib, name)
+        fn.restype = restype
+        fn.argtypes = argtypes
+    return lib
 
 
 STICK_DEADZONE = 0.18
@@ -220,25 +263,21 @@ class GamepadThread(QThread):
             self._mappings[(int(vendor), int(product))] = fields
             self._pending.append((int(vendor), int(product)))
 
-    def _apply_mappings(self, sdl2, controllers):
+    def _apply_mappings(self, sdl, controllers):
         with self._lock:
             pending, self._pending = self._pending, []
         for vendor, product in pending:
             fields = self._mappings.get((vendor, product))
-            for controller in controllers.values():
-                joystick = sdl2.SDL_GameControllerGetJoystick(controller)
-                if (sdl2.SDL_JoystickGetVendor(joystick), sdl2.SDL_JoystickGetProduct(joystick)) == (vendor, product):
-                    self._add_mapping(sdl2, sdl2.SDL_JoystickGetGUID(joystick), sdl2.SDL_JoystickName(joystick), fields)
+            for which in controllers:
+                if (sdl.SDL_GetJoystickVendorForID(which), sdl.SDL_GetJoystickProductForID(which)) == (vendor, product):
+                    self._add_mapping(sdl, which, fields)
 
-    def _add_mapping(self, sdl2, guid, name, fields):
-        import ctypes
-
-        buf = ctypes.create_string_buffer(64)
-        sdl2.SDL_JoystickGetGUIDString(guid, buf, 64)
-        name = (name or b"pad").decode(errors="replace").replace(",", " ")
-        line = f"{buf.value.decode()},{name},{fields},"
-        if sdl2.SDL_GameControllerAddMapping(line.encode()) < 0:
-            log.warning("mapping refused: %s", sdl2.SDL_GetError())
+    def _add_mapping(self, sdl, which, fields):
+        guid = bytes(sdl.SDL_GetJoystickGUIDForID(which).data).hex()
+        name = (sdl.SDL_GetJoystickNameForID(which) or b"pad").decode(errors="replace").replace(",", " ")
+        line = f"{guid},{name},{fields},"
+        if sdl.SDL_AddGamepadMapping(line.encode()) < 0:
+            log.warning("mapping refused: %s", sdl.SDL_GetError())
         else:
             log.info("mapping: %s", line)
 
@@ -265,27 +304,28 @@ class GamepadThread(QThread):
         self.wait()
 
     def run(self):
-        import sdl2
-
-        sdl2.SDL_SetHint(sdl2.SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, b"1")
+        try:
+            sdl = load_sdl()
+        except (OSError, AttributeError) as e:
+            log.warning("no gamepad support: %s", e)
+            return
+        sdl.SDL_SetHint(b"SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS", b"1")
         # The pads are read through evdev, as the watcher reads them: its mapping then names the same buttons.
-        sdl2.SDL_SetHint(sdl2.SDL_HINT_JOYSTICK_HIDAPI, b"0")
-        # The watcher's mapping already puts A on the button printed A; sdl2-compat would swap a Nintendo pad's A and B again.
-        sdl2.SDL_SetHint(b"SDL_GAMECONTROLLER_USE_BUTTON_LABELS", b"0")
-        if sdl2.SDL_Init(sdl2.SDL_INIT_GAMECONTROLLER | sdl2.SDL_INIT_JOYSTICK) != 0:
-            log.warning("no gamepad support: %s", sdl2.SDL_GetError())
+        sdl.SDL_SetHint(b"SDL_JOYSTICK_HIDAPI", b"0")
+        if not sdl.SDL_Init(INIT_GAMEPAD):
+            log.warning("no gamepad support: %s", sdl.SDL_GetError())
             return
         controllers = {}
-        event = sdl2.SDL_Event()
+        event = ctypes.create_string_buffer(EVENT_SIZE)
         try:
             while not self.isInterruptionRequested():
                 if self._rescan:
                     self._rescan = False
-                    self._restart(sdl2, controllers)
-                while sdl2.SDL_PollEvent(event):
-                    self._handle(sdl2, event, controllers)
+                    self._restart(sdl, controllers)
+                while sdl.SDL_PollEvent(event):
+                    self._handle(sdl, event, controllers)
                 if self._pending:
-                    self._apply_mappings(sdl2, controllers)
+                    self._apply_mappings(sdl, controllers)
                 if self._covered:
                     for name, value in self.mapper.center_sticks():
                         self.stick.emit(name, value)
@@ -294,48 +334,46 @@ class GamepadThread(QThread):
                     ticks = self.mapper.tick()
                 for key, pressed, repeat in ticks:
                     self.key.emit(key, pressed, repeat)
-                sdl2.SDL_WaitEventTimeout(None, 20 if self.mapper.held and not self._covered else 500)
+                sdl.SDL_WaitEventTimeout(None, 20 if self.mapper.held and not self._covered else 500)
         finally:
             for c in controllers.values():
-                sdl2.SDL_GameControllerClose(c)
-            sdl2.SDL_Quit()
+                sdl.SDL_CloseGamepad(c)
+            sdl.SDL_Quit()
 
-    def _restart(self, sdl2, controllers):
+    def _restart(self, sdl, controllers):
         for c in controllers.values():
-            sdl2.SDL_GameControllerClose(c)
+            sdl.SDL_CloseGamepad(c)
         controllers.clear()
         for key, pressed, repeat in self.mapper.release_all():
             self.key.emit(key, pressed, repeat)
-        flags = sdl2.SDL_INIT_GAMECONTROLLER | sdl2.SDL_INIT_JOYSTICK
-        sdl2.SDL_QuitSubSystem(flags)
-        if sdl2.SDL_InitSubSystem(flags) != 0:
-            log.warning("gamepad restart: %s", sdl2.SDL_GetError())
+        sdl.SDL_QuitSubSystem(INIT_GAMEPAD)
+        if not sdl.SDL_InitSubSystem(INIT_GAMEPAD):
+            log.warning("gamepad restart: %s", sdl.SDL_GetError())
 
-    def _handle(self, sdl2, event, controllers):
-        t = event.type
-        if t == sdl2.SDL_CONTROLLERDEVICEADDED:
-            index = event.cdevice.which
-            fields = self._mappings.get((sdl2.SDL_JoystickGetDeviceVendor(index), sdl2.SDL_JoystickGetDeviceProduct(index)))
+    def _handle(self, sdl, event, controllers):
+        t, which, part = EVENT_HEAD.unpack_from(event)
+        if t == EVENT_GAMEPAD_ADDED:
+            fields = self._mappings.get((sdl.SDL_GetJoystickVendorForID(which), sdl.SDL_GetJoystickProductForID(which)))
             if fields:
-                self._add_mapping(sdl2, sdl2.SDL_JoystickGetDeviceGUID(index), sdl2.SDL_JoystickNameForIndex(index), fields)
-            controller = sdl2.SDL_GameControllerOpen(index)
+                self._add_mapping(sdl, which, fields)
+            controller = sdl.SDL_OpenGamepad(which)
             if controller:
-                joystick = sdl2.SDL_GameControllerGetJoystick(controller)
-                controllers[sdl2.SDL_JoystickInstanceID(joystick)] = controller
-                log.info("controller: %s", (sdl2.SDL_GameControllerName(controller) or b"?").decode(errors="replace"))
-        elif t == sdl2.SDL_CONTROLLERDEVICEREMOVED:
-            controller = controllers.pop(event.cdevice.which, None)
+                controllers[which] = controller
+                log.info("controller: %s", (sdl.SDL_GetGamepadName(controller) or b"?").decode(errors="replace"))
+        elif t == EVENT_GAMEPAD_REMOVED:
+            controller = controllers.pop(which, None)
             if controller:
-                sdl2.SDL_GameControllerClose(controller)
+                sdl.SDL_CloseGamepad(controller)
         elif self._covered:
             return
-        elif t in (sdl2.SDL_CONTROLLERBUTTONDOWN, sdl2.SDL_CONTROLLERBUTTONUP):
-            for key, pressed, repeat in self.mapper.button(event.cbutton.button, t == sdl2.SDL_CONTROLLERBUTTONDOWN):
+        elif t in (EVENT_GAMEPAD_BUTTON_DOWN, EVENT_GAMEPAD_BUTTON_UP):
+            for key, pressed, repeat in self.mapper.button(part, t == EVENT_GAMEPAD_BUTTON_DOWN):
                 self.key.emit(key, pressed, repeat)
-        elif t == sdl2.SDL_CONTROLLERAXISMOTION:
-            for key, pressed, repeat in self.mapper.axis(event.caxis.axis, event.caxis.value):
+        elif t == EVENT_GAMEPAD_AXIS_MOTION:
+            (value,) = EVENT_VALUE.unpack_from(event)
+            for key, pressed, repeat in self.mapper.axis(part, value):
                 self.key.emit(key, pressed, repeat)
-            moved = self.mapper.stick(event.caxis.axis, event.caxis.value)
+            moved = self.mapper.stick(part, value)
             if moved is not None:
                 self.stick.emit(*moved)
 

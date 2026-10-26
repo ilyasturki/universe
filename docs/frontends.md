@@ -635,7 +635,7 @@ These cost real time to discover; they are properties of Qt 6.11 / PySide6 6.11,
 - **Collections are platforms.** A collection's `shortName` comes from the core's platform
   string, which `api.py` maps (`windows`, `switch`, `wii`, `gamecube`, `nds`, `ps3`, …), falling
   back to the source id. The Switch 2 look groups its software by them; the Universe look shows none.
-- **Gamepad.** SDL2 in a `QThread`, `SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS=1`, hot-plug. Each
+- **Gamepad.** SDL3 through ctypes in a `QThread`, `SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS=1`, hot-plug. Each
   button becomes the keyboard key Pegasus already bound to that action, so the theme's key logic is
   untouched. Axes use hysteresis — 0.5 to press, 0.3 to release — and arrows repeat after 350 ms
   every 90 ms. A held arrow keeps moving the cursor in every list, grid, menu and text of every

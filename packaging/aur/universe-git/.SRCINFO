@@ -28,7 +28,6 @@ pkgname = universe-git
 	depends = hicolor-icon-theme
 	depends = python
 	depends = pyside6>=6.11
-	depends = python-pysdl2
 	depends = python-qrcode
 	depends = python-xkbcommon
 	depends = qt6-5compat
@@ -37,7 +36,7 @@ pkgname = universe-git
 	depends = qt6-multimedia
 	depends = qt6-svg
 	depends = qt6-wayland
-	depends = sdl2
+	depends = sdl3
 	depends = systemd
 	optdepends = gamescope: games run inside it
 	optdepends = mangohud: the frame rate limit and the in-game HUD

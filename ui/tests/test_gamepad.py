@@ -1,4 +1,5 @@
 import os
+import struct
 from types import SimpleNamespace
 
 import pytest
@@ -149,38 +150,37 @@ def test_a_covered_pad_drops_a_press_with_its_release(received):
     assert received() == [(Qt.Key.Key_Return, True), (Qt.Key.Key_Return, False), (Qt.Key.Key_Down, False)], "a dropped repeat does not take its key's release"
 
 
+EVENT_TYPES = {
+    "down": gamepad.EVENT_GAMEPAD_BUTTON_DOWN,
+    "up": gamepad.EVENT_GAMEPAD_BUTTON_UP,
+    "axis": gamepad.EVENT_GAMEPAD_AXIS_MOTION,
+    "added": gamepad.EVENT_GAMEPAD_ADDED,
+    "removed": gamepad.EVENT_GAMEPAD_REMOVED,
+}
+
+
 @pytest.fixture
 def pad(received):
-    sdl2 = pytest.importorskip("sdl2")
     thread = gamepad.GamepadThread()
-    sdl = SimpleNamespace(mappings=[], closed=[], **{name: getattr(sdl2, name) for name in dir(sdl2) if name.startswith("SDL_CONTROLLER")})
+    sdl = SimpleNamespace(mappings=[], closed=[])
     sdl.__dict__.update(
-        SDL_JoystickGetDeviceVendor=lambda index: 0x0F0D,
-        SDL_JoystickGetDeviceProduct=lambda index: 0x0186,
-        SDL_JoystickGetDeviceGUID=lambda index: b"03000000f0d0000086010000",
-        SDL_JoystickGetGUIDString=lambda guid, buf, size: setattr(buf, "value", guid),
-        SDL_JoystickNameForIndex=lambda index: b"Pro 3, D-input",
-        SDL_GameControllerAddMapping=lambda line: sdl.mappings.append(line.decode()) or 1,
-        SDL_GameControllerOpen=lambda index: f"pad{index}",
-        SDL_GameControllerGetJoystick=lambda controller: controller,
-        SDL_JoystickInstanceID=lambda joystick: 7,
-        SDL_GameControllerName=lambda controller: b"Pro 3",
-        SDL_GameControllerClose=sdl.closed.append,
+        SDL_GetJoystickVendorForID=lambda which: 0x0F0D,
+        SDL_GetJoystickProductForID=lambda which: 0x0186,
+        SDL_GetJoystickGUIDForID=lambda which: SimpleNamespace(data=bytes.fromhex("030000000d0f00008601000011010000")),
+        SDL_GetJoystickNameForID=lambda which: b"Pro 3, D-input",
+        SDL_AddGamepadMapping=lambda line: sdl.mappings.append(line.decode()) or 1,
+        SDL_OpenGamepad=lambda which: f"pad{which}",
+        SDL_GetGamepadName=lambda controller: b"Pro 3",
+        SDL_CloseGamepad=sdl.closed.append,
     )
     controllers, moved = {}, record(thread.stick)
 
+    # SDL_Event as SDL 3 lays it out; a device event's `which` is the joystick id.
     def feed(*specs):
         for kind, *fields in specs:
-            event = sdl2.SDL_Event()
-            if kind in ("down", "up"):
-                event.type = sdl.SDL_CONTROLLERBUTTONDOWN if kind == "down" else sdl.SDL_CONTROLLERBUTTONUP
-                event.cbutton.button = fields[0]
-            elif kind == "axis":
-                event.type = sdl.SDL_CONTROLLERAXISMOTION
-                event.caxis.axis, event.caxis.value = fields
-            else:
-                event.type = sdl.SDL_CONTROLLERDEVICEADDED if kind == "added" else sdl.SDL_CONTROLLERDEVICEREMOVED
-                event.cdevice.which = fields[0]
+            event = bytearray(gamepad.EVENT_SIZE)
+            which, part, value = (fields[0], 0, 0) if kind in ("added", "removed") else (7, fields[0], fields[1] if kind == "axis" else 0)
+            struct.pack_into("<I12xIB3xh", event, 0, EVENT_TYPES[kind], which, part, value)
             thread._handle(sdl, event, controllers)
         QCoreApplication.sendPostedEvents(thread)
 
@@ -210,15 +210,23 @@ def test_a_pad_event_posts_its_key(pad, events, posted, moved):
 def test_a_covered_pad_reads_no_input_but_tracks_its_devices(pad):
     pad.thread.setMapping(0x0F0D, 0x0186, "a:b1,b:b0")
     pad.thread.setCovered(True)
-    pad.feed(("added", 0), ("down", gamepad.BTN_A), ("axis", gamepad.AXIS_RIGHTX, 32767))
+    pad.feed(("added", 7), ("down", gamepad.BTN_A), ("axis", gamepad.AXIS_RIGHTX, 32767))
     assert (pad.received(), pad.moved) == ([], [])
-    assert pad.controllers == {7: "pad0"}
-    assert pad.sdl.mappings == ["03000000f0d0000086010000,Pro 3  D-input,a:b1,b:b0,"], "a comma would end the name in SDL's line"
+    assert pad.controllers == {7: "pad7"}
+    assert pad.sdl.mappings == ["030000000d0f00008601000011010000,Pro 3  D-input,a:b1,b:b0,"], "a comma would end the name in SDL's line"
     pad.feed(("removed", 7))
-    assert pad.controllers == {} and pad.sdl.closed == ["pad0"]
+    assert pad.controllers == {} and pad.sdl.closed == ["pad7"]
     pad.thread.setCovered(False)
     pad.feed(("down", gamepad.BTN_A))
     assert pad.received() == [(RETURN, True)]
+
+
+def test_the_pad_thread_starts_on_sdl3_and_stops(app, caplog):
+    thread = gamepad.GamepadThread()
+    with caplog.at_level("WARNING", logger="universe.gamepad"):
+        thread.start()
+        thread.stop()
+    assert caplog.messages == [], "every SDL 3 call it makes resolves and SDL_Init takes the gamepad subsystem"
 
 
 def test_post_key_needs_a_focus_window(app):

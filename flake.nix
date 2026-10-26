@@ -302,7 +302,6 @@
       };
       uiPy = ps: [
         ps.pyside6
-        ps.pysdl2
         ps.qrcode
         ps.xkbcommon
       ];
@@ -340,7 +339,7 @@
         preFixup = ''
           qtWrapperArgs+=(--prefix LD_LIBRARY_PATH : ${
             lib.makeLibraryPath [
-              pkgs.SDL2
+              pkgs.sdl3
               pkgs.pipewire
             ]
           })
@@ -521,6 +520,7 @@
         ];
         # The first run's network test runs the real `universe network watch` against a mocked NetworkManager.
         env.UNIVERSE_BIN = lib.getExe core;
+        env.LD_LIBRARY_PATH = lib.makeLibraryPath [ pkgs.sdl3 ];
       };
       pytestModules = pytestOf {
         name = "universe-pytest-modules";
@@ -669,7 +669,6 @@
                 ps.python-dbusmock
               ]
             ))
-            SDL2
             sway
             wf-recorder
             xdotool

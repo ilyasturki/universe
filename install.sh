@@ -208,8 +208,8 @@ pip install --force-reinstall --no-deps "$dist"/wheels/*.whl
 if ! "$venv/bin/python" -c 'import xkbcommon' 2>/dev/null && ! pip install xkbcommon 2>/dev/null; then
     say "note: xkbcommon did not build (it needs libxkbcommon's headers and a C compiler); the on-screen keyboard shows qwerty"
 fi
-if ! "$venv/bin/python" -c 'import sdl2' 2>/dev/null; then
-    pip install pysdl2-dll
+if ! "$venv/bin/python" -c 'import ctypes; ctypes.CDLL("libSDL3.so.0")' 2>/dev/null; then
+    say "note: SDL3 is not installed; the UI reads no gamepad until it is (the keyboard still works)"
 fi
 
 remove_installed
