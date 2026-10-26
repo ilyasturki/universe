@@ -8,7 +8,7 @@ use crate::game::Game;
 use crate::sessions::{Session, Stats};
 use crate::{paths, sessions};
 
-pub const MEDIA_SLOTS: [&str; 5] = ["box_front", "square", "banner", "background", "logo"];
+pub const MEDIA_SLOTS: [&str; 6] = ["box_front", "square", "banner", "background", "logo", "wallpaper"];
 pub const IMAGE_EXTS: [&str; 4] = ["png", "jpg", "jpeg", "webp"];
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -115,6 +115,7 @@ pub fn stems_of(slot: &str) -> &'static [&'static str] {
         "banner" => &["banner", "steam", "grid"],
         "background" => &["background", "hero", "fanart"],
         "logo" => &["logo"],
+        "wallpaper" => &["wallpaper"],
         _ => &[],
     }
 }

@@ -81,6 +81,7 @@ FocusScope {
 
     LaunchFrame {
         id: frame
+        objectName: "launchFrame"
 
         anchors.fill: parent
         game: overlay.game

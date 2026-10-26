@@ -449,7 +449,7 @@ pub enum Cmd {
     },
 }
 
-const MEDIA_SLOTS: [&str; 6] = ["box_front", "square", "banner", "background", "logo", "screenshot"];
+const MEDIA_SLOTS: [&str; 7] = ["box_front", "square", "banner", "background", "logo", "wallpaper", "screenshot"];
 
 #[derive(Subcommand, Debug)]
 pub enum MediaCmd {

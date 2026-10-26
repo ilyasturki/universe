@@ -65,7 +65,15 @@ FocusScope {
     readonly property real sideMargin: Theme.dp(90)
     readonly property real cardGap: Theme.dp(40)
     readonly property real rowGap: Theme.dp(44)
-    readonly property real captionHeight: Theme.dp(54)
+    readonly property real captionHeight: Theme.dp(84)
+    readonly property var uses: ({
+            box_front: "Library and search covers",
+            square: "Home rail, in-game dock",
+            banner: "Game lists in Settings",
+            background: "Top of the home and the game's page",
+            logo: "Over the background and the launch screen",
+            wallpaper: "Launch screen"
+        })
 
     onGameChanged: {
         index = 0;
@@ -133,8 +141,10 @@ FocusScope {
         level = "slots";
     }
 
-    // The box front stands tall on the left; square and banner, then background and logo, fill the rows beside it.
-    readonly property var rowOf: [-1, 0, 0, 1, 1]
+    // The box front stands tall on the left; square, banner and background, then logo and wallpaper, fill the rows beside it.
+    readonly property var rowOf: [-1, 0, 0, 0, 1, 1]
+    readonly property var rowStart: [1, 4]
+    readonly property var rowEnd: [3, 5]
 
     function go(next) {
         if (next < 0 || next >= slots.length) {
@@ -148,20 +158,23 @@ FocusScope {
     }
 
     function moveAcross(d) {
+        var row = rowOf[index];
         if (index === 0)
-            go(d < 0 ? -1 : (lastRow === 1 ? 3 : 1));
-        else if (index === 1 || index === 3)
-            go(d < 0 ? 0 : index + 1);
+            go(d < 0 ? -1 : rowStart[lastRow]);
+        else if (index === rowStart[row] && d < 0)
+            go(0);
+        else if (index === rowEnd[row] && d > 0)
+            go(-1);
         else
-            go(d < 0 ? index - 1 : -1);
+            go(index + d);
     }
 
     function moveDown() {
-        go(rowOf[index] === 0 ? index + 2 : -1);
+        go(rowOf[index] === 0 ? Math.min(rowStart[1] + index - rowStart[0], rowEnd[1]) : -1);
     }
 
     function moveUp() {
-        go(rowOf[index] === 1 ? index - 2 : -1);
+        go(rowOf[index] === 1 ? rowStart[0] + index - rowStart[1] : -1);
     }
 
     function stepCand(d) {
@@ -216,7 +229,7 @@ FocusScope {
     function menuAnchor() {
         if (browsing)
             return nowFrame;
-        var item = index === 0 ? leftCard : rowOf[index] === 0 ? topCards.itemAt(index - 1) : bottomCards.itemAt(index - 3);
+        var item = index === 0 ? leftCard : rowOf[index] === 0 ? topCards.itemAt(index - rowStart[0]) : bottomCards.itemAt(index - rowStart[1]);
         return item ? item.art : page;
     }
 
@@ -396,6 +409,18 @@ FocusScope {
             font.pixelSize: Theme.dp(24)
             elide: Text.ElideRight
         }
+
+        Text {
+            objectName: "slotUse"
+            anchors.top: artFrame.bottom
+            anchors.topMargin: Theme.dp(54)
+            width: artFrame.width + page.cardGap - Theme.dp(16)
+            text: page.uses[card.modelData.slot] || ""
+            color: Theme.textMuted
+            font.family: Theme.sans
+            font.pixelSize: Theme.dp(18)
+            elide: Text.ElideRight
+        }
     }
 
     Item {
@@ -419,8 +444,8 @@ FocusScope {
 
         // The box front as tall as the two rows beside it, all three filling the width — unless the height runs out first.
         readonly property real leftAspect: page.slots.length > 0 ? page.slots[0].aspect : 2 / 3
-        readonly property real topAspects: page.slots.length > 2 ? page.slots[1].aspect + page.slots[2].aspect : 1
-        readonly property real bottomAspects: page.slots.length > 4 ? page.slots[3].aspect + page.slots[4].aspect : 1
+        readonly property real topAspects: page.slots.length > 3 ? page.slots[1].aspect + page.slots[2].aspect + page.slots[3].aspect : 1
+        readonly property real bottomAspects: page.slots.length > 5 ? page.slots[4].aspect + page.slots[5].aspect : 1
         readonly property real perWidth: 1 / topAspects + 1 / bottomAspects
         readonly property real leftHeight: Math.floor(Math.min((perWidth * (width - 2 * page.cardGap) + page.rowGap + page.captionHeight) / (1 + perWidth * leftAspect), height - page.captionHeight))
         readonly property real rowWidth: (leftHeight - page.rowGap - page.captionHeight) / perWidth
@@ -447,10 +472,10 @@ FocusScope {
 
             Repeater {
                 id: topCards
-                model: page.slots.slice(1, 3)
+                model: page.slots.slice(page.rowStart[0], page.rowStart[1])
 
                 SlotCard {
-                    slotIndex: index + 1
+                    slotIndex: index + page.rowStart[0]
                     artHeight: Math.floor(gallery.rowWidth / gallery.topAspects)
                 }
             }
@@ -465,10 +490,10 @@ FocusScope {
 
             Repeater {
                 id: bottomCards
-                model: page.slots.slice(3)
+                model: page.slots.slice(page.rowStart[1])
 
                 SlotCard {
-                    slotIndex: index + 3
+                    slotIndex: index + page.rowStart[1]
                     artHeight: Math.floor(gallery.rowWidth / gallery.bottomAspects)
                 }
             }

@@ -10,6 +10,7 @@ SLOTS = {
     "banner": (920, 430),
     "background": (1920, 1080),
     "logo": (960, 300),
+    "wallpaper": (1920, 1080),
     "screenshot": (1280, 720),
 }
 

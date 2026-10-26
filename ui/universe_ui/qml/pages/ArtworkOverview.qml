@@ -26,9 +26,10 @@ FocusScope {
     readonly property var job: store.job
     readonly property bool fetching: job !== null && job !== undefined && (job.ok === null || job.ok === undefined)
 
-    readonly property real thumbHeight: Theme.dp(96)
+    readonly property real aspectSum: (columns || []).reduce((sum, column) => sum + column.aspect, 0)
+    // The thumbs shrink before the titles drop under their full width; the ring's room stays on the right.
+    readonly property real thumbHeight: aspectSum > 0 ? Math.min(Theme.dp(96), Math.floor((width - Theme.dp(312) - columns.length * cellGap) / aspectSum)) : Theme.dp(96)
     readonly property real thumbsWidth: (columns || []).reduce((sum, column) => sum + widthOf(column) + cellGap, 0)
-    // The titles give way first on a narrow screen; the ring's room stays on the right.
     readonly property real titleWidth: Math.max(Theme.dp(200), Math.min(Theme.dp(300), width - thumbsWidth - Theme.dp(12)))
     readonly property real rowHeight: Theme.dp(110)
     readonly property real cellGap: Theme.dp(18)
@@ -165,19 +166,22 @@ FocusScope {
         Row {
             x: view.titleWidth + view.cellGap
             anchors.bottom: parent.bottom
-            spacing: view.cellGap
 
             Repeater {
                 model: view.columns
 
-                // A narrow column's name may run into the gap after it.
+                // A narrow column's name may run into the gap after it, then onto a second line.
                 Text {
-                    width: view.widthOf(modelData) + view.cellGap - Theme.dp(4)
+                    width: view.widthOf(modelData) + view.cellGap
+                    height: fetchButton.height
+                    verticalAlignment: Text.AlignBottom
                     text: modelData.label
                     color: Theme.text
                     font.family: Theme.sans
                     font.weight: Font.DemiBold
                     font.pixelSize: Theme.dp(17)
+                    wrapMode: Text.WordWrap
+                    maximumLineCount: 2
                     elide: Text.ElideRight
                 }
             }

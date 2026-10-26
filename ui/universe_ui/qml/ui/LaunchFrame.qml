@@ -6,7 +6,15 @@ Item {
     id: frame
 
     property var game: null
-    readonly property url heroSource: !game ? "" : String(game.assets.background) !== "" ? game.assets.background : game.assets.banner
+    readonly property url heroSource: {
+        if (!game)
+            return "";
+        var shots = game.assets.screenshotList;
+        var art = [game.assets.wallpaper, shots && shots.length > 0 ? shots[0] : "", game.assets.background, game.assets.banner];
+        return art.find(function (u) {
+            return String(u) !== "";
+        }) || "";
+    }
     readonly property url boxSource: game ? game.assets.boxFront : ""
     readonly property url logoSource: game ? game.assets.logo : ""
 

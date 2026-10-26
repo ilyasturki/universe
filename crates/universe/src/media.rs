@@ -26,7 +26,7 @@ const SGDB_PLAN: [(&str, &str, Option<&str>); 5] = [
     ("logo", "logos", None),
 ];
 const KEYLESS: [&str; 4] = ["source", "steam", "gamesdb", "libretro"];
-const STORE_SLOTS: [&str; 4] = ["box_front", "banner", "background", "logo"];
+const STORE_SLOTS: [&str; 5] = ["box_front", "banner", "background", "logo", "wallpaper"];
 pub const GENERATED: &str = "generated";
 const SCREENSHOTS: usize = 8;
 const SQUARE_SIDE: u32 = 512;
@@ -392,6 +392,7 @@ fn gamesdb_image(g: &Value, slot: &str) -> Option<String> {
         "box_front" => ("vertical_cover", "", "jpg"),
         "background" => ("background", "", "jpg"),
         "logo" => ("logo", "", "png"),
+        "wallpaper" => ("background", "", "jpg"),
         // A 796×364 crop of the wide artwork, the shape of Steam's header.
         "banner" => ("horizontal_artwork", "_product_tile_398_2x", "jpg"),
         _ => return None,
@@ -706,6 +707,14 @@ fn see_through(path: &Path) -> bool {
     }
 }
 
+/// The launch screen fills itself with it: GamesDB's background is as often a 3:1 band as a 16:9 picture. A file the decoder cannot read passes.
+fn screen_shaped(path: &Path) -> bool {
+    match image::ImageReader::open(path).ok().and_then(|r| r.with_guessed_format().ok()).map(|r| r.into_dimensions()) {
+        Some(Ok((w, h))) => h > 0 && (w as f64 / h as f64 / (16.0 / 9.0) - 1.0).abs() < 0.2,
+        _ => true,
+    }
+}
+
 /// A square from the cover: the cover whole over a blurred, darkened fill of itself.
 fn compose_square(cover: &Path, dest: &Path) -> crate::Result<()> {
     use image::imageops::{self, FilterType};
@@ -967,10 +976,12 @@ impl<'a> Lookup<'a> {
                     "box_front" => (&["library_capsule_2x", "library_capsule"], &["library_600x900_2x.jpg", "library_600x900.jpg"]),
                     "background" => (&["library_hero"], &["library_hero.jpg"]),
                     "banner" => (&["header_2x", "header"], &["header.jpg"]),
+                    // The unhashed page_bg_raw.jpg outlives the store page's: Hollow Knight's is years stale.
+                    "wallpaper" => (&["raw_page_background"], &[]),
                     _ => (&[], &["logo.png"]),
                 };
                 let mut list = Vec::new();
-                if slot == "banner" || (all && !keys.is_empty()) {
+                if slot == "banner" || slot == "wallpaper" || (all && !keys.is_empty()) {
                     if let Some(items) = self.items(appid).await {
                         list.extend(keys.iter().find_map(|k| steam_asset(&items, k)));
                     }
@@ -986,7 +997,7 @@ impl<'a> Lookup<'a> {
             "gamesdb" if STORE_SLOTS.contains(&slot) => {
                 let Some(g) = self.gamesdb().await else { return vec![] };
                 let mut list: Vec<String> = gamesdb_image(&g, slot).into_iter().collect();
-                if all && slot == "background" {
+                if all && (slot == "background" || slot == "wallpaper") {
                     list.extend(gamesdb_urls(&g, "artworks"));
                 }
                 list
@@ -1012,6 +1023,10 @@ impl<'a> Lookup<'a> {
                     Ok(()) if slot == "logo" && !see_through(&part) => {
                         let _ = std::fs::remove_file(&part);
                         tracing::debug!("{} logo from {provider}: opaque, a picture rather than a logo", self.game.id);
+                    }
+                    Ok(()) if slot == "wallpaper" && !screen_shaped(&part) => {
+                        let _ = std::fs::remove_file(&part);
+                        tracing::debug!("{} wallpaper from {provider}: not 16:9", self.game.id);
                     }
                     Ok(()) => {
                         clear_slot(dir, slot);
@@ -1493,14 +1508,16 @@ mod tests {
         let items = json_of(&format!("steam-getitems-{appid}.json"));
         let assets = &items["response"]["store_items"][0]["assets"];
         let header = steam_asset(assets, "header_2x").or_else(|| steam_asset(assets, "header")).unwrap();
-        vec![
+        let mut list = vec![
             (steam_items_url(appid), fixture(&format!("steam-getitems-{appid}.json"))),
             (steam_details_url(appid), fixture(&format!("steam-appdetails-{appid}.json"))),
             (steam_file(appid, "library_600x900_2x.jpg"), png(60, 90)),
             (steam_file(appid, "library_hero.jpg"), png(192, 62)),
             (steam_file(appid, "logo.png"), logo()),
             (header, png(92, 43)),
-        ]
+        ];
+        list.extend(steam_asset(assets, "raw_page_background").map(|u| (u, png(144, 81))));
+        list
     }
 
     fn gamesdb_answers(g: &Value) -> Vec<(String, Vec<u8>)> {
@@ -1601,13 +1618,14 @@ mod tests {
         assert!(g.metadata.description.starts_with("Hollow Knight Expands with Free Content\n\nGodmaster - Take your place"));
         assert!(g.metadata.summary.starts_with("Forge your own path"));
         assert!(asked(&net).iter().any(|u| u.contains("header_2x.jpg")), "the banner is the 920×430 header");
-        assert!(!asked(&net).iter().any(|u| u.starts_with(GAMESDB)), "Steam had it all");
+        assert!(!got.contains_key("wallpaper"), "its store page lists no raw background any more");
+        assert!(!asked(&net).iter().any(|u| u.contains("page_bg_raw")), "nor is its stale unhashed one taken");
         let square = image::open(game.media_dir().join("square.jpg")).unwrap();
         assert_eq!((square.width(), square.height()), (SQUARE_SIDE, SQUARE_SIDE));
 
         let again = saved(vec![]);
         assert!(!refresh_with(&again, &keyless(), &game, false).await.unwrap());
-        assert!(asked(&again).is_empty(), "a full game asks nothing");
+        assert!(asked(&again).iter().all(|u| *u == steam_items_url(367520) || u.starts_with(GAMESDB)), "only the missing wallpaper asks again");
     }
 
     #[tokio::test]
@@ -1629,6 +1647,7 @@ mod tests {
         assert_eq!(cache.gamesdb_name, "Hollow Knight");
         assert_eq!(cache.sources["box_front"], "steam");
         assert_eq!(cache.sources["description"], "steam");
+        assert!(!cache.sources.contains_key("wallpaper"), "GamesDB's background is no 16:9 picture");
         let g = Game::load(&game.toml_path()).unwrap();
         assert_eq!(g.metadata.steam_appid, 367520, "kept in game.toml, where GAMEID reads it");
         assert_eq!(crate::library::resolve(g, &keyless(), &[]).effective.umu_id, "umu-367520");
@@ -1692,6 +1711,7 @@ mod tests {
         let got = sources(&game);
         assert_eq!((got["box_front"].as_str(), got["logo"].as_str()), ("epic", "epic"));
         assert_eq!((got["banner"].as_str(), got["background"].as_str()), ("steam", "steam"));
+        assert_eq!(got["wallpaper"], "steam", "the store page's raw background");
         assert!(game.media_dir().join("box_front.jpg").is_file());
         assert!(!asked(&net).iter().any(|u| u.contains("library_600x900")), "the store's cover came first");
     }

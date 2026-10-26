@@ -453,6 +453,7 @@ def test_a_launch_holds_the_poster_until_the_window_is_shown(look, fake, monkeyp
     monkeypatch.setattr(fake.core, "wait_session_window", lambda *args: (mapped.wait(5), wait_session_window(*args))[1])
     look.launch("control")
     assert overlay.property("running") is True and root.property("launching") is True
+    assert look.find("launchFrame").property("heroSource").toLocalFile().endswith("/media/wallpaper.png"), "the 16:9 wallpaper over the 3:1 hero"
     until(lambda: fake.currentSession)
     until(lambda: overlay.property("waiting") is True)
     assert fake.currentSession["id"] == "control"
@@ -893,7 +894,8 @@ def test_the_reprise_artwork_page_opens_on_a_slot_and_lists_its_candidates(look,
     page.moveDown()
     page.moveAcross(-1)
     page.moveAcross(1)
-    assert page.property("index") == 3, "the box front remembers the row it was left from"
+    assert page.property("index") == 4, "the box front remembers the row it was left from"
+    assert all(read(page, "uses").get(s["slot"]) for s in read(page, "slots")), "every slot says where it shows"
     page.openMenu()
     until(lambda: page.property("modal") is True)
 

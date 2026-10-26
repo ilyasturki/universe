@@ -9,7 +9,7 @@ def test_slots_carry_both_layers_and_a_pick_sits_over_the_default(api, fake):
     form = api.screens.artwork
     form.load("dead-cells")
     slots = {s["slot"]: s for s in form.slots}
-    assert list(slots) == ["box_front", "square", "banner", "background", "logo"]
+    assert list(slots) == ["box_front", "square", "banner", "background", "logo", "wallpaper"]
     assert slots["box_front"]["kind"] == "default" and slots["box_front"]["hasDefault"]
     assert slots["box_front"]["origin"] == "steam" and slots["square"]["origin"] == "generated", "a keyless profile's art"
     assert not slots["box_front"]["hasOverride"]
@@ -88,7 +88,7 @@ def test_overview_lays_the_library_out_as_games_by_slots(api, fake):
     settle(view)
     titles = [r["title"] for r in view.rows]
     assert titles == sorted(titles, key=str.casefold)
-    assert [c["slot"] for c in view.columns] == ["box_front", "square", "banner", "background", "logo"]
+    assert [c["slot"] for c in view.columns] == ["box_front", "square", "banner", "background", "logo", "wallpaper"]
     assert all([s["slot"] for s in r["slots"]] == [c["slot"] for c in view.columns] for r in view.rows), "every row in column order"
     assert all(s["kind"] == "default" for r in view.rows for s in r["slots"])
 

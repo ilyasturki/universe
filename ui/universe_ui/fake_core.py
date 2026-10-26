@@ -131,8 +131,8 @@ JOURNAL_S = 8.0
 UNLOCK_S = 1.0
 CLIP_S = 20
 
-SLOTS = ("box_front", "square", "banner", "background", "logo")
-FAKE_ORIGINS = {"box_front": "steam", "square": "generated", "banner": "steam", "background": "gamesdb", "logo": "libretro"}
+SLOTS = ("box_front", "square", "banner", "background", "logo", "wallpaper")
+FAKE_ORIGINS = {"box_front": "steam", "square": "generated", "banner": "steam", "background": "gamesdb", "logo": "libretro", "wallpaper": "steam"}
 RELEASES = "https://github.com/ilyasturki/universe/releases/download/"
 
 

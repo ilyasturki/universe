@@ -83,7 +83,7 @@ def sort_title(title):
     return rest if rest and first.lower() in ("the", "a", "an") else title
 
 
-ASSET_SLOTS = ("box_front", "square", "banner", "background", "logo")
+ASSET_SLOTS = ("box_front", "square", "banner", "background", "logo", "wallpaper")
 
 
 def file_url(path):
@@ -144,6 +144,7 @@ class GameAssets(QObject):
     banner = Property(QUrl, lambda self: self._urls["banner"], notify=changed)
     background = Property(QUrl, lambda self: self._urls["background"], notify=changed)
     logo = Property(QUrl, lambda self: self._urls["logo"], notify=changed)
+    wallpaper = Property(QUrl, lambda self: self._urls["wallpaper"], notify=changed)
     screenshotList = Property(list, lambda self: list(self._shots), notify=changed)
 
 

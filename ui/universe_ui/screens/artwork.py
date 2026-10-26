@@ -8,8 +8,9 @@ SLOTS = [
     ("box_front", "Box front", 600 / 900, "Details, launch, settings"),
     ("square", "Square", 1.0, "Home rail, Switch 2 tiles"),
     ("banner", "Banner", 920 / 430, "News cards, info pane; backdrops without a background"),
-    ("background", "Background", 16 / 9, "Behind the home and details"),
+    ("background", "Background", 1920 / 620, "Behind the home and details"),
     ("logo", "Logo", 3.0, "Over the background, launch"),
+    ("wallpaper", "Wallpaper", 16 / 9, "The Universe look's launch screen"),
 ]
 SLOT_LABELS = {slot: label for slot, label, _, _ in SLOTS}
 SLOT_ASPECTS = {slot: aspect for slot, _, aspect, _ in SLOTS}
