@@ -44,6 +44,54 @@
     <color type="primary" scheme_preference="dark">#c64600</color>
   </branding>
   <releases>
+    <release version="0.0.14" date="2026-10-26">
+      <description>
+        <p>Added</p>
+        <ul>
+          <li>Settings › Game defaults › <em>Game updates</em> lists the games with a newer release out, in every look and in Universe Desktop: <em>A</em> installs a store's update, and <em>I have the latest version</em> confirms one you installed yourself. The games Universe can't check sit behind <em>Y</em>, to confirm by hand.</li>
+          <li>The Universe look's top tabs each have an icon, the focused game's name shows in the middle of the tab bar, and the library has 9 columns.</li>
+          <li>HOME opens the dock over a game started from Universe Desktop in gamescope, in your look, and its <em>Home</em> brings Universe Desktop's window back.</li>
+          <li>KytyPS5 and SharpEmu run PlayStation 5 games, each a folder with its <code>sce_sys/param.json</code>.</li>
+          <li>A sixth picture, the <em>Wallpaper</em>, fills the launch screen at 16:9.</li>
+          <li>A game whose art was never fetched, such as one imported by an older version, gets its art, description and screenshots the next time Universe starts, and <em>Fetch missing art</em> fills missing descriptions too.</li>
+          <li>The Media tab has a row of toggles, Up from the top row, to show screenshots, recordings and journal entries or hide them.</li>
+          <li>A journal entry's card in the Media tab shows its first screenshot, and the entry's page puts its screenshots above its text.</li>
+          <li>A book pulses in every look's top bar while a journal entry is being written.</li>
+          <li><em>Test vibration</em> on a controller's page makes the pad buzz.</li>
+          <li>The dock's <em>Game</em> button shows the running game's art, and the controllers card of the dock and of the PS5 control center opens Settings › Controller.</li>
+          <li>In the Universe look, settings rows that name a game, such as search results, show its banner.</li>
+        </ul>
+        <p>Changed</p>
+        <ul>
+          <li>The Universe look's game page is slimmer: one line above the buttons gives your play time, when you last played and whether an update is out, and the store's screenshots sit right of the description, <em>Right</em> moving into them. Game settings, media and achievements open from <em>···</em>.</li>
+          <li>A game's page shows its version with <em>Up to date</em> or <em>Update available</em> only when Universe knows where the game stands; the guess from file dates and its <em>May be out of date</em> are gone.</li>
+          <li><em>Mark as current</em> moved off the game page to <em>I have the latest version</em> in Game updates; <code>universe update &lt;game&gt; --mark-current</code> still does it.</li>
+          <li>A right click on a cover opens the game menu, and a second one closes it; in the Switch 2 and PS5 looks it acts as press and hold.</li>
+          <li>In the Universe look, What's new opens as a window over Home or Settings, and <em>B</em> closes it.</li>
+          <li>Each store and feature row has a switch that shows whether it is on.</li>
+          <li>The Universe look's Appearance no longer shows the theme's affiliation line.</li>
+          <li>Universe Desktop gives a game's saves, cloud saves, Wine prefix and storage their own <em>Saves and Storage</em> page, which <em>Storage</em> opens too.</li>
+          <li>Universe Big Screen reads the controller through SDL3, which the installer needs on the system for your controller: SteamOS 3.8 and Bazzite have it, Ubuntu 24.04 and older don't.</li>
+          <li>A GOG game under Wine fetches GOG Galaxy's stand-in service on its first launch instead of the packages shipping it.</li>
+        </ul>
+        <p>Fixed</p>
+        <ul>
+          <li>A game that minimized itself behind the dock or during a pause comes back when you return to it.</li>
+          <li>Universe Big Screen no longer crashes under Qt 6.12.</li>
+          <li>More games get their art from GOG GamesDB, past brackets, version numbers and edition names in their titles.</li>
+          <li>A launch drops the fonts a Wine or Proton prefix registered from <code>/nix/store</code> files since deleted.</li>
+          <li>A journal entry put off by a restart no longer shows as being written.</li>
+          <li>The Universe look's game page keeps its place through a library refresh, and the Media tab's viewer opens on the screenshot picked.</li>
+          <li>Runner logos show in settings search results.</li>
+          <li><em>B</em> closes the folder picker in the Switch 2 and PS5 looks instead of going up a folder.</li>
+          <li>Universe Desktop's game page draws its header at once and its body in one go, with nothing shifting.</li>
+        </ul>
+        <p>Performance</p>
+        <ul>
+          <li>Covers on home, the library and search load in reading order.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.0.13" date="2026-10-18">
       <description>
         <p>Added</p>

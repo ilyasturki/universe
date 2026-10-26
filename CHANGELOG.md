@@ -1,5 +1,53 @@
 # Changelog
 
+## [0.0.14] - 2026-10-26
+
+### Added
+
+- Settings › Game defaults › **Game updates** lists the games with a newer release out, in every look and in Universe Desktop: **A** installs a store's update, and **I have the latest version** confirms one you installed yourself. The games Universe can't check sit behind **Y**, to confirm by hand.
+- The Universe look's top tabs each have an icon, the focused game's name shows in the middle of the tab bar, and the library has 9 columns.
+  ![The library under the tab bar, each tab with its icon and the focused game named in the middle](https://github.com/ilyasturki/universe/releases/download/v0.0.14/library.webp)
+- HOME opens the dock over a game started from Universe Desktop in gamescope, in your look, and its **Home** brings Universe Desktop's window back.
+- KytyPS5 and SharpEmu run PlayStation 5 games, each a folder with its `sce_sys/param.json`.
+- A sixth picture, the **Wallpaper**, fills the launch screen at 16:9.
+- A game whose art was never fetched, such as one imported by an older version, gets its art, description and screenshots the next time Universe starts, and **Fetch missing art** fills missing descriptions too.
+- The Media tab has a row of toggles, Up from the top row, to show screenshots, recordings and journal entries or hide them.
+- A journal entry's card in the Media tab shows its first screenshot, and the entry's page puts its screenshots above its text.
+- A book pulses in every look's top bar while a journal entry is being written.
+- **Test vibration** on a controller's page makes the pad buzz.
+- The dock's **Game** button shows the running game's art, and the controllers card of the dock and of the PS5 control center opens Settings › Controller.
+- In the Universe look, settings rows that name a game, such as search results, show its banner.
+
+### Changed
+
+- The Universe look's game page is slimmer: one line above the buttons gives your play time, when you last played and whether an update is out, and the store's screenshots sit right of the description, **Right** moving into them. Game settings, media and achievements open from **···**.
+  ![A game page with its play time, its buttons, the description and a column of screenshots](https://github.com/ilyasturki/universe/releases/download/v0.0.14/game-page.webp)
+- A game's page shows its version with **Up to date** or **Update available** only when Universe knows where the game stands; the guess from file dates and its **May be out of date** are gone.
+- **Mark as current** moved off the game page to **I have the latest version** in Game updates; `universe update <game> --mark-current` still does it.
+- A right click on a cover opens the game menu, and a second one closes it; in the Switch 2 and PS5 looks it acts as press and hold.
+- In the Universe look, What's new opens as a window over Home or Settings, and **B** closes it.
+- Each store and feature row has a switch that shows whether it is on.
+- The Universe look's Appearance no longer shows the theme's affiliation line.
+- Universe Desktop gives a game's saves, cloud saves, Wine prefix and storage their own **Saves and Storage** page, which **Storage** opens too.
+- Universe Big Screen reads the controller through SDL3, which the installer needs on the system for your controller: SteamOS 3.8 and Bazzite have it, Ubuntu 24.04 and older don't.
+- A GOG game under Wine fetches GOG Galaxy's stand-in service on its first launch instead of the packages shipping it.
+
+### Fixed
+
+- A game that minimized itself behind the dock or during a pause comes back when you return to it.
+- Universe Big Screen no longer crashes under Qt 6.12.
+- More games get their art from GOG GamesDB, past brackets, version numbers and edition names in their titles.
+- A launch drops the fonts a Wine or Proton prefix registered from `/nix/store` files since deleted.
+- A journal entry put off by a restart no longer shows as being written.
+- The Universe look's game page keeps its place through a library refresh, and the Media tab's viewer opens on the screenshot picked.
+- Runner logos show in settings search results.
+- **B** closes the folder picker in the Switch 2 and PS5 looks instead of going up a folder.
+- Universe Desktop's game page draws its header at once and its body in one go, with nothing shifting.
+
+### Performance
+
+- Covers on home, the library and search load in reading order.
+
 ## [0.0.13] - 2026-10-18
 
 ### Added
@@ -370,6 +418,7 @@
 
 - The search row on the Reprise look's store page.
 
+[0.0.14]: https://github.com/ilyasturki/universe/compare/v0.0.13...v0.0.14
 [0.0.13]: https://github.com/ilyasturki/universe/compare/v0.0.12...v0.0.13
 [0.0.12]: https://github.com/ilyasturki/universe/compare/v0.0.11...v0.0.12
 [0.0.11]: https://github.com/ilyasturki/universe/compare/v0.0.10...v0.0.11
