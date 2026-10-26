@@ -43,7 +43,8 @@ jobs:
           [ "$FMT" = success ] || failed+=("\`tools/fmt\`")
           [ "$BUILD" = success ] || failed+=("\`nix build .#universe .#universe-ui\`")
           if [ "$CHECK" != success ]; then
-            drvs=$(grep -oE "(Cannot build|builder for) '/nix/store/[a-z0-9]{32}-[^']+\.drv'" "$RUNNER_TEMP/check.log" | sed -E "s|.*/nix/store/[a-z0-9]{32}-||; s|\.drv'$||" | sort -u || true)
+            # -a: a segfaulting test writes binary into the log, and grep then names nothing
+            drvs=$(grep -aoE "(Cannot build|builder for) '/nix/store/[a-z0-9]{32}-[^']+\.drv'" "$RUNNER_TEMP/check.log" | sed -E "s|.*/nix/store/[a-z0-9]{32}-||; s|\.drv'$||" | sort -u || true)
             # Nothing named: the evaluation failed before a build
             [ -n "$drvs" ] || drvs="\`nix flake check\` (evaluation)"
             while IFS= read -r drv; do failed+=("$drv"); done <<< "$drvs"
@@ -59,7 +60,7 @@ jobs:
               echo
               printf -- '- %s\n' "${failed[@]}"
               echo
-              echo "Fix them on this branch: \`git switch flake-update\`."
+              echo "The flake-update routine fixes them on this branch and merges once ci passes there. By hand: \`git switch flake-update\`."
               echo EOF
               echo "draft=always-true"
             fi
@@ -75,6 +76,11 @@ jobs:
       # create-pull-request turns a pull request into a draft but never back
       - if: steps.report.outputs.draft == 'false' && steps.pr.outputs.pull-request-operation == 'updated'
         run: gh pr ready "${{ steps.pr.outputs.pull-request-number }}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+      - if: steps.report.outputs.draft == 'false' && steps.pr.outputs.pull-request-number != ''
+        run: gh pr merge "${{ steps.pr.outputs.pull-request-number }}" --squash --delete-branch
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
