@@ -674,6 +674,21 @@
        "arch": "x86_64",
        "format": "tar.gz",
        "program": "kyty_emulator",
+       "sha256": "05b487510ce056078c5267565006ebdb6c1dd742115d097a212e731398e12db6",
+       "size": 77242193,
+       "url": "https://github.com/KytyPS5/KytyPS5/releases/download/KytyPS5-2026-10-26-597137e/KytyPS5-2026-10-26-597137e-Linux-x86_64.tar.gz"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-10-26T01:25:30Z",
+     "version": "2026-10-26-597137e"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "tar.gz",
+       "program": "kyty_emulator",
        "sha256": "c502309441cd674afbe82a0e03d10bc1b143bd5fa6ab66f99a46d0224651b82f",
        "size": 77241278,
        "url": "https://github.com/KytyPS5/KytyPS5/releases/download/KytyPS5-2026-10-25-b2c9ec7/KytyPS5-2026-10-25-b2c9ec7-Linux-x86_64.tar.gz"
@@ -1268,6 +1283,20 @@
       {
        "arch": "x86_64",
        "format": "appimage",
+       "sha256": "8d548cd55c3b9fb530c580d8b49f033d9d8445fabddb25c51e782980f20c4ce1",
+       "size": 83248862,
+       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-e8979d31b3a22c8bc9a6eae6bdc31756eac8ee89/rpcs3-v0.0.43-20404-e8979d31_linux64.AppImage"
+      }
+     ],
+     "channel": "rolling",
+     "date": "2026-10-26T08:55:11Z",
+     "version": "0.0.43-20404-e8979d31"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "appimage",
        "sha256": "c3331ba8725762315a26d5d7894d39132679850ad5d397f15e578bf7b3ccdef6",
        "size": 83142328,
        "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-d00d80231af3f9b0286f38fd72f7513583f1a9d4/rpcs3-v0.0.43-20402-d00d8023_linux64.AppImage"
@@ -1332,20 +1361,6 @@
      "channel": "rolling",
      "date": "2026-10-22T03:15:19Z",
      "version": "0.0.43-20372-e53ac18f"
-    },
-    {
-     "assets": [
-      {
-       "arch": "x86_64",
-       "format": "appimage",
-       "sha256": "e9c1f6eba137092803e36c9c125b2e296f0daf9d696665a50d96c7b202721b0e",
-       "size": 83130176,
-       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-4b1a801f5498376f250a2b606bdfe580ff7c5943/rpcs3-v0.0.43-20364-4b1a801f_linux64.AppImage"
-      }
-     ],
-     "channel": "rolling",
-     "date": "2026-10-21T08:41:44Z",
-     "version": "0.0.43-20364-4b1a801f"
     }
    ],
    "homepage": "https://github.com/RPCS3/rpcs3-binaries-linux",
@@ -1877,6 +1892,6 @@
    "name": "xemu"
   }
  },
- "generated_at": "2026-10-25T22:49:59Z",
+ "generated_at": "2026-10-26T11:18:36Z",
  "schema": 1
 }
