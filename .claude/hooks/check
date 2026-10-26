@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Stop: lint the sections this session's changes touch; a failure goes back to the session (exit 2). Tests stay on `just test` and the pre-push `just verify`.
+# No `just`: a cloud session has nix but none of the dev shell's tools
 set -uo pipefail
 input=$(cat)
 [ "$(printf '%s' "$input" | jq -r '.stop_hook_active // false')" = true ] && exit 0
 root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 cd "$root" || exit 0
 
-base=$(git merge-base HEAD main 2>/dev/null || git rev-parse HEAD)
+# A fresh clone's main can lag origin/main: the newer of the two that HEAD contains is the base
+base=$(git merge-base HEAD main origin/main 2>/dev/null || git merge-base HEAD main 2>/dev/null || git rev-parse HEAD)
 changed=$({ git diff --name-only "$base"; git status --porcelain --untracked-files=all | cut -c4-; } | sort -u)
 [ -n "$changed" ] || exit 0
 
@@ -26,9 +28,9 @@ grep -qE '^(tools/|\.githooks/|\.claude/hooks/)' <<<"$changed" && sections+=(she
 grep -q '^\.github/' <<<"$changed" && sections+=(actions)
 
 log=$(mktemp)
-if [ ${#sections[@]} -eq 0 ] || just lint "${sections[@]}" >"$log" 2>&1; then
+if [ ${#sections[@]} -eq 0 ] || nix develop --quiet --command tools/lint "${sections[@]}" >"$log" 2>&1; then
     [ -n "$tree" ] && printf '%s\n' "$tree" >"$stamp"
     exit 0
 fi
-{ echo "checks failed (just lint ${sections[*]}):"; tail -n 80 "$log"; } >&2
+{ echo "checks failed (tools/lint ${sections[*]}):"; tail -n 80 "$log"; } >&2
 exit 2

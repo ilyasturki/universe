@@ -8,7 +8,7 @@ case "$path" in "$root"/*) ;; *) exit 0 ;; esac
 rel=${path#"$root"/}
 cd "$root" || exit 0
 git check-ignore -q "$rel" && exit 0
-if out=$(just fmt --files "$rel" 2>&1); then
+if out=$(nix develop --quiet --command tools/fmt --files "$rel" 2>&1); then
     exit 0
 fi
 printf 'format hook (%s):\n%s\n' "$rel" "$out" >&2
