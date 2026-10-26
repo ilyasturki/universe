@@ -447,7 +447,7 @@ FocusScope {
             resume();
         else if (act === "close")
             closeSoftware(g);
-        else if (act === "update" || act === "mark-current")
+        else if (act === "update")
             api.updateGame(id);
         else if (act === "favourite") {
             g.favorite = !g.favorite;

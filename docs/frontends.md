@@ -41,10 +41,11 @@ A `Game` exposes `id`, `title`, `sortTitle`, `favorite` (writable), `hidden`, `p
 `description`, `summary`, `source`, `platform`, `runner`, `runnerName`, `tags`, `extra`, `raw`,
 `collections`, and `assets` (`boxFront`, `square`, `banner`, `background`, `logo`, `screenshotList`), plus
 `launch()`. `version` is the core's (`api.md` § Games), `installedVersion` its `installed`, `updateState` how it
-stands in words, `updateAction` the game page's update action: `update` (its store applies it), `mark-current`
-(updated by hand) or empty, and `updateMark` the one mark a game page shows: `update` while upstream is ahead, empty
-for every other status. `api.updateGame(id)` runs the action: the store's update as Downloads' job, told by a notice
-wherever the player is, or `api.universe.markCurrent(id, title)`. Every look's game page asks
+stands in words (empty while Universe can't tell), `updateAction` the game page's update action: `update` while its
+store applies one, else empty, and `updateMark` the one mark a game page shows: `update` while upstream is ahead, empty
+for every other status. No game page offers Mark as current: each look's updates list does. `api.updateGame(id)` runs
+the store's update as Downloads' job, told by a notice wherever the player is, or on a `markable` game not `current`
+`api.universe.markCurrent(id, title)`. Every look's game page asks
 `api.universe.checkVersions(id)` as it opens, and the host every game's 5 s after the start (not in a `--keys` run).
 
 `api.screens.network` and `api.screens.bluetooth` run on `universe network watch --json` and
@@ -677,7 +678,7 @@ list away. Play / Continue (Resume and Quit *title* for the running game), a hai
 when the game's `achievementsTotal` is not 0), Media › (only when the
 game has a screenshot, a recording or a journal entry) and Manage ›. Media › pushes the non-empty
 pages, Manage › Artwork, Sessions and logs, Data and saves (see "Game data and
-storage"), Mark as current (when the game's `updateAction` is `mark-current`, through `api.updateGame`) and, past a
+storage") and, past a
 hairline, Remove from library…; either opens on A or Right, and B or Left comes back to the first.
 Remove asks in place (Keep it / Remove from the library) and goes through
 `api.universe.remove(id, false)`: the watcher drops the game, the detail page closes if it was on it. An item's `gap` draws the hairline above it, `detail` a
@@ -878,7 +879,7 @@ the store's screenshots (`assets.screenshotList`) a column on the right, a third
 from the buttons reaches the description (the screenshots when there is none) and scrolls it, Right from it the
 screenshot already on screen, Up and Down step through them (Up from the first back to the buttons), Left returns to
 the description, A views one full screen. ··· and Start open the game menu beside ···: Game settings and
-Achievements at its top, the recordings, journal and screenshots under Media ›, Mark as current and the rest under
+Achievements at its top, the recordings, journal and screenshots under Media ›, the rest under
 Manage ›. B fades the page out where it stands; the same game opened again starts at the top. Home's hero holds the same entry points for the game under the
 cursor: Continue (or Play, Resume), Game page and ···, one press up from the rail.
 
@@ -1212,7 +1213,10 @@ by title (a "No update available" info row when none is), then behind Y an advan
 `unknown` games `markable` takes. A row's `how` is `apply` (A runs the store's update) or `mark` (A asks first with
 its `confirm` spec: the installed version and the day of upstream's newest build, then `api.updateGame(id)` marks it
 current); a game updated by hand that is not markable is an info row. The page follows `libraryChanged` while open.
-Its game page no longer offers Mark as current; its facts line adds the installed version while the status is
+The Switch 2 and PS5 looks list the same games in Settings › Updates, under the store's own updates (rows of
+`api.screens.sources`): an Updated by hand caption over the `update` rows whose `how` is not `apply`, then a Show the
+games Universe can't check row flipping `api.screens.updates.showAdvanced`, which adds the Can't check ones; A on a
+game asks with the row's `confirm` (`shell.dialogAsk`) before `api.updateGame(id)`. Its game page (the Universe look's) facts line adds the installed version while the status is
 `current` or `update`, and Up to date while it is `current`.
 
 A component row's A is its options, on a runner's page and in Tools alike: the Universe look's page and

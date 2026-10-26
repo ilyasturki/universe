@@ -70,7 +70,7 @@ function options(game, playing) {
     ];
     items.push({ label: "Information", glyph: "info", act: "info" });
     if (game.updateAction)
-        items.push(updateItem(game));
+        items.push(updateItem());
     if (game.achievementsTotal > 0)
         items.push({ label: "Trophies", glyph: "trophy", act: "trophies" });
     items.push(
@@ -86,11 +86,8 @@ function options(game, playing) {
     return items;
 }
 
-// Its store's update, or Mark as Current once updated by hand; the shell's gameOption() runs either.
-function updateItem(game) {
-    return game.updateAction === "update"
-        ? { label: "Update", glyph: "download", act: "update" }
-        : { label: "Mark as Current", glyph: "check", act: "mark-current" };
+function updateItem() {
+    return { label: "Update", glyph: "download", act: "update" };
 }
 
 function tagline(game) {

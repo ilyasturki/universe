@@ -137,7 +137,7 @@ FocusScope {
             }
         ];
         if (game.updateAction)
-            items.push(Home.updateItem(game));
+            items.push(Home.updateItem());
         if (screenshots.length > 0)
             items.push({
                 label: "View Screenshots",

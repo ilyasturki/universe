@@ -606,14 +606,14 @@ class Api(QObject):
 
     @Slot(str)
     def updateGame(self, ident):
-        """A game page's update action: its store's update through Downloads' job, else Mark as current."""
+        """Its store's update through Downloads' job, else, on a game updated by hand, upstream's newest build taken as installed."""
         game = self._library.get(ident)
         if game is None:
             return
+        v = game.version
         if game.updateAction == "update":
-            v = game.version
             self._screens.sources.updateGame(v.get("store", ""), v.get("store_id", ""), game.title)
-        elif game.updateAction == "mark-current":
+        elif v.get("markable") and v.get("status") not in ("current", "final"):
             self._client.markCurrent(ident, game.title)
 
     def shutdown(self):

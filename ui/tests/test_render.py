@@ -1662,7 +1662,7 @@ UNSURE = {
 }
 
 
-def test_a_game_page_offers_the_stores_update_or_mark_as_current_by_hand(look, api, fake):
+def test_a_game_page_offers_the_stores_update_and_leaves_one_by_hand_to_the_updates_list(look, api, fake):
     fake.core._game("control")["version"] = {"status": "update", "reason": "not-owned", "how": "manual", "store": "gog", "store_id": "2049187585"}
     fake.core._game("the-technomancer")["version"] = dict(UNSURE)
     api.library.refresh("control")
@@ -1672,20 +1672,13 @@ def test_a_game_page_offers_the_stores_update_or_mark_as_current_by_hand(look, a
         page = look.game_page(ident)
         offered[ident] = {"update", "mark-current"} & set(look.game_actions(page))
         marks[ident] = look.update_mark(page)
-    by_hand = set() if look.name == "reprise" else {"mark-current"}
-    assert offered == {"mini-metro": {"update"}, "dishonored": by_hand, "control": set(), "the-technomancer": by_hand, "dead-cells": set()}, (
-        "GOG refuses control; Reprise marks a game current from Game updates"
+    assert offered == {"mini-metro": {"update"}, "dishonored": set(), "control": set(), "the-technomancer": set(), "dead-cells": set()}, (
+        "GOG refuses control; one updated by hand is marked current from the updates list"
     )
     if look.name != "ps5":
         assert marks == {"mini-metro": "update", "dishonored": "update", "control": "update", "the-technomancer": "", "dead-cells": ""}, (
             "one mark while upstream is ahead, none when it can't tell"
         )
-    if look.name != "reprise":
-        page = look.game_page("dishonored")
-        look.game_action(page, "mark-current")
-        until(lambda: "mark-current" not in look.game_actions(page), "marked, it is current")
-        assert fake.game("dishonored")["version"]["status"] == "current"
-        assert look.update_mark(page) in ("", None), "current: no mark"
     page = look.game_page("mini-metro")
     look.game_action(page, "update")
     until(lambda: (api.screens.sources.job or {}).get("game") == "1434554947", "Downloads' job updates it")
@@ -1718,3 +1711,20 @@ def test_game_updates_lists_the_games_behind_and_behind_y_the_ones_to_confirm(lo
     look.press(Qt.Key.Key_Return)
     until(lambda: fake.game("the-technomancer")["version"]["status"] == "current")
     until(lambda: "the-technomancer" not in shown(), "confirmed, it leaves the list")
+
+
+@pytest.mark.parametrize("look", ["switch2", "ps5"], indirect=True)
+def test_the_consoles_updates_list_the_games_updated_by_hand_and_behind_a_switch_the_ones_to_confirm(look, api, fake):
+    fake.core._game("the-technomancer")["version"] = dict(UNSURE)
+    api.library.refresh("the-technomancer")
+    page = look.settings("updates")
+    games = lambda: [r["gameId"] for r in content_rows(page) if r.get("gameId")]
+    until(lambda: games() == ["dishonored"], "a store's own game is its row, not this list's")
+    activate(page, content_rows(page), action="game-unsure")
+    until(lambda: "the-technomancer" in games(), "the switch shows the ones it can't tell")
+    activate(page, content_rows(page), gameId="the-technomancer")
+    dialog = look.dialog()
+    until(lambda: dialog.property("open") is True, "it asks before taking it as the latest")
+    look.press(Qt.Key.Key_Return)
+    until(lambda: fake.game("the-technomancer")["version"]["status"] == "current")
+    until(lambda: "the-technomancer" not in games(), "confirmed, it leaves the list")

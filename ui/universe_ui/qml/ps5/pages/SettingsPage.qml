@@ -25,6 +25,7 @@ FocusScope {
     readonly property var runners: api.screens.runners
     readonly property var components: api.screens.components
     readonly property var sources: api.screens.sources
+    readonly property var updates: api.screens.updates
     readonly property var listForm: sectionId === "modules" ? modulesForm : sectionId === "sources" ? sourceList : null
     readonly property bool componentsBar: sectionId !== "artwork" && components.job != null && (sectionId === "runners" || sources.job == null)
     // X on a section where it has no other use.
@@ -65,6 +66,7 @@ FocusScope {
         if (scanned)
             scanned.close();
         artworkOverview.unload();
+        updates.close();
     }
     property int section: 1
     readonly property var current: sections[Math.max(0, Math.min(section, sections.length - 1))]
@@ -93,6 +95,9 @@ FocusScope {
             },
             launch: function () {
                 launch.load();
+            },
+            updates: function () {
+                updates.load("");
             },
             themes: function () {
                 api.theme.rescan();
@@ -353,16 +358,17 @@ FocusScope {
             });
         if (sectionId === "updates") {
             var n = sources.updates.length;
+            var games = gameUpdateRows();
             if (n === 0)
-                return [
-                    {
-                        label: sources.busy ? "Checking…" : "Everything is up to date",
-                        type: "info",
-                        value: true,
-                        display: "",
-                        detail: ""
-                    }
-                ];
+                return (games.behind ? [] : [
+                        {
+                            label: sources.busy ? "Checking…" : "No update available",
+                            type: "info",
+                            value: true,
+                            display: "",
+                            detail: ""
+                        }
+                    ]).concat(games.rows);
             return [
                 {
                     label: "Update everything",
@@ -380,7 +386,7 @@ FocusScope {
                     row: i,
                     detail: ""
                 };
-            }));
+            })).concat(games.rows);
         }
         if (sectionId === "doctor") {
             var checks = Forms.grouped(modulesForm.doctorGroups, modulesForm.doctor, function (c) {
@@ -650,6 +656,62 @@ FocusScope {
     readonly property var parts: Forms.parts(content, current.first || current.label)
     readonly property var partRows: parts[Math.max(0, Math.min(part, parts.length - 1))].rows
 
+    // A store's own games are its rows above: these are the ones updated by hand.
+    function gameUpdateRows() {
+        var rows = [], behind = false;
+        updates.groups.forEach(function (g) {
+            var shown = g.rows.map(function (i) {
+                return updates.rows[i];
+            }).filter(function (r) {
+                return r.gameId && r.how !== "apply";
+            });
+            if (shown.length === 0)
+                return;
+            behind = behind || !g.advanced;
+            rows.push({
+                heading: true,
+                label: g.advanced ? "Can't Check" : "Updated by Hand",
+                display: ""
+            });
+            shown.forEach(function (r) {
+                rows.push({
+                    label: r.label,
+                    type: r.type,
+                    action: r.type === "action" ? "game-update" : "",
+                    gameId: r.gameId,
+                    confirm: r.confirm,
+                    display: r.display,
+                    detail: r.detail || ""
+                });
+            });
+        });
+        if (updates.hasAdvanced)
+            rows.push({
+                label: updates.showAdvanced ? "Hide the Games Universe Can't Check" : "Show the Games Universe Can't Check",
+                type: "action",
+                action: "game-unsure",
+                display: "",
+                detail: "Games whose files don't say which build they are"
+            });
+        return {
+            rows: rows,
+            behind: behind
+        };
+    }
+
+    function askLatest(row) {
+        Sound.play("ok");
+        shell.dialogAsk({
+            message: row.confirm.message,
+            detail: row.confirm.detail,
+            buttons: ["Not Sure", "It's the Latest"],
+            index: 1
+        }, function (i) {
+            if (i === 1)
+                api.updateGame(row.gameId);
+        });
+    }
+
     function activate(index, row) {
         if (sectionId === "about" && (row.key === "changelog" || row.key === "version")) {
             Sound.play("ok");
@@ -722,6 +784,11 @@ FocusScope {
             shell.push("pages/FormPage.qml", {
                 source: row.module
             });
+        } else if (sectionId === "updates" && row.action === "game-unsure") {
+            Sound.play("select");
+            updates.showAdvanced = !updates.showAdvanced;
+        } else if (sectionId === "updates" && row.action === "game-update") {
+            askLatest(row);
         } else if (sectionId === "updates") {
             Sound.play("ok");
             if (row.action === "update-all")

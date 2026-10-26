@@ -201,18 +201,11 @@ class Game(QObject):
         status, reason, store = (str(v.get(k) or "") for k in ("status", "reason", "store"))
         if status == "update" and reason == "not-owned":
             return f"Update available, not owned on {SOURCE_NAMES.get(store, store)}"
-        if status == "unknown":
-            return "Not checked yet" if reason == "no-answer" else "Can't tell if it's up to date"
         return {"update": "Update available", "current": "Up to date"}.get(status, "")
 
-    # Mark as current also before any update: upstream's build then gives the game a baseline.
     def _update_action(self):
         v = self._version
-        if v.get("status") == "update" and v.get("how") == "apply":
-            return "update"
-        if v.get("markable") and v.get("status") not in ("current", "final"):
-            return "mark-current"
-        return ""
+        return "update" if v.get("status") == "update" and v.get("how") == "apply" else ""
 
     def _update_mark(self):
         return "update" if self._version.get("status") == "update" else ""
@@ -279,7 +272,7 @@ class Game(QObject):
     version = Property(dict, lambda self: dict(self._version), notify=changed)
     installedVersion = Property(str, lambda self: str(self._version.get("installed") or ""), notify=changed)
     updateState = Property(str, _update_state, notify=changed)
-    # `update` (its store applies it), `mark-current` (updated by hand) or empty: the game page's update action.
+    # `update` while its store applies one, else empty: the game page's update action.
     updateAction = Property(str, _update_action, notify=changed)
     updateMark = Property(str, _update_mark, notify=changed)
     # A store install under way (an `ArrivingGame`); -1 while the size is not known. A subclass cannot redefine a Property, so both live here.

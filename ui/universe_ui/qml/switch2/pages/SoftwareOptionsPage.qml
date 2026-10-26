@@ -60,8 +60,8 @@ FocusScope {
         ];
         var update = game.updateAction ? [
             {
-                key: game.updateAction,
-                label: game.updateAction === "update" ? "Update" : "Mark as Current",
+                key: "update",
+                label: "Update",
                 type: "action"
             }
         ] : [];
@@ -154,7 +154,7 @@ FocusScope {
             shell.push(row.page, {
                 gameId: game.id
             });
-        } else if (row.key === "update" || row.key === "mark-current") {
+        } else if (row.key === "update") {
             Sound.play("ok");
             api.updateGame(game.id);
         } else if (row.key === "favourite") {
