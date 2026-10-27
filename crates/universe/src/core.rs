@@ -661,6 +661,9 @@ impl Core {
 
     pub(crate) fn module_env(&self, h: &Hooker, game: Option<&Game>, cfg: &Config, base: &HookEnv) -> HookEnv {
         let mut env = base.clone();
+        if let Some(g) = game {
+            env.set("RECORDINGS_DIR", cfg.recordings_root().join(&g.id).to_string_lossy().to_string());
+        }
         match h {
             Hooker::Module(m) => env.set("MODULE_SETTINGS_JSON", serde_json::Value::Object(m.merged_settings(cfg, game)).to_string()),
             Hooker::Source(s) => {

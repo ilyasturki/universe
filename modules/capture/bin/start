@@ -10,6 +10,7 @@ from _common import (
     gsr_args,
     load_settings,
     log,
+    make_pending_dir,
     set_paused,
     show_osd,
     timeline,
@@ -40,8 +41,7 @@ def main():
 
     session_id = os.environ["SESSION_ID"]
     data_dir = os.environ["MODULE_DATA_DIR"]
-    pending_dir = os.path.join(data_dir, "pending")
-    os.makedirs(pending_dir, exist_ok=True)
+    pending_dir = make_pending_dir(data_dir)
     output = os.path.join(pending_dir, f"{session_id}.{settings.get('container') or 'mkv'}")
 
     token = None

@@ -476,10 +476,14 @@ def test_stop_closes_an_open_pause_and_hands_the_timeline_over(tmp_path, fakebin
     assert not (fakebin["logs"] / "systemctl.args").exists() or "stop" not in (fakebin["logs"] / "systemctl.args").read_text(), "the recorder saved on its own"
 
 
-def test_stop_falls_back_to_the_unit_when_the_socket_is_gone(tmp_path, fakebin):
-    env = env_for(tmp_path, fakebin, {"container": "mp4", "min_duration_s": 240}, extra={"FAKE_DURATION": "999"})
+@pytest.mark.parametrize("recordings_made", [True, False], ids=["beside the recordings", "the module's own folder"])
+def test_stop_falls_back_to_the_unit_when_the_socket_is_gone(tmp_path, fakebin, recordings_made):
+    if not recordings_made:
+        (tmp_path / "recordings").write_text("a file where the folder should be")
+    recordings = tmp_path / "recordings" / "x"
+    env = env_for(tmp_path, fakebin, {"container": "mp4", "min_duration_s": 240}, extra={"FAKE_DURATION": "999", "RECORDINGS_DIR": str(recordings)})
     assert run("start", env).returncode == 0
-    mp4 = tmp_path / "data" / "pending" / f"{SESSION_ID}.mp4"
+    mp4 = (recordings / ".pending" if recordings_made else tmp_path / "data" / "pending") / f"{SESSION_ID}.mp4"
     assert flag_values((fakebin["logs"] / "systemd-run.args").read_text().splitlines(), "-o") == [str(mp4)]
     mp4.write_bytes(b"x")
     result = run("stop", env)

@@ -1360,6 +1360,7 @@ pub(crate) mod tests {
         assert_eq!(watch.bind_to.as_deref(), Some(unit.as_str()));
         assert_eq!(watch.env["SOURCE_DIR"], store.to_string_lossy());
         assert_eq!(watch.env["SOURCE_GAME_ID"], "77");
+        assert_eq!(watch.env["RECORDINGS_DIR"], core.config.read().await.recordings_root().join("sample").to_string_lossy());
         memory.finish(&unit, 0);
         core.session_end("sample", &sid, None, None).await.unwrap();
         let lines: Vec<String> = std::fs::read_to_string(&log).unwrap().lines().map(String::from).collect();

@@ -198,6 +198,24 @@ def show_osd(label, icon="video-display-symbolic"):
         subprocess.run([os.environ.get("UNIVERSE_BIN") or "universe", "osd", "--", icon, label], capture_output=True, text=True, timeout=5, check=False)
 
 
+def pending_dirs(data_dir):
+    # On the recordings' own filesystem recording-file files by rename: a copy of an hour of 4K outlasts session-end's timeout_s.
+    rec = os.environ.get("RECORDINGS_DIR")
+    return [*([os.path.join(rec, ".pending")] if rec else []), os.path.join(data_dir, "pending")]
+
+
+def make_pending_dir(data_dir):
+    *preferred, fallback = pending_dirs(data_dir)
+    for d in preferred:
+        try:
+            os.makedirs(d, exist_ok=True)
+            return d
+        except OSError as e:
+            log(f"{d}: {e}; recording into {fallback}")
+    os.makedirs(fallback, exist_ok=True)
+    return fallback
+
+
 def timeline_path(data_dir, session_id):
     return os.path.join(data_dir, "pending", f"{session_id}.timeline.json")
 

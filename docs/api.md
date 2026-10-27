@@ -1266,8 +1266,11 @@ absolute, so a hook that runs twice or lands late cannot flip it the wrong way; 
 pauses in `pending/<session>.timeline.json` (`{"started_at", "paused", "pauses"}`, under a lock):
 the hooks are no-ops until `start` has written it, and `start` reads the game unit's
 `FreezerState` once the recorder answers on its socket, for a HOME pressed while it waited for the
-window. `stop` asks the recorder to stop and answers with the saved file once it is written (the
-unit's stop and a look in `pending/` when the socket is already gone), takes `started_at` from the
+window. The recorder writes into `$RECORDINGS_DIR/.pending/`, on the recordings' own filesystem, so
+`recording-file` files it by a rename: a copy across filesystems of an hour of 4K outlasts the
+hook's `timeout_s`. When that folder cannot be made it writes into the module's `pending/`. `stop`
+asks the recorder to stop and answers with the saved file once it is written (the unit's stop and a
+look in the pending folders when the socket is already gone), takes `started_at` from the
 recorder's first-frame timestamp (`-write-first-frame-ts`: the file starts at its first frame, not
 when the unit did — the window picker may have sat open in between), closes a pause left open and
 hands the timeline to `recording-file`. The paused stretches are cut from the file, not held as a
@@ -2106,6 +2109,7 @@ label = "Writing model"
 | `RECORDING_STARTED_AT`, `RECORDING_PAUSES` | the session line's `recording_started_at` and `recording_pauses` (the latter as JSON), empty / `[]` when unknown | `post-process` |
 | `JOURNAL_DIR` | `games/<id>/journal` | all |
 | `SCREENSHOTS_DIR` | `games/<id>/screenshots`; `<state>/screenshots` for a `screenshot` with no session running | all |
+| `RECORDINGS_DIR` | `<recordings_root>/<id>`, where `recording-file` files the game's recordings | all |
 | `MODULE_SETTINGS_JSON` | global settings merged with the game's | all |
 | `JOURNAL_REWRITE` | `1` when `journal_write` asked for this session again; the hook replaces the entry instead of leaving it alone | `post-process` |
 | `UNIVERSE_ENV_FILE` | write `KEY=VALUE` lines here to add them to the game's environment, ahead of `launch.env`; two keys are not the environment: `UNIVERSE_GAMESCOPE_ARGS` is flags for the game's gamescope (see Gamescope), `UNIVERSE_GAME_ARGS` the game's own arguments, shell-quoted, ahead of `launch.args` (the session's recorded command line holds them) | `pre-launch` |

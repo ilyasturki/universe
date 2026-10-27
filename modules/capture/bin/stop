@@ -5,7 +5,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import gsr_cli, load_settings, log, timeline, unit_env_args
+from _common import gsr_cli, load_settings, log, pending_dirs, timeline, unit_env_args
 from _finish import finish
 
 BIN_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -23,7 +23,7 @@ STOP_WAIT_S = 8
 STITCH_WAIT_S = 9
 
 
-def stop_recorder(session_id, pending_dir):
+def stop_recorder(session_id, data_dir):
     """The saved file's path, from the recorder once it has written it; the unit's stop and a glob when the socket is already gone."""
     try:
         r = gsr_cli(session_id, "stop", timeout=STOP_WAIT_S)
@@ -33,7 +33,7 @@ def stop_recorder(session_id, pending_dir):
     except (OSError, subprocess.SubprocessError) as e:
         log(f"gsr-cli stop: {e}")
     stop_unit(f"universe-capture-{session_id}.service")
-    return next(iter(glob.glob(os.path.join(pending_dir, f"{session_id}.mkv")) + glob.glob(os.path.join(pending_dir, f"{session_id}.mp4"))), None)
+    return next((p for d in pending_dirs(data_dir) for ext in ("mkv", "mp4") for p in glob.glob(os.path.join(d, f"{session_id}.{ext}"))), None)
 
 
 def finish_in_unit(session_id, current):
@@ -62,13 +62,12 @@ def finish_in_unit(session_id, current):
 def main():
     session_id = os.environ["SESSION_ID"]
     data_dir = os.environ["MODULE_DATA_DIR"]
-    pending_dir = os.path.join(data_dir, "pending")
 
     with timeline(data_dir, session_id) as state:
         if state is not None:
             state["stopping"] = True
         parts = list((state or {}).get("parts") or [])
-    current = stop_recorder(session_id, pending_dir)
+    current = stop_recorder(session_id, data_dir)
     if parts:
         return finish_in_unit(session_id, current)
     return finish(session_id, data_dir, current, load_settings().get("min_duration_s", 240))

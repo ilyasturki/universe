@@ -21,7 +21,7 @@ On GNOME, recording one window needs the Universe Shell extension ([After instal
 
 ## Where recordings land
 
-In `~/Videos/universe`, unless you move the folder in Settings › **Game defaults** › **Folders** › **Recordings**, shown with **Y**. The [Media](/docs/using/media/) tab and a game's Recordings page play them.
+In `~/Videos/universe`, unless you move the folder in Settings › **Game defaults** › **Folders** › **Recordings**, shown with **Y**. The [Media](/docs/using/media/) tab and a game's Recordings page play them. While a game runs, its recording grows in a hidden `.pending` folder beside the game's recordings.
 
 ## Settings
 
