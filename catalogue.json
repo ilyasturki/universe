@@ -156,6 +156,27 @@
       {
        "arch": "x86_64",
        "format": "binary",
+       "sha256": "868dd0b510f2c1c63a524b8e0466dd92bb2aecdb697217a690bf9effd04d3a5a",
+       "size": 14660192,
+       "url": "https://github.com/imLinguin/comet/releases/download/v0.4.1/comet-x86_64-unknown-linux-gnu"
+      },
+      {
+       "arch": "aarch64",
+       "format": "binary",
+       "sha256": "33c52a7f4747e4e3340b1de955683679e33d01ba1a4fd2f9d79d7eb4dc229fc8",
+       "size": 12612400,
+       "url": "https://github.com/imLinguin/comet/releases/download/v0.4.1/comet-aarch64-unknown-linux-gnu"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-10-28T14:09:44Z",
+     "version": "0.4.1"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "binary",
        "sha256": "4af235a977052a8d9a232a465f4b9208f48e17753555454ba261d152b0daeaf8",
        "size": 12759152,
        "url": "https://github.com/imLinguin/comet/releases/download/v0.4.0/comet-x86_64-unknown-linux-gnu"
@@ -631,6 +652,20 @@
       {
        "arch": "x86_64",
        "format": "binary",
+       "sha256": "2aa2b59c83d3bfbe7b60ead91c6297b263b5d1e6c233a04b7409bafe26738f02",
+       "size": 983218,
+       "url": "https://github.com/Heroic-Games-Launcher/heroic-gogdl/releases/download/v1.4.0/gogdl_linux_x86_64"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-10-28T20:58:50Z",
+     "version": "1.4.0"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "binary",
        "sha256": "7a6f22da4943bdb4c00baf6250fcee7085c1104ba2ac401479e70ec96e722b59",
        "size": 1621617,
        "url": "https://github.com/Heroic-Games-Launcher/heroic-gogdl/releases/download/v1.3.1/gogdl_linux_x86_64"
@@ -695,6 +730,51 @@
        "arch": "x86_64",
        "format": "tar.gz",
        "program": "kyty_emulator",
+       "sha256": "6de121bf20764550dfe179df175ac36f204eeff79c76b5600454b6c873f5bb20",
+       "size": 78782006,
+       "url": "https://github.com/KytyPS5/KytyPS5/releases/download/KytyPS5-2026-10-29-5e837a9/KytyPS5-2026-10-29-5e837a9-Linux-x86_64.tar.gz"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-10-29T05:36:54Z",
+     "version": "2026-10-29-5e837a9"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "tar.gz",
+       "program": "kyty_emulator",
+       "sha256": "88963f28165bb2551240b981c3841f6a7743e0ffb5306e604d19ee669051a53f",
+       "size": 78777153,
+       "url": "https://github.com/KytyPS5/KytyPS5/releases/download/KytyPS5-2026-10-28-c528324/KytyPS5-2026-10-28-c528324-Linux-x86_64.tar.gz"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-10-28T20:46:44Z",
+     "version": "2026-10-28-c528324"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "tar.gz",
+       "program": "kyty_emulator",
+       "sha256": "ffee2397f68438c284dd295366cd3fd0f4f6b1b966e6877df74f6e7efc54deaa",
+       "size": 78773034,
+       "url": "https://github.com/KytyPS5/KytyPS5/releases/download/KytyPS5-2026-10-28-c67352d/KytyPS5-2026-10-28-c67352d-Linux-x86_64.tar.gz"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-10-28T19:33:22Z",
+     "version": "2026-10-28-c67352d"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "tar.gz",
+       "program": "kyty_emulator",
        "sha256": "6309d7262bab1e5a132bcf1f3d8f42e8ab6944b856bb0f871b90b5ff20535c88",
        "size": 78769178,
        "url": "https://github.com/KytyPS5/KytyPS5/releases/download/KytyPS5-2026-10-28-6c01401/KytyPS5-2026-10-28-6c01401-Linux-x86_64.tar.gz"
@@ -733,51 +813,6 @@
      "channel": "stable",
      "date": "2026-10-27T22:36:01Z",
      "version": "2026-10-27-1be1c6c"
-    },
-    {
-     "assets": [
-      {
-       "arch": "x86_64",
-       "format": "tar.gz",
-       "program": "kyty_emulator",
-       "sha256": "3f88b9a8f0f50358f06bc29b6e83f228aba5a792f90760f983023ffe8270a34c",
-       "size": 78777956,
-       "url": "https://github.com/KytyPS5/KytyPS5/releases/download/KytyPS5-2026-10-27-0685bff/KytyPS5-2026-10-27-0685bff-Linux-x86_64.tar.gz"
-      }
-     ],
-     "channel": "stable",
-     "date": "2026-10-27T10:16:23Z",
-     "version": "2026-10-27-0685bff"
-    },
-    {
-     "assets": [
-      {
-       "arch": "x86_64",
-       "format": "tar.gz",
-       "program": "kyty_emulator",
-       "sha256": "35bbf9af2ce3d7672bd33b3d525585987169826ce9e4c28780e7ba2a17446bf0",
-       "size": 78779773,
-       "url": "https://github.com/KytyPS5/KytyPS5/releases/download/KytyPS5-2026-10-27-a5b3673/KytyPS5-2026-10-27-a5b3673-Linux-x86_64.tar.gz"
-      }
-     ],
-     "channel": "stable",
-     "date": "2026-10-27T10:01:27Z",
-     "version": "2026-10-27-a5b3673"
-    },
-    {
-     "assets": [
-      {
-       "arch": "x86_64",
-       "format": "tar.gz",
-       "program": "kyty_emulator",
-       "sha256": "42f69e8afcc07db79e2358d7e18d3daa4cb82d5d6227d244c5d37e3ac6c9b477",
-       "size": 78780055,
-       "url": "https://github.com/KytyPS5/KytyPS5/releases/download/KytyPS5-2026-10-27-3583331/KytyPS5-2026-10-27-3583331-Linux-x86_64.tar.gz"
-      }
-     ],
-     "channel": "stable",
-     "date": "2026-10-27T07:05:45Z",
-     "version": "2026-10-27-3583331"
     }
    ],
    "homepage": "https://github.com/KytyPS5/KytyPS5",
@@ -1334,6 +1369,20 @@
       {
        "arch": "x86_64",
        "format": "appimage",
+       "sha256": "91a60276ee51afa34133b7a20f25c886748a79b498d5a90d3598d54c976e64b4",
+       "size": 83256934,
+       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-cd0c200b9f45427a2a55dc50c99993f2b100a987/rpcs3-v0.0.43-20504-cd0c200b_linux64.AppImage"
+      }
+     ],
+     "channel": "rolling",
+     "date": "2026-10-29T10:57:08Z",
+     "version": "0.0.43-20504-cd0c200b"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "appimage",
        "sha256": "fbbe102511471b21150ea3aa2cbc15662e0ab26cabcb346807f6fca30ff7a62a",
        "size": 83208472,
        "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-6c44fff7549e941389a4ce072a95c5ff9db7237c/rpcs3-v0.0.43-20415-6c44fff7_linux64.AppImage"
@@ -1398,20 +1447,6 @@
      "channel": "rolling",
      "date": "2026-10-24T21:54:25Z",
      "version": "0.0.43-20397-8b9ee605"
-    },
-    {
-     "assets": [
-      {
-       "arch": "x86_64",
-       "format": "appimage",
-       "sha256": "8c285b087d57f2744cedcd9248b85a60007077d14a2348f6f049c8c66012fe96",
-       "size": 83114459,
-       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-77f595c31c452aab54bb7f2a3ff14eaff3ec240f/rpcs3-v0.0.43-20389-77f595c3_linux64.AppImage"
-      }
-     ],
-     "channel": "rolling",
-     "date": "2026-10-24T09:22:03Z",
-     "version": "0.0.43-20389-77f595c3"
     }
    ],
    "homepage": "https://github.com/RPCS3/rpcs3-binaries-linux",
@@ -1711,21 +1746,21 @@
       {
        "arch": "x86_64",
        "format": "appimage",
-       "sha256": "a2b76221b8238947576e7992cd414d492fa6ae0bacc0d321ad628668ce5716f8",
-       "size": 89636562,
+       "sha256": "c9efe70027406b38f160c250ad5f7d53bb27081b234192f262ce58cfb073c9c5",
+       "size": 89781494,
        "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-x86_64.AppImage"
       },
       {
        "arch": "aarch64",
        "format": "appimage",
-       "sha256": "a09288109e947c4e5f3912125315e3cbfb3d613d1aa8f35175b5f0a1e3162209",
-       "size": 88133990,
+       "sha256": "85b3105afe03a32aab6bb49de752d1bb087847498e7488ae716a9847761a6d5f",
+       "size": 88337406,
        "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-aarch64.AppImage"
       }
      ],
      "channel": "rolling",
-     "date": "2026-10-27T07:37:50Z",
-     "version": "2026.10.27"
+     "date": "2026-10-29T03:08:09Z",
+     "version": "2026.10.29"
     }
    ],
    "homepage": "https://github.com/Vita3K/Vita3K",
@@ -1943,6 +1978,6 @@
    "name": "xemu"
   }
  },
- "generated_at": "2026-10-28T11:27:12Z",
+ "generated_at": "2026-10-29T11:37:34Z",
  "schema": 1
 }
