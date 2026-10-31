@@ -730,6 +730,36 @@
        "arch": "x86_64",
        "format": "tar.gz",
        "program": "kyty_emulator",
+       "sha256": "55db87fe63e6e22edf5fc387d84faec3926a3f8f4d39e3a817b11a467b8703c9",
+       "size": 78841722,
+       "url": "https://github.com/KytyPS5/KytyPS5/releases/download/KytyPS5-2026-10-31-0261891/KytyPS5-2026-10-31-0261891-Linux-x86_64.tar.gz"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-10-31T04:09:08Z",
+     "version": "2026-10-31-0261891"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "tar.gz",
+       "program": "kyty_emulator",
+       "sha256": "fff9badfc482a7571b9b551d6aa05594d15db29c5122075df3a48d80d2fcf015",
+       "size": 78830820,
+       "url": "https://github.com/KytyPS5/KytyPS5/releases/download/KytyPS5-2026-10-31-abd77f5/KytyPS5-2026-10-31-abd77f5-Linux-x86_64.tar.gz"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-10-31T03:51:44Z",
+     "version": "2026-10-31-abd77f5"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "tar.gz",
+       "program": "kyty_emulator",
        "sha256": "1341b5502f6bd999f2a52b33bf138fd60b04e55fcf23da27d2b752ddee43dc5e",
        "size": 78832554,
        "url": "https://github.com/KytyPS5/KytyPS5/releases/download/KytyPS5-2026-10-30-4919fdb/KytyPS5-2026-10-30-4919fdb-Linux-x86_64.tar.gz"
@@ -783,36 +813,6 @@
      "channel": "stable",
      "date": "2026-10-29T05:36:54Z",
      "version": "2026-10-29-5e837a9"
-    },
-    {
-     "assets": [
-      {
-       "arch": "x86_64",
-       "format": "tar.gz",
-       "program": "kyty_emulator",
-       "sha256": "88963f28165bb2551240b981c3841f6a7743e0ffb5306e604d19ee669051a53f",
-       "size": 78777153,
-       "url": "https://github.com/KytyPS5/KytyPS5/releases/download/KytyPS5-2026-10-28-c528324/KytyPS5-2026-10-28-c528324-Linux-x86_64.tar.gz"
-      }
-     ],
-     "channel": "stable",
-     "date": "2026-10-28T20:46:44Z",
-     "version": "2026-10-28-c528324"
-    },
-    {
-     "assets": [
-      {
-       "arch": "x86_64",
-       "format": "tar.gz",
-       "program": "kyty_emulator",
-       "sha256": "ffee2397f68438c284dd295366cd3fd0f4f6b1b966e6877df74f6e7efc54deaa",
-       "size": 78773034,
-       "url": "https://github.com/KytyPS5/KytyPS5/releases/download/KytyPS5-2026-10-28-c67352d/KytyPS5-2026-10-28-c67352d-Linux-x86_64.tar.gz"
-      }
-     ],
-     "channel": "stable",
-     "date": "2026-10-28T19:33:22Z",
-     "version": "2026-10-28-c67352d"
     }
    ],
    "homepage": "https://github.com/KytyPS5/KytyPS5",
@@ -1369,6 +1369,20 @@
       {
        "arch": "x86_64",
        "format": "appimage",
+       "sha256": "e431b133a25fef36726647029c8ee038ab2bf4b48f8d86cd424e364b0b565474",
+       "size": 83227512,
+       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-df090aa12797b5c5f4a6f2567f1578ec3e85409d/rpcs3-v0.0.43-20524-df090aa1_linux64.AppImage"
+      }
+     ],
+     "channel": "rolling",
+     "date": "2026-10-31T05:48:49Z",
+     "version": "0.0.43-20524-df090aa1"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "appimage",
        "sha256": "ac554dfedb571985b8a4ba8426d579566bca6225b16817ccd4ed7b2b2d357f4c",
        "size": 83213794,
        "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-dd47376ace6affd31c328724f85a6070ba1884d1/rpcs3-v0.0.43-20510-dd47376a_linux64.AppImage"
@@ -1433,20 +1447,6 @@
      "channel": "rolling",
      "date": "2026-10-26T08:55:11Z",
      "version": "0.0.43-20404-e8979d31"
-    },
-    {
-     "assets": [
-      {
-       "arch": "x86_64",
-       "format": "appimage",
-       "sha256": "c3331ba8725762315a26d5d7894d39132679850ad5d397f15e578bf7b3ccdef6",
-       "size": 83142328,
-       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-d00d80231af3f9b0286f38fd72f7513583f1a9d4/rpcs3-v0.0.43-20402-d00d8023_linux64.AppImage"
-      }
-     ],
-     "channel": "rolling",
-     "date": "2026-10-25T16:17:51Z",
-     "version": "0.0.43-20402-d00d8023"
     }
    ],
    "homepage": "https://github.com/RPCS3/rpcs3-binaries-linux",
@@ -1455,6 +1455,21 @@
   },
   "shadps4": {
    "builds": [
+    {
+     "assets": [
+      {
+       "appimage": "Shadps4-sdl.AppImage",
+       "arch": "x86_64",
+       "format": "zip",
+       "sha256": "7c41c58254461d742b5edf564e23795697b63e9e46de11d0e1ed67bd2cbaae68",
+       "size": 33362189,
+       "url": "https://github.com/shadps4-emu/shadPS4/releases/download/v.0.21.0/shadps4-linux-sdl-0.21.0.zip"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-10-30T13:38:45Z",
+     "version": "0.21.0"
+    },
     {
      "assets": [
       {
@@ -1746,21 +1761,21 @@
       {
        "arch": "x86_64",
        "format": "appimage",
-       "sha256": "d031ed6ee5e767c23eeb9a74f9ad939bcd9729bbb5c89e317704fd155935af0b",
-       "size": 89776333,
+       "sha256": "43fa2b6f9ce086c5f73fb2e99eaa06c3b892aa3f09ae043b2ff017b5d4bf3a33",
+       "size": 89791989,
        "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-x86_64.AppImage"
       },
       {
        "arch": "aarch64",
        "format": "appimage",
-       "sha256": "41dc46cebb85c6770fc0174436554b013bf8aa577ff8306503dc48b56f51e187",
-       "size": 88336628,
+       "sha256": "81236ae0dbb71abea1c17101e4c5c3d7f8040a0a9f3dfffb580c2cf054bb10e5",
+       "size": 88351142,
        "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-aarch64.AppImage"
       }
      ],
      "channel": "rolling",
-     "date": "2026-10-29T15:16:04Z",
-     "version": "2026.10.29"
+     "date": "2026-10-30T17:45:44Z",
+     "version": "2026.10.30"
     }
    ],
    "homepage": "https://github.com/Vita3K/Vita3K",
@@ -1978,6 +1993,6 @@
    "name": "xemu"
   }
  },
- "generated_at": "2026-10-30T11:28:54Z",
+ "generated_at": "2026-10-31T10:59:48Z",
  "schema": 1
 }
