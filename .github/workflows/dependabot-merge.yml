@@ -1,0 +1,34 @@
+name: dependabot-merge
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  merge:
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      startsWith(github.event.workflow_run.head_branch, 'dependabot/')
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          # Only the commit ci passed on: a push to the branch since then waits for its own run
+          pr=$(gh pr list --head "$BRANCH" --author app/dependabot --state open --json number,headRefOid --jq ".[] | select(.headRefOid == \"$SHA\") | .number")
+          if [ -z "$pr" ]; then
+            echo "No open Dependabot pull request at $SHA"
+            exit 0
+          fi
+          if ! gh pr checks "$pr" --watch; then
+            echo "A check failed on #$pr: left for the owner"
+            exit 0
+          fi
+          # Merged with the workflow token, the push to main starts no ci run there: the nightly covers it
+          gh pr merge "$pr" --squash --delete-branch --match-head-commit "$SHA"
