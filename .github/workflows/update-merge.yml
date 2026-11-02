@@ -1,4 +1,4 @@
-name: dependabot-merge
+name: update-merge
 on:
   workflow_run:
     workflows: [ci]
@@ -11,7 +11,7 @@ jobs:
     if: >-
       github.event.workflow_run.event == 'pull_request' &&
       github.event.workflow_run.conclusion == 'success' &&
-      startsWith(github.event.workflow_run.head_branch, 'dependabot/')
+      (startsWith(github.event.workflow_run.head_branch, 'dependabot/') || github.event.workflow_run.head_branch == 'flake-update')
     runs-on: ubuntu-latest
     steps:
       - env:
@@ -20,15 +20,17 @@ jobs:
           BRANCH: ${{ github.event.workflow_run.head_branch }}
           SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          # Only the commit ci passed on: a push to the branch since then waits for its own run
-          pr=$(gh pr list --head "$BRANCH" --author app/dependabot --state open --json number,headRefOid --jq ".[] | select(.headRefOid == \"$SHA\") | .number")
+          if [ "$BRANCH" = flake-update ]; then author=app/github-actions; else author=app/dependabot; fi
+          # Only the commit ci passed on, and not a draft: a red flake update stays one until the routine has fixed it
+          pr=$(gh pr list --head "$BRANCH" --author "$author" --state open --json number,headRefOid,isDraft --jq ".[] | select(.headRefOid == \"$SHA\" and (.isDraft | not)) | .number")
           if [ -z "$pr" ]; then
-            echo "No open Dependabot pull request at $SHA"
+            echo "No open, ready update pull request at $SHA"
             exit 0
           fi
           if ! gh pr checks "$pr" --watch; then
             echo "A check failed on #$pr: left for the owner"
             exit 0
           fi
+          # Rebase keeps a fix the routine pushed on the flake update as its own commit
           # Merged with the workflow token, the push to main starts no ci run there: the nightly covers it
-          gh pr merge "$pr" --squash --delete-branch --match-head-commit "$SHA"
+          gh pr merge "$pr" --rebase --delete-branch --match-head-commit "$SHA"
