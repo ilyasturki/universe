@@ -106,7 +106,8 @@ class Profile:
             "RUST_LOG": "warn",
         }
         if user:
-            self.env.update(HOME=str(self.dir), USER=user, LOGNAME=user)
+            # Without a session bus, libdbus autolaunches one inside SDL_Init and the launcher's pad thread can hang there for 30 s.
+            self.env.update(HOME=str(self.dir), USER=user, LOGNAME=user, DBUS_SESSION_BUS_ADDRESS=f"unix:path=/run/user/{entry.pw_uid}/bus")
         for kind in ("DATA", "CONFIG", "STATE", "CACHE"):
             path = self.dir / kind.lower()
             path.mkdir()
