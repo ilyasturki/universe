@@ -229,7 +229,7 @@ class Check:
             if not nodes or shut:
                 raise Failed(f"the session cannot open {shut or 'a hidraw node'}: SDL's HIDAPI driver will not read the pad")
 
-    def sdl(self):
+    def sdl_listed(self):
         hook = Path(self.profile.env["UNIVERSE_MODULES_PATH"]) / "controls" / "bin" / "pads"
         out = self.profile.call([str(hook)])
         lines = [json.loads(line) for line in out.stdout.splitlines() if line.startswith("{")]
@@ -238,6 +238,10 @@ class Check:
         ]
         if not mine:
             raise Failed(f"SDL3 lists no such pad: {out.stderr.strip()[-200:]}")
+        return mine
+
+    def sdl(self):
+        mine = self.sdl_listed()
         view = mine[0]["sdl"]
         self.recorded["sdl"] = view
         if self.pad.sdl and not (self.pad.hid or {}).get("synthesized") and comparable(view) != comparable(self.pad.sdl):
@@ -334,7 +338,10 @@ class Check:
         proc = self.profile.spawn([self.ui, "--size", "640x360"], QT_QPA_PLATFORM="offscreen", UNIVERSE_UI_INPUT_LOG="1", QT_FORCE_STDERR_LOGGING="1")
         lines = Lines(proc)
         try:
-            lines.wait(lambda line: "universe.gamepad: mapping:" in line and line, 30, "the launcher maps the pad")
+            try:
+                lines.wait(lambda line: "universe.gamepad: mapping:" in line and line, 30, "the launcher maps the pad")
+            except Failed as e:
+                raise Failed(f"{e}; meanwhile {self.seen_elsewhere()}") from None
             time.sleep(0.5)
             self.device.press(confirm)
             found = lines.wait(lambda line: "from pad" in line and " press " in line and line, 5, f"{confirm} posting a key")
@@ -343,6 +350,16 @@ class Check:
                 raise Failed(f"{confirm} ({labels[confirm]}) posted {found.split('key ', 1)[-1]}, not Return")
         finally:
             stop(proc)
+
+    def seen_elsewhere(self):
+        """Whether a fresh SDL3 and the core list the pad: a launcher that maps nothing missed it, or was never told."""
+        try:
+            self.sdl_listed()
+            sdl = "SDL3 lists it"
+        except Failed as e:
+            sdl = str(e)
+        core = "the core lists it" if self.find() else "the core lists nothing"
+        return f"{sdl}, {core}"
 
     def forwarder(self):
         forward = Path(self.profile.env["UNIVERSE_MODULES_PATH"]) / "pads" / "bin" / "forward"
