@@ -14,6 +14,7 @@ from looks import (
     invoke,
     lit_fraction,
     lit_rows,
+    loaded,
     notices,
     read,
     render,
@@ -726,7 +727,7 @@ def test_the_reprise_game_page_holds_the_games_tools_and_the_hero_its_page_and_m
     look.press(Qt.Key.Key_Right)
     look.press(Qt.Key.Key_Return)
     until(lambda: root.property("detailOpen") is True, "the hero's Game page")
-    page = until(lambda: root.findChild(QObject, "detailPage"))
+    page = until(lambda: loaded(root.findChild(QObject, "detailPage")))
     bar = until(lambda: descendant(page, "hintBar"))
     until(lambda: read(page, "pills") == ["play", "favourite", "more"], "Play, the heart and ···: the game's other tools are in its menu")
     until(lambda: page.property("activeFocus") is True)

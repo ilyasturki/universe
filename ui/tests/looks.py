@@ -108,6 +108,15 @@ def lit_rows(menu):
     return sorted(QQmlEngine.contextForObject(row).contextProperty("index") for row in rows if QColor(row.property("color")).alpha() > 0)
 
 
+def loaded(page):
+    """`page` once its Loader has made it its item: an asynchronous Loader parents a page, and the page may take the focus,
+    while it still incubates, before the Connections on the Loader's item reach it."""
+    parent = page.parentItem() if page is not None else None
+    if parent is not None and parent.inherits("QQuickLoader") and parent.property("item") != page:
+        return None
+    return page
+
+
 def focus_names(window):
     """The objectNames around the item with the active focus, outermost first."""
     names, item = [], window.activeFocusItem()
@@ -185,7 +194,7 @@ class Look:
         root = self.root
         # A Repeater's pages (Reprise's tabs, the others' stack) are no QObject's children: findChild reaches only Reprise's sub-pages.
         if not self.stacked and name not in TABS:
-            return until(lambda: root.findChild(QObject, name), f"{name} is not shown")
+            return until(lambda: loaded(root.findChild(QObject, name)), f"{name} is not shown")
         slot = "topPage" if self.stacked else "activePage"
         return until(lambda: (p := root.property(slot)) is not None and p.objectName() == name and p, f"{name} is not shown")
 
