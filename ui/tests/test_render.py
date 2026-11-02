@@ -713,6 +713,18 @@ def test_the_reprise_detail_page_has_one_line_of_play_and_the_screenshots_beside
 
 
 @reprise
+def test_a_key_pressed_while_a_reprise_page_loads_reaches_it_once_loaded(look, api):
+    root = look.root
+    game = api.allGames.byId("the-technomancer")
+    invoke(root, "openDetail", game)
+    look.press(Qt.Key.Key_Escape)
+    until(lambda: root.property("detailOpen") is False, "B pressed as the Game page loads closes it")
+    invoke(root, "openSub", "pages/GameSettingsPage.qml", {"game": game})
+    look.press(Qt.Key.Key_Escape)
+    until(lambda: root.property("subOpen") is False, "B pressed as a sub page loads closes it")
+
+
+@reprise
 def test_the_reprise_game_page_holds_the_games_tools_and_the_hero_its_page_and_menu(look, api):
     def glyphs(hints):
         return {h["glyph"] for h in hints}

@@ -218,13 +218,13 @@ FocusScope {
     }
 
     function restoreFocus() {
-        // A sub page still loading holds the focus in its loader, not on the tab under it.
+        // A page still loading holds the focus in its KeyHold, not on the tab under it.
         if (whatsNew.open)
             whatsNew.forceActiveFocus();
         else if (subOpen)
-            (subLoader.item || subLoader).forceActiveFocus();
-        else if (detailOpen && detailLoader.item)
-            detailLoader.item.forceActiveFocus();
+            (subLoader.item || subHold).forceActiveFocus();
+        else if (detailOpen)
+            (detailLoader.item || detailHold).forceActiveFocus();
         else if (focusOwner === "search" && searchLoader.item)
             searchLoader.item.forceActiveFocus();
         else if (focusOwner === "chrome")
@@ -1114,50 +1114,59 @@ FocusScope {
         }
     }
 
-    Loader {
-        id: detailLoader
+    KeyHold {
+        id: detailHold
 
         anchors.fill: parent
-        active: root.detailOpen || detailLoader.opacity > 0.01
-        asynchronous: true
-        source: "pages/DetailPage.qml"
         focus: root.detailOpen && !root.subOpen
-        opacity: root.detailOpen && !root.launching && !root.subOpen ? 1.0 : 0.0
-        transform: Translate {
-            y: root.detailOpen ? 0 : Theme.dp(48)
-            Behavior on y {
-                Ease {
-                    duration: Theme.durScene
+        holding: !detailLoader.item
+
+        Loader {
+            id: detailLoader
+
+            anchors.fill: parent
+            active: root.detailOpen || detailLoader.opacity > 0.01
+            asynchronous: true
+            source: "pages/DetailPage.qml"
+            focus: !detailHold.holding
+            opacity: root.detailOpen && !root.launching && !root.subOpen ? 1.0 : 0.0
+            transform: Translate {
+                y: root.detailOpen ? 0 : Theme.dp(48)
+                Behavior on y {
+                    Ease {
+                        duration: Theme.durScene
+                    }
                 }
             }
-        }
 
-        onLoaded: {
-            item.game = Qt.binding(function () {
-                return root.detailGame;
-            });
-            item.overlayHints = Qt.binding(function () {
-                return root.overlayHints;
-            });
-            item.forceActiveFocus();
-        }
+            onLoaded: {
+                item.game = Qt.binding(function () {
+                    return root.detailGame;
+                });
+                item.overlayHints = Qt.binding(function () {
+                    return root.overlayHints;
+                });
+                item.forceActiveFocus();
+                detailHold.release();
+            }
 
-        Connections {
-            target: detailLoader.item
-            ignoreUnknownSignals: true
-            function onLaunchRequested(game) {
-                root.launchGame(game);
+            Connections {
+                target: detailLoader.item
+                ignoreUnknownSignals: true
+                function onLaunchRequested(game) {
+                    root.launchGame(game);
+                }
+                function onCloseRequested() {
+                    root.closeDetail();
+                }
+                function onMenuRequested(game, anchor) {
+                    root.openMenu(game, anchor);
+                }
             }
-            function onCloseRequested() {
-                root.closeDetail();
-            }
-            function onMenuRequested(game, anchor) {
-                root.openMenu(game, anchor);
-            }
-        }
 
-        Behavior on opacity {
-            SceneFade {}
+            Behavior on opacity {
+                SceneFade {}
+            }
         }
     }
 
@@ -1175,66 +1184,75 @@ FocusScope {
         }
     }
 
-    Loader {
-        id: subLoader
-        objectName: "subLoader"
+    KeyHold {
+        id: subHold
 
         anchors.fill: parent
-        active: root.subOpen || subLoader.opacity > 0.01
-        asynchronous: true
-        source: root.subSource
         focus: root.subOpen
-        opacity: root.subOpen && !root.launching && !root.subSwapping ? 1.0 : 0.0
-        visible: opacity > 0.01
-        transform: Translate {
-            y: root.subOpen ? 0 : Theme.dp(48)
-            Behavior on y {
-                Ease {
-                    duration: Theme.durScene
+        holding: !subLoader.item
+
+        Loader {
+            id: subLoader
+            objectName: "subLoader"
+
+            anchors.fill: parent
+            active: root.subOpen || subLoader.opacity > 0.01
+            asynchronous: true
+            source: root.subSource
+            focus: !subHold.holding
+            opacity: root.subOpen && !root.launching && !root.subSwapping ? 1.0 : 0.0
+            visible: opacity > 0.01
+            transform: Translate {
+                y: root.subOpen ? 0 : Theme.dp(48)
+                Behavior on y {
+                    Ease {
+                        duration: Theme.durScene
+                    }
                 }
             }
-        }
 
-        onLoaded: {
-            item.args = Qt.binding(function () {
-                return root.subArgs;
-            });
-            item.forceActiveFocus();
-        }
-
-        Connections {
-            target: subLoader.item
-            ignoreUnknownSignals: true
-            function onCloseRequested() {
-                root.closeSub();
-            }
-            function onJumpRequested(source, session) {
-                root.jumpSub(source, session);
-            }
-            function onInstallRequested(source, section) {
-                root.closeSub();
-                if (section === "source")
-                    root.openSub("pages/FormPage.qml", {
-                        source: source
-                    });
-                else
-                    root.openSettings(section);
-            }
-            function onSettingsRequested(game) {
-                root.pushSub("pages/GameSettingsPage.qml", {
-                    game: game
-                }, {
-                    returnGame: game.id
+            onLoaded: {
+                item.args = Qt.binding(function () {
+                    return root.subArgs;
                 });
+                item.forceActiveFocus();
+                subHold.release();
             }
-            function onMessage(text) {
-                Notices.show(text);
-            }
-        }
 
-        Behavior on opacity {
-            Ease {
-                duration: root.subSwapping ? Theme.durQuick : Theme.durScene
+            Connections {
+                target: subLoader.item
+                ignoreUnknownSignals: true
+                function onCloseRequested() {
+                    root.closeSub();
+                }
+                function onJumpRequested(source, session) {
+                    root.jumpSub(source, session);
+                }
+                function onInstallRequested(source, section) {
+                    root.closeSub();
+                    if (section === "source")
+                        root.openSub("pages/FormPage.qml", {
+                            source: source
+                        });
+                    else
+                        root.openSettings(section);
+                }
+                function onSettingsRequested(game) {
+                    root.pushSub("pages/GameSettingsPage.qml", {
+                        game: game
+                    }, {
+                        returnGame: game.id
+                    });
+                }
+                function onMessage(text) {
+                    Notices.show(text);
+                }
+            }
+
+            Behavior on opacity {
+                Ease {
+                    duration: root.subSwapping ? Theme.durQuick : Theme.durScene
+                }
             }
         }
     }
