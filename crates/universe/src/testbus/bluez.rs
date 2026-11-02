@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use zbus::message::Header;
 use zbus::object_server::SignalEmitter;
-use zbus::zvariant::{ObjectPath, OwnedObjectPath};
+use zbus::{ObjectPath, OwnedObjectPath};
 
 use super::Bus;
 

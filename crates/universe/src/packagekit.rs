@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use futures_util::StreamExt;
-use zbus::zvariant::OwnedObjectPath;
+use zbus::OwnedObjectPath;
 
 use crate::core::Progress;
 use crate::{Error, Result};
@@ -47,13 +47,12 @@ where
 {
     let pk = zbus::Proxy::new(conn, NAME, PATH, NAME).await.map_err(failed)?;
     let path: OwnedObjectPath = pk.call("CreateTransaction", &()).await.map_err(failed)?;
-    let rule = zbus::MatchRule::builder().msg_type(zbus::message::Type::Signal).path(path.clone()).map_err(failed)?.build();
+    let rule = zbus::MatchRule::builder().msg_type(zbus::message::Type::Signal).path(path.clone()).build().map_err(failed)?;
     let mut signals = zbus::MessageStream::for_match_rule(rule, conn, None).await.map_err(failed)?;
     let tx = zbus::proxy::Builder::<zbus::Proxy>::new(conn)
         .destination(NAME)
-        .and_then(|b| b.path(path.clone()))
-        .and_then(|b| b.interface(TRANSACTION))
-        .map_err(failed)?
+        .path(path.clone())
+        .interface(TRANSACTION)
         .cache_properties(zbus::proxy::CacheProperties::No)
         .build()
         .await
@@ -93,7 +92,7 @@ where
                     }
                 }
                 Some("PropertiesChanged") => {
-                    type Changed = (String, std::collections::HashMap<String, zbus::zvariant::OwnedValue>, Vec<String>);
+                    type Changed = (String, std::collections::HashMap<String, zbus::OwnedVariant>, Vec<String>);
                     if let Ok((_, changed, _)) = body.deserialize::<Changed>() {
                         if let Some(percent) = changed.get("Percentage").and_then(|v| u32::try_from(v).ok()) {
                             report(percent);

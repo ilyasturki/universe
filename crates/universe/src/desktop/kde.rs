@@ -35,7 +35,7 @@ fn source(me: &str, body: &str) -> String {
 }
 
 async fn answers(conn: &zbus::Connection) -> Result<zbus::MessageStream, String> {
-    let rule = zbus::MatchRule::builder().msg_type(zbus::message::Type::MethodCall).member("answer").map_err(|e| e.to_string())?.build();
+    let rule = zbus::MatchRule::builder().msg_type(zbus::message::Type::MethodCall).member("answer").build().map_err(|e| e.to_string())?;
     zbus::MessageStream::for_match_rule(rule, conn, None).await.map_err(|e| e.to_string())
 }
 

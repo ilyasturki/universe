@@ -11,7 +11,7 @@ use x11rb::connection::Connection as _;
 use x11rb::protocol::xproto::{AtomEnum, ConnectionExt as _, CreateWindowAux, PropMode, WindowClass};
 use x11rb::wrapper::ConnectionExt as _;
 use zbus::object_server::SignalEmitter;
-use zbus::zvariant::{ObjectPath, OwnedObjectPath, OwnedValue};
+use zbus::{ObjectPath, OwnedObjectPath, OwnedVariant};
 
 #[path = "../src/testbus/mod.rs"]
 #[allow(dead_code)]
@@ -66,11 +66,11 @@ async fn job_done(conn: zbus::Connection, id: u32, job: OwnedObjectPath, unit: S
     Manager::job_removed(&emitter, id, job.as_ref(), &unit, "done").await.unwrap();
 }
 
-fn prop<T: TryFrom<OwnedValue>>(props: &[(String, OwnedValue)], name: &str) -> Option<T> {
+fn prop<T: TryFrom<OwnedVariant>>(props: &[(String, OwnedVariant)], name: &str) -> Option<T> {
     props.iter().find(|(k, _)| k == name).and_then(|(_, v)| T::try_from(v.try_clone().ok()?).ok())
 }
 
-async fn run_game(conn: zbus::Connection, units: Shared, name: String, props: Vec<(String, OwnedValue)>) {
+async fn run_game(conn: zbus::Connection, units: Shared, name: String, props: Vec<(String, OwnedVariant)>) {
     let env: Vec<String> = prop(&props, "Environment").unwrap_or_default();
     let env: Vec<(String, String)> = env.iter().filter_map(|kv| kv.split_once('=')).map(|(k, v)| (k.into(), v.into())).collect();
     let cwd: Option<String> = prop(&props, "WorkingDirectory");
@@ -129,8 +129,8 @@ impl Manager {
         #[zbus(connection)] conn: &zbus::Connection,
         name: String,
         _mode: String,
-        props: Vec<(String, OwnedValue)>,
-        _aux: Vec<(String, Vec<(String, OwnedValue)>)>,
+        props: Vec<(String, OwnedVariant)>,
+        _aux: Vec<(String, Vec<(String, OwnedVariant)>)>,
     ) -> zbus::fdo::Result<OwnedObjectPath> {
         let (id, job) = self.job();
         let argv = prop::<Vec<(String, Vec<String>, bool)>>(&props, "ExecStart").and_then(|e| e.into_iter().next()).map(|(_, a, _)| a).unwrap_or_default();

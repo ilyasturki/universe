@@ -5,7 +5,7 @@ use futures_util::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::sync::{mpsc, oneshot};
-use zbus::zvariant::{ObjectPath, OwnedObjectPath, OwnedValue};
+use zbus::{ObjectPath, OwnedObjectPath, OwnedVariant};
 
 pub use crate::network::system;
 use crate::network::timed;
@@ -46,7 +46,7 @@ pub struct Device {
     pub battery: Option<u8>,
 }
 
-type Props = HashMap<String, OwnedValue>;
+type Props = HashMap<String, OwnedVariant>;
 
 fn text(props: &Props, key: &str) -> Option<String> {
     props.get(key).and_then(|v| <&str>::try_from(&**v).ok()).map(str::to_string)
@@ -104,7 +104,7 @@ pub fn state_of(objects: &zbus::fdo::ManagedObjects) -> Bluetooth {
 }
 
 async fn objects(conn: &zbus::Connection) -> zbus::Result<zbus::fdo::ManagedObjects> {
-    let manager = zbus::fdo::ObjectManagerProxy::builder(conn).destination(BLUEZ)?.path("/")?.build().await?;
+    let manager = zbus::fdo::ObjectManagerProxy::builder(conn).destination(BLUEZ).path("/").build().await?;
     Ok(manager.get_managed_objects().await?)
 }
 
@@ -145,9 +145,9 @@ pub fn reason(e: &zbus::Error) -> &'static str {
 
 async fn proxy<'a>(conn: &zbus::Connection, path: OwnedObjectPath, iface: &'static str) -> zbus::Result<zbus::Proxy<'a>> {
     zbus::proxy::Builder::<zbus::Proxy>::new(conn)
-        .destination(BLUEZ)?
-        .path(path)?
-        .interface(iface)?
+        .destination(BLUEZ)
+        .path(path)
+        .interface(iface)
         .cache_properties(zbus::proxy::CacheProperties::No)
         .build()
         .await
@@ -383,7 +383,7 @@ pub async fn agent(conn: &zbus::Connection, default: bool) -> Result<mpsc::Unbou
 
 async fn describe(conn: &zbus::Connection, device: &OwnedObjectPath) -> (String, String, String) {
     let props = async {
-        let p = zbus::fdo::PropertiesProxy::builder(conn).destination(BLUEZ)?.path(device.clone())?.build().await?;
+        let p = zbus::fdo::PropertiesProxy::builder(conn).destination(BLUEZ).path(device.clone()).build().await?;
         Ok::<_, zbus::Error>(p.get_all(zbus::names::InterfaceName::from_static_str_unchecked(DEVICE)).await?)
     };
     let props: Props = tokio::time::timeout(CALL, props).await.ok().and_then(|r| r.ok()).unwrap_or_default();
@@ -541,7 +541,7 @@ where
     let (asks_tx, mut asks) = mpsc::unbounded_channel();
     conn.object_server().at(AGENT_PATH, Agent { asks: asks_tx }).await.map_err(failed)?;
     let agent_ok = register(&conn, default).await.is_ok();
-    let rule = zbus::MatchRule::builder().msg_type(zbus::message::Type::Signal).sender(BLUEZ).map_err(failed)?.build();
+    let rule = zbus::MatchRule::builder().msg_type(zbus::message::Type::Signal).sender(BLUEZ).build().map_err(failed)?;
     let mut signals = zbus::MessageStream::for_match_rule(rule, &conn, None).await.map_err(failed)?;
     let dbus = zbus::fdo::DBusProxy::new(&conn).await.map_err(failed)?;
     let mut owners = dbus.receive_name_owner_changed_with_args(&[(0, BLUEZ)]).await.map_err(failed)?;

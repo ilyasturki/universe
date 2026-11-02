@@ -5,7 +5,7 @@ use std::time::Duration;
 use futures_util::StreamExt;
 #[cfg(test)]
 use std::sync::Arc;
-use zbus::zvariant::{OwnedObjectPath, Value};
+use zbus::{OwnedObjectPath, Variant};
 
 use crate::config::Config;
 use crate::desktop::Profile;
@@ -108,17 +108,15 @@ impl Systemd {
             Err(e) => return Err(Error::Io(format!("GetUnit({unit}): {e}"))),
         };
         let iface = zbus::names::InterfaceName::try_from(iface.to_string()).map_err(|e| Error::Io(format!("{unit}: {e}")))?;
-        let build = || {
-            zbus::proxy::Builder::new(manager.connection())
-                .destination(SYSTEMD)?
-                .path(path.clone())?
-                .interface(iface)
-                .map(|b| b.cache_properties(zbus::proxy::CacheProperties::No).build())
-        };
-        match build() {
-            Ok(fut) => fut.await.map(Some).map_err(|e| Error::Io(format!("{unit}: {e}"))),
-            Err(e) => Err(Error::Io(format!("{unit}: {e}"))),
-        }
+        zbus::proxy::Builder::new(manager.connection())
+            .destination(SYSTEMD)
+            .path(path.clone())
+            .interface(iface)
+            .cache_properties(zbus::proxy::CacheProperties::No)
+            .build()
+            .await
+            .map(Some)
+            .map_err(|e| Error::Io(format!("{unit}: {e}")))
     }
 
     #[cfg(test)]
@@ -134,9 +132,9 @@ impl Systemd {
 
 async fn manager_proxy(conn: &zbus::Connection) -> zbus::Result<zbus::Proxy<'static>> {
     zbus::proxy::Builder::new(conn)
-        .destination(SYSTEMD)?
-        .path(MANAGER_PATH)?
-        .interface(MANAGER_IFACE)?
+        .destination(SYSTEMD)
+        .path(MANAGER_PATH)
+        .interface(MANAGER_IFACE)
         .cache_properties(zbus::proxy::CacheProperties::No)
         .build()
         .await
@@ -179,14 +177,14 @@ fn qualified(unit: &str) -> String {
 }
 
 /// An `Exec*=` command: the program's path, its argv, failure not ignored.
-fn exec_value(argv: Vec<String>) -> Value<'static> {
+fn exec_value(argv: Vec<String>) -> Variant<'static> {
     let path = argv.first().cloned().unwrap_or_default();
     vec![(path, argv, false)].into()
 }
 
 /// `BindsTo=` plus `After=`: the unit goes down with `bind_to` (the launcher's scope, or a hook's game unit) from the start.
-fn unit_properties(spec: &UnitSpec, program: &Path) -> Vec<(String, Value<'static>)> {
-    let mut props: Vec<(String, Value<'static>)> =
+fn unit_properties(spec: &UnitSpec, program: &Path) -> Vec<(String, Variant<'static>)> {
+    let mut props: Vec<(String, Variant<'static>)> =
         vec![("Description".into(), spec.description.clone().into()), ("CollectMode".into(), "inactive-or-failed".into())];
     let mut argv = vec![program.to_string_lossy().into_owned()];
     argv.extend(spec.args.iter().cloned());
@@ -206,7 +204,7 @@ fn unit_properties(spec: &UnitSpec, program: &Path) -> Vec<(String, Value<'stati
         props.push(("UnsetEnvironment".into(), spec.unset_env.clone().into()));
     }
     for (k, v) in &spec.properties {
-        let v: Value<'static> = match v {
+        let v: Variant<'static> = match v {
             Prop::Str(s) => s.clone().into(),
             Prop::U64(n) => (*n).into(),
         };
@@ -225,7 +223,7 @@ impl Units {
                 let props = unit_properties(spec, &program);
                 let manager = sd.manager().await?;
                 let mut jobs = manager.receive_signal("JobRemoved").await.map_err(|e| Error::Io(format!("JobRemoved: {e}")))?;
-                let aux: Vec<(String, Vec<(String, Value)>)> = vec![];
+                let aux: Vec<(String, Vec<(String, Variant)>)> = vec![];
                 let job = match manager.call::<_, _, OwnedObjectPath>("StartTransientUnit", &(name.as_str(), "fail", &props, &aux)).await {
                     Ok(job) => job,
                     Err(e) if is_dbus_error(&e, UNIT_EXISTS) => return Err(Error::Busy(format!("{name} is already running"))),
@@ -415,8 +413,8 @@ impl Units {
             Units::Systemd(sd) => {
                 let manager = sd.manager().await?;
                 let mut jobs = manager.receive_signal("JobRemoved").await.map_err(|e| Error::Unavailable(format!("JobRemoved: {e}")))?;
-                let props: Vec<(&str, Value)> = vec![("PIDs", vec![pid].into()), ("Description", "Universe launcher".into())];
-                let aux: Vec<(String, Vec<(String, Value)>)> = vec![];
+                let props: Vec<(&str, Variant)> = vec![("PIDs", vec![pid].into()), ("Description", "Universe launcher".into())];
+                let aux: Vec<(String, Vec<(String, Variant)>)> = vec![];
                 match manager.call::<_, _, OwnedObjectPath>("StartTransientUnit", &(name.as_str(), "fail", props, aux)).await {
                     Ok(job) => match wait_job(&mut jobs, &job, START_WAIT).await.as_deref() {
                         Some("done") => {}
@@ -768,7 +766,7 @@ mod tests {
         assert_eq!((log.ended.unwrap() - log.started.unwrap()).num_seconds(), 3);
     }
 
-    fn prop<'a>(props: &'a [(String, Value<'static>)], name: &str) -> Option<&'a Value<'static>> {
+    fn prop<'a>(props: &'a [(String, Variant<'static>)], name: &str) -> Option<&'a Variant<'static>> {
         props.iter().find(|(k, _)| k == name).map(|(_, v)| v)
     }
 
@@ -787,7 +785,7 @@ mod tests {
             stop_post: vec!["/usr/bin/universe".into(), "session-end".into(), "x".into(), "20260911-120000".into()],
         };
         let plain = unit_properties(&spec, Path::new("/nix/store/u/bin/umu-run"));
-        let exec = |v: &Value<'static>| -> Vec<(String, Vec<String>, bool)> { v.try_clone().unwrap().downcast().unwrap() };
+        let exec = |v: &Variant<'static>| -> Vec<(String, Vec<String>, bool)> { v.try_clone().unwrap().downcast().unwrap() };
         assert_eq!(
             exec(prop(&plain, "ExecStart").unwrap()),
             [("/nix/store/u/bin/umu-run".to_string(), vec!["/nix/store/u/bin/umu-run".to_string(), "/g/x.exe".into(), "-w".into()], false)]
@@ -796,16 +794,16 @@ mod tests {
             exec(prop(&plain, "ExecStopPost").unwrap()),
             [("/usr/bin/universe".to_string(), vec!["/usr/bin/universe".to_string(), "session-end".into(), "x".into(), "20260911-120000".into()], false)]
         );
-        assert_eq!(prop(&plain, "Description").unwrap(), &Value::from("Universe: X"));
-        assert_eq!(prop(&plain, "CollectMode").unwrap(), &Value::from("inactive-or-failed"));
-        assert_eq!(prop(&plain, "ExitType").unwrap(), &Value::from("cgroup"));
-        assert_eq!(prop(&plain, "TimeoutStopUSec").unwrap(), &Value::from(80_000_000u64));
-        assert_eq!(prop(&plain, "Environment").unwrap(), &Value::from(vec!["PATH=/bin".to_string(), "WINEPREFIX=/p".into()]));
-        assert_eq!(prop(&plain, "UnsetEnvironment").unwrap(), &Value::from(vec!["WAYLAND_DISPLAY".to_string()]));
+        assert_eq!(prop(&plain, "Description").unwrap(), &Variant::from("Universe: X"));
+        assert_eq!(prop(&plain, "CollectMode").unwrap(), &Variant::from("inactive-or-failed"));
+        assert_eq!(prop(&plain, "ExitType").unwrap(), &Variant::from("cgroup"));
+        assert_eq!(prop(&plain, "TimeoutStopUSec").unwrap(), &Variant::from(80_000_000u64));
+        assert_eq!(prop(&plain, "Environment").unwrap(), &Variant::from(vec!["PATH=/bin".to_string(), "WINEPREFIX=/p".into()]));
+        assert_eq!(prop(&plain, "UnsetEnvironment").unwrap(), &Variant::from(vec!["WAYLAND_DISPLAY".to_string()]));
         assert!(prop(&plain, "BindsTo").is_none() && prop(&plain, "After").is_none() && prop(&plain, "WorkingDirectory").is_none());
         let bound = unit_properties(&UnitSpec { bind_to: Some("universe-launcher-4242.scope".into()), ..spec }, Path::new("/nix/store/u/bin/umu-run"));
-        assert_eq!(prop(&bound, "BindsTo").unwrap(), &Value::from(vec!["universe-launcher-4242.scope".to_string()]));
-        assert_eq!(prop(&bound, "After").unwrap(), &Value::from(vec!["universe-launcher-4242.scope".to_string()]));
+        assert_eq!(prop(&bound, "BindsTo").unwrap(), &Variant::from(vec!["universe-launcher-4242.scope".to_string()]));
+        assert_eq!(prop(&bound, "After").unwrap(), &Variant::from(vec!["universe-launcher-4242.scope".to_string()]));
         assert_eq!(bound.len(), plain.len() + 2);
     }
 

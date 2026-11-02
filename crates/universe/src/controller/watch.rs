@@ -214,12 +214,13 @@ fn hidraw_of(path: &Path, vendor: u16) -> Option<AsyncFd<std::fs::File>> {
     }
     let node = hidraw_nodes(Path::new("/sys"), path).into_iter().next()?;
     let fd = rustix::fs::open(node, rustix::fs::OFlags::RDONLY | rustix::fs::OFlags::NONBLOCK, rustix::fs::Mode::empty()).ok()?;
-    AsyncFd::new(std::fs::File::from(fd)).ok()
+    // SAFETY: the File moves into the AsyncFd, so it stays open for its whole life.
+    unsafe { AsyncFd::register(std::fs::File::from(fd)) }.ok()
 }
 
 const BLUEZ_BATTERY: &str = "org.bluez.Battery1";
 
-fn percent_of(v: Option<&zbus::zvariant::Value<'_>>) -> Option<u8> {
+fn percent_of(v: Option<&zbus::Variant<'_>>) -> Option<u8> {
     v.and_then(|v| u8::try_from(v).ok()).map(|p| p.min(100))
 }
 
@@ -228,7 +229,7 @@ fn percent_of(v: Option<&zbus::zvariant::Value<'_>>) -> Option<u8> {
 /// turning up after the pad included. None for a pad BlueZ does not list.
 async fn bluez_battery(address: &str) -> Option<Pin<Box<dyn Stream<Item = u8> + Send>>> {
     let conn = zbus::Connection::system().await.ok()?;
-    let manager = zbus::fdo::ObjectManagerProxy::builder(&conn).destination("org.bluez").ok()?.path("/").ok()?.build().await.ok()?;
+    let manager = zbus::fdo::ObjectManagerProxy::builder(&conn).destination("org.bluez").path("/").build().await.ok()?;
     let (path, ifaces) = manager.get_managed_objects().await.ok()?.into_iter().find(|(_, ifaces)| {
         ifaces
             .get("org.bluez.Device1")
@@ -237,7 +238,7 @@ async fn bluez_battery(address: &str) -> Option<Pin<Box<dyn Stream<Item = u8> + 
             .is_some_and(|a| a.eq_ignore_ascii_case(address))
     })?;
     let now = ifaces.get(BLUEZ_BATTERY).and_then(|b| percent_of(b.get("Percentage").map(|v| &**v)));
-    let props = zbus::fdo::PropertiesProxy::builder(&conn).destination("org.bluez").ok()?.path(path.clone()).ok()?.build().await.ok()?;
+    let props = zbus::fdo::PropertiesProxy::builder(&conn).destination("org.bluez").path(path.clone()).build().await.ok()?;
     let changed = props.receive_properties_changed().await.ok()?.filter_map(|s| async move {
         let args = s.args().ok()?;
         (args.interface_name == BLUEZ_BATTERY).then(|| percent_of(args.changed_properties.get("Percentage"))).flatten()
@@ -1558,10 +1559,10 @@ mod tests {
 
     #[test]
     fn a_bluez_percentage_is_a_byte_capped_at_full() {
-        use zbus::zvariant::Value;
-        assert_eq!(percent_of(Some(&Value::U8(45))), Some(45));
-        assert_eq!(percent_of(Some(&Value::U8(120))), Some(100));
-        assert_eq!(percent_of(Some(&Value::from("45"))), None);
+        use zbus::Variant;
+        assert_eq!(percent_of(Some(&Variant::U8(45))), Some(45));
+        assert_eq!(percent_of(Some(&Variant::U8(120))), Some(100));
+        assert_eq!(percent_of(Some(&Variant::from("45"))), None);
         assert_eq!(percent_of(None), None);
     }
 
@@ -1573,7 +1574,7 @@ mod tests {
             eprintln!("no system bus; skipped");
             return;
         };
-        let manager = zbus::fdo::ObjectManagerProxy::builder(&conn).destination("org.bluez").unwrap().path("/").unwrap().build().await.unwrap();
+        let manager = zbus::fdo::ObjectManagerProxy::builder(&conn).destination("org.bluez").path("/").build().await.unwrap();
         let mut seen = 0;
         for (_, ifaces) in manager.get_managed_objects().await.unwrap() {
             let Some(device) = ifaces.get("org.bluez.Device1") else { continue };

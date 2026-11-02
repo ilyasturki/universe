@@ -43,7 +43,7 @@ pub async fn restore_cursor(undo: &CursorUndo) {
 
 /// `None` when the shell cannot be asked, `Some(None)` when it has not loaded the extension, else the ExtensionState.
 pub async fn extension_state(proxy: &zbus::Proxy<'_>, extension: &str) -> Option<Option<f64>> {
-    shell_call::<HashMap<String, zbus::zvariant::OwnedValue>>(proxy, "GetExtensionInfo", extension)
+    shell_call::<HashMap<String, zbus::OwnedVariant>>(proxy, "GetExtensionInfo", extension)
         .await
         .map(|info| info.get("state").and_then(|v| f64::try_from(v).ok()))
 }

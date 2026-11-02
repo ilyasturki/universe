@@ -5,7 +5,7 @@ use futures_util::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::sync::mpsc;
-use zbus::zvariant::{ObjectPath, OwnedObjectPath, OwnedValue, Value};
+use zbus::{ObjectPath, OwnedObjectPath, OwnedVariant, Variant};
 
 use crate::{Error, Result};
 
@@ -68,10 +68,10 @@ pub struct Wifi {
     pub active: bool,
 }
 
-type Props = HashMap<String, OwnedValue>;
-type Settings = HashMap<String, HashMap<String, OwnedValue>>;
+type Props = HashMap<String, OwnedVariant>;
+type Settings = HashMap<String, HashMap<String, OwnedVariant>>;
 
-fn get<'a, T: TryFrom<&'a Value<'a>>>(props: &'a Props, key: &str) -> Option<T> {
+fn get<'a, T: TryFrom<&'a Variant<'a>>>(props: &'a Props, key: &str) -> Option<T> {
     props.get(key).and_then(|v| T::try_from(v).ok())
 }
 
@@ -120,16 +120,16 @@ pub(crate) async fn timed<T>(limit: Duration, call: impl std::future::Future<Out
 
 async fn proxy<'a>(conn: &zbus::Connection, path: impl Into<OwnedObjectPath>, iface: &'static str) -> zbus::Result<zbus::Proxy<'a>> {
     zbus::proxy::Builder::<zbus::Proxy>::new(conn)
-        .destination(NM)?
-        .path(path.into())?
-        .interface(iface)?
+        .destination(NM)
+        .path(path.into())
+        .interface(iface)
         .cache_properties(zbus::proxy::CacheProperties::No)
         .build()
         .await
 }
 
 async fn all(conn: &zbus::Connection, path: &OwnedObjectPath, iface: &'static str) -> zbus::Result<Props> {
-    let p = zbus::fdo::PropertiesProxy::builder(conn).destination(NM)?.path(path.clone())?.build().await?;
+    let p = zbus::fdo::PropertiesProxy::builder(conn).destination(NM).path(path.clone()).build().await?;
     Ok(p.get_all(zbus::names::InterfaceName::from_static_str_unchecked(iface)).await?)
 }
 
@@ -330,12 +330,12 @@ fn user_name() -> String {
 
 /// A new connection for `ssid`: the password kept in it (`psk-flags` 0) for a session with no secret agent; owned by `owner`
 /// alone when it is set, else system-wide.
-pub fn settings_for(ssid: &str, security: &str, password: Option<&str>, owner: Option<&str>) -> HashMap<&'static str, HashMap<&'static str, Value<'static>>> {
-    let mut connection: HashMap<&str, Value> = HashMap::from([("type", Value::from("802-11-wireless")), ("id", Value::from(ssid.to_string()))]);
+pub fn settings_for(ssid: &str, security: &str, password: Option<&str>, owner: Option<&str>) -> HashMap<&'static str, HashMap<&'static str, Variant<'static>>> {
+    let mut connection: HashMap<&str, Variant> = HashMap::from([("type", Variant::from("802-11-wireless")), ("id", Variant::from(ssid.to_string()))]);
     if let Some(user) = owner {
-        connection.insert("permissions", Value::from(vec![format!("user:{user}")]));
+        connection.insert("permissions", Variant::from(vec![format!("user:{user}")]));
     }
-    let wireless = HashMap::from([("ssid", Value::from(ssid.as_bytes().to_vec())), ("mode", Value::from("infrastructure"))]);
+    let wireless = HashMap::from([("ssid", Variant::from(ssid.as_bytes().to_vec())), ("mode", Variant::from("infrastructure"))]);
     let mut out = HashMap::from([("connection", connection), ("802-11-wireless", wireless)]);
     let key_mgmt = match security {
         "psk" => Some("wpa-psk"),
@@ -344,10 +344,10 @@ pub fn settings_for(ssid: &str, security: &str, password: Option<&str>, owner: O
         _ => None,
     };
     if let Some(key_mgmt) = key_mgmt {
-        let mut security = HashMap::from([("key-mgmt", Value::from(key_mgmt))]);
+        let mut security = HashMap::from([("key-mgmt", Variant::from(key_mgmt))]);
         if let Some(psk) = password.filter(|_| key_mgmt != "owe") {
-            security.insert("psk", Value::from(psk.to_string()));
-            security.insert("psk-flags", Value::from(0u32));
+            security.insert("psk", Variant::from(psk.to_string()));
+            security.insert("psk-flags", Variant::from(0u32));
         }
         out.insert("802-11-wireless-security", security);
     }
@@ -402,8 +402,8 @@ pub async fn connect(conn: &zbus::Connection, ssid: &str, password: Option<&str>
                 let c = proxy(conn, saved.clone(), CONNECTION).await?;
                 let mut settings: Settings = timed(CALL, c.call("GetSettings", &())).await?;
                 let security = settings.entry("802-11-wireless-security".into()).or_default();
-                security.insert("psk".into(), OwnedValue::try_from(Value::from(psk.to_string())).map_err(zbus::Error::from)?);
-                security.insert("psk-flags".into(), OwnedValue::from(0u32));
+                security.insert("psk".into(), OwnedVariant::try_from(Variant::from(psk.to_string()))?);
+                security.insert("psk-flags".into(), OwnedVariant::from(0u32));
                 timed(CALL, c.call::<_, _, ()>("Update", &(settings,))).await?;
             }
             let active: OwnedObjectPath = timed(CALL, manager.call("ActivateConnection", &(&saved, &device, &ap.path))).await?;
@@ -450,7 +450,7 @@ pub async fn set_enabled(conn: &zbus::Connection, on: bool) -> std::result::Resu
 
 pub async fn scan(conn: &zbus::Connection) -> std::result::Result<(), Failure> {
     let device = wifi_device(conn).await?;
-    let options: HashMap<&str, Value> = HashMap::new();
+    let options: HashMap<&str, Variant> = HashMap::new();
     Ok(timed(CALL, async { proxy(conn, device, WIRELESS).await?.call::<_, _, ()>("RequestScan", &(options,)).await }).await?)
 }
 
@@ -556,7 +556,7 @@ where
     E: FnMut(serde_json::Value) -> bool,
 {
     let failed = |e: zbus::Error| Error::Unavailable(format!("NetworkManager: {e}"));
-    let rule = zbus::MatchRule::builder().msg_type(zbus::message::Type::Signal).sender(NM).map_err(failed)?.build();
+    let rule = zbus::MatchRule::builder().msg_type(zbus::message::Type::Signal).sender(NM).build().map_err(failed)?;
     let mut signals = zbus::MessageStream::for_match_rule(rule, &conn, None).await.map_err(failed)?;
     let (done, mut outcomes) = mpsc::unbounded_channel();
     let mut rescan = tokio::time::interval(SCAN_EVERY);
@@ -675,15 +675,15 @@ mod tests {
     #[test]
     fn a_new_connection_keeps_its_password_and_names_its_owner() {
         let s = settings_for("Home", "psk", Some("hunter22"), Some("yasso"));
-        assert_eq!(s["connection"]["permissions"], Value::from(vec!["user:yasso".to_string()]));
-        assert_eq!(s["802-11-wireless"]["ssid"], Value::from(b"Home".to_vec()));
-        assert_eq!(s["802-11-wireless-security"]["key-mgmt"], Value::from("wpa-psk"));
-        assert_eq!(s["802-11-wireless-security"]["psk"], Value::from("hunter22"));
-        assert_eq!(s["802-11-wireless-security"]["psk-flags"], Value::from(0u32), "no secret agent in the session: the system keeps it");
+        assert_eq!(s["connection"]["permissions"], Variant::from(vec!["user:yasso".to_string()]));
+        assert_eq!(s["802-11-wireless"]["ssid"], Variant::from(b"Home".to_vec()));
+        assert_eq!(s["802-11-wireless-security"]["key-mgmt"], Variant::from("wpa-psk"));
+        assert_eq!(s["802-11-wireless-security"]["psk"], Variant::from("hunter22"));
+        assert_eq!(s["802-11-wireless-security"]["psk-flags"], Variant::from(0u32), "no secret agent in the session: the system keeps it");
         let open = settings_for("Cafe", "open", None, None);
         assert!(!open["connection"].contains_key("permissions"), "saved for everyone");
         assert!(!open.contains_key("802-11-wireless-security"));
-        assert_eq!(settings_for("Attic", "sae", Some("x"), None)["802-11-wireless-security"]["key-mgmt"], Value::from("sae"));
+        assert_eq!(settings_for("Attic", "sae", Some("x"), None)["802-11-wireless-security"]["key-mgmt"], Variant::from("sae"));
     }
 
     #[tokio::test]

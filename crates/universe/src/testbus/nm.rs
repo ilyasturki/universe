@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use zbus::message::Header;
 use zbus::object_server::SignalEmitter;
-use zbus::zvariant::{ObjectPath, OwnedObjectPath, OwnedValue, Value};
+use zbus::{ObjectPath, OwnedObjectPath, OwnedVariant, Variant};
 
 use super::Bus;
 
@@ -13,7 +13,7 @@ const SETTINGS: &str = "/org/freedesktop/NetworkManager/Settings";
 const ETHERNET: &str = "/org/freedesktop/NetworkManager/Devices/1";
 const WIFI: &str = "/org/freedesktop/NetworkManager/Devices/2";
 
-type Settings = HashMap<String, HashMap<String, OwnedValue>>;
+type Settings = HashMap<String, HashMap<String, OwnedVariant>>;
 
 #[derive(Debug, zbus::DBusError)]
 #[zbus(prefix = "org.freedesktop.NetworkManager")]
@@ -75,7 +75,7 @@ fn psk_in(settings: &Settings) -> String {
 }
 
 fn noted(state: &Shared, hdr: &Header<'_>) {
-    if hdr.primary().flags().contains(zbus::message::Flags::AllowInteractiveAuth) {
+    if hdr.primary().flags().contains(zbus::message::Flags::ALLOW_INTERACTIVE_AUTH) {
         state.lock().unwrap().interactive = true;
     }
 }
@@ -242,7 +242,7 @@ impl Wireless {
         self.state.lock().unwrap().aps.iter().map(|(p, _, _)| p.clone()).collect()
     }
 
-    fn request_scan(&self, _options: HashMap<String, OwnedValue>) {
+    fn request_scan(&self, _options: HashMap<String, OwnedVariant>) {
         self.state.lock().unwrap().scans += 1;
     }
 
@@ -408,15 +408,15 @@ impl Nm {
 
     /// A network saved before: its password kept by the system, or with an empty one, by a desktop's keyring NM cannot reach.
     pub async fn saved(&self, ssid: &str, psk: &str) {
-        let value = |v: Value<'_>| OwnedValue::try_from(v).unwrap();
+        let value = |v: Variant<'_>| OwnedVariant::try_from(v).unwrap();
         let mut settings: Settings = HashMap::from([
-            ("connection".into(), HashMap::from([("type".into(), value(Value::from("802-11-wireless"))), ("id".into(), value(Value::from(ssid)))])),
-            ("802-11-wireless".into(), HashMap::from([("ssid".into(), value(Value::from(ssid.as_bytes().to_vec())))])),
+            ("connection".into(), HashMap::from([("type".into(), value(Variant::from("802-11-wireless"))), ("id".into(), value(Variant::from(ssid)))])),
+            ("802-11-wireless".into(), HashMap::from([("ssid".into(), value(Variant::from(ssid.as_bytes().to_vec())))])),
         ]);
         let mut security =
-            HashMap::from([("key-mgmt".into(), value(Value::from("wpa-psk"))), ("psk-flags".into(), value(Value::from(u32::from(psk.is_empty()))))]);
+            HashMap::from([("key-mgmt".into(), value(Variant::from("wpa-psk"))), ("psk-flags".into(), value(Variant::from(u32::from(psk.is_empty()))))]);
         if !psk.is_empty() {
-            security.insert("psk".into(), value(Value::from(psk)));
+            security.insert("psk".into(), value(Variant::from(psk)));
         }
         settings.insert("802-11-wireless-security".into(), security);
         Nm::add(&self.conn, &self.state, settings).await;

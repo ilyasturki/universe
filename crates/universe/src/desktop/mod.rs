@@ -206,7 +206,7 @@ pub async fn screen_mode(screen: &str) -> Option<crate::gamescope::Mode> {
 
 /// The `is-current` mode of the monitor on `screen`; Mutter spells HDMI outputs without the `-A`, so both spellings match.
 async fn mutter_current_mode(screen: &str) -> zbus::Result<Option<crate::gamescope::Mode>> {
-    type Props = HashMap<String, zbus::zvariant::OwnedValue>;
+    type Props = HashMap<String, zbus::OwnedVariant>;
     type Mode = (String, i32, i32, f64, f64, Vec<f64>, Props);
     type Monitor = ((String, String, String, String), Vec<Mode>, Props);
     type Logical = (i32, i32, f64, u32, bool, Vec<(String, String, String, String)>, Props);
@@ -290,7 +290,7 @@ const AWAKE_SERVICES: [(&str, &str, &str); 2] = [
 pub struct Inhibitor {
     conn: zbus::Connection,
     cookies: Vec<(usize, u32)>,
-    idle_lock: Option<zbus::zvariant::OwnedFd>,
+    idle_lock: Option<zbus::OwnedFd>,
 }
 
 impl Inhibitor {
@@ -311,7 +311,7 @@ impl Inhibitor {
 }
 
 /// logind's IdleAction and hypridle wait on an `idle` lock. Not `sleep`: since systemd 257 a block lock refuses the user's own Suspend too.
-async fn logind_idle_lock(reason: &str) -> zbus::Result<zbus::zvariant::OwnedFd> {
+async fn logind_idle_lock(reason: &str) -> zbus::Result<zbus::OwnedFd> {
     let conn = zbus::Connection::system().await?;
     let proxy = zbus::Proxy::new(&conn, "org.freedesktop.login1", "/org/freedesktop/login1", "org.freedesktop.login1.Manager").await?;
     proxy.call("Inhibit", &("idle", "Universe", reason, "block")).await

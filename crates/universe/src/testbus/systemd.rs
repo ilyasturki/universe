@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use zbus::object_server::SignalEmitter;
-use zbus::zvariant::{ObjectPath, OwnedObjectPath};
+use zbus::{ObjectPath, OwnedObjectPath};
 
 use super::Bus;
 

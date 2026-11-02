@@ -111,7 +111,8 @@ pub async fn watch(core: Arc<Core>, options: Options) -> Result<(Watch, mpsc::Un
         core,
         options,
         events,
-        fd: AsyncFd::new(fd)?,
+        // SAFETY: the OwnedFd moves into the AsyncFd, so it stays open for its whole life.
+        fd: unsafe { AsyncFd::register(fd) }.map_err(std::io::Error::from)?,
         roots,
         watched: HashMap::new(),
         limit_told: false,

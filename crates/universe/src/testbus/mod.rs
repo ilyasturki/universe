@@ -43,7 +43,7 @@ impl Bus {
     }
 
     pub async fn connect(&self) -> zbus::Connection {
-        zbus::connection::Builder::address(self.address.as_str()).unwrap().build().await.unwrap()
+        zbus::connection::Builder::address(self.address.as_str()).build().await.unwrap()
     }
 }
 
