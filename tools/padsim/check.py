@@ -52,12 +52,22 @@ class Lines:
             except queue.Empty:
                 break
             if line is None:
-                raise Failed(f"{what}: the process ended ({self.proc.poll()}); last lines: {self.seen[-5:]}")
+                raise Failed(f"{what}: the process ended ({self.proc.poll()}); last lines: {self.tail()}")
             self.seen.append(line)
             found = match(line)
             if found:
                 return found
-        raise Failed(f"{what}: nothing within {timeout:g} s; last lines: {self.seen[-5:]}")
+        raise Failed(f"{what}: nothing within {timeout:g} s; last lines: {self.tail()}")
+
+    def tail(self, n=10):
+        """The last n distinct lines: a warning repeated on every frame would push out the ones that tell what went wrong."""
+        lines = []
+        for line in reversed(self.seen):
+            if line not in lines:
+                lines.append(line)
+            if len(lines) == n:
+                break
+        return lines[::-1]
 
 
 def events(match):
