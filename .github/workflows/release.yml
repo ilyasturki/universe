@@ -7,7 +7,7 @@ permissions:
 jobs:
   # The push of main beside the tag starts ci on this commit: its run is awaited, not repeated
   ci:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     permissions:
       actions: read
     steps:
@@ -26,7 +26,7 @@ jobs:
           gh run watch "$id" --exit-status --interval 30
   notes:
     needs: [ci, smoke]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - name: Notes from CHANGELOG.md
@@ -39,7 +39,7 @@ jobs:
   # The github-pages environment deploys from main only, so the site is published by a run on main, told which release to build
   site:
     needs: notes
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     permissions:
       actions: write
     steps:
@@ -48,7 +48,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
   # GTK 4.22 and libadwaita 1.9 are no older distro's: Universe Desktop is built on Arch, for the systems that have them
   desktop:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     container: archlinux:latest
     steps:
       - uses: actions/checkout@v7
@@ -61,7 +61,7 @@ jobs:
   # Outside Nix, whose outputs are not relocatable; 22.04's glibc 2.35 is the oldest the binary then asks for, in a container since its runner image is being retired
   dist:
     needs: desktop
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     container: ubuntu:22.04
     # a container's default shell is sh, dash on ubuntu
     defaults:
@@ -88,7 +88,7 @@ jobs:
   # The tarball just built, installed and started as a user would before anything publishes it
   smoke:
     needs: dist
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -118,7 +118,7 @@ jobs:
   # gh is not in the 22.04 container
   upload:
     needs: notes
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
@@ -143,7 +143,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
   aur:
     needs: notes
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - run: grep -qx "pkgver=${GITHUB_REF_NAME#v}" packaging/aur/universe/PKGBUILD
@@ -160,7 +160,7 @@ jobs:
   # The COPR project builds with the network on (cargo fetches the crates), for Fedora 44 and newer: older ones ship a PySide6 under 6.11
   copr:
     needs: notes
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     container: fedora:latest
     steps:
       - uses: actions/checkout@v7
@@ -181,7 +181,7 @@ jobs:
           COPR_CONFIG: ${{ secrets.COPR_CONFIG }}
   aur-bin:
     needs: upload
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - run: grep -qx "pkgver=${GITHUB_REF_NAME#v}" packaging/aur/universe-bin/PKGBUILD

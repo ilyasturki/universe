@@ -9,7 +9,7 @@ concurrency:
   group: catalogue
 jobs:
   bump:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - name: Check out the catalogue branch, created on the first run

@@ -5,7 +5,7 @@ on:
   pull_request:
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - uses: DeterminateSystems/nix-installer-action@v23
@@ -14,7 +14,7 @@ jobs:
           use-flakehub: disabled
       - run: nix build .#checks.x86_64-linux.lint .#checks.x86_64-linux.rust-lint --no-link -L
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       actions: write
@@ -49,7 +49,7 @@ jobs:
           purge-primary-key: never
   # Off NixOS: the core's tests, tools/dist, install.sh, the CLI and the UI offscreen, as a user other than root
   distros:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -85,7 +85,7 @@ jobs:
           key: cargo-${{ matrix.image }}-${{ steps.rustc.outputs.version }}-${{ hashFiles('Cargo.lock') }}
   # Each desktop profile started without a GPU: windows, cursor, OSD and shots
   desktops:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     container: archlinux:latest
     steps:
       - uses: actions/checkout@v7

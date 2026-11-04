@@ -6,7 +6,7 @@ on:
 jobs:
   # Every recorded pad of tests/pads through the real kernel drivers in a NixOS VM (KVM): too slow for every push
   vm-pads:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - uses: DeterminateSystems/nix-installer-action@v23
