@@ -129,10 +129,9 @@ def test_the_upload_after_a_session_leaves_gogdl_alone_with_no_saves_here(src, c
     assert ran(cloud) == [], "gogdl downloads into an empty folder whatever --skip-download says"
 
 
-@pytest.mark.slow
 def test_a_download_out_of_time_is_killed_and_the_game_launches_on_its_saves_whole(src, cloud, monkeypatch):
-    monkeypatch.setattr(src, "PRE_LAUNCH_BUDGET_S", 1.0)
-    monkeypatch.setattr(src, "SYNC_MIN_S", 0.5)
+    monkeypatch.setattr(src, "PRE_LAUNCH_BUDGET_S", 0.5)
+    monkeypatch.setattr(src, "SYNC_MIN_S", 0.1)
     monkeypatch.setenv("SHIM_SYNC", "hang")
     src.update_cloud("1434554947", ts={"saves": "1"})
     put(cloud["local"], "profile.json", "local")

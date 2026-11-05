@@ -158,10 +158,9 @@ def test_offline_the_launch_goes_on_without_legendary(src, cloud, monkeypatch):
     assert state(src)["state"] == "offline"
 
 
-@pytest.mark.slow
 def test_a_download_killed_at_the_deadline_puts_legendarys_save_path_back(src, cloud, monkeypatch):
-    monkeypatch.setattr(src, "PRE_LAUNCH_BUDGET_S", 1.5)
-    monkeypatch.setattr(src, "SYNC_MIN_S", 0.5)
+    monkeypatch.setattr(src, "PRE_LAUNCH_BUDGET_S", 0.5)
+    monkeypatch.setattr(src, "SYNC_MIN_S", 0.1)
     monkeypatch.setenv("SHIM_MODE", "hangdown")
     put(cloud["local"], "slot1.sav", "old", age_s=900)
     src.update_cloud("Min", base={"cloud": src.utc_date(time.time() - 900), "local": time.time() - 900})
@@ -184,10 +183,9 @@ def test_a_save_path_legendary_holds_locked_fails_the_sync_rather_than_stay_on_t
     assert save_path(cloud) == str(cloud["local"])
 
 
-@pytest.mark.slow
 def test_a_sync_out_of_time_is_killed_and_the_game_launches_on_its_saves(src, cloud, monkeypatch):
-    monkeypatch.setattr(src, "PRE_LAUNCH_BUDGET_S", 1.0)
-    monkeypatch.setattr(src, "SYNC_MIN_S", 0.5)
+    monkeypatch.setattr(src, "PRE_LAUNCH_BUDGET_S", 0.5)
+    monkeypatch.setattr(src, "SYNC_MIN_S", 0.1)
     monkeypatch.setenv("SHIM_MODE", "hang")
     put(cloud["local"], "slot1.sav", "local")
     assert src.main(["pre-launch"]) == 0
