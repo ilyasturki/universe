@@ -957,13 +957,40 @@ def test_journal_paragraphs_become_markdown_blocks():
 
 
 @pytest.mark.slow
-def test_recording_frames_are_sampled_from_the_file(api):
+def test_recording_frames_are_sampled_from_the_file(api, fake, tmp_path):
     import shutil
+    import subprocess
 
     from universe_ui.screens import media
 
     if not (shutil.which("ffmpeg") and shutil.which("ffprobe")):
         pytest.skip("ffmpeg and ffprobe sample the frames")
+    clip = tmp_path / "recording.mkv"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=size=96x54:rate=2:duration=20",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-pix_fmt",
+            "yuv420p",
+            str(clip),
+        ],
+        check=True,
+        timeout=10,
+    )
+    for line in fake.core._data["sessions"]["the-technomancer"]:
+        if line.get("recording"):
+            path = tmp_path / f"{line['session']}.mkv"
+            shutil.copyfile(clip, path)
+            line.update(recording=str(path), recording_duration_s=20)
     recordings = api.screens.recordings
     recordings.load("the-technomancer")
     session = recordings.rows[0]["session"]
