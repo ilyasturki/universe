@@ -8,7 +8,6 @@ import stat
 import struct
 import subprocess
 import sys
-import threading
 import time
 import urllib.error
 from pathlib import Path
@@ -216,6 +215,28 @@ def client(env):
     proc.wait()
 
 
+@pytest.fixture
+def observe_steam_progress(monkeypatch, capsys):
+    def observe(callback):
+        original_write = sys.stdout.write
+        pending = ""
+
+        def write(text):
+            nonlocal pending
+            written = original_write(text)
+            pending += text
+            while "\n" in pending:
+                line, pending = pending.split("\n", 1)
+                event = json.loads(line)
+                if event["event"] == "progress":
+                    callback(event["done"], event["total"])
+            return written
+
+        monkeypatch.setattr(sys.stdout, "write", write)
+
+    return observe
+
+
 def calls(env, prog=None):
     lines = env["log"].read_text().splitlines() if env["log"].exists() else []
     return [entry["args"] for entry in map(json.loads, lines) if prog in (None, entry["prog"])]
@@ -346,8 +367,15 @@ def test_info_sums_the_depots_of_the_installed_platform(src, env, run):
     assert (events[0]["download_size"], events[0]["disk_size"]) == (797632, 1906055), "a redistributable from another app is not counted"
 
 
-def test_install_starts_steam_opens_its_window_and_follows_the_download(src, env, run):
-    code, events, _ = run("install", "400")
+def test_install_starts_steam_opens_its_window_and_follows_the_download(src, env, run, monkeypatch, observe_steam_progress):
+    progress_dir = env["tmp"] / "progress"
+    progress_dir.mkdir()
+    monkeypatch.setenv("SHIM_PROGRESS", str(progress_dir))
+    observe_steam_progress(lambda done, total: (progress_dir / f"{done}-{total}").touch())
+    try:
+        code, events, _ = run("install", "400")
+    finally:
+        (progress_dir / "cancel").touch()
     assert code == 0
     assert events[0] == {"event": "window", "class": "steam", "title": "Install"}, "before the URL: the dialog maps right after"
     assert (events[1]["event"], events[1]["done"], events[1]["total"]) == ("progress", 0, 0), "waiting on the user"
@@ -386,7 +414,7 @@ def test_uninstall_goes_through_steams_window_and_waits_for_the_manifest_to_go(e
     assert code == 1, "nobody confirmed"
 
 
-def test_updates_are_listed_and_one_is_waited_for(src, env, run, client):
+def test_updates_are_listed_and_one_is_waited_for(src, env, run, client, observe_steam_progress):
     lib = env["lib"]
     install(lib, 480, "Spacewar", "Spacewar", files=("SteamworksExample.exe",), flags=6, buildid=1, TargetBuildID=2)
     code, events, _ = run("update")
@@ -395,13 +423,13 @@ def test_updates_are_listed_and_one_is_waited_for(src, env, run, client):
         {"event": "done"},
     ]
 
-    def steam_updates():
-        time.sleep(0.3)
-        install(lib, 480, "Spacewar", "Spacewar", flags=1030, buildid=1, TargetBuildID=2, BytesToDownload=10, BytesDownloaded=5)
-        time.sleep(0.3)
-        install(lib, 480, "Spacewar", "Spacewar", flags=4, buildid=2, TargetBuildID=2)
+    def steam_updates(done, total):
+        if (done, total) == (0, 0):
+            install(lib, 480, "Spacewar", "Spacewar", flags=1030, buildid=1, TargetBuildID=2, BytesToDownload=10, BytesDownloaded=5)
+        elif (done, total) == (5, 10):
+            install(lib, 480, "Spacewar", "Spacewar", flags=4, buildid=2, TargetBuildID=2)
 
-    threading.Thread(target=steam_updates, daemon=True).start()
+    observe_steam_progress(steam_updates)
     code, events, _ = run("update", "480")
     assert code == 0 and events[-2]["build"] == "2"
     assert ("progress", 5, 10) in [(e["event"], e.get("done"), e.get("total")) for e in events]
