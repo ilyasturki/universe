@@ -233,7 +233,7 @@ def failed_file(journal_dir):
 
 def test_stub_pipeline_writes_entry_note_and_memory(tmp_path, fakebin):
     rec = tmp_path / "rec.mkv"
-    make_mkv(rec, "testsrc", 200)
+    ffmpeg("-f", "lavfi", "-i", "testsrc=duration=200:size=64x48:rate=1", "-c:v", "mpeg4", "-q:v", "5", str(rec))
     shots_dir = tmp_path / "games" / "testgame" / "screenshots"
     for name in ("20260911-120130.png", "20260911-120245.png", "20260911-130000.png"):
         add_shot(tmp_path, name)
@@ -252,7 +252,7 @@ def test_stub_pipeline_writes_entry_note_and_memory(tmp_path, fakebin):
         + "\n"
     )
 
-    res, journal_dir = run_process(tmp_path, fakebin, {}, {"FAKE_UNIVERSE_EXIT": "1"}, recording=rec)
+    res, journal_dir = run_process(tmp_path, fakebin, {"max_images": img.GALLERY_FRAME_TARGET}, {"FAKE_UNIVERSE_EXIT": "1"}, recording=rec)
     assert res.returncode == 0, res.stderr
     assert "core unavailable" in res.stderr
 
