@@ -668,12 +668,24 @@ class FakeCore:
             for p in sorted(directory.glob("*.png"), reverse=True) if directory.is_dir() else []:
                 taken = datetime.strptime(p.stem, "%Y%m%d-%H%M%S").astimezone().isoformat()
                 session = next((s["session"] for s in sessions if s.get("started_at", "") <= taken <= s.get("ended_at", "")), "")
-                # The fixture's shots are small: the picture stands as its own thumbnail.
                 out.append(
-                    {"game": i, "title": self._game(i)["title"], "path": str(p), "taken_at": taken, "session": session, "thumb": str(p), "thumb_ready": True}
+                    {
+                        "game": i,
+                        "title": self._game(i)["title"],
+                        "path": str(p),
+                        "taken_at": taken,
+                        "session": session,
+                        "thumb": self._thumb(i, p),
+                        "thumb_ready": True,
+                    }
                 )
         out.sort(key=lambda r: os.path.basename(r["path"]), reverse=True)
         return out
+
+    # The core's thumbnail is a file of its own in the cache, which trashing the shot leaves; the fixture's shots are small enough to stand as theirs.
+    def _thumb(self, ident, shot):
+        thumb = os.path.join(os.path.dirname(self._cache), "thumbs", f"{ident}--{shot.stem}-{shot.stat().st_mtime_ns}.png")
+        return thumb if os.path.exists(thumb) else _place(str(shot), thumb)
 
     def media(self, ident):
         lines = self.sessions(ident)
