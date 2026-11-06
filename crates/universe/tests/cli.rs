@@ -439,7 +439,7 @@ impl SavedGame {
 /// ludusavi cannot write slot2.sav while `obstruct` exists, whichever folder of the second it picks.
 fn slot2_obstructed(dir: &std::path::Path) -> String {
     format!(
-        "if [ -e {flag} ]; then\nrel=drive-0/universe/prefix/{FIXTURE_SAVES}/slot2.sav\nrm -rf \"$path/Fixture Game/$rel\"\nmkdir -p \"$path/Fixture Game/$rel/taken\"\nfor s in 0 1 2 3; do mkdir -p \"$path/Fixture Game/backup-$(date -u -d \"+$s seconds\" +%Y%m%dT%H%M%SZ)/$rel/taken\"; done\nfi",
+        "if [ -e {flag} ]; then\nrel=drive-0/universe/prefix/{FIXTURE_SAVES}/slot2.sav\nrm -rf \"$path/Fixture Game/$rel\"\nmkdir -p \"$path/Fixture Game/$rel/taken\"\nnow=$(date +%s)\nfor s in 0 1 2 3 4 5; do mkdir -p \"$path/Fixture Game/backup-$(date -u -d @$((now + s)) +%Y%m%dT%H%M%SZ)/$rel/taken\"; done\nfi",
         flag = dir.join("obstruct").display()
     )
 }
@@ -540,6 +540,7 @@ fn a_backup_in_another_process_survives_the_repair_of_a_stale_mapping() {
     while second.try_wait().unwrap().is_none() && window.elapsed().as_millis() < 500 {
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
+    assert!(second.try_wait().unwrap().is_none(), "the second backup ran beside the first's reading of the mapping");
     reading.write_all(stale.as_bytes()).unwrap();
     drop(reading);
     for process in [first.wait_with_output(), second.wait_with_output()] {
@@ -557,7 +558,8 @@ fn a_backup_in_another_process_survives_the_repair_of_a_stale_mapping() {
 
 #[test]
 fn a_restore_and_an_export_in_another_process_wait_out_a_running_backup() {
-    let game = SavedGame::new(5, |dir| format!("touch {0}\nwhile [ -e {1} ]; do sleep 0.02; done", dir.join("started").display(), dir.join("hold").display()));
+    // Only the first backup to get here stops: one that overtakes it runs through.
+    let game = SavedGame::new(5, |dir| format!("if mkdir {0} 2>/dev/null; then while [ -e {1} ]; do sleep 0.02; done; fi", dir.join("started").display(), dir.join("hold").display()));
     game.put("slot1.sav", "selected");
     assert!(game.saves(&["backup", "fixture-game"]).status.success());
     let list: serde_json::Value = serde_json::from_slice(&game.saves(&["list", "fixture-game", "--json"]).stdout).unwrap();
@@ -565,7 +567,7 @@ fn a_restore_and_an_export_in_another_process_wait_out_a_running_backup() {
     game.put("slot1.sav", "progress");
 
     let (started, hold, zips) = (game.dir.path().join("started"), game.dir.path().join("hold"), game.dir.path().join("zips"));
-    std::fs::remove_file(&started).unwrap();
+    std::fs::remove_dir(&started).unwrap();
     std::fs::write(&hold, "").unwrap();
     let backup = game.spawn_backup();
     let waiting = std::time::Instant::now();
@@ -601,10 +603,12 @@ fn a_crash_between_staging_and_commit_costs_nothing_and_its_leftovers_go_with_th
     assert!(!game.saves(&["backup", "fixture-game"]).status.success());
     assert!(files_under(&staging).iter().any(|f| f.ends_with("slot1.sav")), "the crash came before ludusavi staged");
     assert!(game.held("slot1.sav").is_empty());
-    std::fs::write(staging.join("Fixture Game/mapping.yaml"), "backups: [").unwrap();
+    // Left by another game's backup, the folder is the only name it goes by.
+    std::fs::rename(staging.join("Fixture Game"), staging.join("Other Game")).unwrap();
     std::fs::remove_file(&crash).unwrap();
     assert!(game.saves(&["backup", "fixture-game"]).status.success());
-    assert_eq!(game.held("slot1.sav"), ["first"], "a mapping torn by the crash is not read");
+    assert_eq!(game.held("slot1.sav"), ["first"]);
+    assert!(!game.dir.path().join("data/saves/fixture-game/Other Game").exists(), "a stale folder joined this game's backups");
 
     game.put("slot1.sav", "progress");
     std::fs::write(&crash, "").unwrap();
