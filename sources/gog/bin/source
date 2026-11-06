@@ -25,6 +25,7 @@ from pathlib import Path
 AUTH_URL = "https://auth.gog.com/auth?client_id=46899977096215655&redirect_uri=https%3A%2F%2Fembed.gog.com%2Fon_login_success%3Forigin%3Dclient&response_type=code&layout=client2"
 LIBRARY_URL = "https://embed.gog.com/account/getFilteredProducts?mediaType=1&page={page}"
 USER_URL = "https://embed.gog.com/userData.json"
+AUTH_HOST = "auth.gog.com"
 CATALOG_URL = "https://catalog.gog.com/v1/catalog"
 BUILDS_URL = "https://content-system.gog.com/products/{id}/os/{platform}/builds?generation=2"
 ACHIEVEMENTS_URL = "https://gameplay.gog.com/clients/{client}/users/{user}/achievements"
@@ -79,6 +80,10 @@ class SourceError(Exception):
 
 
 class SyncTimeout(SourceError):
+    pass
+
+
+class Offline(SourceError):
     pass
 
 
@@ -150,11 +155,20 @@ def gogdl_command(settings, *args):
     return ["gogdl", "--auth-config-path", settings["auth_path"], *args]
 
 
+def gogdl_config():
+    return data_dir() / "gogdl"
+
+
 def gogdl_env():
     env = dict(os.environ)
     # gogdl's manifest cache is keyed by id alone, ignores --path, and a stale one truncates real files.
-    env["GOGDL_CONFIG_PATH"] = str(data_dir() / "gogdl")
+    env["GOGDL_CONFIG_PATH"] = str(gogdl_config())
     return env
+
+
+# gogdl diffs a download against this and never looks at the disk: outliving its folder, it fetches nothing or only what changed.
+def forget_manifest(game_id):
+    (gogdl_config() / "heroic_gogdl" / "manifests" / game_id).unlink(missing_ok=True)
 
 
 def gogdl_json(settings, *args):
@@ -321,10 +335,17 @@ def size_info(settings, game_id):
     return data, total
 
 
+def has_session(settings):
+    return bool(((load_json(settings["auth_path"]) or {}).get(GALAXY_CLIENT_ID) or {}).get("refresh_token"))
+
+
 def access_token(settings):
     creds = gogdl_json(settings, "auth")
     token = creds.get("access_token") if isinstance(creds, dict) else None
     if not token:
+        # gogdl prints null for a refresh that failed and for one GOG refused: only the network tells them apart.
+        if has_session(settings) and not reachable(AUTH_HOST):
+            raise Offline("GOG could not be reached.")
         raise SourceError("not logged in to GOG (run login)")
     return token
 
@@ -544,16 +565,18 @@ def cmd_login(settings, args):
 def cmd_status(settings, args):
     try:
         token = access_token(settings)
+    except Offline:
+        token = None
     except SourceError:
         emit("done")
         return
     try:
-        user = fetch(USER_URL, token).get("username") or ""
+        user = (fetch(USER_URL, token).get("username") or "") if token else ""
     except Exception:  # noqa: BLE001
         user = ""
     if user:
         remember_user(username=user)
-    emit("logged_in", user=user)
+    emit("logged_in", user=user or remembered_user().get("username") or "")
     emit("done")
 
 
@@ -601,6 +624,8 @@ def cmd_install(settings, args):
     if folder:
         title = ((index or {}).get(game_id) or {}).get("title") or folder
         set_partial(game_id, {"dir": os.path.join(games_dir, folder), "title": title, **total})
+    if find_install(settings, game_id, [games_dir]) is None:
+        forget_manifest(game_id)
     gogdl_stream(settings, "download", game_id, *platform_args(settings), "--path", games_dir, timeout=settings["install_timeout_s"])
     install = find_install(settings, game_id, [games_dir])
     if install is None:
@@ -921,7 +946,7 @@ def wants_comet(settings):
         return None
     if not has_galaxy(os.environ.get("GAME_DIR", "")):
         return None
-    if not ((load_json(settings["auth_path"]) or {}).get(GALAXY_CLIENT_ID) or {}).get("refresh_token"):
+    if not has_session(settings):
         log("not logged in to GOG: no achievements this session")
         return None
     return comet
@@ -1247,7 +1272,7 @@ def cmd_cloud_saves(settings, args):
 def hook_check(settings):
     """doctor's lines: the login, and comet while achievements are on."""
     auth = settings["auth_path"]
-    logged = bool(((load_json(auth) or {}).get(GALAXY_CLIENT_ID) or {}).get("refresh_token"))
+    logged = has_session(settings)
     check = {"check": "gog-auth", "label": "GOG login", "ok": logged, "detail": auth if logged else "not logged in", "fix": "run universe login gog"}
     print(json.dumps(check), flush=True)
     if settings["achievements"]:

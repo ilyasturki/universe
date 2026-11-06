@@ -4,11 +4,16 @@ import json
 import os
 import shutil
 import sqlite3
+import subprocess
 import time
 import zlib
 from pathlib import Path
 
 import pytest
+
+GOG = Path(__file__).resolve().parents[1]
+CLI = os.environ.get("UNIVERSE_BIN", "")
+MINI_METRO = "1434554947"
 
 LIBRARY_PAGE = {
     "totalPages": 1,
@@ -130,6 +135,39 @@ def test_status_names_the_user_only_while_gogdl_holds_a_session(web, src, env, r
     monkeypatch.setenv("SHIM_MODE", "noauth")
     code, events, _ = run("status")
     assert code == 0 and events == [{"event": "done"}]
+
+
+@pytest.mark.parametrize(
+    ("session", "offline", "signed_in"),
+    [({"refresh_token": "r"}, True, True), ({"refresh_token": "r"}, False, False), ({}, True, False)],
+    ids=["offline", "revoked", "no-refresh-token"],
+)
+def test_status_keeps_a_session_gogdl_could_not_refresh_only_offline(src, env, run, monkeypatch, session, offline, signed_in):
+    monkeypatch.setenv("SHIM_MODE", "noauth")
+    monkeypatch.setattr(src, "reachable", lambda host: not offline)
+    auth = env["tmp"] / "auth" / "auth.json"
+    auth.parent.mkdir(parents=True)
+    auth.write_text(json.dumps({src.GALAXY_CLIENT_ID: {"access_token": "old", "expires_in": 3600, "loginTime": 1, **session}}))
+    (env["data"] / "user.json").write_text(json.dumps({"username": "Yasso"}))
+    code, events, _ = run("status")
+    assert code == 0 and events == ([{"event": "logged_in", "user": "Yasso"}] if signed_in else []) + [{"event": "done"}]
+
+
+def test_status_names_the_remembered_user_when_a_live_token_cannot_reach_gog(web, src, env, run):
+    (env["data"] / "user.json").write_text(json.dumps({"username": "Yasso"}))
+    fake_fetch(web, {src.USER_URL: OSError("offline")})
+    code, events, _ = run("status")
+    assert code == 0 and events == [{"event": "logged_in", "user": "Yasso"}, {"event": "done"}]
+
+
+def test_library_offline_says_so_rather_than_asking_to_sign_in_again(src, env, run, monkeypatch):
+    monkeypatch.setenv("SHIM_MODE", "noauth")
+    monkeypatch.setattr(src, "reachable", lambda host: False)
+    auth = env["tmp"] / "auth" / "auth.json"
+    auth.parent.mkdir(parents=True)
+    auth.write_text(json.dumps({src.GALAXY_CLIENT_ID: {"refresh_token": "r"}}))
+    code, events, err = run("library")
+    assert code == 1 and events == [] and "run login" not in err
 
 
 def test_library_lists_the_owned_games_with_the_installs_found_on_disk(web, src, env, run, monkeypatch):
@@ -263,6 +301,62 @@ def test_install_downloads_into_the_games_folder_and_lands_the_game(env, run):
     assert call["args"][2:] == ["download", "1434554947", "--platform", "windows", "--with-dlcs", "--path", str(env["games"])]
     assert call["config"] == str(env["data"] / "gogdl")
     assert json.loads((env["data"] / "partials.json").read_text()) == {}, "a finished install leaves no partial"
+
+
+@pytest.fixture
+def universe(tmp_path, shims):
+    root = tmp_path / "profile"
+    env = {name: value for name, value in os.environ.items() if not name.startswith(("UNIVERSE_", "XDG_", "SHIM_"))}
+    env |= {f"UNIVERSE_{kind.upper()}_HOME": str(root / kind) for kind in ("data", "config", "state", "cache")}
+    env |= {"HOME": str(root / "home"), "XDG_DATA_HOME": str(root / "home" / "share"), "XDG_CONFIG_HOME": str(root / "home" / "config")}
+    env |= {"UNIVERSE_MODULES_PATH": str(root / "modules"), "UNIVERSE_SOURCES_PATH": str(GOG.parent), "SHIM_LOG": str(tmp_path / "gogdl.log")}
+    env |= {"DBUS_SESSION_BUS_ADDRESS": "unix:path=/dev/null/bus", "XDG_RUNTIME_DIR": str(root / "run")}
+    env |= dict.fromkeys(("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"), "http://127.0.0.1:9")
+    games = root / "games"
+    for name in ("config", "modules", "run", "home", "data/sources/gog"):
+        (root / name).mkdir(parents=True)
+    (root / "config" / "config.toml").write_text(
+        f'schema = 1\n[desktop]\nprofile = "none"\n[sources]\nenabled = ["gog"]\n[sources.gog]\ngames_dir = "{games}"\n'
+    )
+    (root / "data/sources/gog/library.json").write_text(json.dumps([{"id": MINI_METRO, "title": "Mini Metro", "owned": True, "installed": False}]))
+    (root / "data/sources/gog/umu.json").write_text(json.dumps({MINI_METRO: "umu-287980"}))
+
+    def universe(*args, build="B2"):
+        done = subprocess.run([CLI, *args], env={**env, "SHIM_BUILD": build}, capture_output=True, text=True, check=False, timeout=20)
+        assert done.returncode == 0, f"universe {' '.join(args)}: {done.stderr}"
+        return done.stdout
+
+    universe.folder = games / "Mini Metro"
+    universe.trashed = root / "home" / "share" / "Trash" / "files" / "Mini Metro"
+    return universe
+
+
+@pytest.mark.skipif(not os.path.isfile(CLI), reason="UNIVERSE_BIN names no built CLI")
+@pytest.mark.parametrize("build", ["B2", "B3"], ids=["same-build", "newer-build"])
+@pytest.mark.parametrize("route", ["library-game", "not-in-your-library"])
+def test_a_game_trashed_by_the_core_installs_again_whole(universe, route, build):
+    universe("install", MINI_METRO, "--source", "gog")
+    if route == "library-game":
+        universe("uninstall", "mini-metro", "--yes")
+    else:
+        universe("rm", "mini-metro", "--yes")
+        universe("uninstall", MINI_METRO, "--source", "gog", "--yes")
+    assert not universe.folder.exists() and universe.trashed.is_dir(), "the trash, so the player can have it back"
+    universe("install", MINI_METRO, "--source", "gog", build=build)
+    assert sorted(p.name for p in universe.folder.iterdir()) == sorted([f"goggame-{MINI_METRO}.info", "Mini Metro.exe"])
+    game = json.loads(universe("info", "mini-metro", "--json"))
+    assert (game["source"]["dir"], game["source"]["build_id"]) == (str(universe.folder), build)
+
+
+def test_install_over_a_whole_install_keeps_gogdls_manifest(src, env, run):
+    seed_cache(env)
+    assert run("install", "1434554947")[0] == 0
+    manifest = env["data"] / "gogdl" / "heroic_gogdl" / "manifests" / "1434554947"
+    assert manifest.is_file(), "the shim keeps gogdl's cache where gogdl does"
+    code, events, _ = run("install", "1434554947")
+    assert code == 0 and events[-2]["installed"] is True
+    assert manifest.is_file(), "the install is there, so gogdl's diff still holds"
+    assert [c["args"][2] for c in calls(env)].count("download") == 2
 
 
 def test_install_stopped_by_sigterm_keeps_a_resumable_partial(src, env, run, interrupt, monkeypatch):
