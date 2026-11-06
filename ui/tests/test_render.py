@@ -86,6 +86,31 @@ switch2 = pytest.mark.parametrize("look", ["switch2"], indirect=True)
 stacked = pytest.mark.parametrize("look", ["switch2", "ps5"], indirect=True)
 
 
+@pytest.mark.slow
+@reprise
+def test_a_look_picked_on_switch2_then_left_at_once_runs_nothing_its_settings_queued(look, api):
+    look.settings("themes")
+    look.switch("switch2")
+    until(lambda: look.page("settingsPage").property("shownId") == "themes")
+    look.press(Qt.Key.Key_Escape)
+    look.home()
+    look.press(Qt.Key.Key_Down)
+    look.press(Qt.Key.Key_Right, 4)
+    look.press(Qt.Key.Key_Return)
+    look.page("controllersPage")
+    look.press(Qt.Key.Key_Return)
+    page = look.page("settingsPage")
+    look.press(Qt.Key.Key_Up, 2)
+    look.press(Qt.Key.Key_Return)
+    until(lambda: page.property("shownId") == "themes" and page.property("zone") == "rows", "the crawl's path ends on the Themes rows")
+    look.press(Qt.Key.Key_Return)
+    assert api.theme.current == "reprise", "A on the first row picks Universe, whose Settings lands on Themes"
+    look.switch("ps5")
+    page = look.page("settingsPage")
+    until(lambda: page.property("sectionId") == "themes", "the next look lands on its own Themes")
+    assert api.theme.landing == ""
+
+
 @pytest.mark.parametrize("skip", [pytest.param(True, id="skipped"), pytest.param(False, id="played", marks=pytest.mark.slow)])
 @pytest.mark.parametrize("name", LOOKS)
 def test_the_intro_plays_then_leaves_home_the_focus_and_no_press(fake, tmp_path, name, skip):

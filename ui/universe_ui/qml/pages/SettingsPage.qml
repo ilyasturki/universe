@@ -901,7 +901,11 @@ FocusScope {
     }
 
     onSearchingChanged: followSearch()
+
+    // A look switch tears the page down with a call still queued; the call finds this false.
+    property bool alive: true
     Component.onDestruction: {
+        alive = false;
         if (searched !== "")
             api.screens[searched].close();
     }
@@ -1640,6 +1644,8 @@ FocusScope {
         // `sectionId` still names the section left.
         refresh(sections[section].id);
         Qt.callLater(function () {
+            if (!page.alive)
+                return;
             cards.swapping = false;
             cards.reset();
             if (mainHad)
