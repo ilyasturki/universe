@@ -1,7 +1,7 @@
 import threading
 
 import pytest
-from looks import content_rows, focus_names, held_notices, notices
+from looks import activate, content_rows, focus_names, held_notices, notices
 from PySide6.QtCore import SIGNAL, Qt
 from uitest import record, until
 
@@ -128,9 +128,10 @@ def test_a_data_action_reports_once_whether_its_page_stays_or_closes(api, fake, 
     def back_up(close):
         gate.clear()
         clear()
-        look.open("pages/DataPage.qml", look.game("the-technomancer"))
+        page = look.open("pages/DataPage.qml", look.game("the-technomancer"))
         until(lambda: "backup" in keys(store))
-        assert store.act("backup") is True
+        activate(page, store.rows, key="backup")
+        until(lambda: store.busy == "backup")
         while close and store.gameId:
             look.press(Qt.Key.Key_Escape)
         if not close:

@@ -1,7 +1,7 @@
 import threading
 
-from looks import focus_names, held_notices
-from PySide6.QtCore import SIGNAL, Qt
+from looks import focus_names, held_notices, invoke
+from PySide6.QtCore import SIGNAL, QObject, Qt
 from uitest import record, settle, until
 
 from universe_ui.errors import UniverseError
@@ -94,10 +94,14 @@ def test_a_lutris_import_reports_once_whether_its_page_stays_or_closes(api, fake
     def import_lutris(close):
         gate.clear()
         clear()
-        look.open("pages/AddGamePage.qml", {"add": True})
+        page = look.open("pages/AddGamePage.qml", {"add": True})
         form.previewLutris()
         settle(form)
-        form.importLutris()
+        invoke(page, "importLutris")
+        dialog = look.dialog() if look.stacked else page.findChild(QObject, "dialog")
+        until(lambda: dialog.property("open") is True, "the import asks first")
+        look.press(Qt.Key.Key_Return)
+        until(lambda: form.busy, "Import starts it")
         while close and "addGamePage" in focus_names(look.window):
             look.press(Qt.Key.Key_Escape)
         if not close:

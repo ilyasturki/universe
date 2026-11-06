@@ -219,6 +219,7 @@ FocusScope {
 
     ConfirmDialog {
         id: confirm
+        objectName: "dialog"
         anchors.fill: parent
         z: 4
         onClosed: cards.forceActiveFocus()
