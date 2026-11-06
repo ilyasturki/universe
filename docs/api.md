@@ -924,8 +924,8 @@ trash keeps its manifest until then. `status` says `logged_in` while gogdl gives
 prints `null` both for a refresh that never reached GOG and for one GOG refused, and logs
 `[AUTH] ERROR: Failed to refresh credentials` for the first alone (a connection error or timeout,
 TLS failures behind a captive portal included). With that line the session still reads as
-`logged_in`, with the user name kept in `user.json`, and `library` fails with
-`GOG could not be reached.`; a `null` without it reads as signed out.
+`logged_in`, with the user name kept in `user.json`, and `library` and `achievements` (the game
+client's token included) fail with `GOG could not be reached.`; a `null` without it reads as signed out.
 
 ### Epic Games
 

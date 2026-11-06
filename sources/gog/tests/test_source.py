@@ -122,10 +122,12 @@ def test_login_takes_the_code_out_of_the_address_it_lands_on(web, src, env, run,
     assert (env["tmp"] / "auth" / "auth.json").read_text() == "{}"
 
 
-def test_a_rejected_code_signs_nobody_in(web, src, env, run, monkeypatch):
-    fake_fetch(web, {})
-    code, events, _ = run("login", "bad")
-    assert code == 1 and events == []
+@pytest.mark.parametrize(("code", "gogdl"), [("bad", "ok"), ("good", "offline")], ids=["refused", "offline"])
+def test_a_rejected_code_signs_nobody_in(web, src, env, run, monkeypatch, code, gogdl):
+    monkeypatch.setenv("SHIM_MODE", gogdl)
+    fake_fetch(web, {src.USER_URL: {"username": "Yasso"}})
+    exit_code, events, _ = run("login", code)
+    assert exit_code == 1 and events == []
 
 
 def test_status_names_the_user_only_while_gogdl_holds_a_session(web, src, env, run, monkeypatch):
@@ -137,16 +139,30 @@ def test_status_names_the_user_only_while_gogdl_holds_a_session(web, src, env, r
     assert code == 0 and events == [{"event": "done"}]
 
 
+def expired_session(**fields):
+    return {"access_token": "old", "refresh_token": "r", "user_id": "4242", "expires_in": 3600, "loginTime": 1, **fields}
+
+
+def write_auth(env, sessions):
+    auth = env["tmp"] / "auth" / "auth.json"
+    auth.parent.mkdir(parents=True, exist_ok=True)
+    auth.write_text(json.dumps(sessions))
+
+
 @pytest.mark.parametrize(
     ("session", "gogdl", "signed_in"),
-    [({"refresh_token": "r"}, "offline", True), ({"refresh_token": "r"}, "noauth", False), ({}, "offline", False)],
-    ids=["offline", "revoked", "no-refresh-token"],
+    [
+        (expired_session(), "offline", True),
+        (expired_session(), "noauth", False),
+        ({k: v for k, v in expired_session().items() if k != "refresh_token"}, "offline", False),
+        (None, "offline", False),
+        (expired_session(loginTime=time.time()), "offline", True),
+    ],
+    ids=["offline", "revoked", "no-refresh-token", "empty-auth", "live-token"],
 )
 def test_status_keeps_a_session_gogdl_could_not_refresh_only_offline(src, env, run, monkeypatch, session, gogdl, signed_in):
     monkeypatch.setenv("SHIM_MODE", gogdl)
-    auth = env["tmp"] / "auth" / "auth.json"
-    auth.parent.mkdir(parents=True)
-    auth.write_text(json.dumps({src.GALAXY_CLIENT_ID: {"access_token": "old", "expires_in": 3600, "loginTime": 1, **session}}))
+    write_auth(env, {src.GALAXY_CLIENT_ID: session} if session else {})
     (env["data"] / "user.json").write_text(json.dumps({"username": "Yasso"}))
     code, events, _ = run("status")
     assert code == 0 and events == ([{"event": "logged_in", "user": "Yasso"}] if signed_in else []) + [{"event": "done"}]
@@ -161,11 +177,9 @@ def test_status_names_the_remembered_user_when_a_live_token_cannot_reach_gog(web
 
 def test_library_offline_says_so_rather_than_asking_to_sign_in_again(src, env, run, monkeypatch):
     monkeypatch.setenv("SHIM_MODE", "offline")
-    auth = env["tmp"] / "auth" / "auth.json"
-    auth.parent.mkdir(parents=True)
-    auth.write_text(json.dumps({src.GALAXY_CLIENT_ID: {"refresh_token": "r"}}))
+    write_auth(env, {src.GALAXY_CLIENT_ID: expired_session()})
     code, events, err = run("library")
-    assert code == 1 and events == [] and "run login" not in err
+    assert code == 1 and events == [] and err.rstrip().endswith(src.UNREACHABLE)
 
 
 def test_library_lists_the_owned_games_with_the_installs_found_on_disk(web, src, env, run, monkeypatch):
@@ -552,6 +566,25 @@ def test_achievements_page_through_the_games_client(web, src, env, run, monkeypa
     assert not any(u.startswith("https://content-system") for u, _ in seen), "the client id is kept"
 
 
+@pytest.mark.parametrize(
+    ("sessions", "gogdl", "offline"),
+    [
+        ({}, "offline", True),
+        ({"5010": expired_session()}, "offline", True),
+        ({}, "noauth", False),
+    ],
+    ids=["offline", "game-client-offline", "revoked"],
+)
+def test_achievements_offline_say_so_rather_than_asking_to_sign_in_again(src, env, run, monkeypatch, sessions, gogdl, offline):
+    monkeypatch.setenv("SHIM_MODE", gogdl)
+    galaxy = expired_session(loginTime=time.time()) if sessions else expired_session()
+    write_auth(env, {src.GALAXY_CLIENT_ID: galaxy, **sessions})
+    (env["data"] / "clients.json").write_text(json.dumps({MINI_METRO: {"client_id": "5010", "client_secret": "s3cret"}}))
+    code, events, err = run("achievements", MINI_METRO)
+    assert code == 1 and events == []
+    assert err.rstrip().endswith(src.UNREACHABLE) == offline and ("run login" in err) == (not offline)
+
+
 def test_achievements_of_a_game_without_a_client(web, src, env, run, monkeypatch):
     fake_manifest(web, {"baseProductId": "1"})
     fake_fetch(web, {"https://content-system.gog.com/": {"items": [{"link": "https://cdn/manifest"}]}})
@@ -628,6 +661,16 @@ def test_pre_launch_leaves_comet_alone(src, hooks, settings, monkeypatch, capsys
     assert src.main(["pre-launch"]) == 0
     assert hooks["ran"] == []
     assert not (hooks["data"] / "comet-session.json").exists()
+
+
+@pytest.mark.parametrize(("gogdl", "offline"), [("offline", True), ("noauth", False)], ids=["offline", "revoked"])
+def test_pre_launch_starts_comet_on_the_tokens_it_has(src, hooks, monkeypatch, capsys, gogdl, offline):
+    monkeypatch.setenv("SHIM_MODE", gogdl)
+    hooks["auth"].write_text(json.dumps({src.GALAXY_CLIENT_ID: expired_session()}))
+    assert src.main(["pre-launch"]) == 0
+    assert any(cmd[0] == "systemd-run" and "/nix/bin/comet" in cmd for cmd in hooks["ran"])
+    assert (hooks["data"] / "comet-session.json").exists()
+    assert ("run login" in capsys.readouterr().err) == (not offline)
 
 
 def test_pre_launch_goes_on_when_comet_fails(src, hooks):

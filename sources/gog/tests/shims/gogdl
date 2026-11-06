@@ -18,12 +18,26 @@ while args and args[0].startswith("--"):
     args = args[2:]
 verb = args[0]
 if verb == "auth" and os.environ.get("SHIM_MODE") == "offline":
+    galaxy = "46899977096215655"
     stored = json.loads(Path(sys.argv[sys.argv.index("--auth-config-path") + 1]).read_text())
-    # gogdl's refresh_credentials reads the refresh_token before it goes online: a KeyError, exit 1.
-    if "refresh_token" not in stored.get("46899977096215655", {}):
-        sys.exit(1)
-    print("[AUTH] ERROR: Failed to refresh credentials", file=sys.stderr)
-    print("null")
+
+    # gogdl 1.3.0 to 1.4.0's get_credentials with auth.gog.com out of reach; a missing key raises, exit 1, as in gogdl.
+    def credentials(client):
+        creds = stored.get(client)
+        if not creds and client == galaxy:
+            return None
+        if creds and time.time() < creds["loginTime"] + creds["expires_in"]:
+            return creds
+        refresh_token = stored[galaxy]["refresh_token"]
+        print("[AUTH] ERROR: Failed to refresh credentials", file=sys.stderr)
+        return None
+
+    # gogdl's ApiHandler reads Galaxy's credentials at start, whatever the verb.
+    credentials(galaxy)
+    if "--code" in args:
+        print(json.dumps({"error": True}))
+    else:
+        print(json.dumps(credentials(args[args.index("--client-id") + 1] if "--client-id" in args else galaxy)))
 elif verb == "auth":
     ok = ("--code" not in args or args[args.index("--code") + 1] == "good") and os.environ.get("SHIM_MODE") != "noauth"
     token = f"tok-{args[args.index('--client-id') + 1]}" if "--client-id" in args else "tok"

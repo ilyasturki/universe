@@ -27,6 +27,7 @@ LIBRARY_URL = "https://embed.gog.com/account/getFilteredProducts?mediaType=1&pag
 USER_URL = "https://embed.gog.com/userData.json"
 # gogdl 1.3.0 to 1.4.0 log this only when the refresh never reached GOG; a refused one prints null silently.
 REFRESH_UNREACHABLE = "[AUTH] ERROR: Failed to refresh credentials"
+UNREACHABLE = "GOG could not be reached."
 CATALOG_URL = "https://catalog.gog.com/v1/catalog"
 BUILDS_URL = "https://content-system.gog.com/products/{id}/os/{platform}/builds?generation=2"
 ACHIEVEMENTS_URL = "https://gameplay.gog.com/clients/{client}/users/{user}/achievements"
@@ -345,14 +346,20 @@ def has_session(settings):
     return bool(((load_json(settings["auth_path"]) or {}).get(GALAXY_CLIENT_ID) or {}).get("refresh_token"))
 
 
+def gogdl_creds(settings, *args):
+    creds, log_lines = gogdl_json_and_log(settings, "auth", *args)
+    if isinstance(creds, dict) and creds.get("access_token"):
+        return creds
+    if REFRESH_UNREACHABLE in log_lines:
+        raise Offline(UNREACHABLE)
+    return None
+
+
 def access_token(settings):
-    creds, log_lines = gogdl_json_and_log(settings, "auth")
-    token = creds.get("access_token") if isinstance(creds, dict) else None
-    if not token:
-        if REFRESH_UNREACHABLE in log_lines:
-            raise Offline("GOG could not be reached.")
+    creds = gogdl_creds(settings)
+    if not creds:
         raise SourceError("not logged in to GOG (run login)")
-    return token
+    return creds["access_token"]
 
 
 def fetch_library(settings):
@@ -714,8 +721,8 @@ def remember_user(**fields):
 
 
 def galaxy_creds(settings):
-    creds = gogdl_json(settings, "auth")
-    if not isinstance(creds, dict) or not creds.get("access_token") or not creds.get("user_id"):
+    creds = gogdl_creds(settings)
+    if not creds or not creds.get("user_id"):
         raise SourceError("not logged in to GOG (run login)")
     remember_user(user_id=str(creds["user_id"]))
     return creds
@@ -771,10 +778,10 @@ def cmd_achievements(settings, args):
     game_id = require_id(args, "achievements")
     user_id = galaxy_creds(settings)["user_id"]
     client = game_client(settings, game_id)
-    creds = gogdl_json(settings, "auth", "--client-id", client["client_id"], "--client-secret", client["client_secret"])
-    token = creds.get("access_token") if isinstance(creds, dict) else None
-    if not token:
+    creds = gogdl_creds(settings, "--client-id", client["client_id"], "--client-secret", client["client_secret"])
+    if not creds:
         raise SourceError(f"GOG refused a token for {game_id}'s Galaxy client")
+    token = creds["access_token"]
     url = ACHIEVEMENTS_URL.format(client=client["client_id"], user=user_id)
     locale = LOCALE_RE.match(os.environ.get("LANG", ""))
     lang = {"X-Gog-Lc": f"{locale.group(1)}-{locale.group(2)}" if locale else "en-US"}
@@ -1183,8 +1190,8 @@ def run_sync(settings, game_id, action, deadline):
         return cloud_entry(game_id)
     if not reachable(CLOUD_HOST):
         if action in KEEPS:
-            raise SourceError("GOG could not be reached.")
-        return update_cloud(game_id, state="offline", message="GOG could not be reached.", at=now_iso())
+            raise SourceError(UNREACHABLE)
+        return update_cloud(game_id, state="offline", message=UNREACHABLE, at=now_iso())
     locations = cloud_locations(cloud_client_id(settings, game_id, ctx["dir"]), deadline)
     if not locations:
         return update_cloud(game_id, state="unsupported", message="GOG keeps no cloud saves for this game.", at=now_iso())
@@ -1310,7 +1317,7 @@ def start_session_comet(settings):
     try:
         galaxy_creds(settings)
     except SourceError as exc:
-        log(f"{exc}: comet runs on the tokens it has")
+        log(f"comet runs on the tokens it has: {exc}")
     try:
         install_galaxy_service()
     except (OSError, ValueError) as exc:
