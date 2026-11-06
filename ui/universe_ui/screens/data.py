@@ -90,7 +90,8 @@ def game_rows(data):
         rows.append(_static("saves_folder", "Save folder", "Every game's", _home(saves.get("folder"))))
     else:
         if saves.get("error"):
-            rows.append(_static("saves_status", "Saves", "Not found", saves["error"]))
+            found = f"{_files(len(files))} · {_size(saves.get('bytes'))}" if files else "Not found"
+            rows.append(_static("saves_status", "Saves", found, saves["error"]))
         else:
             where = os.path.commonpath([f["path"] for f in files]) if files else ""
             rows.append(_static("saves_status", saves.get("name") or "Saves", f"{_files(len(files))} · {_size(saves.get('bytes'))}", _home(where)))
@@ -99,7 +100,7 @@ def game_rows(data):
         detail = f"Kept in {_home(saves.get('dir'))}, the last {keep}" + (", one after each session." if saves.get("auto") else ".")
         rows.append(_action("backup", "Back Up Now", last, detail))
         rows.append(_action("restore", "Restore the Latest Backup", "", "The saves on disk now are backed up, then replaced.", disabled=not backups))
-        rows.append(_action("export", "Export the Backups", "", "One zip in your home folder.", disabled=not backups))
+        rows.append(_action("export", "Export the Backups", "", "One zip in your home folder.", disabled=not backups and not saves.get("unreadable")))
     rows.extend(_cloud_rows(saves.get("cloud")))
     if saves.get("engine") and backups:
         rows.append(_head("Backups", _size(saves.get("backups_bytes"))))

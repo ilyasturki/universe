@@ -229,7 +229,7 @@ out its own compatdata instead, which stays Steam's), and each game's backups go
  "saves": {"engine": "ludusavi", "name": "Hollow Knight", "files": [{"path": "…/user1.dat", "bytes": 120000}],
            "bytes": 5100000, "error": "", "folder": "", "title_id": "", "dir": "~/.local/share/universe/saves/hollow-knight",
            "backups": [{"id": "backup-20261004T100051Z", "name": "Hollow Knight", "when": "RFC3339", "bytes": 5100000, "path": "…"}],
-           "backups_bytes": 5100000, "auto": true, "keep": 5,
+           "backups_bytes": 5100000, "unreadable": null, "auto": true, "keep": 5,
            "cloud": {"enabled": true, "state": "synced", "message": "", "at": "RFC3339", "locations": [{"name": "saves", "path": "…"}]}},
  "universe": {"path": "…/games/hollow-knight", "bytes": 3100000, "parts": {"media": 3000000, "screenshots": 0, "journal": 0, "sessions": 2048}},
  "recordings": {"path": "~/Videos/universe/hollow-knight", "bytes": 0, "exists": false, "archived": false},
@@ -244,7 +244,10 @@ never moved, `lutris` for an import, else `elsewhere`; `shared_with` names the o
 `move_prefix` would take it. `saves.engine` is `ludusavi` for a PC game, `emulator` for an emulated
 title whose saves are known one by one, and empty where only the emulator's `folder` is known;
 `error` says why the saves could not be listed (ludusavi not installed yet, a title it does not
-know). `saves.cloud` is `saves_cloud(id, "status")`, `null` for a game whose source syncs no cloud
+know). `saves.unreadable` is the path of a mapping that can't be read, or that is missing from a
+folder with backups in it, else `null`; `error` then names it. A backup and a restore refuse, the
+restore of a backup another mapping lists excepted, an export still zips the folders, and no
+folder goes until the mapping is fixed or its folder moved away. `saves.cloud` is `saves_cloud(id, "status")`, `null` for a game whose source syncs no cloud
 saves. Sizes walk the folders, and the saves ask ludusavi (about a second): a frontend calls it off
 its UI thread. `total` adds the parts and the backups.
 

@@ -26,6 +26,12 @@ The game menu (**Start** on a game) › **Manage** › **Data and saves** has:
 
 Restoring is refused while the game runs, and when the saves on disk can't be backed up first. After **Reset the Prefix…**, restoring puts the saves back in the game's fresh prefix, so you can do it before the next launch. The same goes for a Steam game whose prefix Steam deleted: the saves land where Steam makes the new one. You can leave the page while an action runs: its result, or why it failed, shows when it ends.
 
+### When the list of backups is damaged
+
+The Data and saves page then names the damaged file, and backing up, restoring and **Reset the Prefix…** stop for that game. The backups stay on disk, and nothing removes them.
+
+**Export the Backups** still zips them. To go on, use a file manager or a terminal to move the folder holding that file out of the game's backups: the next backup starts a new list.
+
 ## Cloud saves
 
 Cloud saves are off by default, and only a Windows build run through Proton or Wine syncs. Turn them on for every game of a store in Settings › Stores › **GOG** (or **Epic Games**), or for one game in the **GOG** or **Epic Games** card of its Game settings.

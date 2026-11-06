@@ -193,7 +193,7 @@ pub fn fill(list: &gtk::ListBox, data: &Value, reload: Reload) {
                 Some(b) => gettext("{} kept · last {}").replacen("{}", &backups.len().to_string(), 1).replacen("{}", &day(&text(b, "when")), 1),
                 None => gettext("None yet"),
             })
-            .sensitive(!backups.is_empty())
+            .sensitive(!backups.is_empty() || !saves["unreadable"].is_null())
             .build();
         kept.add_prefix(&gtk::Image::from_icon_name("document-open-recent-symbolic"));
         for b in &backups {

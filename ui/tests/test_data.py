@@ -12,6 +12,23 @@ def keys(store):
     return [r["key"] for r in store.rows if r["key"]]
 
 
+def test_backups_behind_a_damaged_list_can_still_be_exported(api, fake, monkeypatch):
+    readable = fake.core.game_data
+
+    def damaged(ident):
+        data = readable(ident)
+        data["saves"].update(backups=[], unreadable="/saves/mapping.yaml", error="/saves/mapping.yaml: damaged")
+        return data
+
+    monkeypatch.setattr(fake.core, "game_data", damaged)
+    store = api.screens.gameData
+    store.load("the-technomancer")
+    until(lambda: store.count > 0 and not store.loading)
+    rows = {r["key"]: r for r in store.rows if r["key"]}
+    assert "/saves/mapping.yaml" in rows["saves_status"]["detail"]
+    assert rows["restore"]["disabled"] and not rows["export"]["disabled"]
+
+
 def test_a_games_data_lists_its_saves_its_prefix_and_its_files_and_runs_their_actions(api, fake):
     store = api.screens.gameData
     store.load("the-technomancer")

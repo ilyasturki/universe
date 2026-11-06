@@ -255,9 +255,9 @@ impl Core {
 
     async fn saves_status(&self, game: &Game, config: &Config) -> Value {
         let dir = saves::dir(config, &game.id);
-        let backups = {
+        let (backups, unreadable) = {
             let dir = dir.clone();
-            blocking(move || Ok(saves::backups(&dir))).await.unwrap_or_default()
+            blocking(move || Ok((saves::backups(&dir), saves::unreadable(&dir)))).await.unwrap_or_default()
         };
         let emu = saves::emulator(game, config);
         let mut out = json!({
@@ -265,7 +265,7 @@ impl Core {
             "name": game.saves.name, "files": [], "bytes": 0, "error": "",
             "folder": emu.as_ref().map(|e| e.folder.clone()).unwrap_or_default(),
             "title_id": emu.as_ref().map(|e| e.title_id.clone()).unwrap_or_default(),
-            "dir": dir, "backups_bytes": backups.iter().map(|b| b.bytes).sum::<u64>(), "backups": backups,
+            "dir": dir, "backups_bytes": backups.iter().map(|b| b.bytes).sum::<u64>(), "backups": backups, "unreadable": unreadable,
             "auto": config.saves.auto_backup, "keep": config.saves.keep,
         });
         if out["engine"] == "" {
@@ -283,6 +283,9 @@ impl Core {
                 }
             }
             Err(e) => out["error"] = e.to_string().into(),
+        }
+        if let Some(file) = unreadable {
+            out["error"] = saves::damaged(&file).to_string().into();
         }
         out
     }

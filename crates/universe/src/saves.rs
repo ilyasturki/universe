@@ -488,11 +488,15 @@ fn admit(stage: &Path, dir: &Path, seeded: usize, keep: Option<usize>) -> Result
         let Some(record) = staged["backups"].as_vec().filter(|listed| listed.len() > seeded).and_then(|listed| listed.last()) else { continue };
         let Some(staged_id) = record["name"].as_str() else { continue };
         let game = dir.join(entry.file_name());
-        std::fs::create_dir_all(&game)?;
+        std::fs::create_dir_all(dir)?;
+        if is_empty(&game) {
+            // Backup and mapping in one rename: a crash can't leave backups no mapping lists.
+            std::fs::rename(entry.path(), &game)?;
+            continue;
+        }
         let file = game.join("mapping.yaml");
-        let unreadable = || Error::Io(format!("{}: not a mapping ludusavi wrote", file.display()));
-        let mut doc = if file.exists() { mapping(&file).ok_or_else(unreadable)? } else { staged.clone() };
-        let listed = records(&mut doc).ok_or_else(unreadable)?;
+        let mut doc = mapping(&file).ok_or_else(|| damaged(&file))?;
+        let listed = records(&mut doc).ok_or_else(|| damaged(&file))?;
         // ludusavi 0.31 leaves a copy that failed under a redirect in its mapping, with no folder behind it.
         listed.retain(|b| b["name"].as_str().is_some_and(|id| game.join(id).exists()));
         let id = (1..).map(|n| if n == 1 { staged_id.to_string() } else { format!("{staged_id}-{n}") }).find(|id| !game.join(id).exists()).unwrap_or_default();
@@ -509,6 +513,10 @@ fn admit(stage: &Path, dir: &Path, seeded: usize, keep: Option<usize>) -> Result
         sweep(&game, &left);
     }
     Ok(())
+}
+
+fn is_empty(folder: &Path) -> bool {
+    std::fs::read_dir(folder).map_or(true, |mut entries| entries.next().is_none())
 }
 
 fn at(path: &Path) -> impl Fn(std::io::Error) -> Error + '_ {
@@ -535,6 +543,9 @@ pub async fn restore(ask: &Ask, config: &Config, id: &str, backup: &str) -> Resu
     let _game = hold_game(id).await?;
     let _held = hold().await?;
     let listed = backups(&dir);
+    if let Some(file) = unreadable(&dir).filter(|_| !listed.iter().any(|b| b.id == backup)) {
+        return Err(damaged(&file));
+    }
     let picked = if backup.is_empty() { listed.iter().find(|b| b.name == ask.name).or(listed.first()) } else { listed.iter().find(|b| b.id == backup) };
     let picked = picked.ok_or_else(|| Error::NotFound(format!("{id} has no backup {backup}").trim_end().to_string()))?;
     let restoring = |extra: &[&str]| {
@@ -570,7 +581,18 @@ pub struct Backup {
 
 fn mapping(file: &Path) -> Option<yaml_rust2::Yaml> {
     let text = std::fs::read_to_string(file).ok()?;
-    yaml_rust2::YamlLoader::load_from_str(&text).ok()?.into_iter().next()
+    let doc = yaml_rust2::YamlLoader::load_from_str(&text).ok()?.into_iter().next()?;
+    (doc["name"].as_str().is_some() && doc["backups"].as_vec().is_some()).then_some(doc)
+}
+
+/// A mapping of the game's that can't be read, missing from a folder with anything in it included: the backups it lists are on disk, out of reach.
+pub fn unreadable(dir: &Path) -> Option<PathBuf> {
+    let folders = std::fs::read_dir(dir).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| p.is_dir());
+    folders.filter(|folder| !is_empty(folder)).map(|folder| folder.join("mapping.yaml")).find(|file| mapping(file).is_none())
+}
+
+pub fn damaged(file: &Path) -> Error {
+    Error::Io(format!("{}: this list of backups can't be read, and the backups stay on disk", file.display()))
 }
 
 fn field<'a>(doc: &'a mut yaml_rust2::Yaml, key: &str) -> Option<&'a mut yaml_rust2::Yaml> {
@@ -624,7 +646,7 @@ pub fn backups(dir: &Path) -> Vec<Backup> {
 /// Laid out as ludusavi lays its backups out: unpacked, any ludusavi restores from it. The caller holds the game's lock.
 pub fn export(config: &Config, id: &str, to: &Path) -> Result<PathBuf> {
     let dir = dir(config, id);
-    if backups(&dir).is_empty() {
+    if backups(&dir).is_empty() && unreadable(&dir).is_none() {
         return Err(Error::NotFound(format!("{id} has no backup to export")));
     }
     std::fs::create_dir_all(to)?;

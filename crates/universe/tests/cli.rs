@@ -763,6 +763,68 @@ fn a_failed_export_leaves_no_zip_and_names_the_file_it_could_not_read() {
     assert_eq!(read_zipped(&mut only_zip(&zips), &format!("fixture-game/Fixture Game/{id}/drive-0/universe/prefix/{FIXTURE_SAVES}/slot1.sav")), "saved");
 }
 
+#[test]
+fn a_mapping_that_cant_be_read_is_reported_and_costs_no_backup() {
+    let game = SavedGame::new(1, |_| String::new());
+    game.put("slot1.sav", "kept");
+    assert!(game.saves(&["backup", "fixture-game"]).status.success());
+    let mapping = game.mapping();
+    let (good, folder) = (std::fs::read_to_string(&mapping).unwrap(), game.backup_folder());
+    let stored = folder.join("drive-0/universe/prefix").join(FIXTURE_SAVES).join("slot1.sav");
+    let named = mapping.to_str().unwrap();
+    game.put("slot1.sav", "progress");
+
+    for (broken, damage) in [("cut short", Some("name: Fixture Game\nbackups: [")), ("empty", Some("")), ("not a mapping", Some("words")), ("gone", None)] {
+        match damage {
+            Some(bytes) => std::fs::write(&mapping, bytes).unwrap(),
+            None => std::fs::remove_file(&mapping).unwrap(),
+        }
+        let list = game.saves(&["list", "fixture-game", "--json"]);
+        let data: serde_json::Value = serde_json::from_slice(&list.stdout).unwrap_or_else(|e| panic!("{broken}: {e}: {}", text(&list.stderr)));
+        assert!(data["error"].as_str().unwrap().contains(named), "{broken}: {data}");
+        assert_eq!(data["unreadable"], named, "{broken}: {data}");
+        assert_eq!(data["files"].as_array().unwrap().len(), 1, "{broken}: the live saves are still found: {data}");
+
+        for action in [
+            &["saves", "backup", "fixture-game"][..],
+            &["saves", "restore", "fixture-game", "--yes"][..],
+            &["data", "fixture-game", "reset-prefix", "--yes"][..],
+        ] {
+            let refused = universe(&game.dir, action, &[("PATH", &game.path)]);
+            assert!(!refused.status.success(), "{broken}: {action:?}: {}", text(&refused.stdout));
+            assert!(text(&refused.stderr).contains(named), "{broken}: {action:?}: {}", text(&refused.stderr));
+        }
+        assert_eq!(std::fs::read_to_string(&stored).unwrap(), "kept", "{broken}");
+        assert_eq!(game.read("slot1.sav"), "progress", "{broken}");
+
+        let zips = game.dir.path().join("zips").join(broken);
+        let exported = game.saves(&["export", "fixture-game", zips.to_str().unwrap()]);
+        assert!(exported.status.success(), "{broken}: {}", text(&exported.stderr));
+        let id = folder.file_name().unwrap().to_string_lossy();
+        assert_eq!(
+            read_zipped(&mut only_zip(&zips), &format!("fixture-game/Fixture Game/{id}/drive-0/universe/prefix/{FIXTURE_SAVES}/slot1.sav")),
+            "kept",
+            "{broken}"
+        );
+        std::fs::write(&mapping, &good).unwrap();
+    }
+
+    assert_eq!(game.saves(&["list", "fixture-game", "--json"]).status.code(), Some(0));
+    assert!(game.saves(&["backup", "fixture-game"]).status.success());
+    assert_eq!(game.held("slot1.sav"), ["progress"], "the file put back, backups go on");
+
+    let title = mapping.parent().unwrap();
+    std::fs::write(&mapping, "words").unwrap();
+    std::fs::rename(title, game.dir.path().join("moved away")).unwrap();
+    std::fs::create_dir_all(title).unwrap();
+    let list = game.saves(&["list", "fixture-game", "--json"]);
+    let data: serde_json::Value = serde_json::from_slice(&list.stdout).unwrap();
+    assert_eq!((&data["error"], &data["unreadable"]), (&serde_json::json!(""), &serde_json::Value::Null), "an empty folder lost nothing");
+    game.put("slot1.sav", "fresh start");
+    assert!(game.saves(&["backup", "fixture-game"]).status.success());
+    assert_eq!(game.held("slot1.sav"), ["fresh start"], "the guide's way forward: the folder moved, the next backup starts a new list");
+}
+
 fn files_under(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
     std::fs::read_dir(dir).into_iter().flatten().flatten().flat_map(|e| if e.path().is_dir() { files_under(&e.path()) } else { vec![e.path()] }).collect()
 }
