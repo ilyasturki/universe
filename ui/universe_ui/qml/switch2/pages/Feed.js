@@ -13,7 +13,6 @@ function channels(rows) {
     return out;
 }
 
-// An entry nobody has written yet: never asked for, put off after a failure, or given up on.
 function blank(row) {
     return row.state === "none" || row.state === "deferred" || row.state === "failed";
 }

@@ -145,7 +145,6 @@ FocusScope {
         });
     }
 
-    // Hands the session to the journal module: a first entry, another try, or a fresh one over what is there.
     function write(row, again) {
         Sound.play("ok");
         store.write(row.gameId, row.session, again);
