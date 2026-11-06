@@ -470,7 +470,9 @@ def test_each_switch2_news_card_offers_what_its_state_allows(look, fake):
     game = "the-technomancer"
     failed = next(e for e in fake.core._data["journal"][game] if e["session"] == "20260907-224100")
     failed.update(state="failed", title="", paragraphs=["codex timed out after 30 min"])
-    next(s for s in fake.core._data["sessions"][game] if s["session"] == failed["session"])["recording"] = None
+    lines = {s["session"]: s for s in fake.core._data["sessions"][game]}
+    lines[failed["session"]]["recording"] = None
+    lines["20260901-200000"]["recording"] = "/mnt/recordings/games/the-technomancer/20260901-200000.mkv"
     page = look.open("pages/NewsPage.qml")
     grid = page.findChild(QObject, "newsGrid")
     picker = look.find("picker")
@@ -542,29 +544,37 @@ def test_each_switch2_news_card_offers_what_its_state_allows(look, fake):
     assert all(t.property("text") for t in descendants(page, "newsTitle")), "an entry being written has a title too"
 
 
-@switch2
-def test_removing_an_unwritten_session_s_recording_keeps_the_session_to_write(look, fake):
+@stacked
+def test_removing_an_unwritten_session_s_recording_keeps_the_session_and_says_why_it_has_nothing_to_write(look, fake):
     game, session = "the-technomancer", "20260909-213045"
     fake.core._data["journal"][game] = [e for e in fake.core._data["journal"][game] if e["session"] != session]
+    for shot in fake.core.screenshots(game):
+        if shot["session"] == session:
+            os.unlink(shot["path"])
     errors = []
     fake.error.connect(lambda kind, message: errors.append(kind))
     page = look.open("pages/NewsPage.qml")
-    grid = page.findChild(QObject, "newsGrid")
-    picker, dialog = look.menu(), look.dialog()
+    menu, dialog = look.menu(), look.dialog()
+    shown = notices(look.engine)
+    rows = "articles" if look.name == "switch2" else "entries"
+    cursor = page.findChild(QObject, "newsGrid") if look.name == "switch2" else page
 
     def entry():
-        return next((r for r in read(page, "articles") if r["session"] == session), None)
+        return next((r for r in read(page, rows) if r["session"] == session), None)
+
+    def acts():
+        return [a["act"] for a in read(page, "actions")] if look.name == "switch2" else [i["act"] for i in read(menu, "items")]
 
     until(lambda: (r := entry()) and r["state"] == "none" and r["hasRecording"], "the session has a recording and no entry")
-    grid.setProperty("index", [r["session"] for r in read(page, "articles")].index(session))
+    cursor.setProperty("index", [r["session"] for r in read(page, rows)].index(session))
     until(lambda: read(page, "current")["session"] == session)
     settle(look.window)
     trace = FocusTrace(look.window)
     look.press(Qt.Key.Key_F1)
-    until(lambda: picker.property("open") is True)
-    acts = [a["act"] for a in read(page, "actions")]
-    assert "remove-recording" in acts and "remove" not in acts, acts
-    look.press(Qt.Key.Key_Down, acts.index("remove-recording") - picker.property("index"))
+    until(lambda: menu.property("open") is True)
+    removal = {"switch2": "remove-recording", "ps5": "remove"}[look.name]
+    assert removal in acts() and not (look.name == "switch2" and "remove" in acts()), acts()
+    look.press(Qt.Key.Key_Down, acts().index(removal) - menu.property("index"))
     look.press(Qt.Key.Key_Return)
     until(lambda: dialog.property("open") is True, "the recording's removal asks first")
     look.press(Qt.Key.Key_Right)
@@ -572,12 +582,14 @@ def test_removing_an_unwritten_session_s_recording_keeps_the_session_to_write(lo
     until(lambda: dialog.property("open") is False and page.property("activeFocus") is True)
     until(lambda: (r := entry()) and not r["hasRecording"], "the recording goes")
     settle(look.window)
-    assert trace.stop().foreign("newsPage", "picker", "dialog") == [], "the focus stays on the page, its menu or its question"
+    assert trace.stop().foreign("newsPage", MENU[look.name], "dialog") == [], "the focus stays on the page, its menu or its question"
     assert errors == [], "nothing else is asked to go"
-    assert entry()["state"] == "none", "the session stays, one write away"
-    assert [a["act"] for a in read(page, "actions")] == ["write"]
+    assert entry()["state"] == "none", "the session stays"
     look.press(Qt.Key.Key_Return)
-    until(lambda: entry()["state"] == "pending", "A still asks for its entry")
+    until(lambda: errors == ["Invalid"], "with no recording and no screenshot, the journal has nothing to write from")
+    until(lambda: (n := shown()) and n["error"], "and the player is told so")
+    settle(look.window)
+    assert entry()["state"] == "none", "no write was started"
 
 
 @stacked

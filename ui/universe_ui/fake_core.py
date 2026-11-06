@@ -2175,16 +2175,34 @@ class FakeCore:
         self._later(JOURNAL_S, write)
 
     def journal_write(self, ident, session_id, rewrite=False):
+        return self._start_journal(ident, session_id, rewrite, asked=True)
+
+    def _start_journal(self, ident, session_id, rewrite, asked):
         lines = self._data.get("sessions", {}).get(ident, [])
-        if not any(s.get("session") == session_id for s in lines):
+        line = next((s for s in lines if s.get("session") == session_id), None)
+        if line is None:
             raise UniverseError("NotFound", f"session {session_id} of {ident}")
         entries = self._data.setdefault("journal", {}).setdefault(ident, [])
         written = next((e for e in entries if e.get("session") == session_id and e.get("state", "written") == "written"), None)
         if written and not rewrite:
             raise UniverseError("Invalid", f"{session_id} already has an entry; ask for a rewrite to replace it")
+        if asked and not line.get("recording") and not self._shot_during(ident, line):
+            raise UniverseError("Invalid", "this session has no recording and no screenshot to write from")
         self._data["journal"][ident] = [e for e in entries if e.get("session") != session_id]
         self._pend_journal(ident, session_id)
         return f"universe-journal-post-process-{session_id}.service"
+
+    # The journal module's window: 90 s before the start to 120 s after the end.
+    def _shot_during(self, ident, line):
+        from datetime import timedelta
+
+        try:
+            start, end = datetime.fromisoformat(line["started_at"]), datetime.fromisoformat(line["ended_at"])
+        except (KeyError, ValueError):
+            return False
+        directory = self._game_dir(ident) / "screenshots"
+        taken = [datetime.strptime(p.stem, "%Y%m%d-%H%M%S").astimezone() for p in directory.glob("*.png")] if directory.is_dir() else []
+        return any(start - timedelta(seconds=90) <= t <= end + timedelta(seconds=120) for t in taken)
 
     def sweep_journals(self, ident=""):
         waiting = [
@@ -2195,7 +2213,7 @@ class FakeCore:
         if not due:
             return {"started": None, "due": 0, "next": nxt}
         game, entry = due[0]
-        self.journal_write(game, entry["session"], True)
+        self._start_journal(game, entry["session"], True, asked=False)
         return {"started": {"game": game, "session": entry["session"]}, "due": len(due) - 1, "next": nxt}
 
     def remove_journal_entry(self, ident, session_id):

@@ -44,16 +44,21 @@ pub fn list_dir(dir: &Path) -> Vec<PathBuf> {
     shots
 }
 
-fn spans(sessions: &[Session]) -> Vec<(DateTime<Local>, DateTime<Local>, &str)> {
+fn span(s: &Session) -> Option<(DateTime<Local>, DateTime<Local>, &str)> {
     let parse = |s: &str| DateTime::parse_from_rfc3339(s.trim()).ok().map(|t| t.with_timezone(&Local));
-    sessions
-        .iter()
-        .filter_map(|s| {
-            let start = parse(&s.started_at)?;
-            let end = parse(&s.ended_at).unwrap_or_else(|| start + chrono::Duration::seconds(s.duration_s as i64));
-            Some((start - chrono::Duration::seconds(HEAD_GRACE_S), end + chrono::Duration::seconds(TAIL_GRACE_S), s.session.as_str()))
-        })
-        .collect()
+    let start = parse(&s.started_at)?;
+    let end = parse(&s.ended_at).unwrap_or_else(|| start + chrono::Duration::seconds(s.duration_s as i64));
+    Some((start - chrono::Duration::seconds(HEAD_GRACE_S), end + chrono::Duration::seconds(TAIL_GRACE_S), s.session.as_str()))
+}
+
+fn spans(sessions: &[Session]) -> Vec<(DateTime<Local>, DateTime<Local>, &str)> {
+    sessions.iter().filter_map(span).collect()
+}
+
+/// Whether the journal module would find a shot of `session` to write from.
+pub fn any_during(r: &Resolved, session: &Session) -> bool {
+    let Some((start, end, _)) = span(session) else { return false };
+    list_dir(&r.game.screenshots_dir()).iter().filter_map(|p| taken_at(p)).any(|t| start <= t && t <= end)
 }
 
 fn session_of(t: DateTime<Local>, spans: &[(DateTime<Local>, DateTime<Local>, &str)]) -> String {

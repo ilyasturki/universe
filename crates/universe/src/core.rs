@@ -1481,15 +1481,23 @@ impl Core {
 
     /// Writes one session's entry now: a retry of a deferred or failed one, a first entry for a session that never had one, `rewrite` over a written one.
     pub async fn journal_write(&self, id: &str, session_id: &str, rewrite: bool) -> Result<String> {
+        self.start_journal(id, session_id, rewrite, true).await
+    }
+
+    /// `asked`: a player's own ask, refused when the module would find nothing to write from; a retry the module owes runs anyway, to clear its state.
+    async fn start_journal(&self, id: &str, session_id: &str, rewrite: bool, asked: bool) -> Result<String> {
         let r = self.get(id).await?;
         if crate::sessions::parse_session_id(session_id).is_none() {
             return Err(Error::Invalid(format!("session {session_id} is not a timestamp: there is nothing to write from")));
         }
-        if !r.sessions.iter().any(|s| s.session == session_id) {
+        let Some(session) = r.sessions.iter().find(|s| s.session == session_id) else {
             return Err(Error::NotFound(format!("session {session_id} of {id}")));
-        }
+        };
         if r.game.journal_dir().join(format!("{session_id}.json")).is_file() && !rewrite {
             return Err(Error::Invalid(format!("{session_id} already has an entry; ask for a rewrite to replace it")));
+        }
+        if asked && session.recording.as_deref().unwrap_or_default().is_empty() && !crate::screenshots::any_during(&r, session) {
+            return Err(Error::Invalid("this session has no recording and no screenshot to write from".into()));
         }
         let unit = format!("universe-{JOURNAL_MODULE}-post-process-{session_id}");
         if self.host.units.is_active(&unit).await {
@@ -1573,7 +1581,7 @@ impl Core {
             return serde_json::json!({"started": null, "due": 0, "next": self.waiting_at(None).await});
         }
         let (id, session) = due.remove(0);
-        match self.journal_write(&id, &session, false).await {
+        match self.start_journal(&id, &session, false, false).await {
             // The session just started is owed nothing more: the instant reported is the next one after it.
             Ok(_) => {
                 let next = self.waiting_at(Some(&session)).await;
@@ -2919,6 +2927,45 @@ mod tests {
         assert_eq!(spec.env["JOURNAL_REWRITE"], "1");
         assert!(matches!(core.journal_write("sample", "lutris", false).await, Err(Error::Invalid(_))), "a session with no timestamp has nothing to read");
         assert!(matches!(core.journal_write("sample", "20990101-000000", false).await, Err(Error::NotFound(_))));
+    }
+
+    #[tokio::test]
+    async fn a_session_with_nothing_captured_is_refused_its_entry_and_told_why() {
+        let _dir = journal_sandbox("stub");
+        let core = open().await;
+        let game = core.get("sample").await.unwrap().game;
+        let bare = "20260912-100000";
+        crate::sessions::append(
+            &game.sessions_path(),
+            &crate::sessions::Session {
+                session: bare.into(),
+                game: "sample".into(),
+                started_at: "2026-09-12T10:00:00+02:00".into(),
+                ended_at: "2026-09-12T11:00:00+02:00".into(),
+                duration_s: 3600,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let core = open().await;
+        let err = core.journal_write("sample", bare, false).await.unwrap_err();
+        assert!(matches!(err, Error::Invalid(ref m) if m.contains("no recording and no screenshot")), "{err}");
+        assert!(memory(&core).spec(&format!("universe-journal-post-process-{bare}")).is_none(), "no run that would write nothing");
+
+        std::fs::create_dir_all(game.screenshots_dir()).unwrap();
+        std::fs::write(game.screenshots_dir().join("20260912-110100.png"), b"").unwrap();
+        assert!(core.journal_write("sample", bare, false).await.is_ok(), "a shot inside the module's window is enough to write from");
+        memory(&core).finish(&format!("universe-journal-post-process-{bare}"), 0);
+        std::fs::remove_file(game.screenshots_dir().join("20260912-110100.png")).unwrap();
+
+        let past = (chrono::Local::now() - chrono::Duration::minutes(1)).to_rfc3339();
+        std::fs::create_dir_all(game.journal_dir()).unwrap();
+        std::fs::write(
+            game.journal_dir().join(format!("{bare}.deferred.json")),
+            format!(r#"{{"session":"{bare}","game":"sample","provider":"stub","until":"{past}","reason":"codex quota reached","attempts":1}}"#),
+        )
+        .unwrap();
+        assert_eq!(core.sweep_journals().await["started"]["session"], bare, "a retry the module owes still runs, so it can clear its own state");
     }
 
     #[tokio::test]
