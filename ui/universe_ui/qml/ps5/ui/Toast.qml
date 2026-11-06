@@ -65,8 +65,8 @@ Item {
         }
 
         Label {
-            objectName: "notice"
             id: label
+            objectName: "notice"
             anchors.verticalCenter: parent.verticalCenter
             width: Math.min(implicitWidth, (toast.parent ? toast.parent.width : 1920) - Theme.dp(360))
             text: Base.Notices.text

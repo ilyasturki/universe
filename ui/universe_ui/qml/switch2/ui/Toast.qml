@@ -37,8 +37,8 @@ Item {
     }
 
     Label {
-        objectName: "notice"
         id: label
+        objectName: "notice"
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.margins: Theme.dp(32)
