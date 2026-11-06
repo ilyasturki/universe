@@ -427,10 +427,36 @@ def test_updates_list_every_install_against_the_published_build(web, src, env, r
     assert calls(env) == []
 
 
-def test_updates_without_an_answer_list_nothing(web, src, env, run, monkeypatch):
+def test_updates_without_an_answer_fail_and_one_unanswered_install_is_named(web, src, env, run, monkeypatch):
     fake_fetch(web, {"https://content-system.gog.com/products/": OSError("boom")})
+    code, events, err = run("update")
+    assert code == 1 and events == [] and "boom" in err
+
+    write_info(env["scan"] / "Current", "2", "2", "Current", build="B2")
+    write_info(env["scan"] / "Unlisted", "3", "3", "Unlisted", build="B0")
+    web.answers.clear()
+    fake_fetch(
+        web,
+        {
+            "https://content-system.gog.com/products/2/": BUILDS,
+            "https://content-system.gog.com/products/3/": {"items": []},
+            "https://content-system.gog.com/products/": OSError("boom"),
+        },
+    )
+    code, events, err = run("update")
+    assert code == 0
+    assert [(e["event"], e.get("id"), e.get("unanswered")) for e in events] == [
+        ("update", "2", None),
+        ("update", "1434554947", True),
+        ("done", None, None),
+    ], "a store with no build for it has answered; the unanswered install stays in the list"
+    assert "Mini Metro" in err and "boom" in err
+
+
+def test_updates_with_nothing_installed_ask_nobody(web, src, env, run):
+    shutil.rmtree(env["scan"])
     code, events, _ = run("update")
-    assert code == 0 and events == [{"event": "done"}]
+    assert code == 0 and events == [{"event": "done"}] and web.seen == []
 
 
 def test_update_of_a_current_install_leaves_gogdl_alone(web, src, env, run, monkeypatch):

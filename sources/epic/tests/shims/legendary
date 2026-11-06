@@ -59,6 +59,9 @@ elif verb == "auth":
 elif verb == "list" and "--json" in rest:
     print(json.dumps(json.loads(os.environ["SHIM_LIBRARY"])))
 elif verb == "list-installed":
+    if mode == "offline" and "--check-updates" in rest:
+        print("[Core] ERROR: HTTP request for login failed: ConnectionError(), please try again later.", file=sys.stderr)
+        err("Login failed! Not checking for updates.")
     if "--csv" in rest:
         print("App name,App title,Installed version,Available version,Update available,Install size,Install path,Platform")
         for app, g in installed.items():

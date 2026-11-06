@@ -219,6 +219,14 @@ def test_updates_list_the_base_games_and_one_updates(env, run, monkeypatch):
     assert code == 1 and events == [], "not installed"
 
 
+def test_updates_fail_when_legendary_could_not_log_in_to_check(env, run, monkeypatch):
+    install_state(env, {"Min": hades(env)})
+    monkeypatch.setenv("SHIM_MODE", "offline")
+    code, events, err = run("update")
+    assert code == 1 and events == [], "legendary's list is its cache, exit 0"
+    assert err.rstrip().splitlines()[-1].endswith("please try again later."), "the cause, not legendary's closing line"
+
+
 def test_scan_adopts_heroics_installs_once_signed_in(env, run):
     heroic = env["tmp"] / "heroic"
     heroic.mkdir()

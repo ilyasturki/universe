@@ -162,10 +162,11 @@ impl Upstream {
         self.stores.get(source).is_none_or(|s| now - s.at >= FRESH_S)
     }
 
-    /// The `update` rows a store listed, by the store's id of each game.
+    /// The `update` rows a store listed, by the store's id of each game. A list with an unanswered row is asked for again at the next check.
     pub(crate) fn set_store(&mut self, source: &str, rows: impl IntoIterator<Item = serde_json::Map<String, Value>>, now: i64) {
-        let rows = rows.into_iter().filter_map(|r| Some((r.get("id")?.as_str()?.to_string(), r))).collect();
-        self.stores.insert(source.into(), Store { rows, at: now });
+        let rows: BTreeMap<_, _> = rows.into_iter().filter_map(|r| Some((r.get("id")?.as_str()?.to_string(), r))).collect();
+        let at = if rows.values().any(unanswered) { 0 } else { now };
+        self.stores.insert(source.into(), Store { rows, at });
     }
 
     pub fn with_sources(mut self, active: &[String]) -> Upstream {
@@ -179,7 +180,16 @@ impl Upstream {
         self.steam.extend(fresh.steam);
         self.switch.extend(fresh.switch);
         self.ps3.extend(fresh.ps3);
-        self.stores.extend(fresh.stores);
+        for (source, mut list) in fresh.stores {
+            if let Some(old) = self.stores.get(&source) {
+                for (id, row) in list.rows.iter_mut().filter(|(_, row)| unanswered(row)) {
+                    if let Some(kept) = old.rows.get(id) {
+                        row.clone_from(kept);
+                    }
+                }
+            }
+            self.stores.insert(source, list);
+        }
     }
 
     /// After the store updated `id`: its row says the published build is the one installed.
@@ -440,6 +450,11 @@ pub(crate) fn mark_refusal(game: &Game, read: &Installed, store: &str) -> Option
     }
 }
 
+/// A row for a game the store could not be asked about, in a list that holds the others.
+pub(crate) fn unanswered(row: &serde_json::Map<String, Value>) -> bool {
+    row.get("unanswered") == Some(&Value::Bool(true))
+}
+
 fn by_store(game: &Game, read: &Installed, list: &Store, store: &str, id: &str) -> Check {
     let (store, store_id) = (store.to_string(), id.to_string());
     let Some(row) = list.rows.get(id) else {
@@ -447,6 +462,9 @@ fn by_store(game: &Game, read: &Installed, list: &Store, store: &str, id: &str) 
         let own = game.source.kind == store;
         return Check { store, store_id, ..if own { Check { status: "current", how: "apply", ..Default::default() } } else { manual("unknown", "no-answer") } };
     };
+    if unanswered(row) {
+        return Check { store, store_id, ..manual("unknown", "no-answer") };
+    }
     let text = |k: &str| row.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
     let local = if read.build.is_empty() { text("local_build") } else { read.build.clone() };
     // A store's build labels may match across an update (an itch upload changed in place): only its word or the files say current.
@@ -766,12 +784,18 @@ mod tests {
             row("30", "upload 7", "upload 7", "1.1", "", ""),
         ]
         .join("; ");
+        let patchy = [
+            row("1237807960", "B2", "B3", "1.26", "1.25.3", ""),
+            r#"echo '{"event":"update","id":"20","title":"x","unanswered":true}'"#.to_string(),
+            r#"echo '{"event":"update","id":"1434554947","title":"x","unanswered":true}'"#.to_string(),
+        ]
+        .join("; ");
         let event = format!(
             r#"{{"event":"game","id":"1434554947","title":"Mini Metro","owned":true,"installed":true,"dir":"{}","exe":"game.exe","build":"M2"}}"#,
             games.join("Mini Metro").display()
         );
         let script = format!(
-            "#!/bin/sh\ncase \"$1\" in\nupdate) if [ -n \"$2\" ]; then sed -i s/M1/M2/ '{}'; echo '{event}'; else echo \"$1\" >> \"$SOURCE_DATA_DIR/asked\"; {listed}; fi ;;\nesac\necho '{{\"event\":\"done\"}}'\n",
+            "#!/bin/sh\ncase \"$1\" in\nupdate) if [ -n \"$2\" ]; then sed -i s/M1/M2/ '{}'; echo '{event}'; else echo \"$1\" >> \"$SOURCE_DATA_DIR/asked\"; [ -e \"$SOURCE_DATA_DIR/down\" ] && exit 1; if [ -e \"$SOURCE_DATA_DIR/patchy\" ]; then {patchy}; else {listed}; fi; fi ;;\nesac\necho '{{\"event\":\"done\"}}'\n",
             mini.display()
         );
         let src = env.path().join("sources/gog");
@@ -788,6 +812,14 @@ mod tests {
             (("unknown", "no-answer", "manual", ""), Some("gog")),
             "its store on, not asked yet"
         );
+        let flag = |name: &str| paths::sources_data_dir("gog").join(name);
+        let lists = || std::fs::read_to_string(flag("asked")).unwrap().lines().count();
+        file(&flag("down"), b"");
+        core.check_versions_with(&net, "").await.unwrap();
+        assert_eq!(of(&judged(&core).await, "witcher"), ("unknown", "no-answer", "manual", ""), "a store that fails is no answer");
+        core.check_versions_with(&net, "").await.unwrap();
+        assert_eq!(lists(), 2, "and it is asked again");
+        std::fs::remove_file(flag("down")).unwrap();
         core.check_versions_with(&net, "").await.unwrap();
         let v = judged(&core).await;
         assert_eq!(of(&v, "dead-cells"), ("current", "", "apply", "1.25.3"));
@@ -806,9 +838,33 @@ mod tests {
         let v = judged(&core).await;
         assert_eq!((of(&v, "mini-metro").0, v["mini-metro"]["installed"].as_str()), ("current", Some("1.1")), "updated, it is at the build listed");
         core.check_versions_with(&net, "").await.unwrap();
-        let lists = std::fs::read_to_string(paths::sources_data_dir("gog").join("asked")).unwrap();
-        assert_eq!(lists.lines().count(), 1, "a store's list is kept a few hours too");
+        assert_eq!(lists(), 3, "a store's list is kept a few hours too");
         assert!(core.mark_current_with(&net, "cuphead", "1").await.is_err(), "its manifest says its build");
+
+        let age = || {
+            let mut up = Upstream::load();
+            up.stores.get_mut("gog").unwrap().at -= FRESH_S;
+            up.save();
+        };
+        let stale = || Upstream::load().store_stale("gog", chrono::Utc::now().timestamp());
+        let kept = judged(&core).await;
+        age();
+        file(&flag("down"), b"");
+        core.check_versions_with(&net, "").await.unwrap();
+        assert_eq!(judged(&core).await, kept, "the old list stands, and no game of it turns current");
+        assert!(stale(), "and it is asked again");
+        std::fs::remove_file(flag("down")).unwrap();
+
+        file(&flag("patchy"), b"");
+        age();
+        core.check_versions_with(&net, "").await.unwrap();
+        let v = judged(&core).await;
+        assert_eq!(of(&v, "dead-cells"), ("update", "", "apply", "1.26"), "what the store did answer is taken");
+        assert_eq!(of(&v, "mini-metro"), of(&kept, "mini-metro"), "an install it could not answer for keeps its row");
+        assert_eq!(of(&v, "witcher"), ("unknown", "no-answer", "manual", ""), "and without one reads no answer, not current");
+        assert_eq!(v["witcher"]["store"], "gog");
+        assert!(stale(), "a list with a hole in it is asked again");
+        assert!(core.source_updates().await.unwrap().iter().all(|u| u["id"] != "20"), "an install with no answer is not pending");
     }
 
     #[tokio::test]

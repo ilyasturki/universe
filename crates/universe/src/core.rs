@@ -228,7 +228,7 @@ fn load_source_caches(sources: &[Source]) -> BTreeMap<String, Vec<serde_json::Ma
 
 /// A store's `update` row may name an install at the published build (`current`), or one it would not update (`skipped`).
 fn pending(u: &serde_json::Map<String, serde_json::Value>) -> bool {
-    u.get("skipped").and_then(|s| s.as_str()).is_none_or(str::is_empty) && u.get("current") != Some(&serde_json::Value::Bool(true))
+    u.get("skipped").and_then(|s| s.as_str()).is_none_or(str::is_empty) && u.get("current") != Some(&serde_json::Value::Bool(true)) && !crate::upstream::unanswered(u)
 }
 
 fn runtime_of(c: &Current, seed: Runtime) -> Runtime {

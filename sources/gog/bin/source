@@ -410,8 +410,7 @@ def fetch_builds(settings, game_ids):
         try:
             return game_id, fetch_build(settings, game_id)
         except SourceError as exc:
-            log(str(exc))
-            return game_id, None
+            return game_id, exc
 
     with ThreadPoolExecutor(max_workers=8) as pool:
         return dict(pool.map(one, game_ids))
@@ -652,8 +651,15 @@ def cmd_update(settings, args):
     index = library_index()
     if not args:
         remotes = fetch_builds(settings, [i["id"] for i in installs])
+        failures = [r for r in remotes.values() if isinstance(r, SourceError)]
+        if failures and len(failures) == len(remotes):
+            raise failures[0]
         for install in installs:
             remote = remotes.get(install["id"])
+            if isinstance(remote, SourceError):
+                log(f"{install['title']}: {remote}")
+                emit("update", id=install["id"], title=install["title"], unanswered=True)
+                continue
             if remote is None:
                 log(f"{install['title']}: no build published for {settings['platform']}, skipped")
                 continue

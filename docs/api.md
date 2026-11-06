@@ -186,7 +186,8 @@ The rest is how the game stands by the answers `check_versions` kept. A game is 
 is on: the one it came from (by `source.kind` and `source.id`), else GOG for a `gog` install (by its game id); until
 the store has answered it is `unknown`. That store's `update` row decides: `current` when the installed build (the
 `goggame-<id>.info`'s) is the published one, or, without one, when the row says `current`; else `update`. The store's
-own game it does not list is `current`. Its
+own game it does not list is `current`. A store that fails its `update` verb leaves its old list, and is asked again at the next
+check; so does an `unanswered` row, for its game alone, which is `unknown` with no old row. Its
 `local_version`, when it names the installed build, shows as `installed` with `from` the store's id. Without a store,
 the channel decides: `pc` by Steam's public branch (`api.steamcmd.net/v1/info/<metadata.steam_appid>`): `current` when
 `seen` is its build id, `update` when `seen` is another, else `unknown` (a program's date says nothing of its
@@ -817,7 +818,7 @@ source unavailable, and `doctor` reports it as fetched on first use.
 | `source_adopt(source, game_id, progress)` | `adopt(source, game_id, progress)` | `universe scan [source] --only <id>` | the library id of the one install of `game_id` the source's `scan` finds, brought in as a scan would and no other: `NotFound` when nothing of it is installed, `Invalid` when the store does not list it as owned (an ownership the scan cannot tell is the cached listing's). A game new to the library, or back from the archive, is stamped `added_at`; one it held already is not. The caller fetches its art (the CLI and both apps do) |
 | `source_trash(source, game_id)` | `trash(source, game_id)` | `universe uninstall <id> --source <source> [-y]` | the folder removed: the `dir` of the install of `game_id` the source's `scan` finds, when no library game stands for it (see below), through the source's `uninstall` verb when it declares one (the store forgets the install too: Steam, Epic, itch.io), else to the trash. `NotFound` without such an install; `Invalid` when a library game stands for it (`uninstall` that one) or when the folder is one `uninstall` refuses to trash. An archived game standing for it does not hold it back |
 | `source_update(source, game_id, progress)` | `update(source, game_id, progress)` | `universe update [name] [-y]` | how many were updated; `game_id=""` updates everything pending |
-| `source_updates()` | `updates()` | — (`universe update` lists every kind: see `check_versions`) | `[{id, title, local_build, remote_build, version, date, source}]`, every enabled source's pending rows (a `current` or `skipped` row is left out) |
+| `source_updates()` | `updates()` | — (`universe update` lists every kind: see `check_versions`) | `[{id, title, local_build, remote_build, version, date, source}]`, every enabled source's pending rows (a `current`, `skipped` or `unanswered` row is left out) |
 | `source_scan(source, progress)` | `scan(source, progress)` | `universe scan [source]` | the ids of the games that became the source's (one it already had is updated, not listed again), whose art the caller fetches after (`media_refresh_many`; the CLI, both apps' jobs and their first run do); `source=""` scans all |
 
 `progress` is called `(done, total, message)` as the job runs. The CLI's `[source]` and `--source`
@@ -996,7 +997,8 @@ download size it announces. Stopped, legendary keeps a resume file under `<confi
 folder is reported as `partial_dir` while it is there, and the next `install` picks the download
 up. legendary exits 0 on some failures (a held lock), so an install is judged by `list-installed`
 afterwards. `update` lists the installed games whose version is behind (`list-installed
---check-updates --csv`; a DLC's update rides on its game's) and runs `legendary -y update`.
+--check-updates --csv`; a DLC's update rides on its game's) and runs `legendary -y update`. Past `Login failed!`
+that list is legendary's cache, so the verb fails.
 `uninstall` runs `legendary -y uninstall`: the files and legendary's record go together. `scan` lists legendary's installs whose folder is still there and first adopts those of another
 legendary (`adopt_from`, Heroic's by default) with `legendary import`, which needs the sign-in: a
 refused import waits an hour before the next try. The game's `store` is `egs` and its `umu_id` the
@@ -2268,7 +2270,7 @@ One JSON object per line on stdout, human-readable logs on stderr, meaningful ex
 | `search` | `<text>` | `{"event":"game", …}` |
 | `info` | `<id>` | `{"event":"info","data":{…},"download_size":…,"disk_size":…}`, the sizes optional |
 | `install` | `<id>` | `progress` lines (`done`/`total` in bytes when the source knows them), then the installed `game`. On SIGTERM the source stops its downloader, keeps the files and exits non-zero; a later `install` of the same id resumes |
-| `update` | `[id]` | without an id: `{"event":"update","id","title","local_build","remote_build","version","date"}` per pending update, and optionally one with `"current": true` per install at the published build; `local_version` (optional) names the installed build as the store lists it, `skipped` (optional, `not owned`) marks an update the store would refuse. A row with neither `current` nor `skipped` is pending, whatever its build labels say; with an id: `progress` then `game` |
+| `update` | `[id]` | without an id: `{"event":"update","id","title","local_build","remote_build","version","date"}` per pending update, and optionally one with `"current": true` per install at the published build; `local_version` (optional) names the installed build as the store lists it, `skipped` (optional, `not owned`) marks an update the store would refuse. `{"event":"update","id","title","unanswered":true}` stands for an install the store could not be asked about while others answered; with none answering the verb fails. A row with none of `current`, `skipped` and `unanswered` is pending, whatever its build labels say; with an id: `progress` then `game` |
 | `scan` | | `{"event":"game", …}` per installation found (`disk_size` measured) and per stopped download (`installed: false`, `partial_dir`, `partial_bytes`), `owned` crossed with the cached library |
 | `achievements` | `<id>` | `{"event":"achievement", …}` per achievement of the game, an `Achievement` (see Achievements); only asked of a source whose `capabilities` names it |
 | `uninstall` | `<id>` | optional `progress` lines, then `done` once the store has removed the game's files and forgotten the install (nothing to do is no error); only asked of a source whose `capabilities` names it, by `uninstall(id)` instead of trashing `source.dir` |

@@ -41,6 +41,7 @@ DOWNLOAD_SIZE_RE = re.compile(r"Download size: ([\d.]+) MiB")
 ERROR_RE = re.compile(r"^\[[\w.]+\] (?:CRITICAL|ERROR): (.*)")
 NOT_LOGGED_IN = "<not logged in>"
 NO_CREDENTIALS = "ValueError: No saved credentials"  # legendary's traceback when a verb that logs in runs signed out
+LOGIN_FAILED = "Login failed!"  # list-installed --check-updates goes on from it: prints its cached list and exits 0
 ADOPT_RETRY_S = 3600
 ANTICHEAT_DEPTH = 3
 ANTICHEATS = (("easyanticheat", "eac_runtime", "PROTON_EAC_RUNTIME"), ("battleye", "battleye_runtime", "PROTON_BATTLEYE_RUNTIME"))
@@ -145,7 +146,8 @@ def last_error(text):
     if NO_CREDENTIALS in text:
         return ": not signed in to Epic (run login)"
     errors = [m.group(1) for m in map(ERROR_RE.match, text.splitlines()) if m]
-    return f": {errors[-1]}" if errors else ""
+    causes = [e for e in errors if not e.startswith(LOGIN_FAILED)] or errors
+    return f": {causes[-1]}" if causes else ""
 
 
 def legendary(settings, verb, *args, yes=False, timeout=LEGENDARY_TIMEOUT_S):
@@ -530,7 +532,7 @@ def cmd_install(settings, args):
 
 def pending_updates(settings):
     proc = legendary(settings, "list-installed", "--check-updates", "--csv")
-    if proc.returncode != 0:
+    if proc.returncode != 0 or LOGIN_FAILED in proc.stderr:
         raise failure("list-installed", proc)
     return [row for row in csv.DictReader(io.StringIO(proc.stdout)) if row.get("Update available") == "True"]
 
