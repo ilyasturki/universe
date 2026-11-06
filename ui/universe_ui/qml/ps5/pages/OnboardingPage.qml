@@ -119,7 +119,9 @@ FocusScope {
     function settle() {
         rows.reset();
         nav.index = 1;
-        form.loading || form.idle ? nav.forceActiveFocus() : rows.forceActiveFocus();
+        var target = form.loading || form.idle ? nav : rows;
+        // The shell gives the page its focus back once the question over it closes.
+        shell.modal ? target.focus = true : target.forceActiveFocus();
     }
 
     Keys.onPressed: function (event) {

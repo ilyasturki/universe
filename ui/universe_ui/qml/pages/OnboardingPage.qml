@@ -163,13 +163,24 @@ FocusScope {
             yes: "Skip",
             index: 0
         }, function (yes) {
-            back.forceActiveFocus();
+            page.landWaits && !yes ? page.land() : back.forceActiveFocus();
             if (yes)
                 form.finish();
         });
     }
 
+    // A step that came in under the question lands once it is answered.
+    property bool landWaits: false
+
     function settle() {
+        if (confirm.open)
+            landWaits = true;
+        else
+            land();
+    }
+
+    function land() {
+        landWaits = false;
         cards.reset();
         nav.index = 1;
         form.loading || form.idle ? nav.forceActiveFocus() : cards.forceActiveFocus();

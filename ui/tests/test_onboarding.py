@@ -367,6 +367,11 @@ def focused(look, name):
     return page is not None and any(item.property("activeFocus") is True for item in page.findChildren(QObject, name))
 
 
+def question_of(look):
+    """The setup's Skip setup? question: the page's own in Reprise, the shell's dialog on the consoles."""
+    return look.page("onboardingPage").findChild(QObject, "setupConfirm") if look.name == "reprise" else look.dialog()
+
+
 def reopen(look):
     """The setup again: Settings › About on the PS5 look, the empty Home's Set up entry on the others."""
     if look.name == "ps5":
@@ -396,7 +401,7 @@ def test_the_setup_in_each_look(stores_signed_out, held_sources, look, empty_api
         look.press(key)
         assert opened(look) and not empty.onboarded() and marked == []
     look.press(Qt.Key.Key_Escape)
-    question = look.page("onboardingPage").findChild(QObject, "setupConfirm") if look.name == "reprise" else look.dialog()
+    question = question_of(look)
     until(lambda: question.property("open"))
     look.press(Qt.Key.Key_Return)
     until(lambda: not question.property("open"))
@@ -451,6 +456,32 @@ def test_the_setup_in_each_look(stores_signed_out, held_sources, look, empty_api
         until(lambda: page.property("tileSelected") is True, "Down leaves the hero pills for the rail, Right past the last game reaches the Library tile")
         look.press(Qt.Key.Key_Left)
         until(lambda: page.property("tileSelected") is False and page.property("currentGame") is not None)
+
+
+@pytest.mark.parametrize("answer", ["b", "keep going", "skip"])
+def test_the_skip_question_keeps_the_focus_when_the_machine_is_read(held_sources, look, empty_api, empty, answer):
+    form = empty_api.screens.onboarding
+    gate, entered = held_sources
+    until(lambda: entered.is_set() and opened(look) and form.loading)
+    look.press(Qt.Key.Key_Escape)
+    question = question_of(look)
+    until(lambda: question.property("open"))
+    trace = FocusTrace(look.window)
+    gate.set()
+    until(lambda: not form.loading and form.stepId == "found" and form.count == 6)
+    settle(look.window)
+    settle(look.window)
+    assert question.property("open")
+    assert trace.stop().foreign(question.objectName()) == [], "the focus stays on the question while the steps come in"
+    if answer == "skip":
+        look.press(SECOND[look.name])
+        look.press(Qt.Key.Key_Return)
+        until(lambda: empty.onboarded() is True and not opened(look), "Skip skips it")
+        return
+    look.press(Qt.Key.Key_Escape if answer == "b" else Qt.Key.Key_Return)
+    until(lambda: not question.property("open"))
+    until(lambda: focused(look, "setupRows") or focused(look, "setupNav"))
+    assert opened(look) and not empty.onboarded()
 
 
 def test_the_offline_setup_joins_a_network_in_each_look(offline, look, empty_api, empty):
