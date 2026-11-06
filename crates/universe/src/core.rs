@@ -2328,7 +2328,7 @@ impl Core {
         if let Some(d) = g.get("dlcs").and_then(|v| v.as_array()) {
             game.source.dlcs = d.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect();
         }
-        if game.launch.exe.is_empty() && !exe.is_empty() && !dir.is_empty() {
+        if !exe.is_empty() && !dir.is_empty() && !game.is_installed() {
             let p = if exe.starts_with('/') { PathBuf::from(&exe) } else { Path::new(&dir).join(&exe) };
             game.launch.exe = p.to_string_lossy().into();
         }

@@ -1688,6 +1688,45 @@ fn restore_brings_a_removed_game_back_with_its_recordings_and_overwrites_none() 
 }
 
 #[test]
+fn a_store_game_whose_folder_vanished_installs_again_elsewhere_and_launches_from_there() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = no_desktop();
+    let (gone, moved) = (dir.path().join("unmounted/Quest"), dir.path().join("games/Quest"));
+    std::fs::write(dir.path().join("config/config.toml"), "schema = 1\n[desktop]\nprofile = \"none\"\n[sources]\nenabled = [\"shim\"]\n").unwrap();
+    let source = dir.path().join("sources/shim");
+    std::fs::create_dir_all(&source).unwrap();
+    std::fs::write(source.join("source.toml"), "api = 2\nid = \"shim\"\nname = \"Shim\"\nexe = \"run\"\n").unwrap();
+    let event = format!(r#"{{"event":"game","id":"7","title":"Quest","owned":true,"installed":true,"dir":"{}","exe":"bin/quest.sh"}}"#, moved.display());
+    let run = format!(
+        "#!/bin/sh\ncase \"$1\" in\n  status) echo '{{\"event\":\"logged_in\",\"user\":\"shim\"}}' ;;\n  install) mkdir -p '{0}/bin' && touch '{0}/bin/quest.sh' && echo '{event}' ;;\nesac\necho '{{\"event\":\"done\"}}'\n",
+        moved.display()
+    );
+    std::fs::write(source.join("run"), run).unwrap();
+    std::fs::set_permissions(source.join("run"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    let game = dir.path().join("data/games/quest");
+    std::fs::create_dir_all(&game).unwrap();
+    std::fs::write(
+        game.join("game.toml"),
+        format!(
+            "schema = 1\nid = \"quest\"\ntitle = \"Quest\"\n[source]\nkind = \"shim\"\nid = \"7\"\ndir = \"{0}\"\n[launch]\nrunner = \"linux\"\nexe = \"{0}/bin/quest.sh\"\n",
+            gone.display()
+        ),
+    )
+    .unwrap();
+    let quest = || -> serde_json::Value {
+        let out = universe(&dir, &["ls", "--json"], &[NO_BUS]);
+        let games: Vec<serde_json::Value> = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| panic!("{e}: {}", text(&out.stderr)));
+        games.into_iter().find(|g| g["id"] == "quest").expect("quest stays in the library")
+    };
+    assert_eq!(quest()["installed"], false, "its folder is gone");
+    let out = universe(&dir, &["install", "7", "--source", "shim"], &[NO_BUS]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let quest = quest();
+    assert_eq!(quest["installed"], true, "{quest}");
+    assert_eq!(quest["launch"]["exe"], moved.join("bin/quest.sh").to_string_lossy().as_ref(), "it launches from where it was installed");
+}
+
+#[test]
 fn update_lists_a_game_updated_by_hand_until_it_is_marked_current() {
     let dir = no_desktop();
     let exe = dir.path().join("games/GTA V/GTA5_Enhanced.exe");

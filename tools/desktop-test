@@ -324,7 +324,14 @@ mkfifo "$UNIVERSE_CONFIG_HOME/config.toml"
 UNIVERSE_DESKTOP_LOADING_LIMIT_S=2 run stuck "view:failed button:win.retry view:failed shot:$out/stuck.png $repaired"
 [ -s "$out/stuck.png" ] || fail "no stuck.png ($out/stuck.log)"
 
-if grep -E 'panicked at|CRITICAL|WARNING \*\*' "$out"/{app,service,recovery,service-recovery,stuck}.log; then
+# A store game whose folder went with an unmounted drive, installed again elsewhere through the CLI, plays from there.
+sed -i "s|^id = \"123\"$|&\ndir = \"$tmp/unmounted\"\n[launch]\nrunner = \"linux\"\nexe = \"$tmp/unmounted/game.sh\"|" "$store_game"
+moved="$tmp/games/moved"
+sed -i "s|^    info)|    install) mkdir -p '$moved' \&\& printf '#!/bin/sh\\n' >'$moved/game.sh' \&\& chmod +x '$moved/game.sh' \&\& echo '{\"event\":\"game\",\"id\":\"123\",\"title\":\"Uninstalled Game\",\"owned\":true,\"installed\":true,\"dir\":\"$moved\",\"exe\":\"game.sh\"}' ;;\n&|" "$tmp/sources/desktop-smoke/run"
+"$cli" install 123 --source desktop-smoke >"$out/reinstall.log" 2>&1 || fail "the CLI did not install the moved game ($out/reinstall.log)"
+run moved "action:win.open-game::store-smoke has:game.play"
+
+if grep -E 'panicked at|CRITICAL|WARNING \*\*' "$out"/{app,service,recovery,service-recovery,stuck,moved}.log; then
     fail "the app emitted a panic or GTK warning"
 fi
 echo "desktop-test: $((${#shots[@]} + ${#service_shots[@]} + 4)) surfaces shot in $out ($((SECONDS - started)) s)"
