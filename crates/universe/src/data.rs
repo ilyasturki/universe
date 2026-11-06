@@ -950,6 +950,9 @@ mod tests {
 
         core.saves_backup("fixture-game").await.unwrap();
         assert_eq!(backup_ids(&core).await.len(), 1);
+
+        assert!(matches!(core.set_setting("saves.keep", "255").await, Err(Error::Invalid(_))), "ludusavi's 255 leaves a restore no room for one more");
+        core.set_setting("saves.keep", &saves::MOST_KEPT.to_string()).await.unwrap();
     }
 
     #[test]
