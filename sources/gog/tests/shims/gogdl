@@ -35,6 +35,7 @@ if verb == "auth" and os.environ.get("SHIM_MODE") == "offline":
     # gogdl's ApiHandler reads Galaxy's credentials at start, whatever the verb.
     credentials(galaxy)
     if "--code" in args:
+        print("[AUTH] ERROR: Failed to reach GOG (ConnectionError)", file=sys.stderr)
         print(json.dumps({"error": True}))
     else:
         print(json.dumps(credentials(args[args.index("--client-id") + 1] if "--client-id" in args else galaxy)))

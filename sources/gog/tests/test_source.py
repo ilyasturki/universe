@@ -126,8 +126,9 @@ def test_login_takes_the_code_out_of_the_address_it_lands_on(web, src, env, run,
 def test_a_rejected_code_signs_nobody_in(web, src, env, run, monkeypatch, code, gogdl):
     monkeypatch.setenv("SHIM_MODE", gogdl)
     fake_fetch(web, {src.USER_URL: {"username": "Yasso"}})
-    exit_code, events, _ = run("login", code)
+    exit_code, events, err = run("login", code)
     assert exit_code == 1 and events == []
+    assert err.rstrip().endswith(src.UNREACHABLE) == (gogdl == "offline")
 
 
 def test_status_names_the_user_only_while_gogdl_holds_a_session(web, src, env, run, monkeypatch):
@@ -157,8 +158,9 @@ def write_auth(env, sessions):
         ({k: v for k, v in expired_session().items() if k != "refresh_token"}, "offline", False),
         (None, "offline", False),
         (expired_session(loginTime=time.time()), "offline", True),
+        ({k: v for k, v in expired_session(loginTime=time.time()).items() if k != "refresh_token"}, "offline", True),
     ],
-    ids=["offline", "revoked", "no-refresh-token", "empty-auth", "live-token"],
+    ids=["offline", "revoked", "no-refresh-token", "empty-auth", "live-token", "live-token-no-refresh-token"],
 )
 def test_status_keeps_a_session_gogdl_could_not_refresh_only_offline(src, env, run, monkeypatch, session, gogdl, signed_in):
     monkeypatch.setenv("SHIM_MODE", gogdl)
@@ -166,6 +168,38 @@ def test_status_keeps_a_session_gogdl_could_not_refresh_only_offline(src, env, r
     (env["data"] / "user.json").write_text(json.dumps({"username": "Yasso"}))
     code, events, _ = run("status")
     assert code == 0 and events == ([{"event": "logged_in", "user": "Yasso"}] if signed_in else []) + [{"event": "done"}]
+
+
+REFRESH_FAILED = "[AUTH] ERROR: Failed to refresh credentials"
+REACH_FAILED = "[AUTH] ERROR: Failed to reach GOG (ConnectionError)"
+GAME_CLIENT = ["--client-id", "1111", "--client-secret", "s"]
+LIVE = expired_session(loginTime=time.time())
+LIVE_NO_REFRESH = {k: v for k, v in LIVE.items() if k != "refresh_token"}
+EXPIRED_NO_REFRESH = {k: v for k, v in expired_session().items() if k != "refresh_token"}
+
+
+# Each row is what gogdl 1.3.1 and 1.4.0 do with no network.
+@pytest.mark.parametrize(
+    ("galaxy", "client", "args", "exit_code", "answer", "log"),
+    [
+        (None, None, ["--code", "c"], 0, {"error": True}, [REACH_FAILED]),
+        (expired_session(), None, ["--code", "c"], 0, {"error": True}, [REFRESH_FAILED, REACH_FAILED]),
+        (expired_session(), None, [], 0, None, [REFRESH_FAILED, REFRESH_FAILED]),
+        (expired_session(), LIVE, GAME_CLIENT, 0, LIVE, [REFRESH_FAILED]),
+        (LIVE, expired_session(), GAME_CLIENT, 0, None, [REFRESH_FAILED]),
+        (LIVE_NO_REFRESH, None, [], 0, LIVE_NO_REFRESH, []),
+        (EXPIRED_NO_REFRESH, LIVE, GAME_CLIENT, 1, None, []),
+    ],
+    ids=["code-empty-auth", "code-expired", "expired", "client-live-galaxy-expired", "client-expired", "live-no-refresh-token", "galaxy-read-first"],
+)
+def test_the_shim_answers_offline_as_gogdl_does(src, env, monkeypatch, galaxy, client, args, exit_code, answer, log):
+    monkeypatch.setenv("SHIM_MODE", "offline")
+    write_auth(env, {k: v for k, v in {src.GALAXY_CLIENT_ID: galaxy, "1111": client}.items() if v})
+    path = env["tmp"] / "auth" / "auth.json"
+    proc = subprocess.run(["gogdl", "--auth-config-path", str(path), "auth", *args], capture_output=True, text=True, check=False)
+    assert proc.returncode == exit_code
+    assert [line for line in proc.stderr.splitlines() if line.startswith("[AUTH]")] == log
+    assert exit_code or json.loads(proc.stdout) == answer
 
 
 def test_status_names_the_remembered_user_when_a_live_token_cannot_reach_gog(web, src, env, run):
