@@ -60,6 +60,18 @@ def test_the_game_defaults_switch_and_abouts_are_one(api, fake):
     until(lambda: changelog.opensAfterUpdate is False, "About's switch follows")
 
 
+def playing(page):
+    """The page's clip once its player has opened the file: B before that tears the player down mid-open, which Qt warns about."""
+    from PySide6.QtMultimedia import QMediaPlayer
+
+    def ready():
+        clip = next(iter(named(page, "releaseClip")), None)
+        player = clip.findChild(QMediaPlayer) if clip is not None else None
+        return player is not None and player.mediaStatus() == QMediaPlayer.MediaStatus.BufferedMedia and clip
+
+    return until(ready, "the clip plays")
+
+
 def under(look, name):
     """The Universe look's What's new holds the focus, and its page loads under it, often after it opened."""
     root = look.root
@@ -110,7 +122,7 @@ def test_an_update_opens_whats_new_once_and_about_opens_the_changelog(look):
     shown = until(lambda: len(m := [i for i in named(page, "releaseMedia") if i.property("file")]) == 2 and m, "the highlights' media download")
     assert sorted(m.property("media")["kind"] for m in shown) == ["clip", "still"]
     still = until(lambda: next(iter(named(page, "releaseStill")), None), "the still is shown")
-    clip = until(lambda: next(iter(named(page, "releaseClip")), None), "the clip plays")
+    clip = playing(page)
     files = changelog.files
     assert {still.property("source").toString(), clip.property("source").toString()} == set(files.values())
     if look.name == "reprise":
@@ -134,6 +146,7 @@ def test_an_update_opens_whats_new_once_and_about_opens_the_changelog(look):
     invoke(about, "activate", rows.index(row), row)
     page = until(lambda: (p := look.page("changelogPage")).property("fresh") is False and p, "About › What's new opens it")
     assert versions(read(page, "releases")) == ["0.0.3", "0.0.2", "0.0.1"]
+    playing(page)
     if look.name == "reprise":
         over_the_page(look, "settingsPage")
         assert opening.stop().foreign("settingsPage", "whatsNew") == [], "every frame of the way in: the focus on the page or in the dialog"
