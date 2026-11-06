@@ -189,6 +189,41 @@ def test_updates_list_the_direct_ones_and_one_updates(env, run):
     assert (queued["caveId"], queued["reason"], queued["build"]["id"]) == ("cave-11", "update", 6)
 
 
+def unreachable(game_id):
+    return f'Get "https://api.itch.io/games/{game_id}/uploads?download_key_id=6001": dial tcp [2606:4700:20::ac43:4563]:443: connect: cannot assign requested address'
+
+
+def two_installs_one_behind(env, run):
+    signed_in(run)
+    run("install", "11")
+    run("install", "14")
+    choice = {"upload": UPLOADS["11"][2], "build": {"id": 6, "version": 4, "userVersion": "1.1", "updatedAt": "2026-09-20T10:00:00Z"}}
+    patch_state(env, updates=[{"caveId": "cave-11", "direct": True, "choices": [choice]}])
+
+
+@pytest.mark.parametrize("warnings", [(unreachable(11), unreachable(14)), ("a cave it cannot name", "another")], ids=["named", "unnamed"])
+def test_an_update_check_butler_warns_about_for_every_install_fails(env, run, warnings):
+    two_installs_one_behind(env, run)
+    patch_state(env, check_warnings=dict(zip(("cave-11", "cave-14"), warnings, strict=True)))
+    code, events, err = run("update")
+    assert code == 1 and events == [] and any(w in err for w in warnings)
+    code, events, err = run("update", "14")
+    assert code == 1 and events == [] and "already current" not in err
+    assert not [c for c in calls(env) if c["method"] == "Install.Queue" and c["params"].get("reason") == "update"]
+
+
+@pytest.mark.parametrize("warning", [unreachable(14), "a cave it cannot name", unreachable(999)], ids=["named", "unnamed", "another-game"])
+def test_an_update_check_butler_warns_about_for_one_install_leaves_it_unanswered(env, run, warning):
+    two_installs_one_behind(env, run)
+    patch_state(env, check_warnings={"cave-14": warning})
+    code, events, _ = run("update")
+    assert code == 0 and [(e["event"], e.get("id"), e.get("unanswered")) for e in events] == [
+        ("update", "11", None),
+        ("update", "14", True),
+        ("done", None, None),
+    ], "what butler answered stands; a warning tied to no install holds back every install it listed nothing for"
+
+
 def test_scan_adopts_the_itch_apps_installs_where_they_lie(env, run):
     app_dir = env["tmp"] / "itch-app"
     app_dir.mkdir()

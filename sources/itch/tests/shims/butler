@@ -164,8 +164,10 @@ def handle(method, params):
         save(state)
         return {"caveId": queued["id"], "events": []}
     if method == "CheckUpdate":
-        updates = [u for u in state["updates"] if u["caveId"] in params.get("caveIds", [])]
-        return {"updates": [{**u, "game": state["caves"][u["caveId"]]["game"]} for u in updates], "warnings": []}
+        # butler checks the caves at once: a cave it cannot ask lists nothing, and its warning comes in no set order.
+        warned = {c: w for c, w in state.get("check_warnings", {}).items() if c in params.get("caveIds", [])}
+        updates = [u for u in state["updates"] if u["caveId"] in params.get("caveIds", []) and u["caveId"] not in warned]
+        return {"updates": [{**u, "game": state["caves"][u["caveId"]]["game"]} for u in updates], "warnings": list(reversed(warned.values()))}
     if method == "Uninstall.Perform":
         cave = state["caves"].pop(params["caveId"], None)
         if cave:

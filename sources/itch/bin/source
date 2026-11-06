@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import queue
+import re
 import signal
 import sqlite3
 import subprocess
@@ -27,6 +28,7 @@ PAGE = 100
 PLAYABLE = ("game", "tool")
 PACKAGES = (".deb", ".rpm", ".pkg", ".dmg")
 FLAVORS = {"linux": ("script", "linux"), "windows": ("windows",)}
+WARNED_GAME = re.compile(r"/games/(\d+)\b")  # butler's CheckUpdate warnings carry no cave id, only the URL it failed on
 
 _child = None
 
@@ -609,11 +611,27 @@ def version_of(choice):
     return build.get("userVersion") or (f"build {build['version']}" if build.get("version") else upload.get("displayName") or upload.get("filename") or "?")
 
 
+def unanswered_caves(caves, updates, warnings):
+    if not warnings:
+        return []
+    named = {m[1] for m in map(WARNED_GAME.search, warnings) if m}
+    games = {str((c.get("game") or {}).get("id")): i for i, c in caves.items()}
+    if len(named & games.keys()) == len(warnings):
+        return [games[g] for g in named]
+    # A warning tied to no install could be about any install butler listed nothing for.
+    listed = {u.get("caveId") for u in updates}
+    return [i for i in caves if i not in listed]
+
+
 def direct_updates(butler, caves):
     if not caves:
-        return []
-    updates = butler.call("CheckUpdate", {"caveIds": list(caves)}).get("updates") or []
-    return [u for u in updates if u.get("direct") and u.get("choices") and u.get("caveId") in caves]
+        return [], []
+    result = butler.call("CheckUpdate", {"caveIds": list(caves)})
+    updates, warnings = result.get("updates") or [], result.get("warnings") or []
+    unanswered = unanswered_caves(caves, updates, warnings)
+    if len(unanswered) == len(caves):
+        raise SourceError(f"update check: {warnings[0]}")
+    return [u for u in updates if u.get("direct") and u.get("choices") and u.get("caveId") in caves], unanswered
 
 
 def cmd_uninstall(settings, args):
@@ -630,7 +648,8 @@ def cmd_update(settings, args):
     with Butler(settings) as butler:
         present = {c["id"]: c for c in paged(butler, "Fetch.Caves", {}) if os.path.isdir(folder_of(c))}
         if not args:
-            for update in direct_updates(butler, present):
+            updates, unanswered = direct_updates(butler, present)
+            for update in updates:
                 cave, choice = present[update["caveId"]], update["choices"][0]
                 known = game_fields(cave.get("game") or {})
                 stamp = (choice.get("build") or {}).get("updatedAt") or (choice.get("upload") or {}).get("updatedAt") or ""
@@ -643,6 +662,9 @@ def cmd_update(settings, args):
                     version=version_of(choice),
                     date=str(stamp)[:10],
                 )
+            for cave_id in unanswered:
+                known = game_fields(present[cave_id].get("game") or {})
+                emit("update", id=known["id"], title=known["title"], unanswered=True)
             emit("done")
             return
         game_id = numeric_id(args, "update")
@@ -651,7 +673,7 @@ def cmd_update(settings, args):
             raise SourceError(f"{game_id} is not installed")
         if owned_status(game_id, index) is False:
             raise SourceError(f"{(cave.get('game') or {}).get('title') or game_id} is not in the itch.io library, refusing to update")
-        updates = direct_updates(butler, {cave["id"]: cave})
+        updates, _ = direct_updates(butler, {cave["id"]: cave})
         if not updates:
             log(f"{(cave.get('game') or {}).get('title') or game_id} is already current")
             emit("done")
