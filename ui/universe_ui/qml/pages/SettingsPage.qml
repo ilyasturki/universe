@@ -1647,6 +1647,13 @@ FocusScope {
         });
     }
 
+    // Measure again is the first card: a failed measure over the rows held puts the cursor there, where the reason shows.
+    readonly property string storageError: api.screens.storage.error
+    onStorageErrorChanged: {
+        if (storageError !== "" && sectionId === "storage")
+            Qt.callLater(cards.reset);
+    }
+
     function stepSection(d) {
         var n = sections.length;
         section = (section + d + n) % n;

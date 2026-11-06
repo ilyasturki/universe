@@ -1,9 +1,9 @@
 import threading
 
 import pytest
-from looks import FocusTrace, activate, content_rows, focus_names, held_notices, notices, settle
+from looks import FocusTrace, activate, content_rows, focus_names, held_notices, notices, read, settle
 from PySide6.QtCore import SIGNAL, QObject, Qt
-from uitest import record, until
+from uitest import descendant, record, until
 
 from universe_ui.errors import UniverseError
 
@@ -232,3 +232,17 @@ def test_settings_storage_says_it_is_measuring_and_offers_a_retry_when_the_measu
     settle(look.window)
     assert trace.stop().foreign("settingsCards") == [], "the focus stays in the cards while the rows swap"
     assert "retry" not in [r["key"] for r in content_rows(page)]
+
+    cards = descendant(page, "settingsCards")
+    look.press(Qt.Key.Key_Down, 3)
+    held_key = read(cards, "currentRow")["key"]
+    gate.clear()
+    failing.append(True)
+    look.press(Qt.Key.Key_I)
+    until(lambda: api.screens.storage.loading, "X measures again")
+    assert "measuring" not in [r["key"] for r in content_rows(page)], "the rows stay while they are measured again"
+    assert read(cards, "currentRow")["key"] == held_key, "and the cursor with them"
+    gate.set()
+    until(lambda: "retry" in [r["key"] for r in content_rows(page)], "a failed measure over the rows offers its retry")
+    until(lambda: read(cards, "currentRow")["key"] == "retry", "the cursor goes to it")
+    assert read(cards, "caption") == "the games folder could not be read", "and shows why"
