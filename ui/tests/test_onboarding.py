@@ -521,7 +521,9 @@ def test_a_step_with_nothing_to_do_lands_on_its_button(look, empty_api, empty):
     until(lambda: empty.onboarded() is True and not opened(look), "A finishes")
 
 
-@pytest.mark.parametrize(("empty_api", "connected"), [(True, "intro"), (False, "load"), (False, "loaded")], ids=["intro", "load", "loaded"], indirect=["empty_api"])
+@pytest.mark.parametrize(
+    ("empty_api", "connected"), [(True, "intro"), (False, "load"), (False, "loaded")], ids=["intro", "load", "loaded"], indirect=["empty_api"]
+)
 def test_a_new_controller_waits_until_the_setup_closes(held_sources, look, empty_api, empty, connected):
     from universe_ui.screens.controller import FakeWatcher
 
