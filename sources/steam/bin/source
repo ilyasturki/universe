@@ -854,7 +854,8 @@ def cmd_install(settings, args):
     found = find_manifest(root, appid)
     title = title_of(found[1], appid) if found else str((index.get(appid) or {}).get("title") or appid)
     if found and installed(found[1]) and files_gone(appinfo_of(root), appid, *found):
-        raise SourceError(f"{title}'s files are gone from {folder_of(*found)}. Verify its files in Steam to download them again.")
+        log(f"{title}: its files are gone from {folder_of(*found)}")
+        raise SourceError(f"{title}'s files are gone. Verify its files in Steam to download them again.")
     if found is None or not installed(found[1]):
         if found is None and index and appid not in index:
             log(f"{title} is not in the listed library: Steam may show its store page rather than an install")

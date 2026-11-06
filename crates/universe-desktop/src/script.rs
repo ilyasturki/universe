@@ -22,6 +22,8 @@ pub enum Step {
     Has(String),
     Lacks(String),
     CloseToast,
+    Said(PathBuf),
+    Answer(String),
     View(String),
     Dialog(String),
     Copy(PathBuf, PathBuf),
@@ -50,6 +52,8 @@ fn step(word: &str) -> Option<Step> {
         "has" => Some(Step::Has(arg.replace('~', " "))),
         "lacks" => Some(Step::Lacks(arg.replace('~', " "))),
         "toast" => (arg == "close").then_some(Step::CloseToast),
+        "said" => Some(Step::Said(arg.into())),
+        "answer" => Some(Step::Answer(arg.into())),
         "view" => Some(Step::View(arg.into())),
         "dialog" => Some(Step::Dialog(arg.into())),
         "copy" => arg.split_once(':').map(|(from, to)| Step::Copy(from.into(), to.into())),
@@ -126,6 +130,36 @@ async fn run_step(window: &gtk::Window, step: Step) -> Result<(), String> {
             drawn(window).await?;
             close.emit_clicked();
             println!("toast: close");
+        }
+        Step::Said(path) => {
+            let words = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+            let words = words.trim();
+            let title = until(|| {
+                widgets(window.upcast_ref())
+                    .into_iter()
+                    .filter(|widget| widget.type_().name() == "AdwToastWidget")
+                    .flat_map(|toast| widgets(&toast))
+                    .filter_map(|widget| widget.downcast::<gtk::Label>().ok())
+                    .find(|label| label.text() == words)
+            })
+            .await
+            .ok_or_else(|| format!("no toast says {words:?}"))?;
+            drawn(window).await?;
+            if title.layout().is_ellipsized() {
+                return Err(format!("the toast cuts {words:?}"));
+            }
+            println!("said: {}", path.display());
+        }
+        Step::Answer(response) => {
+            let dialog = until(|| {
+                widgets(window.upcast_ref()).into_iter().find_map(|widget| widget.downcast::<adw::AlertDialog>().ok().filter(|d| d.has_response(&response)))
+            })
+            .await
+            .ok_or_else(|| format!("no visible dialog answers {response}"))?;
+            drawn(window).await?;
+            dialog.emit_by_name_with_details::<()>("response", glib::Quark::from_str(&response), &[&response]);
+            dialog.close();
+            println!("answer: {response}");
         }
         Step::View(name) => {
             until(|| {

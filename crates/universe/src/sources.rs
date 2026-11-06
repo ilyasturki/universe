@@ -266,7 +266,11 @@ where
     let status = child.wait().await?;
     let last_err = err_task.await.unwrap_or_default();
     if !status.success() {
-        return Err(crate::Error::Io(format!("{} {verb} failed ({}): {last_err}", source.id(), status.code().unwrap_or(-1))));
+        let code = status.code().unwrap_or(-1);
+        tracing::warn!("{} {verb} failed ({code}): {last_err}", source.id());
+        // A source ends on why it failed, as `<id>: why`: that line is what the player reads.
+        let said = last_err.strip_prefix(&format!("{}: ", source.id())).unwrap_or(&last_err).trim();
+        return Err(crate::Error::Io(if said.is_empty() { format!("{} {verb} failed ({code})", source.id()) } else { said.to_string() }));
     }
     Ok(())
 }

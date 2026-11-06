@@ -25,6 +25,8 @@ Downloads works as for [every store](/docs/library/gog/#installing-from-the-stor
 - **Update** waits for Steam to run the update. When it doesn't, start it from Steam's Downloads page.
 - **Uninstall…** opens Steam's uninstall dialog.
 
+A game whose files are gone, with the drive they were on or by hand, reads as not installed, but Steam still counts it as installed and won't download it again on its own. **Install** then says so: open the game's **Properties** in Steam and verify its files under **Installed Files** to download them again.
+
 A game someone shares with you through Steam can't be added to the library.
 
 ## Launching a Steam game

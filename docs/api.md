@@ -2263,7 +2263,9 @@ modules' hooks of the same name; a source's `session-end` timeout counts in the 
 budget.
 A `games_dir` setting whose manifest default is empty arrives filled with `paths.games_root`.
 One JSON object per line on stdout, human-readable logs on stderr, meaningful exit code.
-**Every verb ends with `{"event":"done"}`**, `login` included.
+**Every verb ends with `{"event":"done"}`**, `login` included. A verb that fails exits non-zero with
+why as its last stderr line, `<id>: ` first or not: that line, without the prefix, is the error a
+player reads (`Io`); the verb and exit code go to the log.
 
 | Verb | Argument | Events |
 |---|---|---|

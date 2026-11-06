@@ -99,7 +99,7 @@ readme-video *args: develop
 desktop *args: build env
     @{{ nix }} target/debug/universe-desktop {{ args }}
 
-# The desktop app in a headless compositor, nothing on screen: the steps run, then it quits. just desktop-shot DIR [steps…]: size:WxH wait:MS action:win.sort::a-z button:ACTION has:ACTION view:NAME dialog:RESPONSE lacks:ACTION toast:close copy:FROM:TO feed:FROM:TO move:FROM:TO shot:NAME.png, each shot under DIR (default: one shot once loaded)
+# The desktop app in a headless compositor, nothing on screen: the steps run, then it quits. just desktop-shot DIR [steps…]: size:WxH wait:MS action:win.sort::a-z button:ACTION has:ACTION view:NAME dialog:RESPONSE answer:RESPONSE lacks:ACTION toast:close said:FILE copy:FROM:TO feed:FROM:TO move:FROM:TO shot:NAME.png, each shot under DIR (default: one shot once loaded)
 [positional-arguments]
 desktop-shot dir *steps: build env
     #!/usr/bin/env -S nix develop --quiet --command bash

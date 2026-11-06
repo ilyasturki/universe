@@ -21,9 +21,10 @@ Opens that end after their give-up: an error shows, an error while a Try Again
 runs does not, and one that wins keeps the library when the Try Again then
 fails. Where FUSE is at hand, a drive that never answers holds the library's
 read: Try Again goes on from there, not opening the core again, and once the
-drive is unmounted opens the library. A store game installed again elsewhere
-through the CLI plays from there. Each run is a script of steps (button:, has:,
-lacks:, view:, dialog:, toast:, copy:, feed:, move:, action:, shot:;
+drive is unmounted opens the library. A store refusing an install says why in
+its own words, whole in a toast. A store game installed again elsewhere through
+the CLI plays from there. Each run is a script of steps (button:, has:, lacks:,
+view:, dialog:, answer:, toast:, said:, copy:, feed:, move:, action:, shot:;
 docs/frontends.md has them).
 
 Fails when weston or the app does not start, a script step fails (an action
@@ -96,7 +97,7 @@ left_behind() {
 shots=(media platform library hidden store game data preferences updates not-installed)
 mkdir -p "$out" "$tmp"/{data,config,state,cache,games,run,bin}
 service_shots=(service service-media service-store)
-for shot in "${shots[@]}" "${service_shots[@]}" failed recovered install stuck drive; do rm -f "$out/$shot.png"; done
+for shot in "${shots[@]}" "${service_shots[@]}" failed recovered install stuck drive refused; do rm -f "$out/$shot.png"; done
 chmod 700 "$tmp/run"
 started=$SECONDS
 
@@ -419,6 +420,15 @@ else
     echo "desktop-test: no FUSE here, so no drive that stops answering: the drive run is skipped" >&2
 fi
 
+# A store that refuses an install says why in its own words, whole in a toast at the window's scripted size.
+smoke_run="$tmp/sources/desktop-smoke/run"
+cp "$smoke_run" "$tmp/smoke-run"
+echo "Uninstalled Game's files are gone. Verify its files in Steam to download them again." >"$tmp/refusal.txt"
+sed -i "s|^    info)|    install) echo \"desktop-smoke: \$(cat '$tmp/refusal.txt')\" >\&2; exit 1 ;;\n&|" "$smoke_run"
+grep -q '^    install)' "$smoke_run" || fail "the store stand-in has no refusal"
+run refused "action:win.open-game::store-smoke button:game.install view:store dialog:install answer:install said:$tmp/refusal.txt shot:$out/refused.png"
+cp "$tmp/smoke-run" "$smoke_run"
+
 # A store game whose folder went with an unmounted drive, installed again elsewhere through the CLI, plays from there.
 sed -i "s|^id = \"123\"$|&\ndir = \"$tmp/unmounted\"\n[launch]\nrunner = \"linux\"\nexe = \"$tmp/unmounted/game.sh\"|" "$store_game"
 moved="$tmp/games/moved"
@@ -426,7 +436,9 @@ sed -i "s|^    info)|    install) mkdir -p '$moved' \&\& printf '#!/bin/sh\\n' >
 "$cli" install 123 --source desktop-smoke >"$out/reinstall.log" 2>&1 || fail "the CLI did not install the moved game ($out/reinstall.log)"
 run moved "action:win.open-game::store-smoke has:game.play"
 
-if grep -E 'panicked at|CRITICAL|WARNING \*\*' "$out"/{app,service,recovery,service-recovery,stuck,late-error,late-stale,late-won,moved}.log "${drive_runs[@]}"; then
+# Nothing on the private bus shows notifications, and GIO warns when a job's end sends one.
+if grep -E 'panicked at|CRITICAL|WARNING \*\*' "$out"/{app,service,recovery,service-recovery,stuck,late-error,late-stale,late-won,refused,moved}.log "${drive_runs[@]}" |
+    grep -v 'unable to send notifications through org.freedesktop.Notifications'; then
     fail "the app emitted a panic or GTK warning"
 fi
-echo "desktop-test: $((${#shots[@]} + ${#service_shots[@]} + 4)) surfaces shot in $out ($((SECONDS - started)) s)"
+echo "desktop-test: $((${#shots[@]} + ${#service_shots[@]} + 5)) surfaces shot in $out ($((SECONDS - started)) s)"

@@ -1819,6 +1819,8 @@ class FakeCore:
         return True
 
     def install(self, source, game_id, progress=None):
+        if refusal := self._data.get("refusals", {}).get(game_id):
+            raise UniverseError("Io", refusal)
         game = self._source_game(source, game_id)
         total = int((game or {}).get("disk_size") or self._data.get("sizes", {}).get(game_id, {}).get("disk_size") or 20)
         start = int((game or {}).get("partial_bytes") or 0)

@@ -965,6 +965,20 @@ def test_an_install_runs_one_at_a_time_and_x_cancels_it_keeping_its_files(look, 
     until(lambda: next(r for r in sources.rows if r["id"] == ident)["partial"], "the files stay for a later resume")
 
 
+def test_a_refused_install_shows_the_stores_words_whole(look, api, fake):
+    sources = api.screens.sources
+    install_page(look)
+    until(lambda: sources.rows)
+    witcher = next(i for i, r in enumerate(sources.rows) if r["title"] == "The Witcher 3: Wild Hunt")
+    refusal = "The Witcher 3: Wild Hunt's files are gone. Verify its files in Steam to download them again."
+    fake.core._data.setdefault("refusals", {})[sources.rows[witcher]["id"]] = refusal
+    sources.install(witcher)
+    shown = lambda: next((n for n in look.root.findChildren(QObject, "notice") if n.property("text") == refusal and n.property("visible")), None)
+    notice = until(shown, "the store's own words, as the core hands them")
+    settle(look.window)
+    assert notice.property("truncated") is False, "whole on screen"
+
+
 @reprise
 def test_the_reprise_library_runs_in_homes_order_and_y_hearts_the_game_under_the_cursor(look, api):
     def title():

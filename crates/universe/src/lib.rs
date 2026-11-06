@@ -117,6 +117,15 @@ pub enum Error {
     Io(String),
 }
 
+impl Error {
+    /// What a player reads: the words without the kind `Display` puts first.
+    pub fn message(&self) -> &str {
+        match self {
+            Error::NotFound(m) | Error::Ambiguous(m) | Error::Busy(m) | Error::Invalid(m) | Error::Unavailable(m) | Error::Io(m) => m,
+        }
+    }
+}
+
 impl From<std::io::Error> for Error {
     fn from(e: std::io::Error) -> Self {
         Error::Io(e.to_string())

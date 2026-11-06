@@ -43,6 +43,7 @@ Item {
         }
 
         Text {
+            objectName: "notice"
             anchors.verticalCenter: parent.verticalCenter
             width: Math.min(implicitWidth, pill.maxWidth - Theme.dp(44) - (pill.error ? Theme.dp(22) : 0))
             text: Notices.text

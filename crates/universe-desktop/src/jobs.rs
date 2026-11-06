@@ -336,7 +336,7 @@ where
             Ok(outcome) => outcome,
             Err(_) if cancelled && job.pauses() => failed(gettext("{} is paused: it resumes from the Store").replace("{}", &job.title())),
             Err(_) if cancelled => failed(gettext("Stopped")),
-            Err(e) => failed(e.to_string()),
+            Err(e) => failed(e.message().to_string()),
         }
     }
 }
