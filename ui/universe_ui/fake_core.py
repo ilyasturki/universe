@@ -440,6 +440,7 @@ class FakeCore:
         self._cache = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "universe", "fake-art")
         self._fake_launch = fake_launch
         self._lock = threading.Lock()
+        self._thumb_lock = threading.Lock()
         self._timers = []
         self._process = None
         self._session = None
@@ -692,7 +693,8 @@ class FakeCore:
     # The core's thumbnail is a file of its own in the cache, which trashing the shot leaves; the fixture's shots are small enough to stand as theirs.
     def _thumb(self, ident, shot):
         thumb = os.path.join(os.path.dirname(self._cache), "thumbs", f"{ident}--{shot.stem}-{shot.stat().st_mtime_ns}.png")
-        return thumb if os.path.exists(thumb) else _place(str(shot), thumb)
+        with self._thumb_lock:
+            return thumb if os.path.exists(thumb) else _place(str(shot), thumb)
 
     def media(self, ident):
         lines = self.sessions(ident)
