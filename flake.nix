@@ -137,6 +137,7 @@
           pkgs.cacert
           pkgs.dbus
           pkgs.pipewire
+          pkgs.strace
           pkgs.wireplumber
           pkgs.xvfb
         ]
@@ -677,6 +678,7 @@
             dbus
             pipewire
             wireplumber
+            strace
             xvfb
           ]
           ++ qtRuntime

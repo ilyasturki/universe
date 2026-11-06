@@ -481,17 +481,21 @@ fn whole(game: &Path, record: &yaml_rust2::Yaml) -> bool {
 }
 
 /// The staged backup joins the game's under an id of its own, ludusavi's being unique to the second, then the oldest beyond `keep` go.
+/// All of it is on disk first: a power cut can't take a pruned backup with the one that replaced it.
 fn admit(stage: &Path, dir: &Path, seeded: usize, keep: Option<usize>) -> Result<()> {
     use yaml_rust2::Yaml;
     for entry in std::fs::read_dir(stage)?.flatten() {
         let Some(staged) = mapping(&entry.path().join("mapping.yaml")) else { continue };
         let Some(record) = staged["backups"].as_vec().filter(|listed| listed.len() > seeded).and_then(|listed| listed.last()) else { continue };
         let Some(staged_id) = record["name"].as_str() else { continue };
+        sync_tree(&entry.path())?;
         let game = dir.join(entry.file_name());
         std::fs::create_dir_all(dir)?;
         if is_empty(&game) {
             // Backup and mapping in one rename: a crash can't leave backups no mapping lists.
             std::fs::rename(entry.path(), &game)?;
+            sync(dir)?;
+            sync(dir.parent().unwrap_or(dir))?;
             continue;
         }
         let file = game.join("mapping.yaml");
@@ -501,6 +505,7 @@ fn admit(stage: &Path, dir: &Path, seeded: usize, keep: Option<usize>) -> Result
         listed.retain(|b| b["name"].as_str().is_some_and(|id| game.join(id).exists()));
         let id = (1..).map(|n| if n == 1 { staged_id.to_string() } else { format!("{staged_id}-{n}") }).find(|id| !game.join(id).exists()).unwrap_or_default();
         std::fs::rename(entry.path().join(staged_id), game.join(&id))?;
+        sync(&game)?;
         let mut record = record.clone();
         set(&mut record, "name", Yaml::String(id));
         listed.push(record);
@@ -509,7 +514,11 @@ fn admit(stage: &Path, dir: &Path, seeded: usize, keep: Option<usize>) -> Result
         }
         let left: Vec<String> = listed.iter().filter_map(|b| b["name"].as_str().map(String::from)).collect();
         set(&mut doc, "drives", staged["drives"].clone());
-        crate::game::atomic_write(&file, dump(&doc, &file)?.as_bytes())?;
+        let tmp = file.with_extension("tmp");
+        std::fs::write(&tmp, dump(&doc, &file)?)?;
+        sync(&tmp)?;
+        std::fs::rename(&tmp, &file)?;
+        sync(&game)?;
         sweep(&game, &left);
     }
     Ok(())
@@ -521,6 +530,28 @@ fn is_empty(folder: &Path) -> bool {
 
 fn at(path: &Path) -> impl Fn(std::io::Error) -> Error + '_ {
     move |e| Error::Io(format!("{}: {e}", path.display()))
+}
+
+fn sync(path: &Path) -> Result<()> {
+    match std::fs::File::open(path).and_then(|f| f.sync_all()) {
+        // A network filesystem can refuse to sync a folder.
+        Err(e) if path.is_dir() && e.raw_os_error() == Some(rustix::io::Errno::INVAL.raw_os_error()) => Ok(()),
+        synced => synced.map_err(at(path)),
+    }
+}
+
+/// Files before their folders, as they are read back after a crash.
+fn sync_tree(folder: &Path) -> Result<()> {
+    for entry in std::fs::read_dir(folder).map_err(at(folder))? {
+        let entry = entry.map_err(at(folder))?;
+        let kind = entry.file_type().map_err(at(folder))?;
+        if kind.is_dir() {
+            sync_tree(&entry.path())?;
+        } else if kind.is_file() {
+            sync(&entry.path())?;
+        }
+    }
+    sync(folder)
 }
 
 /// The folders no record names. A `.` backup is the game's folder itself, its files under `drive-*`.

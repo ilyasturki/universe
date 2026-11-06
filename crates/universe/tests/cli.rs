@@ -825,6 +825,44 @@ fn a_mapping_that_cant_be_read_is_reported_and_costs_no_backup() {
     assert_eq!(game.held("slot1.sav"), ["fresh start"], "the guide's way forward: the folder moved, the next backup starts a new list");
 }
 
+#[test]
+fn a_backup_reaches_the_disk_before_the_one_it_prunes_goes() {
+    let game = SavedGame::new(1, |_| String::new());
+    game.put("slot1.sav", "kept");
+    assert!(game.saves(&["backup", "fixture-game"]).status.success());
+    let old = game.backup_folder().file_name().unwrap().to_string_lossy().into_owned();
+    game.put("slot1.sav", "newer");
+
+    let log = game.dir.path().join("strace.log");
+    let backup = command(&game.dir, &["saves", "backup", "fixture-game"], &[("PATH", &game.path)]);
+    let mut traced = Command::new("strace");
+    traced
+        .args(["-f", "-y", "-qq", "-s", "512", "-e", "trace=fsync,fdatasync,rename,renameat,renameat2,unlinkat", "-o"])
+        .arg(&log)
+        .arg(backup.get_program())
+        .args(backup.get_args());
+    traced.envs(backup.get_envs().filter_map(|(k, v)| v.map(|v| (k, v))));
+    let done = traced.output().expect("strace is not on PATH: the dev shell and the Nix check have it");
+    assert!(done.status.success(), "{}", text(&done.stderr));
+    assert_eq!(game.held("slot1.sav"), ["newer"]);
+
+    let trace = std::fs::read_to_string(&log).unwrap();
+    let calls: Vec<&str> = trace.lines().collect();
+    let first = |what: &str, seen: &dyn Fn(&str) -> bool| calls.iter().position(|l| seen(l)).unwrap_or_else(|| panic!("no {what} in:\n{trace}"));
+    let new = game.backup_folder().file_name().unwrap().to_string_lossy().into_owned();
+    let unlink = first("unlink of the old backup", &|l| l.contains("unlinkat(") && l.contains(&format!("/{old}/")));
+    let file = first("fsync of the new file", &|l| l.contains("fsync(") && l.contains(&format!("/{new}/")) && l.contains("slot1.sav>"));
+    let folder = first("fsync of the new folder", &|l| l.contains("fsync(") && l.contains(&format!("/{new}>")));
+    let moved = first("rename into the store", &|l| l.contains("rename") && l.contains(".staging") && l.contains(&format!("/{new}\"")));
+    let written = first("fsync of the mapping", &|l| l.contains("fsync(") && l.contains("/mapping.tmp>"));
+    let committed = first("rename of the mapping", &|l| l.contains("rename") && l.contains("mapping.tmp"));
+    let store = |after: usize| calls[after..].iter().position(|l| l.contains("fsync(") && l.contains("/Fixture Game>")).map(|at| at + after);
+    let (entry, record) = (store(moved).expect("no fsync of the store after the rename"), store(committed).expect("no fsync of the store after the mapping"));
+    assert!(file < moved && folder < moved, "{trace}");
+    assert!(moved < entry && entry < committed, "{trace}");
+    assert!(written < committed && committed < record && record < unlink, "{trace}");
+}
+
 fn files_under(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
     std::fs::read_dir(dir).into_iter().flatten().flatten().flat_map(|e| if e.path().is_dir() { files_under(&e.path()) } else { vec![e.path()] }).collect()
 }

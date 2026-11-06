@@ -277,8 +277,9 @@ process takes, held through a whole backup or restore: no detected roots, the in
 as an `other` root (saves a game keeps beside its files), the backup path and no differential backups.
 ludusavi writes a backup to an empty `.staging` folder beside the games', given the record of the
 game's last whole backup to compare with. Only a backup it finished joins the game's folder, under an
-id of its own, and only then do the oldest beyond `saves.keep` go: a failed backup costs none.
-A second lock, one per game (`<data>/ludusavi/locks/<id>`, taken
+id of its own, and only then do the oldest beyond `saves.keep` go: a failed backup costs none. The
+new backup's files and folders and the mapping reach the disk before the oldest is unlinked, so a
+power cut leaves one or the other. A second lock, one per game (`<data>/ludusavi/locks/<id>`, taken
 first), holds a game's backups still through a backup, a restore or an export. An export takes only
 that one: a long export stalls that game's backups and no other game's.
 A prefix is passed as `--wine-prefix` (its `pfx/` when it has one, and always under
