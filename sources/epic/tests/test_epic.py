@@ -69,7 +69,8 @@ def seed_cache(env, events):
 
 def hades(env, **extra):
     folder = env["games"] / "Hades"
-    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "x64").mkdir(parents=True, exist_ok=True)
+    (folder / "x64" / "Hades.exe").write_bytes(b"MZ")
     return {
         "app_name": "Min",
         "title": "Hades",
@@ -168,16 +169,42 @@ def test_install_streams_bytes_and_lands_the_game(env, run, monkeypatch):
     assert json.loads((env["data"] / "partials.json").read_text()) == {}, "a finished install leaves no partial"
 
 
-def test_a_game_whose_folder_vanished_installs_again(env, run, monkeypatch):
+@pytest.mark.parametrize("emptied", [False, True], ids=["folder-gone", "folder-emptied"])
+def test_a_game_whose_program_vanished_installs_again(env, run, monkeypatch, emptied):
     seed_cache(env, [{"id": "Min", "title": "Hades", "folder": "Hades", "owned_dlcs": []}])
-    install_state(env, {"Min": hades(env, install_path=str(env["tmp"] / "unmounted" / "Hades"))})
+    install = hades(env)
+    (env["games"] / "Hades" / "x64" / "Hades.exe").unlink()
+    if not emptied:
+        install["install_path"] = str(env["tmp"] / "unmounted" / "Hades")
+    install_state(env, {"Min": install})
+    code, events, _ = run("scan")
+    assert events == [{"event": "done"}], "nothing to play is no install"
     monkeypatch.setenv("SHIM_FOLDER", "Hades")
     code, events, err = run("install", "Min")
     assert code == 0, err
     game = next(e for e in events if e["event"] == "game")
     assert (game["installed"], game["dir"]) == (True, str(env["games"] / "Hades"))
-    assert (env["games"] / "Hades" / "Game.exe").is_file(), "downloaded again"
+    assert (env["games"] / "Hades" / "x64" / "Hades.exe").is_file(), "downloaded again"
     assert ["-y", "uninstall", "Min", "--keep-files"] in calls(env), "legendary forgets the old folder first"
+
+
+@pytest.mark.parametrize("scanned", [True, False], ids=["scan-then-uninstall", "uninstall"])
+def test_a_game_a_failed_reinstall_forgot_comes_back_with_its_drive(env, run, monkeypatch, scanned):
+    logged_in(env)
+    seed_cache(env, [{"id": "Min", "title": "Hades", "folder": "Hades", "owned_dlcs": []}])
+    old = env["tmp"] / "unmounted" / "Hades"
+    install_state(env, {"Min": hades(env, install_path=str(old))})
+    monkeypatch.setenv("SHIM_MODE", "fail")
+    code, _, _ = run("install", "Min")
+    assert code == 1
+    (old / "x64").mkdir(parents=True)
+    (old / "x64" / "Hades.exe").write_bytes(b"MZ")
+    monkeypatch.setenv("SHIM_MODE", "ok")
+    if scanned:
+        code, events, _ = run("scan")
+        assert [(e["id"], e["installed"], e["dir"]) for e in events if e["event"] == "game"] == [("Min", True, str(old))]
+    code, events, _ = run("uninstall", "Min")
+    assert code == 0 and not old.exists(), "legendary knows it again, so it removes it"
 
 
 def test_an_install_legendary_gives_up_on_is_an_error(env, run, monkeypatch):
@@ -244,6 +271,7 @@ def test_scan_adopts_heroics_installs_once_signed_in(env, run):
     heroic.mkdir()
     game_dir = env["tmp"] / "elsewhere" / "Fall Guys"
     game_dir.mkdir(parents=True)
+    (game_dir / "FallGuys.exe").write_bytes(b"MZ")
     (heroic / "installed.json").write_text(
         json.dumps({"Fall": {"app_name": "Fall", "title": "Fall Guys", "install_path": str(game_dir), "platform": "Windows", "is_dlc": False}})
     )

@@ -95,7 +95,8 @@ elif verb in ("install", "update"):
         sys.exit(0)
     for percent, n in (("50.00", 2), ("100.00", 4)):
         print(f"[DLManager] INFO: = Progress: {percent}% ({n}/4), Running for 00:00:01, ETA: 00:00:01", file=sys.stderr, flush=True)
-    (folder / "Game.exe").write_bytes(b"MZ")
+    (folder / "x64").mkdir(exist_ok=True)
+    (folder / "x64" / "Hades.exe").write_bytes(b"MZ")
     (config / "tmp" / f"{app}.resume").unlink(missing_ok=True)
     installed[app] = install_entry(app, "Hades", os.environ.get("SHIM_LATEST", "1.0"), str(folder), "x64\\Hades.exe", 4194304)
     save()
@@ -112,7 +113,12 @@ elif verb == "import":
     if not user.exists():
         err("Log in failed!")
         sys.exit(0)
-    installed[app] = install_entry(app, "Imported", "7", path, "Game.exe", 10)
+    # legendary takes the manifest's program and refuses a folder without it.
+    exe = next((p.relative_to(path) for p in sorted(Path(path).rglob("*")) if p.is_file()), None)
+    if exe is None:
+        err(f"Game executable could not be found at {path}")
+        sys.exit(1)
+    installed[app] = install_entry(app, "Imported", "7", path, str(exe).replace("/", "\\"), 10)
     save()
 elif verb == "launch":
     if mode == "offline" and "--offline" not in rest:

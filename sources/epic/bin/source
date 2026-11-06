@@ -393,8 +393,37 @@ def game_event(settings, app, title, owned, install=None, known=None, installs=N
     )
 
 
+def playable(install):
+    folder = install.get("install_path") or ""
+    exe = exe_of(install)
+    return os.path.isdir(folder) and (exe is None or os.path.isfile(os.path.join(folder, exe)))
+
+
 def present(installs):
-    return {app: g for app, g in installs.items() if not g.get("is_dlc") and os.path.isdir(g.get("install_path") or "")}
+    return {app: g for app, g in installs.items() if not g.get("is_dlc") and playable(g)}
+
+
+def forgotten_path():
+    return data_dir() / "forgotten.json"
+
+
+# A game legendary forgot so it would download it again: its old folder may come back with its drive, a whole install again.
+def remember_forgotten(app, install):
+    forgotten = load_json(forgotten_path())
+    save_json(forgotten_path(), {**(forgotten if isinstance(forgotten, dict) else {}), app: install})
+
+
+def restore_forgotten(settings, installs):
+    forgotten = load_json(forgotten_path())
+    back = {app: g for app, g in (forgotten if isinstance(forgotten, dict) else {}).items() if app not in installs and isinstance(g, dict) and playable(g)}
+    if not back:
+        return installs
+    tries = {app: legendary(settings, "import", app, game["install_path"], "--with-dlcs", "--platform", "Windows", yes=True) for app, game in back.items()}
+    installs = installed_games(settings)
+    for app, proc in tries.items():
+        if app not in installs:
+            log(f"{back[app].get('title') or app}: {back[app]['install_path']} is back but not imported{last_error(proc.stderr)}")
+    return installs
 
 
 def require_id(args, verb):
@@ -509,9 +538,10 @@ def cmd_install(settings, args):
         sizes = {}
     set_partial(app, {"dir": os.path.join(games_dir, known.get("folder") or app), "title": title, **sizes})
     gone = installed_games(settings).get(app)
-    if gone and not os.path.isdir(gone.get("install_path") or ""):
+    if gone and not playable(gone):
         # legendary diffs manifests, not the disk: a game it lists downloads nothing until it forgets the folder.
-        log(f"{title}: {gone.get('install_path')} is gone, installing again")
+        log(f"{title}: its program is gone from {gone.get('install_path')}, installing again")
+        remember_forgotten(app, gone)
         proc = legendary(settings, "uninstall", app, "--keep-files", yes=True)
         if proc.returncode != 0:
             raise failure("uninstall", proc)
@@ -546,7 +576,7 @@ def pending_updates(settings):
 
 def cmd_uninstall(settings, args):
     app = require_id(args, "uninstall")
-    if app in installed_games(settings):
+    if app in restore_forgotten(settings, installed_games(settings)):
         proc = legendary(settings, "uninstall", app, yes=True, timeout=settings["install_timeout_s"])
         if proc.returncode != 0 or app in installed_games(settings):
             raise failure("uninstall", proc)
@@ -630,11 +660,11 @@ def adopt(settings, installs):
 
 def cmd_scan(settings, args):
     index = library_index()
-    installs = adopt(settings, installed_games(settings))
+    installs = restore_forgotten(settings, adopt(settings, installed_games(settings)))
     on_disk = present(installs)
     for app, install in installs.items():
         if not install.get("is_dlc") and app not in on_disk:
-            log(f"{install.get('title') or app}: {install.get('install_path')} is gone, skipped")
+            log(f"{install.get('title') or app}: its program is gone from {install.get('install_path')}, skipped")
     for app, install in on_disk.items():
         game_event(settings, app, install.get("title") or app, owned_status(app, index), install, (index or {}).get(app), installs)
     partials = load_partials()

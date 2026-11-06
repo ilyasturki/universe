@@ -21,6 +21,8 @@ The first listing can take up to 15 minutes. It leaves out the games that instal
 
 Installing, updating and uninstalling work as for [every store](/docs/library/gog/#installing-from-the-store). **Install owned DLCs**, on by default, installs the DLCs you own with each game.
 
+A game whose files are gone, with the drive they were on or by hand, reads as not installed, and **Install** downloads it again. If the drive comes back before the new copy is installed, the game plays from the drive again.
+
 ## Heroic's Epic games
 
 Once you're signed in, the Epic games Heroic installed show under **On this PC**, ready for **Add to library**. Universe updates them from then on. Each one gets a new Wine prefix, so its saves in Heroic's prefix stay there ([Lutris and Heroic](/docs/library/lutris-heroic/#heroic)).
