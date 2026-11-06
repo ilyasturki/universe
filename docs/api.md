@@ -215,7 +215,7 @@ out its own compatdata instead, which stays Steam's), and each game's backups go
 | `prefix_tool(id, tool, args)` | `prefix_tool(id, tool, args=[])` | `universe data <name> winecfg\|winetricks [verbs]\|run <exe> [args]\|kill` | `winecfg`, `winetricks` and `run`: a transient unit `universe-prefix-<id>-<tool>-<stamp>` running the tool in the game's prefix with the launch's environment, no gamescope: `umu-run winecfg`, `umu-run winetricks …`, `umu-run <exe>` for Proton; `wine winecfg`, `winetricks` with `WINE` set, `wine <exe>` for Wine. Winetricks with no verbs opens its GUI (`--gui`): umu-run refuses it bare; verbs given pass as they are. `{tool, unit}` once the tool's own process runs in the unit (`winecfg.exe`, `winetricks`, the exe's name), or after 60 s at most: umu sets its container up first. A unit that ends before then on a non-zero exit is `Io`: the tool, the exit status and the last line it wrote (winetricks exiting 127); a failure later goes unreported. A program that is not installed (and is no tool Universe fetches, as umu-run is) is `Unavailable`, named, and nothing starts. `kill`: what `wineserver -k` does, from the core itself: every wineserver serving the prefix gets SIGINT (it kills the prefix's programs, saves the registry and exits), SIGKILL after 5 s. A server is found by its working directory, Wine's `server-<dev>-<ino>` named after the prefix, so one in a sandbox's private `/tmp` (umu on NixOS) is found too, whatever started it, and no other prefix's. `{tool, stopped}`, `stopped` the servers stopped (0: nothing ran); `Busy` when one outlives SIGKILL |
 | `saves_backup(id)` | `saves_backup(id)` | `universe saves backup <name>` | a backup now, below; `Outcome {change, files: [{path, bytes}], bytes}`, `change` ludusavi's `new`, `different` or `same` (unchanged saves make no backup), `none` when it found nothing |
 | `saves_restore(id, backup)` | `saves_restore(id, backup="")` | `universe saves restore <name> [backup]` | a backup's saves put back, the latest when `backup` is empty, after a backup of the saves it replaces; refused while the game runs, or when that backup fails or misses one |
-| `saves_export(id, to)` | `saves_export(id, to)` | `universe saves export <name> [dir]` | every backup of the game zipped into `<to>/<id>-saves-<stamp>.zip`, laid out as ludusavi lays them out: unpacked, any ludusavi restores from it |
+| `saves_export(id, to)` | `saves_export(id, to)` | `universe saves export <name> [dir]` | every backup of the game zipped into `<to>/<id>-saves-<stamp>.zip`, laid out as ludusavi lays them out: unpacked, any ludusavi restores from it. The zip takes its name once whole: a failed export leaves none and its error names the file it could not read |
 | `saves_cloud(id, action)` | `saves_cloud(id, action="status")` | `universe saves cloud <name> [--download\|--upload\|--keep-local\|--keep-cloud] [-y]` | the game's cloud saves through its source's `cloud-saves` verb (see Cloud saves): `status` reads the last sync's state, `download` and `upload` sync now, `keep-local` and `keep-cloud` settle a conflict. A `cloud` object; `Unavailable` for a game whose source has no `cloud-saves` capability; any action but `status` is refused while the game runs |
 | — | — | `universe saves list <name>` | the saves found and the backups kept: `game_data`'s `saves` |
 
@@ -270,11 +270,14 @@ for a home screen.
 PC saves are ludusavi's (MIT; its manifest is compiled from PCGamingWiki): a fetched tool (see
 Fetched tools), with its own config, manifest and cache in `<data>/ludusavi/`, apart from a ludusavi
 the player runs. Each call writes `config.yaml` there whole (JSON, which is YAML) under a lock every
-process takes, held through a whole backup, restore or export: no detected roots, the install folder's parent
+process takes, held through a whole backup or restore: no detected roots, the install folder's parent
 as an `other` root (saves a game keeps beside its files), the backup path and no differential backups.
 ludusavi writes a backup to an empty `.staging` folder beside the games', given the record of the
 game's last whole backup to compare with. Only a backup it finished joins the game's folder, under an
 id of its own, and only then do the oldest beyond `saves.keep` go: a failed backup costs none.
+A second lock, one per game (`<data>/ludusavi/locks/<id>`, taken
+first), holds a game's backups still through a backup, a restore or an export. An export takes only
+that one: a long export stalls that game's backups and no other game's.
 A prefix is passed as `--wine-prefix` (its `pfx/` when it has one, and always under
 `steamapps/compatdata`, where Steam makes it, even when Steam deleted the folder) and redirected
 both ways to `/universe/prefix`: a backup records the prefix's files at that path and a restore puts

@@ -444,7 +444,7 @@ impl Core {
         self.get(id).await?;
         let config = self.config.read().await.clone();
         let (id, to) = (id.to_string(), paths::expand(to));
-        let held = saves::hold().await?;
+        let held = saves::hold_game(&id).await?;
         blocking(move || {
             let _held = held;
             saves::export(&config, &id, &to)

@@ -386,7 +386,8 @@ impl SavedGame {
         std::fs::set_permissions(bin.join("ludusavi"), std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
         let tools = dir.path().join("data/ludusavi");
         std::fs::create_dir_all(&tools).unwrap();
-        std::fs::write(tools.join("manifest.yaml"), "Fixture Game:\n  files:\n    \"<winAppData>/Fixture\":\n      when:\n        - os: windows\n").unwrap();
+        let entry = |title: &str, folder: &str| format!("{title}:\n  files:\n    \"<winAppData>/{folder}\":\n      when:\n        - os: windows\n");
+        std::fs::write(tools.join("manifest.yaml"), entry("Fixture Game", "Fixture") + &entry("Other Game", "Other")).unwrap();
         let now = chrono::Utc::now().to_rfc3339();
         std::fs::write(tools.join("cache.yaml"), format!("manifests:\n  \"https://raw.githubusercontent.com/mtkennerly/ludusavi-manifest/master/data/manifest.yaml\":\n    checked: \"{now}\"\n    updated: \"{now}\"\n")).unwrap();
         let exe = dir.path().join("Game.exe");
@@ -433,6 +434,45 @@ impl SavedGame {
 
     fn mapping(&self) -> std::path::PathBuf {
         self.dir.path().join("data/saves/fixture-game/Fixture Game/mapping.yaml")
+    }
+
+    /// Other Game beside the fixture, with a save.
+    fn add_other_game(&self) {
+        let exe = self.dir.path().join("Other.exe");
+        std::fs::write(&exe, b"MZ").unwrap();
+        let added = universe(&self.dir, &["add", exe.to_str().unwrap(), "--runner", "proton", "--title", "Other Game", "--json"], &[]);
+        assert!(added.status.success(), "{}", text(&added.stderr));
+        let live = self.dir.path().join("data/prefixes/other-game/drive_c/users/steamuser/AppData/Roaming/Other");
+        std::fs::create_dir_all(&live).unwrap();
+        std::fs::write(live.join("slot1.sav"), "other").unwrap();
+    }
+
+    /// The process `args` start, stopped by a fifo in the mapping's place where it first reads it. Writing `mapping` to the fifo lets it go; anyone else finds the file `mapping` back in its place.
+    fn stopped_at_the_mapping(&self, args: &[&str], mapping: &str) -> (std::process::Child, std::fs::File) {
+        use std::os::unix::fs::OpenOptionsExt;
+        let file = self.mapping();
+        let beside = file.with_file_name("beside.yaml");
+        std::fs::write(&beside, mapping).unwrap();
+        // A fifo in the mapping's place stops the first process between reading the mapping and acting on it.
+        std::fs::remove_file(&file).unwrap();
+        rustix::fs::mknodat(rustix::fs::CWD, &file, rustix::fs::FileType::Fifo, rustix::fs::Mode::from_raw_mode(0o600), 0).unwrap();
+        let process = self.spawn(args);
+        let started = std::time::Instant::now();
+        let fifo = loop {
+            match std::fs::OpenOptions::new().write(true).custom_flags(libc::O_NONBLOCK).open(&file) {
+                Ok(fifo) => break fifo,
+                Err(_) if started.elapsed().as_secs() < 10 => std::thread::sleep(std::time::Duration::from_millis(5)),
+                Err(e) => panic!("{args:?} never read the mapping: {e}"),
+            }
+        };
+        std::fs::rename(&beside, &file).unwrap();
+        (process, fifo)
+    }
+
+    fn backup_folder(&self) -> std::path::PathBuf {
+        let list = self.saves(&["list", "fixture-game", "--json"]);
+        let data: serde_json::Value = serde_json::from_slice(&list.stdout).unwrap_or_else(|e| panic!("{e}: {}", text(&list.stderr)));
+        data["backups"][0]["path"].as_str().unwrap().into()
     }
 }
 
@@ -505,7 +545,6 @@ fn a_backup_that_failed_part_way_at_a_limit_of_one_loses_nothing_and_its_retry_i
 #[test]
 fn a_backup_in_another_process_survives_the_repair_of_a_stale_mapping() {
     use std::io::Write;
-    use std::os::unix::fs::OpenOptionsExt;
     // Each backup sees saves of its own: a game still writing them.
     let game = SavedGame::new(5, |dir| {
         let (count, save) = (dir.join("runs"), dir.join("data/prefixes/fixture-game").join(FIXTURE_SAVES).join("slot1.sav"));
@@ -518,22 +557,7 @@ fn a_backup_in_another_process_survives_the_repair_of_a_stale_mapping() {
     let phantom =
         "  - name: backup-20000101T000000Z\n    when: \"2000-01-01T00:00:00Z\"\n    os: linux\n    files: {}\n    registry:\n      hash: ~\n    children: []\n";
     let stale = std::fs::read_to_string(&mapping).unwrap().trim_end().to_string() + "\n" + phantom;
-    let beside = mapping.with_file_name("stale.yaml");
-    std::fs::write(&beside, &stale).unwrap();
-    // A fifo in the mapping's place stops the first process between reading the mapping and acting on it.
-    std::fs::remove_file(&mapping).unwrap();
-    rustix::fs::mknodat(rustix::fs::CWD, &mapping, rustix::fs::FileType::Fifo, rustix::fs::Mode::from_raw_mode(0o600), 0).unwrap();
-
-    let first = game.spawn_backup();
-    let started = std::time::Instant::now();
-    let mut reading = loop {
-        match std::fs::OpenOptions::new().write(true).custom_flags(libc::O_NONBLOCK).open(&mapping) {
-            Ok(fifo) => break fifo,
-            Err(_) if started.elapsed().as_secs() < 10 => std::thread::sleep(std::time::Duration::from_millis(5)),
-            Err(e) => panic!("the first backup never read the mapping: {e}"),
-        }
-    };
-    std::fs::rename(&beside, &mapping).unwrap();
+    let (first, mut reading) = game.stopped_at_the_mapping(&["backup", "fixture-game"], &stale);
 
     let mut second = game.spawn_backup();
     let window = std::time::Instant::now();
@@ -631,6 +655,112 @@ fn a_crash_between_staging_and_commit_costs_nothing_and_its_leftovers_go_with_th
     held.sort();
     assert_eq!(held, ["first", "progress"]);
     assert!(!staging.exists() && !orphan.exists());
+}
+
+/// `process`'s output once it ends, `None` when it outlives `limit` and is killed.
+fn output_within(mut process: std::process::Child, limit: std::time::Duration) -> Option<std::process::Output> {
+    let started = std::time::Instant::now();
+    while process.try_wait().unwrap().is_none() {
+        if started.elapsed() > limit {
+            process.kill().unwrap();
+            process.wait().unwrap();
+            return None;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    Some(process.wait_with_output().unwrap())
+}
+
+fn only_zip(folder: &std::path::Path) -> zip::ZipArchive<std::fs::File> {
+    let found: Vec<_> = std::fs::read_dir(folder).unwrap().flatten().map(|e| e.path()).collect();
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(found[0].file_name().unwrap().to_string_lossy().starts_with("fixture-game-saves-"), "{found:?}");
+    zip::ZipArchive::new(std::fs::File::open(&found[0]).unwrap()).unwrap()
+}
+
+fn read_zipped(zip: &mut zip::ZipArchive<std::fs::File>, name: &str) -> String {
+    let mut bytes = String::new();
+    std::io::Read::read_to_string(&mut zip.by_name(name).unwrap_or_else(|e| panic!("{name}: {e}")), &mut bytes).unwrap();
+    bytes
+}
+
+#[test]
+fn another_games_saves_answer_beside_a_long_export_within_its_budget() {
+    use std::io::Write;
+    let game = SavedGame::new(5, |_| String::new());
+    game.put("slot1.sav", "saved");
+    assert!(game.saves(&["backup", "fixture-game"]).status.success());
+    game.add_other_game();
+    let mapping = std::fs::read_to_string(game.mapping()).unwrap();
+    let zips = game.dir.path().join("zips");
+    let (export, mut fifo) = game.stopped_at_the_mapping(&["export", "fixture-game", zips.to_str().unwrap()], &mapping);
+
+    let limit = speed_limit(1500, 20000);
+    let list = output_within(game.spawn(&["list", "other-game"]), limit);
+    let backup = output_within(game.spawn(&["backup", "other-game"]), limit);
+    fifo.write_all(mapping.as_bytes()).unwrap();
+    drop(fifo);
+    let done = export.wait_with_output().unwrap();
+
+    for (what, ended) in [("list", list), ("backup", backup)] {
+        let ended = ended.unwrap_or_else(|| panic!("another game's {what} waited for the export"));
+        assert!(ended.status.success(), "{what}: {}", text(&ended.stderr));
+    }
+    assert!(done.status.success(), "{}", text(&done.stderr));
+    only_zip(&zips);
+}
+
+#[test]
+fn an_export_beside_a_pruning_backup_zips_every_backup_whole() {
+    use std::io::Write;
+    let game = SavedGame::new(1, |_| String::new());
+    game.put("slot1.sav", "kept");
+    assert!(game.saves(&["backup", "fixture-game"]).status.success());
+    let exported = game.backup_folder();
+    let id = exported.file_name().unwrap().to_string_lossy().into_owned();
+    let mapping = std::fs::read_to_string(game.mapping()).unwrap();
+    let zips = game.dir.path().join("zips");
+    let (export, mut fifo) = game.stopped_at_the_mapping(&["export", "fixture-game", zips.to_str().unwrap()], &mapping);
+
+    game.put("slot1.sav", "newer");
+    let mut backup = game.spawn_backup();
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    let waited = backup.try_wait().unwrap().is_none();
+    let held = exported.exists();
+    fifo.write_all(mapping.as_bytes()).unwrap();
+    drop(fifo);
+    for process in [export.wait_with_output(), backup.wait_with_output()] {
+        let done = process.unwrap();
+        assert!(done.status.success(), "{}", text(&done.stderr));
+    }
+    assert!(waited && held, "the backup pruned under the export");
+
+    let mut zip = only_zip(&zips);
+    assert!(read_zipped(&mut zip, "fixture-game/Fixture Game/mapping.yaml").contains(&id));
+    assert_eq!(read_zipped(&mut zip, &format!("fixture-game/Fixture Game/{id}/drive-0/universe/prefix/{FIXTURE_SAVES}/slot1.sav")), "kept");
+    assert_eq!(game.held("slot1.sav"), ["newer"]);
+}
+
+#[test]
+fn a_failed_export_leaves_no_zip_and_names_the_file_it_could_not_read() {
+    use std::os::unix::fs::PermissionsExt;
+    let game = SavedGame::new(5, |_| String::new());
+    game.put("slot1.sav", "saved");
+    assert!(game.saves(&["backup", "fixture-game"]).status.success());
+    let stored = game.backup_folder().join("drive-0/universe/prefix").join(FIXTURE_SAVES).join("slot1.sav");
+    let zips = game.dir.path().join("zips");
+
+    std::fs::set_permissions(&stored, std::fs::Permissions::from_mode(0o000)).unwrap();
+    let failed = game.saves(&["export", "fixture-game", zips.to_str().unwrap()]);
+    std::fs::set_permissions(&stored, std::fs::Permissions::from_mode(0o644)).unwrap();
+    assert!(!failed.status.success(), "{}", text(&failed.stdout));
+    assert!(text(&failed.stdout).contains(stored.to_str().unwrap()), "{}", text(&failed.stdout));
+    assert_eq!(files_under(&zips), Vec::<std::path::PathBuf>::new());
+
+    let done = game.saves(&["export", "fixture-game", zips.to_str().unwrap()]);
+    assert!(done.status.success(), "{}", text(&done.stderr));
+    let id = game.backup_folder().file_name().unwrap().to_string_lossy().into_owned();
+    assert_eq!(read_zipped(&mut only_zip(&zips), &format!("fixture-game/Fixture Game/{id}/drive-0/universe/prefix/{FIXTURE_SAVES}/slot1.sav")), "saved");
 }
 
 fn files_under(dir: &std::path::Path) -> Vec<std::path::PathBuf> {

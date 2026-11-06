@@ -258,11 +258,20 @@ fn config_yaml(ask: Option<&Ask>, dir: &Path, keep: u32) -> Value {
     })
 }
 
-/// ludusavi's config is rewritten for each call and a game's backups change under a backup or a restore: every process waits on one lock.
-pub(crate) async fn hold() -> Result<std::fs::File> {
-    let cfg_dir = config_dir();
-    std::fs::create_dir_all(&cfg_dir)?;
-    let lock = std::fs::File::create(cfg_dir.join("universe.lock"))?;
+/// ludusavi's config is rewritten for each call and `.staging` is shared: every process waits on one lock.
+async fn hold() -> Result<std::fs::File> {
+    lock(config_dir().join("universe.lock")).await
+}
+
+/// A game's backups hold still under this lock, taken before `hold`. An export takes only this one, so a long export stalls no other game.
+pub(crate) async fn hold_game(id: &str) -> Result<std::fs::File> {
+    // A folder of their own: a game called Universe would wait on `universe.lock` forever.
+    lock(config_dir().join("locks").join(id)).await
+}
+
+async fn lock(file: PathBuf) -> Result<std::fs::File> {
+    std::fs::create_dir_all(file.parent().unwrap_or(&file))?;
+    let lock = std::fs::File::create(file)?;
     crate::core::blocking(move || {
         rustix::fs::flock(&lock, rustix::fs::FlockOperation::LockExclusive).map_err(|e| Error::Io(format!("ludusavi lock: {e}")))?;
         Ok(lock)
@@ -416,6 +425,7 @@ fn kept(config: &Config) -> u32 {
 
 /// Unchanged saves make no new backup; the oldest beyond `saves.keep` goes.
 pub async fn backup(ask: &Ask, config: &Config, id: &str) -> Result<Outcome> {
+    let _game = hold_game(id).await?;
     let _held = hold().await?;
     back_up(ask, config, &dir(config, id), Some(kept(config) as usize)).await
 }
@@ -501,6 +511,10 @@ fn admit(stage: &Path, dir: &Path, seeded: usize, keep: Option<usize>) -> Result
     Ok(())
 }
 
+fn at(path: &Path) -> impl Fn(std::io::Error) -> Error + '_ {
+    move |e| Error::Io(format!("{}: {e}", path.display()))
+}
+
 /// The folders no record names. A `.` backup is the game's folder itself, its files under `drive-*`.
 fn sweep(game: &Path, left: &[String]) {
     let solo = left.iter().any(|id| id == ".");
@@ -518,6 +532,7 @@ fn sweep(game: &Path, left: &[String]) {
 /// A prefix's files land in the prefix the game has now, or will have: a reset leaves no folder, and ludusavi makes it.
 pub async fn restore(ask: &Ask, config: &Config, id: &str, backup: &str) -> Result<Outcome> {
     let dir = dir(config, id);
+    let _game = hold_game(id).await?;
     let _held = hold().await?;
     let listed = backups(&dir);
     let picked = if backup.is_empty() { listed.iter().find(|b| b.name == ask.name).or(listed.first()) } else { listed.iter().find(|b| b.id == backup) };
@@ -606,35 +621,44 @@ pub fn backups(dir: &Path) -> Vec<Backup> {
     out
 }
 
-/// Laid out as ludusavi lays its backups out: unpacked, any ludusavi restores from it.
+/// Laid out as ludusavi lays its backups out: unpacked, any ludusavi restores from it. The caller holds the game's lock.
 pub fn export(config: &Config, id: &str, to: &Path) -> Result<PathBuf> {
-    use std::io::Write;
     let dir = dir(config, id);
     if backups(&dir).is_empty() {
         return Err(Error::NotFound(format!("{id} has no backup to export")));
     }
     std::fs::create_dir_all(to)?;
     let file = to.join(format!("{id}-saves-{}.zip", chrono::Local::now().format("%Y%m%d-%H%M%S")));
+    // No stamp: the next export writes over what a killed one left.
+    let part = to.join(format!(".{id}-saves.zip.part"));
+    let written = zip_folder(&dir, id, &part).and_then(|()| std::fs::rename(&part, &file).map_err(at(&file)));
+    if written.is_err() {
+        let _ = std::fs::remove_file(&part);
+    }
+    written.map(|()| file)
+}
+
+fn zip_folder(dir: &Path, id: &str, file: &Path) -> Result<()> {
     let zipped = |e: zip::result::ZipError| Error::Io(format!("{}: {e}", file.display()));
-    let mut zip = zip::ZipWriter::new(std::fs::File::create(&file)?);
+    let mut zip = zip::ZipWriter::new(std::fs::File::create(file).map_err(at(file))?);
     let options = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
-    let mut stack = vec![dir.clone()];
+    let mut stack = vec![dir.to_path_buf()];
     while let Some(d) = stack.pop() {
-        for e in std::fs::read_dir(&d)?.flatten() {
-            let path = e.path();
-            let meta = path.symlink_metadata()?;
-            let rel = Path::new(id).join(path.strip_prefix(&dir).unwrap_or(&path)).to_string_lossy().into_owned();
+        for e in std::fs::read_dir(&d).map_err(at(&d))? {
+            let path = e.map_err(at(&d))?.path();
+            let meta = path.symlink_metadata().map_err(at(&path))?;
+            let rel = Path::new(id).join(path.strip_prefix(dir).unwrap_or(&path)).to_string_lossy().into_owned();
             if meta.is_dir() {
                 zip.add_directory(rel, options).map_err(zipped)?;
                 stack.push(path);
             } else if meta.is_file() {
+                let mut source = std::fs::File::open(&path).map_err(at(&path))?;
                 zip.start_file(rel, options).map_err(zipped)?;
-                zip.write_all(&std::fs::read(&path)?)?;
+                std::io::copy(&mut source, &mut zip).map_err(at(&path))?;
             }
         }
     }
-    zip.finish().map_err(zipped)?;
-    Ok(file)
+    zip.finish().map_err(zipped)?.sync_all().map_err(at(file))
 }
 
 #[cfg(test)]
