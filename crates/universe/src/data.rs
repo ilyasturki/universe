@@ -882,6 +882,34 @@ mod tests {
         assert_eq!(std::fs::read(save(&moved)).unwrap(), b"first", "the backup outlives the reset: its saves land in the prefix the game will have");
     }
 
+    #[tokio::test]
+    async fn a_restore_into_steams_compatdata_lands_in_pfx_whatever_steam_left_of_the_folder() {
+        let env = paths::test_env();
+        assert!(saves::installed().is_some(), "ludusavi is not on PATH: the dev shell and the Nix check have it");
+        library(&env);
+        saves::tests::offline_manifest("Fixture Game:\n  files:\n    \"<winAppData>/Fixture\":\n      when:\n        - os: windows\n");
+        let compat = env.path().join("SteamLibrary/steamapps/compatdata/123");
+        let inside = "drive_c/users/steamuser/AppData/Roaming/Fixture/slot1.sav";
+        let save = compat.join("pfx").join(inside);
+        std::fs::create_dir_all(save.parent().unwrap()).unwrap();
+        std::fs::write(&save, b"steam save").unwrap();
+        proton_game(&env, "Fixture Game", &compat);
+        let (core, _) = open().await;
+        core.saves_backup("fixture-game").await.unwrap();
+
+        for folder_left in [false, true] {
+            std::fs::remove_dir_all(&compat).unwrap();
+            if folder_left {
+                std::fs::create_dir_all(&compat).unwrap();
+            }
+            core.saves_restore("fixture-game", "").await.unwrap();
+            assert_eq!(std::fs::read(&save).unwrap(), b"steam save", "the folder left: {folder_left}");
+            assert!(!compat.join("drive_c").exists(), "Steam makes its prefix in pfx: a save beside it is lost");
+            let data = core.game_data("fixture-game").await.unwrap();
+            assert_eq!(data["saves"]["files"][0]["path"], save.to_string_lossy().as_ref());
+        }
+    }
+
     /// Fixture Game on a profile keeping `keep` backups, and where its save sits in its prefix.
     async fn game_keeping(env: &paths::TestEnv, keep: u32) -> (Core, PathBuf) {
         assert!(saves::installed().is_some(), "ludusavi is not on PATH: the dev shell and the Nix check have it");

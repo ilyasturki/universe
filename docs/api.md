@@ -275,7 +275,8 @@ as an `other` root (saves a game keeps beside its files), the backup path and no
 ludusavi writes a backup to an empty `.staging` folder beside the games', given the record of the
 game's last whole backup to compare with. Only a backup it finished joins the game's folder, under an
 id of its own, and only then do the oldest beyond `saves.keep` go: a failed backup costs none.
-A prefix is passed as `--wine-prefix` (its `pfx/` when it has one, Steam's layout) and redirected
+A prefix is passed as `--wine-prefix` (its `pfx/` when it has one, and always under
+`steamapps/compatdata`, where Steam makes it, even when Steam deleted the folder) and redirected
 both ways to `/universe/prefix`: a backup records the prefix's files at that path and a restore puts
 them in the prefix the game has now, so a backup outlives a `move_prefix` or a reset: a restore
 after a reset makes the prefix's folder, and the next launch builds a Wine prefix around the saves. A

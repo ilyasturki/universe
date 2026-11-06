@@ -31,10 +31,10 @@ pub fn dir(config: &Config, id: &str) -> PathBuf {
     config.saves_root().join(id)
 }
 
-/// The Wine prefix in a game's prefix folder: Steam's compatdata keeps it under `pfx/`.
+/// The Wine prefix in a game's prefix folder: Steam's compatdata keeps it under `pfx/`, even while Steam has yet to make it.
 pub fn wine_prefix(prefix: &Path) -> PathBuf {
     let pfx = prefix.join("pfx");
-    if pfx.join("drive_c").is_dir() {
+    if pfx.join("drive_c").is_dir() || prefix.parent().is_some_and(|p| p.ends_with("steamapps/compatdata")) {
         pfx
     } else {
         prefix.to_path_buf()
@@ -729,5 +729,8 @@ pub(crate) mod tests {
         std::fs::create_dir_all(dir.path().join("own/drive_c")).unwrap();
         assert_eq!(wine_prefix(&dir.path().join("compat")), dir.path().join("compat/pfx"));
         assert_eq!(wine_prefix(&dir.path().join("own")), dir.path().join("own"));
+        let steam = dir.path().join("steamapps/compatdata/620");
+        assert_eq!(wine_prefix(&steam), steam.join("pfx"), "Steam makes it there, even when nothing is there yet");
+        assert_eq!(wine_prefix(&steam.join("pfx")), steam.join("pfx"), "a game pointed at the Wine prefix itself");
     }
 }
