@@ -1244,9 +1244,8 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     }
                 }
             }
-            let path = core.get(&id).await?.game.sessions_path();
             for _ in 0..30 {
-                if let Some(s) = sessions::read(&path).unwrap_or_default().into_iter().find(|s| s.session == sid) {
+                if let Some(s) = core.closed_row(&id, &sid).await {
                     if !json {
                         let end = match sessions::end_of(&s) {
                             "crashed" if s.exit == 0 => "crashed".red().to_string(),

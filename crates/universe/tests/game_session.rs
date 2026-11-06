@@ -496,6 +496,20 @@ fn hud_limit_and_filter_changed_in_game_last_the_session_and_leave_the_settings_
         core.stop("").await.unwrap();
         until("the second session ends", || units.lock().unwrap().loaded.is_empty().then_some(())).await;
         assert_eq!(settings(), before);
+
+        let history = root.join("data/games").join(&id).join("sessions.jsonl");
+        std::fs::remove_file(&history).unwrap();
+        std::fs::create_dir(&history).unwrap();
+        core.launch(&id, "", "").await.unwrap();
+        core.nest_filter("integer", None).await.unwrap();
+        core.stop("").await.unwrap();
+        until("the session with no history to land in ends", || units.lock().unwrap().loaded.is_empty().then_some(())).await;
+        assert!(core.current().await.is_none(), "session-end took the marker");
+        assert_eq!(gamescope.filter(), (Some(4), Some(7)), "and undid what the game changed");
+        std::fs::remove_dir(&history).unwrap();
+        Core::open().await.unwrap();
+        let rows = std::fs::read_to_string(&history).unwrap();
+        assert_eq!(rows.lines().count(), 1, "{rows}");
         drop(watcher.stdin);
         let _ = watcher.child.wait().await;
     });

@@ -425,7 +425,7 @@ impl Watcher {
         if let Err(e) = self.core.reload_game(&t.id).await {
             tracing::debug!("reload {}: {e}", t.id);
         }
-        let line = self.core.get(&t.id).await.ok().and_then(|r| r.sessions.into_iter().find(|s| s.session == t.session_id));
+        let line = self.core.closed_row(&t.id, &t.session_id).await;
         let mut ended = Ended { session_id: t.session_id, id: t.id.clone(), title: t.title, ..Ended::default() };
         if let Some(s) = line {
             ended.end = crate::sessions::end_of(&s).into();

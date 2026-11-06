@@ -143,6 +143,10 @@ pub fn read(path: &Path) -> crate::Result<Vec<Session>> {
 pub fn append(path: &Path, s: &Session) -> crate::Result<()> {
     let mut line = serde_json::to_string(s)?;
     line.push('\n');
+    // A full disk can cut a line short: this one must not land on its tail.
+    if std::fs::read(path).is_ok_and(|text| text.last().is_some_and(|c| *c != b'\n')) {
+        line.insert(0, '\n');
+    }
     path.parent()
         .map_or(Ok(()), std::fs::create_dir_all)
         .and_then(|()| std::fs::OpenOptions::new().create(true).append(true).open(path))

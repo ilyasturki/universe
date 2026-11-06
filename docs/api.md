@@ -38,9 +38,14 @@ operation; a dash means the surface doesn't expose it.
   The current session is the marker whose unit is still active.
   On every open the core **reconciles**: a marker with no live unit is closed from `journalctl`
   timestamps, one it cannot read is dropped, and one of a game with no folder is undone and dropped
-  with no row. A row that cannot be written keeps its marker: the open goes on, the next one tries
-  again, and `launch` refuses until the row is filed. A launch that fails after an effect began
-  undoes the same list.
+  with no row. A launch that fails after an effect began undoes the same list.
+- A row whose `sessions.jsonl` cannot be read or written **waits** in `state/unfiled-sessions/`, one
+  file per session: the session ends all the same (undo, `session-end` hooks, saves backup, marker
+  gone) and any game launches. Every reconcile, on open and before `launch`, files the rows their
+  history takes under the marker's lock, each once and in order, then runs their `post-process`
+  hooks; a row whose game has no folder is dropped. `recording-file` lands on the waiting row.
+  A row that cannot wait either keeps the marker and its undo: the open goes on, the next one tries
+  again, and `launch` refuses, naming both paths, until it can.
 - Asynchronous hooks (`post-launch`, `post-process`) run as transient units. A `post-launch` hook
   that starts a process meant to last the whole session (the recorder) must put it in its own unit
   with `BindsTo=$SESSION_UNIT After=$SESSION_UNIT`, so it stops with the game even if nothing else
@@ -346,7 +351,7 @@ The Python host derives the same events itself (`docs/frontends.md` § Changes).
 | `Library(ids)` | a game's directory, `game.toml` or `sessions.jsonl` moved, or anything the rows below name: those games are reloaded (`reload_game`) before the event, a new or a removed one among them. Empty when `games/` itself went, after `reload_all` |
 | `Media(id)`, `Journal(id)`, `Screenshots(id)` | after that game's `Library`: its `media/`, the picks in `media/picked/` included; its `journal/` or `journal/attachments/`; its `screenshots/` |
 | `SessionStarted(Current)` | the marker's session is active (`current()`); first of all when one already runs as the watch starts |
-| `SessionEnded(Ended)` | the marker went: `{session_id, id, title, duration_s, end, exit, recording}` from the line `session-end` filed (`end` as `sessions::end_of`: `quit`, `stopped`, `crashed`, `killed`, `ended`; empty, the rest zero, when no line was filed), then the game's `Library` |
+| `SessionEnded(Ended)` | the marker went: `{session_id, id, title, duration_s, end, exit, recording}` from the line `session-end` filed (`end` as `sessions::end_of`: `quit`, `stopped`, `crashed`, `killed`, `ended`; empty, the rest zero, when the session has no line, filed or waiting), then the game's `Library` |
 | `JournalWriting {id, session, title}` | an entry turned `pending` (`title` is the game's); once per session |
 | `JournalDone {id, session, state, text}` | a pending entry is no longer: `written` (`text` its title), `deferred` or `failed` (`text` the reason, `timed out` included) |
 
@@ -395,6 +400,7 @@ every 10 s, since the 30-minute timeout writes no file.
 | `sessions(id)` | `sessions(id)` | `universe sessions <name>` | `[SessionRow]`, newest first (by `ended_at`); `id = ""` spans every visible game (not removed, not hidden) |
 | `session_log(id, session_id, tail)` | `session_log(id, session_id="", tail=0)` | `universe logs <name> [session] [-n N] [-f]` | what a session's processes wrote (see Logs): `[{time, source, priority, message}]`, oldest first, the last `tail` lines (0: all). `session_id` `""` is the running session, else the newest played; `NotFound` for a session that never was, `[]` once the journal has let the unit go, and for an import |
 | `session_end(id, session_id, exit, ended)` | — | `universe session-end <id> <session>` | closes the session, idempotent. Run by systemd's `ExecStopPost`, or by reconciliation |
+| `closed_row(id, session_id)` | — | — | the closed session's line, from `sessions.jsonl` or waiting to reach it; none while it runs or when it has no line |
 
 One `sessions.jsonl` line:
 

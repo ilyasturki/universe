@@ -109,12 +109,13 @@ pub fn file(game: &Game, session_id: &str, src: &Path, recordings_root: &Path, t
     let ds = dest.to_string_lossy().to_string();
     let duration_s = probe_duration(&dest).unwrap_or(0);
     let timeline = timeline.cloned().unwrap_or_default();
-    let found = sessions::update(&game.sessions_path(), session_id, |s| {
+    let set = |s: &mut Session| {
         s.recording = Some(ds.clone());
         s.recording_duration_s = duration_s;
         s.recording_started_at = timeline.started_at.clone();
         s.recording_pauses = timeline.pauses.clone();
-    })?;
+    };
+    let found = crate::session::change_unfiled(&game.id, session_id, set)? || sessions::update(&game.sessions_path(), session_id, set)?;
     if !found {
         let (started_at, ended_at) = session_times(session_id, duration_s);
         sessions::append(

@@ -147,6 +147,94 @@ fn take_marker(session_id: &str) -> Option<Marker> {
     Some(m)
 }
 
+fn unfiled_file(game: &str, session_id: &str) -> std::path::PathBuf {
+    paths::unfiled_sessions_dir().join(format!("{session_id}.{game}.json"))
+}
+
+fn keep_unfiled(row: &Session) -> std::io::Result<()> {
+    use std::io::Write;
+    let p = unfiled_file(&row.game, &row.session);
+    std::fs::create_dir_all(paths::unfiled_sessions_dir())?;
+    let tmp = p.with_extension("tmp");
+    let kept = std::fs::File::create(&tmp)
+        .and_then(|mut f| f.write_all(serde_json::to_string(row)?.as_bytes()).and_then(|()| f.sync_all()))
+        .and_then(|()| std::fs::rename(&tmp, &p));
+    if kept.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    kept
+}
+
+fn read_unfiled(file: &Path) -> Option<Session> {
+    let row = std::fs::read(file).map_err(|e| e.to_string()).and_then(|text| serde_json::from_slice(&text).map_err(|e| e.to_string()));
+    row.inspect_err(|e| tracing::warn!("{}: {e}", file.display())).ok()
+}
+
+/// Oldest first.
+fn unfiled_rows() -> Vec<(std::path::PathBuf, Session)> {
+    let Ok(dir) = std::fs::read_dir(paths::unfiled_sessions_dir()) else { return vec![] };
+    let mut files: Vec<_> = dir.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|e| e == "json")).collect();
+    files.sort();
+    files.into_iter().filter_map(|p| read_unfiled(&p).map(|row| (p, row))).collect()
+}
+
+pub(crate) fn unfiled_game(session_id: &str) -> Option<String> {
+    unfiled_rows().into_iter().map(|(_, row)| row).find(|row| row.session == session_id).map(|row| row.game)
+}
+
+/// `false` when no row of the session waits.
+pub(crate) fn change_unfiled(game: &str, session_id: &str, f: impl FnOnce(&mut Session)) -> Result<bool> {
+    let file = unfiled_file(game, session_id);
+    if !file.exists() {
+        return Ok(false);
+    }
+    let _lock = marker_lock()?;
+    let Some(mut row) = read_unfiled(&file) else { return Ok(false) };
+    f(&mut row);
+    keep_unfiled(&row)?;
+    Ok(true)
+}
+
+/// The `(game, session)` of each row it filed. The marker's lock is what lands a row once when several processes open at the same time.
+fn file_unfiled() -> Vec<(String, String)> {
+    if !paths::unfiled_sessions_dir().is_dir() {
+        return vec![];
+    }
+    let _lock = match marker_lock() {
+        Ok(lock) => lock,
+        Err(e) => {
+            tracing::warn!("marker lock: {e}");
+            return vec![];
+        }
+    };
+    let mut filed = vec![];
+    for (file, row) in unfiled_rows() {
+        let dir = paths::game_dir(&row.game);
+        if std::fs::metadata(&dir).is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound) {
+            tracing::warn!("session {} of {} dropped: the game has no folder", row.session, row.game);
+            let _ = std::fs::remove_file(&file);
+            continue;
+        }
+        let history = dir.join("sessions.jsonl");
+        let appended = sessions::read(&history).and_then(|rows| match rows.iter().any(|s| s.session == row.session) {
+            true => Ok(false),
+            false => sessions::append(&history, &row).map(|()| true),
+        });
+        match appended {
+            Ok(appended) => {
+                if let Err(e) = std::fs::remove_file(&file) {
+                    tracing::warn!("{}: {e}", file.display());
+                }
+                if appended {
+                    filed.push((row.game, row.session));
+                }
+            }
+            Err(e) => tracing::warn!("session {} of {} still waits: {e}", row.session, row.game),
+        }
+    }
+    filed
+}
+
 /// A change to the session's marker, in place and only while it is that session's: a temp file renamed over it, so
 /// `session-end` never reads half a marker.
 fn update_marker(session_id: &str, f: impl FnOnce(&mut Marker)) -> Result<()> {
@@ -213,8 +301,14 @@ impl Core {
     }
 
     /// A marker without an active unit (crash, reboot) is closed now; one that cannot be read goes, or every launch would be `Busy`.
-    /// One of a game with no folder goes too, undone and with no row. An `Err` that leaves the marker owes its row: a launch waits for it.
+    /// One of a game with no folder goes too, undone and with no row. An `Err` that leaves the marker owes a row kept nowhere else: a launch waits for it.
     pub async fn reconcile(&self) -> Result<()> {
+        for (id, session_id) in file_unfiled() {
+            if let Err(e) = self.reload_game(&id).await {
+                tracing::warn!("{id}: {e}");
+            }
+            self.post_process(&id, &session_id).await;
+        }
         let path = paths::current_session_file();
         let Ok(text) = std::fs::read_to_string(&path) else { return Ok(()) };
         let m: Marker = match serde_json::from_str(&text) {
@@ -230,6 +324,12 @@ impl Core {
         }
         tracing::warn!("session {} of {} was left open; closing it", m.current.session_id, m.current.id);
         self.session_end(&m.current.id, &m.current.session_id, None, None).await
+    }
+
+    /// A closed session's row: in its history, or waiting for it.
+    pub async fn closed_row(&self, id: &str, session_id: &str) -> Option<Session> {
+        let filed = sessions::read(&self.get(id).await.ok()?.game.sessions_path()).unwrap_or_default().into_iter().find(|s| s.session == session_id);
+        filed.or_else(|| Some(unfiled_file(id, session_id)).filter(|f| f.exists()).and_then(|f| read_unfiled(&f)))
     }
 
     /// Every game launched afterwards is bound to the scope, so it goes down with the launcher; idempotent.
@@ -547,15 +647,16 @@ impl Core {
         let marker = read_marker().filter(|m| m.current.session_id == session_id);
         let filed = match self.get(id).await {
             Err(e) => Err(e),
+            Ok(_) if unfiled_file(id, session_id).exists() => Ok(None),
             Ok(r) if sessions::read(&r.game.sessions_path()).unwrap_or_default().iter().any(|s| s.session == session_id) => Ok(None),
-            // A row that could not be appended keeps the marker: `reconcile` files it on the next open.
+            // A row kept nowhere keeps the marker, its undo with it: `reconcile` tries again on the next open.
             Ok(r) => Ok(Some((self.file_session(&r, session_id, exit, ended, marker.as_ref()).await?, r))),
         };
         // Taken again: a change since the first read may have added an undo step.
         if let Some(m) = marker.as_ref().and_then(|_| take_marker(session_id)) {
             self.rollback(&m.undo).await;
         }
-        let Some((session, r)) = filed? else { return Ok(()) };
+        let Some(((session, in_history), r)) = filed? else { return Ok(()) };
         let cfg = self.config.read().await.clone();
         let mut env_end = match &marker {
             Some(m) => HookEnv { vars: m.hook_env.clone() },
@@ -580,7 +681,9 @@ impl Core {
         if cfg.saves.auto_backup && crate::saves::backs_up(&r.game, &cfg) {
             self.start_saves_backup(&r.game.id, session_id).await;
         }
-        self.post_process(id, session_id).await;
+        if in_history {
+            self.post_process(id, session_id).await;
+        }
         Ok(())
     }
 
@@ -606,7 +709,7 @@ impl Core {
         exit: Option<i32>,
         ended: Option<chrono::DateTime<chrono::Local>>,
         marker: Option<&Marker>,
-    ) -> Result<Session> {
+    ) -> Result<(Session, bool)> {
         let unit = marker.map(|m| m.current.unit.clone()).unwrap_or_else(|| format!("{}.service", launcher::unit_name(&r.game.id, session_id)));
         let log = self.host.units.log(&unit).await;
         let started = marker
@@ -634,8 +737,19 @@ impl Core {
             command: marker.map(|m| m.command.clone()).unwrap_or_default(),
             ..Default::default()
         };
-        sessions::append(&r.game.sessions_path(), &session)?;
-        Ok(session)
+        let history = r.game.sessions_path();
+        // A history it cannot read cannot show the row is not there already.
+        let Err(e) = sessions::read(&history).and_then(|_| sessions::append(&history, &session)) else { return Ok((session, true)) };
+        tracing::warn!("session {session_id} of {} waits for {}: {e}", r.game.id, history.display());
+        keep_unfiled(&session).map_err(|kept| {
+            Error::Io(format!(
+                "the last session of {} could not be saved to {} ({e}) or kept in {} ({kept}): free some disk space or make those folders writable, then try again",
+                r.game.title,
+                history.display(),
+                paths::unfiled_sessions_dir().display()
+            ))
+        })?;
+        Ok((session, false))
     }
 
     /// What a `post-process` hook is told about one session of `r`, whether it just ended or is being written again later.
@@ -1044,6 +1158,99 @@ pub(crate) mod tests {
         let calls = memory.calls();
         assert_eq!(calls.last().map(String::as_str), Some("cursor:restore"));
         assert!(core.launch("sample", "", "").await.is_ok(), "the next launch is not Busy");
+    }
+
+    #[tokio::test]
+    async fn a_history_that_cannot_be_written_holds_back_neither_the_undo_nor_the_next_game() {
+        use std::os::unix::fs::PermissionsExt;
+        let sb = sandbox();
+        let module = std::path::PathBuf::from(std::env::var_os("UNIVERSE_MODULES_PATH").unwrap()).join("log");
+        std::fs::create_dir_all(module.join("bin")).unwrap();
+        std::fs::write(module.join("module.toml"), "api = 2\nid = \"log\"\n[hooks]\nsession-end = \"bin/end\"\npost-process = \"bin/post\"\n").unwrap();
+        let ended = paths::state_home().join("ended");
+        for (hook, body) in [("end", format!("#!/bin/sh\necho \"$GAME_ID\" >> {}\n", ended.display())), ("post", "#!/bin/sh\n".into())] {
+            std::fs::write(module.join("bin").join(hook), body).unwrap();
+            std::fs::set_permissions(module.join("bin").join(hook), std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        std::fs::write(
+            paths::config_home().join("config.toml"),
+            "[launch]\ngamescope = false\nmangohud = false\nfps_limit = \"none\"\n[saves]\nauto_backup = false\n[modules]\nenabled = [\"log\"]\n",
+        )
+        .unwrap();
+        let (core, memory) = open().await;
+        let sample = core.get("sample").await.unwrap().game;
+        let mut other = Game::new("Other");
+        other.launch = sample.launch.clone();
+        other.launch.post_command = "true".into();
+        other.save().unwrap();
+        core.reload_game("other").await.unwrap();
+        let history = sample.sessions_path();
+
+        let sid = core.launch("sample", "", "").await.unwrap();
+        let unit = format!("universe-game-sample-{sid}.service");
+        let post_process = format!("universe-log-post-process-{sid}");
+        std::fs::create_dir_all(&history).unwrap();
+        memory.finish(&unit, 3);
+        core.session_end("sample", &sid, None, None).await.unwrap();
+        assert!(read_marker().is_none(), "the slot is free for the next game");
+        assert!(sb.post_ran.exists(), "post_command ran");
+        assert_eq!(memory.calls().iter().filter(|c| *c == "cursor:restore").count(), 1);
+        assert_eq!(std::fs::read_to_string(&ended).unwrap(), "sample\n", "session-end hooks are cleanup: they run with the undo");
+        assert!(memory.spec(&post_process).is_none(), "post-process reads the row: it waits with it");
+        assert_eq!(core.closed_row("sample", &sid).await.map(|s| s.exit), Some(3), "a frontend hears how it ended");
+        core.session_end("sample", &sid, None, None).await.unwrap();
+        assert_eq!(std::fs::read_to_string(&ended).unwrap(), "sample\n", "idempotent");
+        let clip = paths::state_home().join("clip.mkv");
+        std::fs::write(&clip, b"").unwrap();
+        let filed_clip = core.file_recording(&sid, clip.to_str().unwrap(), None).await.unwrap();
+
+        std::fs::remove_file(&sb.post_ran).unwrap();
+        let (core, memory) = open().await;
+        assert!(!sb.post_ran.exists() && !memory.calls().contains(&"cursor:restore".to_string()), "reopening repeats no undo");
+
+        let other_sid = core.launch("other", "", "").await.unwrap();
+        memory.finish(&format!("universe-game-other-{other_sid}.service"), 0);
+        core.session_end("other", &other_sid, None, None).await.unwrap();
+        let other_history = core.get("other").await.unwrap().game.sessions_path();
+        let other_rows = std::fs::read(&other_history).unwrap();
+        assert_eq!(sessions::read(&other_history).unwrap().len(), 1);
+
+        let waiting: Vec<_> = std::fs::read_dir(paths::unfiled_sessions_dir()).unwrap().flatten().map(|e| e.path()).collect();
+        assert_eq!(waiting.len(), 1, "{waiting:?}");
+        let kept = std::fs::read(&waiting[0]).unwrap();
+        std::fs::remove_dir(&history).unwrap();
+        std::fs::write(&history, "{\"session\":\"cut sh").unwrap();
+        let (core, memory) = open().await;
+        let rows = sessions::read(&history).unwrap();
+        assert_eq!(rows.len(), 1, "{rows:?}");
+        assert_eq!((rows[0].session.as_str(), rows[0].exit, rows[0].unit.as_str()), (sid.as_str(), 3, unit.as_str()));
+        assert_eq!(rows[0].recording.as_deref(), Some(filed_clip.as_str()), "a recording filed while it waited lands on the row");
+        assert_eq!(core.get("sample").await.unwrap().sessions.len(), 1, "the library reads it at once");
+        assert_eq!(memory.spec(&post_process).expect("post-process, once the row is there").env["RECORDING_PATH"], filed_clip);
+
+        std::fs::write(&waiting[0], kept).unwrap();
+        let (_core, memory) = open().await;
+        assert_eq!(sessions::read(&history).unwrap().len(), 1, "a stop between the line and the file's removal files nothing twice");
+        assert!(memory.spec(&post_process).is_none());
+        assert!(!waiting[0].exists());
+        assert_eq!(std::fs::read(&other_history).unwrap(), other_rows, "the other game's history is as it was");
+    }
+
+    #[tokio::test]
+    async fn a_history_it_cannot_read_takes_no_row_it_might_already_hold() {
+        use std::os::unix::fs::PermissionsExt;
+        let _sb = sandbox();
+        let (core, memory) = open().await;
+        let history = core.get("sample").await.unwrap().game.sessions_path();
+        let sid = core.launch("sample", "", "").await.unwrap();
+        std::fs::write(&history, "").unwrap();
+        std::fs::set_permissions(&history, std::fs::Permissions::from_mode(0o200)).unwrap();
+        memory.finish(&format!("universe-game-sample-{sid}.service"), 0);
+        core.session_end("sample", &sid, None, None).await.unwrap();
+        std::fs::set_permissions(&history, std::fs::Permissions::from_mode(0o644)).unwrap();
+        assert_eq!(std::fs::read(&history).unwrap(), b"", "nothing landed blind");
+        open().await;
+        assert_eq!(sessions::read(&history).unwrap().len(), 1);
     }
 
     #[tokio::test]
