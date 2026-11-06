@@ -166,6 +166,7 @@ class Onboarding(RowsForm):
         self._games = games
         self._login = login
         self._controller = controller
+        controller.holdOffersForSetup(self._needed)
         self._components = components
         self._steps = []
         self._step = 0

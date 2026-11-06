@@ -24,11 +24,12 @@ def empty(app, xdg, tmp_path):
 
 
 @pytest.fixture
-def empty_api(empty, tmp_path):
+def empty_api(request, empty, tmp_path):
+    """The Api on the empty library; `parametrize("empty_api", [True], indirect=True)` starts it on the startup animation."""
     from universe_ui.api import Api
     from universe_ui.screens.power import FAKE
 
-    api = Api(empty, memory_path=str(tmp_path / "memory.json"), power_root=FAKE)
+    api = Api(empty, memory_path=str(tmp_path / "memory.json"), power_root=FAKE, boot=getattr(request, "param", False))
     yield api
     api.shutdown()
 
@@ -513,20 +514,27 @@ def test_a_step_with_nothing_to_do_lands_on_its_button(look, empty_api, empty):
     until(lambda: empty.onboarded() is True and not opened(look), "A finishes")
 
 
-@pytest.mark.parametrize("during_load", [True, False])
-def test_a_new_controller_waits_until_the_setup_closes(held_sources, look, empty_api, empty, during_load):
+@pytest.mark.parametrize(("empty_api", "connected"), [(True, "intro"), (False, "load"), (False, "loaded")], ids=["intro", "load", "loaded"], indirect=["empty_api"])
+def test_a_new_controller_waits_until_the_setup_closes(held_sources, look, empty_api, empty, connected):
     from universe_ui.screens.controller import FakeWatcher
 
     form = empty_api.screens.onboarding
     gate, entered = held_sources
-    until(lambda: opened(look) and entered.is_set() and form.loading)
-    if not during_load:
-        gate.set()
-        until(lambda: not form.loading)
     controller = empty_api.screens.controller
     offers = record(controller.walkOffered)
     watcher = FakeWatcher("8bitdo-pro-3")
-    controller.start(watcher)
+    if connected == "intro":
+        assert empty_api.boot.running
+        controller.start(watcher)
+        settle(look.window)
+        look.press(Qt.Key.Key_Return)
+        until(lambda: not empty_api.boot.running, "a press skips the intro")
+    until(lambda: opened(look) and entered.is_set() and form.loading)
+    if connected == "loaded":
+        gate.set()
+        until(lambda: not form.loading)
+    if connected != "intro":
+        controller.start(watcher)
     settle(look.window)
     assert not look.dialog().property("open"), "the controller offer must not cover setup"
     assert offers == [] and not controller.walking and controller.learning == ""

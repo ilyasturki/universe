@@ -198,6 +198,7 @@ class ControllerScreen(AdvancedRows, QObject):
         self._walk_seconds = 0
         self._offered = set()
         self._walk_offers_paused = False
+        self._setup_due = lambda: False
         self._walk_timer = QTimer(self)
         self._walk_timer.setInterval(1000)
         self._walk_timer.timeout.connect(self._walk_tick)
@@ -434,9 +435,11 @@ class ControllerScreen(AdvancedRows, QObject):
         if not paused:
             QTimer.singleShot(0, self._offer_connected)
 
+    # The first-run setup holds every offer from the start, before a look has opened it: `due()` while it has still to run.
+    def holdOffersForSetup(self, due):
+        self._setup_due = due
+
     def _offer_connected(self):
-        if self._walk_offers_paused:
-            return
         for entry in self._devices:
             self._offer(entry)
 
@@ -445,6 +448,7 @@ class ControllerScreen(AdvancedRows, QObject):
         family = entry["family"]
         if (
             self._walk_offers_paused
+            or self._setup_due()
             or family in self._offered
             or self._status != "ready"
             or self._passive
