@@ -547,6 +547,11 @@ def test_a_new_controller_waits_until_the_setup_closes(held_sources, look, empty
     settle(look.window)
     assert not look.dialog().property("open"), "the controller offer must not cover setup"
     assert offers == [] and not controller.walking and controller.learning == ""
+    empty_api.home.guide(True)
+    empty_api.home.guide(False)
+    look.press(Qt.Key.Key_F1)
+    settle(look.window)
+    assert opened(look) and not empty.onboarded() and offers == [], "HOME and Start leave the setup up"
     watcher.emit(watcher.device())
     look.press(Qt.Key.Key_Escape)
     look.press(SECOND[look.name])

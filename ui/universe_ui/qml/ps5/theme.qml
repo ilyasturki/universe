@@ -68,7 +68,7 @@ FocusScope {
     Binding {
         target: api.screens.controller
         property: "walkOffersPaused"
-        value: root.topPage !== null && root.topPage.objectName === "onboardingPage" || root.modal
+        value: root.settingUp || root.modal
     }
 
     // args travel as JSON: a library reload can delete a Game under a page, so pages carry ids.
@@ -84,6 +84,7 @@ FocusScope {
     property bool quitAfterStop: false
 
     readonly property Item topPage: pages.count > 0 && pages.itemAt(pages.count - 1) ? pages.itemAt(pages.count - 1).item : null
+    readonly property bool settingUp: topPage !== null && topPage.objectName === "onboardingPage"
     readonly property bool topOverlay: topPage !== null && topPage.overlay === true
     readonly property var hints: dialog.open ? dialog.hints : sheet.open ? sheet.hints : popup.open ? popup.hints : folder.open ? folder.hints : launching ? [] : !onHome && topPage ? topPage.hints : home.hints
     // The console shows no button hints: the strip comes up only over what it never had, a pick's △ for all games among them.
@@ -105,7 +106,7 @@ FocusScope {
     }
 
     function goHome() {
-        if (depth === 0)
+        if (depth === 0 || settingUp)
             return;
         Sound.play("home");
         stack.clear();
