@@ -198,7 +198,7 @@ class ControllerScreen(AdvancedRows, QObject):
         self._walk_seconds = 0
         self._offered = set()
         self._walk_offers_paused = False
-        self._setup_due = lambda: False
+        self._setup_due = None
         self._walk_timer = QTimer(self)
         self._walk_timer.setInterval(1000)
         self._walk_timer.timeout.connect(self._walk_tick)
@@ -439,6 +439,11 @@ class ControllerScreen(AdvancedRows, QObject):
     def holdOffersForSetup(self, due):
         self._setup_due = due
 
+    def releaseOffersForSetup(self):
+        if self._setup_due is not None:
+            self._setup_due = None
+            QTimer.singleShot(0, self._offer_connected)
+
     def _offer_connected(self):
         for entry in self._devices:
             self._offer(entry)
@@ -448,7 +453,7 @@ class ControllerScreen(AdvancedRows, QObject):
         family = entry["family"]
         if (
             self._walk_offers_paused
-            or self._setup_due()
+            or (self._setup_due is not None and self._setup_due())
             or family in self._offered
             or self._status != "ready"
             or self._passive

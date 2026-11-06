@@ -565,3 +565,23 @@ def test_a_new_controller_waits_until_the_setup_closes(held_sources, look, empty
     watcher.emit(watcher.device())
     settle(look.window)
     assert len(offers) == 1 and not look.dialog().property("open")
+
+
+@pytest.mark.parametrize("empty_api", [True], indirect=True)
+def test_a_controller_held_through_the_intro_is_offered_when_games_came_instead(look, empty_api, empty):
+    from universe_ui.screens.controller import FakeWatcher
+
+    controller = empty_api.screens.controller
+    offers = record(controller.walkOffered)
+    assert empty_api.boot.running
+    controller.start(FakeWatcher("8bitdo-pro-3"))
+    settle(look.window)
+    assert offers == []
+    empty.core.add_game({"runner": "native", "exe": "/bin/true", "title": "Late"})
+    empty.libraryChanged.emit([])
+    until(lambda: empty_api.allGames.count > 0)
+    look.press(Qt.Key.Key_Return)
+    until(lambda: not empty_api.boot.running, "a press skips the intro")
+    until(lambda: offers and look.dialog().property("open"), "no setup to wait for: the offer comes")
+    assert not opened(look) and empty.onboarded() is True
+    assert [family for family, _ in offers] == ["8bitdo-pro-3"]

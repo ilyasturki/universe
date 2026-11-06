@@ -188,6 +188,12 @@ class Onboarding(RowsForm):
         wifi.changed.connect(lambda: self._refresh() if self._step_id() == "network" else None)
 
     def _needed(self):
+        if self._due():
+            return True
+        self._controller.releaseOffersForSetup()
+        return False
+
+    def _due(self):
         if self._client.onboarded():
             return False
         # ui-memory.json held the flag before the core kept one for every frontend: carried over once.
