@@ -88,11 +88,23 @@ template $UniverseWindow: Adw.ApplicationWindow {
                       icon-name: "dialog-error-symbolic";
                       title: _("Universe Could Not Start");
 
-                      child: Button {
-                        label: _("Try Again");
-                        action-name: "win.retry";
+                      child: Box {
+                        orientation: vertical;
+                        spacing: 12;
                         halign: center;
-                        styles ["suggested-action", "pill"]
+
+                        Button retry_button {
+                          label: _("Try Again");
+                          action-name: "win.retry";
+                          styles ["suggested-action", "pill"]
+                        }
+
+                        Button failed_file_button {
+                          label: _("Show Settings File");
+                          action-name: "win.show-failed-file";
+                          visible: false;
+                          styles ["pill"]
+                        }
                       };
                     };
                   };

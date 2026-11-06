@@ -16,8 +16,6 @@ use crate::script;
 use crate::state::State;
 use crate::widgets::NowPlaying;
 
-const LOADING_LIMIT_S: u32 = 30;
-
 /// What the sidebar lists besides the fixed items; rebuilt only when it changes, so the selection stays put.
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Shape {
@@ -46,6 +44,10 @@ mod imp {
         pub stack: TemplateChild<adw::ViewStack>,
         #[template_child]
         pub failed_page: TemplateChild<adw::StatusPage>,
+        #[template_child]
+        pub retry_button: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub failed_file_button: TemplateChild<gtk::Button>,
         #[template_child]
         pub library_page: TemplateChild<LibraryPage>,
         #[template_child]
@@ -213,6 +215,18 @@ impl Window {
                 win.imp().stack.set_visible_child_name("loading");
             })
             .build();
+        let failed_file = gio::ActionEntry::builder("show-failed-file")
+            .activate(|win: &Self, _, _| {
+                let Some(file) = win.app().failed_file() else { return };
+                let launcher = gtk::FileLauncher::new(Some(&gio::File::for_path(&file)));
+                let win_ = win.downgrade();
+                launcher.open_containing_folder(Some(win), gio::Cancellable::NONE, move |result| {
+                    if let (Some(win), Err(e)) = (win_.upgrade(), result) {
+                        win.toast(adw::Toast::new(&e.to_string()));
+                    }
+                });
+            })
+            .build();
         let onboarding = gio::ActionEntry::builder("onboarding").activate(|win: &Self, _, _| crate::dialogs::onboarding::present(win)).build();
         let rescan = gio::ActionEntry::builder("rescan").activate(|win: &Self, _, _| win.rescan()).build();
         let entry = gio::ActionEntry::builder("open-journal-entry")
@@ -234,7 +248,7 @@ impl Window {
             })
             .build();
         let undo = gio::ActionEntry::builder("undo").activate(|win: &Self, _, _| win.undo()).build();
-        self.add_action_entries([show_sidebar, search, sort, show_hidden, view, add_game, retry, onboarding, rescan, entry, game, undo]);
+        self.add_action_entries([show_sidebar, search, sort, show_hidden, view, add_game, retry, failed_file, onboarding, rescan, entry, game, undo]);
         self.imp().library_page.set_show_hidden(state.show_hidden);
     }
 
@@ -244,9 +258,13 @@ impl Window {
                 action.set_enabled(self.app().is_ready());
             }
         }
+        let failed = self.app().failure().is_some();
         if let Some(action) = self.lookup_action("retry").and_downcast::<gio::SimpleAction>() {
-            action.set_enabled(self.app().failure().is_some());
+            action.set_enabled(failed);
         }
+        let imp = self.imp();
+        imp.retry_button.set_visible(failed);
+        imp.failed_file_button.set_visible(self.app().failed_file().is_some());
     }
 
     /// The first-run flow is behind the player, in every frontend.
@@ -407,21 +425,20 @@ impl Window {
             self.core_failed(&failure);
         }
         let win = self.downgrade();
-        glib::timeout_add_seconds_local_once(LOADING_LIMIT_S, move || {
+        glib::timeout_add_seconds_local_once(crate::app::loading_limit_s(), move || {
             win.upgrade().inspect(|win| win.give_up_loading());
         });
     }
 
     fn give_up_loading(&self) {
         let imp = self.imp();
-        let limit = LOADING_LIMIT_S.to_string();
-        let stuck = match imp.stack.visible_child_name().as_deref() {
-            Some("loading") => gettext("Universe Desktop has been {stage} for {limit} seconds.").replace("{stage}", &self.app().stage()),
-            Some("library") if imp.library_page.is_loading() => gettext("The library was read, but this window has not shown it after {limit} seconds."),
-            _ => return,
+        if imp.stack.visible_child_name().as_deref() != Some("library") || !imp.library_page.is_loading() {
+            return;
         }
-        .replace("{limit}", &limit);
+        let stuck = gettext("The library was read, but this window has not shown it after {limit} seconds.")
+            .replace("{limit}", &crate::app::loading_limit_s().to_string());
         tracing::error!("{stuck}");
+        self.sync_core_actions();
         imp.failed_page.set_description(Some(&glib::markup_escape_text(&stuck)));
         imp.stack.set_visible_child_name("failed");
     }

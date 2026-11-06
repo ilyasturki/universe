@@ -19,6 +19,8 @@ pub enum Step {
     Action(String),
     Size(i32, i32),
     Button(String),
+    Has(String),
+    CloseToast,
     View(String),
     Dialog(String),
     Copy(PathBuf, PathBuf),
@@ -42,6 +44,8 @@ fn step(word: &str) -> Option<Step> {
         "action" => Some(Step::Action(arg.replace('~', " "))),
         "size" => arg.split_once('x').and_then(|(w, h)| Some(Step::Size(w.parse().ok()?, h.parse().ok()?))),
         "button" => Some(Step::Button(arg.into())),
+        "has" => Some(Step::Has(arg.replace('~', " "))),
+        "toast" => (arg == "close").then_some(Step::CloseToast),
         "view" => Some(Step::View(arg.into())),
         "dialog" => Some(Step::Dialog(arg.into())),
         "copy" => arg.split_once(':').map(|(from, to)| Step::Copy(from.into(), to.into())),
@@ -80,26 +84,45 @@ async fn run_step(window: &gtk::Window, step: Step) -> Result<(), String> {
             }
         }
         Step::Button(action) => {
-            loaded(window).await?;
-            drawn(window).await?;
-            let button = widgets(window.upcast_ref())
-                .into_iter()
-                .filter_map(|widget| widget.downcast::<gtk::Button>().ok())
-                .find(|button| button.action_name().as_deref() == Some(&action))
+            let button = until(|| loading(window.upcast_ref()).is_none().then(|| button(window, &action, None)).flatten())
+                .await
                 .ok_or_else(|| format!("no visible button for {action}"))?;
+            drawn(window).await?;
             if !button.is_sensitive() {
                 return Err(format!("button for {action} is disabled"));
             }
             button.emit_clicked();
         }
+        Step::Has(detailed) => {
+            let (name, target) = gio::Action::parse_detailed_name(&detailed).map_err(|e| format!("{detailed}: {e}"))?;
+            until(|| button(window, &name, target.as_ref()).filter(|b| b.is_sensitive()))
+                .await
+                .ok_or_else(|| format!("no visible button that can run {detailed}"))?;
+            println!("has: {detailed}");
+        }
+        Step::CloseToast => {
+            let close = until(|| {
+                widgets(window.upcast_ref())
+                    .into_iter()
+                    .filter(|widget| widget.type_().name() == "AdwToastWidget")
+                    .find_map(|toast| widgets(&toast).into_iter().rev().find_map(|widget| widget.downcast::<gtk::Button>().ok()))
+            })
+            .await
+            .ok_or("no toast shown")?;
+            drawn(window).await?;
+            close.emit_clicked();
+            println!("toast: close");
+        }
         Step::View(name) => {
-            loaded(window).await?;
-            if !widgets(window.upcast_ref())
-                .iter()
-                .any(|widget| widget.downcast_ref::<adw::ViewStack>().is_some_and(|stack| stack.visible_child_name().as_deref() == Some(&name)))
-            {
-                return Err(format!("no visible view {name}"));
-            }
+            until(|| {
+                (loading(window.upcast_ref()).is_none()
+                    && widgets(window.upcast_ref())
+                        .iter()
+                        .any(|widget| widget.downcast_ref::<adw::ViewStack>().is_some_and(|stack| stack.visible_child_name().as_deref() == Some(&name))))
+                .then_some(())
+            })
+            .await
+            .ok_or_else(|| format!("no visible view {name} after {} s", LOADING_TIMEOUT.as_secs()))?;
             println!("view: {name}");
         }
         Step::Dialog(response) => {
@@ -119,7 +142,9 @@ async fn run_step(window: &gtk::Window, step: Step) -> Result<(), String> {
             }
         }
         Step::Copy(from, to) => {
-            std::fs::copy(&from, &to).map_err(|e| format!("copy {} to {}: {e}", from.display(), to.display()))?;
+            // Renamed into place: writing into a FIFO there would feed whoever is stuck reading it.
+            let part = to.with_extension("part");
+            std::fs::copy(&from, &part).and_then(|_| std::fs::rename(&part, &to)).map_err(|e| format!("copy {} to {}: {e}", from.display(), to.display()))?;
         }
         Step::Shot(path) => {
             loaded(window).await?;
@@ -130,6 +155,27 @@ async fn run_step(window: &gtk::Window, step: Step) -> Result<(), String> {
         Step::Unreadable(word) => return Err(format!("no step reads {word:?}")),
     }
     Ok(())
+}
+
+/// `found` polled until it gives something or `LOADING_TIMEOUT` passes.
+async fn until<T>(found: impl Fn() -> Option<T>) -> Option<T> {
+    let started = std::time::Instant::now();
+    loop {
+        if let Some(found) = found() {
+            return Some(found);
+        }
+        if started.elapsed() >= LOADING_TIMEOUT {
+            return None;
+        }
+        glib::timeout_future(Duration::from_millis(50)).await;
+    }
+}
+
+fn button(window: &gtk::Window, action: &str, target: Option<&glib::Variant>) -> Option<gtk::Button> {
+    widgets(window.upcast_ref())
+        .into_iter()
+        .filter_map(|widget| widget.downcast::<gtk::Button>().ok())
+        .find(|button| button.action_name().as_deref() == Some(action) && (target.is_none() || button.action_target_value().as_ref() == target))
 }
 
 async fn drawn(window: &gtk::Window) -> Result<(), String> {

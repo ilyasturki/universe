@@ -1732,6 +1732,12 @@ What cost time:
 weston and saves shots: `size:WxH`, `wait:MS`, `action:NAME[::TARGET]` (`~` for a space, looked up
 on the widgets on screen, so a page's own group answers: `win.open-game::<id>` opens a game's page,
 `app.preferences-page::stores` a Preferences page, `app.system-check` a dialog) and `shot:NAME.png`, with
-`GDK_DISABLE=offload,dmabuf` so a playing video is part of the window's render node. A scripted run
+`GDK_DISABLE=offload,dmabuf` so a playing video is part of the window's render node. Steps that wait
+up to 10 s: `button:ACTION` clicks the button on screen that runs ACTION and fails when it is disabled,
+`has:ACTION[::TARGET]` only checks that one is there and enabled, `view:NAME` waits for a stack page by
+name (`failed`, `library`, `store`), `dialog:RESPONSE` for an alert whose default response is RESPONSE,
+`toast:close` for a toast, which it closes; `copy:FROM:TO` renames a copy of FROM into place. A start
+still running after 30 s (`UNIVERSE_DESKTOP_LOADING_LIMIT_S`) fails, so **Try Again** can start
+another. `tools/desktop-test` runs these against a broken, a hanging and a repaired config. A scripted run
 is `NON_UNIQUE`, adopts no scope, sweeps no journal, checks no updates and saves no state; it cannot
 open a popover or answer a dialog. `man universe-desktop` has the options and keys.

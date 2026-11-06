@@ -38,6 +38,12 @@ const SYSTEM_CHECK_URI: &str = "universe-desktop:system-check";
 
 // Started by the shell for a search, the app stays up between keystrokes rather than open the core for each.
 const SEARCH_LINGER_MS: u32 = 60_000;
+const LOADING_LIMIT_S: u32 = 30;
+
+/// How long an open runs before the window offers Try Again; `UNIVERSE_DESKTOP_LOADING_LIMIT_S` shortens it for a test.
+pub fn loading_limit_s() -> u32 {
+    std::env::var("UNIVERSE_DESKTOP_LOADING_LIMIT_S").ok().and_then(|s| s.parse().ok()).filter(|s| *s > 0).unwrap_or(LOADING_LIMIT_S)
+}
 
 /// A delete held back while its toast offers Undo: what runs once the toast goes, and the line that tells its failure.
 pub type Commit = Box<dyn FnOnce() -> Pin<Box<dyn Future<Output = Result<(), String>>>>>;
@@ -49,6 +55,12 @@ mod imp {
     pub struct Application {
         pub ready: Cell<bool>,
         pub opening: Cell<bool>,
+        /// Counts the opens started; an open given up on, or one a retry superseded, reports nothing when it ends.
+        pub attempt: Cell<u32>,
+        /// An open got the core: one that ends after it runs no further.
+        pub claimed: Cell<bool>,
+        /// The settings file the core could not read, when that is why it failed.
+        pub failed_file: RefCell<Option<std::path::PathBuf>>,
         pub scripted: Cell<bool>,
         pub stage: RefCell<String>,
         pub failure: RefCell<Option<String>>,
@@ -660,6 +672,30 @@ impl Application {
         self.imp().failure.borrow().clone()
     }
 
+    pub fn failed_file(&self) -> Option<std::path::PathBuf> {
+        self.imp().failed_file.borrow().clone()
+    }
+
+    fn fail(&self, failure: String, file: Option<std::path::PathBuf>) {
+        let imp = self.imp();
+        imp.failure.replace(Some(failure.clone()));
+        imp.failed_file.replace(file);
+        imp.opening.set(false);
+        self.emit_by_name::<()>("core-failed", &[&failure]);
+    }
+
+    /// An open still running after the limit fails, so Try Again starts another; the stalled one may still finish.
+    fn give_up(&self, attempt: u32) {
+        if self.is_ready() || !self.imp().opening.get() || self.imp().attempt.get() != attempt {
+            return;
+        }
+        let stuck = gettext("Universe Desktop has been {stage} for {limit} seconds.")
+            .replace("{stage}", &self.stage())
+            .replace("{limit}", &loading_limit_s().to_string());
+        tracing::error!("{stuck}");
+        self.fail(stuck, None);
+    }
+
     fn window(&self) -> Window {
         self.active_window().and_downcast::<Window>().unwrap_or_else(|| Window::new(self))
     }
@@ -669,14 +705,26 @@ impl Application {
         if self.is_ready() || self.imp().opening.replace(true) {
             return;
         }
-        self.imp().failure.take();
+        let imp = self.imp();
+        imp.failure.take();
+        imp.failed_file.take();
+        let attempt = imp.attempt.get() + 1;
+        imp.attempt.set(attempt);
+        let app = self.downgrade();
+        glib::timeout_add_seconds_local_once(loading_limit_s(), move || {
+            app.upgrade().inspect(|app| app.give_up(attempt));
+        });
         let app = self.clone();
         glib::spawn_future_local(async move {
             app.set_stage(gettext("opening the core"));
             if let Err(e) = backend::open().await {
-                app.imp().failure.replace(Some(e.to_string()));
-                app.imp().opening.set(false);
-                app.emit_by_name::<()>("core-failed", &[&e.to_string()]);
+                if app.imp().attempt.get() == attempt && app.imp().opening.get() {
+                    let file = backend::run(async { universe::config::Config::load().is_err().then(universe::paths::config_file) }).await;
+                    app.fail(e.to_string(), file);
+                }
+                return;
+            }
+            if app.imp().claimed.replace(true) {
                 return;
             }
             let scripted = app.scripted();
@@ -704,6 +752,8 @@ impl Application {
             app.library().refresh(&[]).await;
             app.set_stage(gettext("reading the recordings"));
             app.start_frames().await;
+            app.imp().failure.take();
+            app.imp().failed_file.take();
             app.imp().ready.set(true);
             app.imp().opening.set(false);
             app.set_core_actions(true);
