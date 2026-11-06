@@ -296,7 +296,14 @@ fn claim_closing(game: &str, session_id: &str, seen: bool, row: impl FnOnce(Opti
 }
 
 /// The row of a session that just ended, from its marker when there is one, else from the unit's log.
-fn closed_session(game: &str, session_id: &str, exit: Option<i32>, ended: Option<chrono::DateTime<chrono::Local>>, marker: Option<&Marker>, log: &crate::host::UnitLog) -> Session {
+fn closed_session(
+    game: &str,
+    session_id: &str,
+    exit: Option<i32>,
+    ended: Option<chrono::DateTime<chrono::Local>>,
+    marker: Option<&Marker>,
+    log: &crate::host::UnitLog,
+) -> Session {
     let unit = marker.map(|m| m.current.unit.clone()).unwrap_or_else(|| format!("{}.service", launcher::unit_name(game, session_id)));
     let started = marker
         .and_then(|m| chrono::DateTime::parse_from_rfc3339(&m.current.started_at).ok().map(|t| t.with_timezone(&chrono::Local)))
@@ -1227,7 +1234,8 @@ pub(crate) mod tests {
         assert!(core.current().await.is_none());
         let m = read_marker().unwrap();
         let row = closed_session("sample", &sid, None, None, Some(&m), &Default::default());
-        write_closing(&Closing { row, undo: m.undo.clone(), hook_env: Some(m.hook_env), ..Closing::default() }).expect("a close cut between its record and the marker's removal");
+        write_closing(&Closing { row, undo: m.undo.clone(), hook_env: Some(m.hook_env), ..Closing::default() })
+            .expect("a close cut between its record and the marker's removal");
         core.reconcile().await.unwrap();
         let rows = sessions::read(&core.get("sample").await.unwrap().game.sessions_path()).unwrap();
         assert_eq!(rows.len(), 1);

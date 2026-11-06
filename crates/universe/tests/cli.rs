@@ -409,8 +409,10 @@ fn a_close_held_in_the_journal_while_another_files_the_session_files_it_once() {
     let (marker, undone) = left_open(&dir, "quest", "20261106-000000");
     let quick = shim(&dir.path().join("quick"), "journalctl", "");
     let (entered, release) = (dir.path().join("entered"), dir.path().join("release"));
-    let path = shim(&dir.path().join("held"), "journalctl", &format!("touch {}\nwhile [ ! -e {} ]; do sleep 0.02; done\n", entered.display(), release.display()));
-    let mut held = command(&dir, &["storage"], &[NO_BUS, ("PATH", &path)]).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn().unwrap();
+    let path =
+        shim(&dir.path().join("held"), "journalctl", &format!("touch {}\nwhile [ ! -e {} ]; do sleep 0.02; done\n", entered.display(), release.display()));
+    let mut held =
+        command(&dir, &["storage"], &[NO_BUS, ("PATH", &path)]).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn().unwrap();
     let started = std::time::Instant::now();
     while !entered.exists() {
         if started.elapsed().as_secs() >= 10 || held.try_wait().unwrap().is_some() {

@@ -47,8 +47,9 @@ operation; a dash means the surface doesn't expose it.
   the row filed into `sessions.jsonl` under the marker's lock, which reads the history first and
   appends only a row it lacks; the undo, a step at a time; the `session-end` hooks and the saves
   backup; then the record goes and `post-process` runs. Each step is noted in the record once done,
-  so a close cut short (a crash, a kill) resumes on the next reconcile where it stopped, and each
-  step runs once. A history that cannot be read or written leaves only the record: the undo and the
+  so a close cut short (a crash, a kill) resumes on the next reconcile where it stopped: a step
+  completed is never repeated, one cut mid-way runs again, and a cut between the record's removal
+  and `post-process` loses that hook. A history that cannot be read or written leaves only the record: the undo and the
   hooks run all the same, any game launches, and every reconcile, on open and before `launch`, files
   the rows their history takes, each once and in order; a row whose game has no folder is dropped.
   `recording-file` lands on the waiting row. Without a marker, a row goes only into a history that
