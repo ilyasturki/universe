@@ -45,8 +45,8 @@ FocusScope {
         },
         {
             glyph: "A",
-            label: "Read",
-            dim: current === null
+            label: current && Feed.blank(current) ? "Write" : "Read",
+            dim: current === null || current.state === "pending"
         }
     ]
 
@@ -66,6 +66,42 @@ FocusScope {
             filterId = args.gameId;
     }
 
+    readonly property var actions: {
+        var row = current;
+        if (!row)
+            return [];
+        var items = [];
+        if (row.state === "written")
+            items.push({
+                label: "Read",
+                act: "read"
+            }, {
+                label: "Write it again",
+                act: "rewrite"
+            });
+        else if (Feed.blank(row))
+            items.push({
+                label: row.state === "none" ? "Write the entry" : "Try again now",
+                act: "write"
+            });
+        if (row.hasRecording)
+            items.push({
+                label: "Watch the recording",
+                act: "recording"
+            });
+        if (row.state !== "none")
+            items.push({
+                label: row.state === "pending" ? "Cancel the writing…" : "Remove entry…",
+                act: "remove"
+            });
+        else if (row.hasRecording)
+            items.push({
+                label: "Remove the recording…",
+                act: "remove-recording"
+            });
+        return items;
+    }
+
     function options() {
         if (!current) {
             Sound.play("edge");
@@ -73,48 +109,51 @@ FocusScope {
         }
         Sound.play("ok");
         var row = current;
-        var pending = row.state === "pending";
-        var items = pending ? [] : [
-            {
-                label: "Read",
-                act: "read"
-            }
-        ];
-        if (row.hasRecording)
-            items.push({
-                label: "Watch the recording",
-                act: "recording"
-            });
-        items.push({
-            label: pending ? "Cancel the writing…" : "Remove entry…",
-            act: "remove"
-        });
-        shell.menu(row.gameTitle + " · " + row.dateText, items, function (act) {
+        shell.menu(row.gameTitle + " · " + row.dateText, actions, function (act) {
             if (act === "read")
-                shell.push("pages/ArticlePage.qml", {
-                    session: row.session,
-                    gameId: row.gameId
-                });
+                read(row);
+            else if (act === "write" || act === "rewrite")
+                write(row, act === "rewrite");
             else if (act === "recording")
                 shell.push("pages/PlayerPage.qml", {
                     session: row.session,
                     gameId: row.gameId
+                });
+            else if (act === "remove-recording")
+                Removal.recording(shell, api.screens, Object.assign({
+                    hasJournal: false
+                }, row), function () {
+                    store.loadAll();
                 });
             else
                 Removal.entry(shell, api.screens, row, function () {});
         });
     }
 
+    function read(row) {
+        shell.push("pages/ArticlePage.qml", {
+            session: row.session,
+            gameId: row.gameId
+        });
+    }
+
+    // Hands the session to the journal module: a first entry, another try, or a fresh one over what is there.
+    function write(row, again) {
+        Sound.play("ok");
+        store.write(row.gameId, row.session, again);
+    }
+
     function activate() {
-        if (!current) {
+        if (!current || current.state === "pending") {
             Sound.play("edge");
             return;
         }
+        if (Feed.blank(current)) {
+            write(current, false);
+            return;
+        }
         Sound.play("ok");
-        shell.push("pages/ArticlePage.qml", {
-            session: current.session,
-            gameId: current.gameId
-        });
+        read(current);
     }
 
     function railAction(id) {
@@ -188,6 +227,7 @@ FocusScope {
     CellGrid {
         id: grid
 
+        objectName: "newsGrid"
         x: Theme.dp(253)
         y: Theme.dp(226)
         height: parent.height - y - Theme.dp(Theme.hintBarHeight)
@@ -263,12 +303,13 @@ FocusScope {
             }
 
             Label {
+                objectName: "newsTitle"
                 x: badge.x + badge.width + Theme.dp(20)
                 y: page.imageHeight + Theme.dp(14)
                 width: parent.width - x - Theme.dp(18)
                 height: page.captionHeight - Theme.dp(14)
                 verticalAlignment: Text.AlignVCenter
-                text: entry.title
+                text: Feed.heading(entry)
                 wrapMode: Text.WordWrap
                 maximumLineCount: 2
                 elide: Text.ElideRight

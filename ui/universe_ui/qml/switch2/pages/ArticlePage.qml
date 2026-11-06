@@ -3,6 +3,8 @@ import "../core"
 import "../sound"
 import "../ui"
 import "../ui/Removal.js" as Removal
+import "Feed.js" as Feed
+import "../../ui/PadNames.js" as Names
 
 FocusScope {
     id: page
@@ -20,6 +22,7 @@ FocusScope {
     }
     readonly property var images: row ? row.images : []
     readonly property var game: row ? api.allGames.byId(row.gameId) : null
+    readonly property bool blank: row !== null && Feed.blank(row)
 
     property string mode: "text"
     property int shotIndex: 0
@@ -51,7 +54,8 @@ FocusScope {
     ] : [
         {
             glyph: "Start",
-            label: "Options"
+            label: "Options",
+            dim: !row || row.state === "none"
         },
         {
             glyph: "Y",
@@ -61,6 +65,11 @@ FocusScope {
         {
             glyph: "B",
             label: "Back"
+        },
+        {
+            glyph: "A",
+            label: "Write",
+            dim: !blank
         }
     ]
 
@@ -136,7 +145,7 @@ FocusScope {
             }
         } else if (api.keys.isMenu(event)) {
             event.accepted = true;
-            if (!row) {
+            if (!row || row.state === "none") {
                 Sound.play("edge");
                 return;
             }
@@ -149,6 +158,9 @@ FocusScope {
             if (mode === "shots") {
                 Sound.play("ok");
                 lightbox = true;
+            } else if (blank) {
+                Sound.play("ok");
+                store.write(row.gameId, row.session, false);
             } else {
                 openShots();
             }
@@ -243,7 +255,7 @@ FocusScope {
 
             Label {
                 width: parent.width
-                text: page.row ? page.row.title : ""
+                text: page.row ? Feed.heading(page.row) : ""
                 wrapMode: Text.WordWrap
                 font.pixelSize: Theme.dp(Theme.fontTitle)
             }
@@ -260,8 +272,31 @@ FocusScope {
                 color: Theme.hairline
             }
 
+            Label {
+                objectName: "articleState"
+                width: parent.width
+                visible: text !== ""
+                text: {
+                    if (!page.row)
+                        return "";
+                    if (page.row.state === "pending")
+                        return "The journal module is writing this entry. It shows up here when it is done.";
+                    if (page.row.state === "none")
+                        return "Nobody wrote about this session yet. " + Names.buttonName("A", api.screens.controller.family) + " asks the journal module for its entry.";
+                    if (page.row.state === "deferred")
+                        return page.row.reason + ". Another try " + page.row.retryText + ", or ask for one now with " + Names.buttonName("A", api.screens.controller.family) + ".";
+                    if (page.row.state === "failed")
+                        return page.row.reason + ". Ask for another try with " + Names.buttonName("A", api.screens.controller.family) + ".";
+                    return "";
+                }
+                color: page.row && page.row.state === "failed" ? Theme.danger : Theme.textMuted
+                wrapMode: Text.WordWrap
+                lineHeight: 1.4
+            }
+
             Repeater {
-                model: page.row ? page.row.blocks : []
+                // A row with no entry says its piece above; its one paragraph is that same reason.
+                model: page.row && !page.blank ? page.row.blocks : []
 
                 Label {
                     width: article.width

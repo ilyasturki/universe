@@ -466,6 +466,72 @@ def test_a_held_arrow_keeps_stepping_down_the_game_menu(look):
 
 
 @switch2
+def test_each_switch2_news_card_offers_what_its_state_allows(look, fake):
+    game = "the-technomancer"
+    failed = next(e for e in fake.core._data["journal"][game] if e["session"] == "20260907-224100")
+    failed.update(state="failed", title="", paragraphs=["codex timed out after 30 min"])
+    page = look.open("pages/NewsPage.qml")
+    grid = page.findChild(QObject, "newsGrid")
+    picker = look.find("picker")
+
+    def row(state):
+        return next(r for r in read(page, "articles") if r["state"] == state)
+
+    def pick(session):
+        grid.setProperty("index", [r["session"] for r in read(page, "articles")].index(session))
+        until(lambda: read(page, "current")["session"] == session)
+
+    def options():
+        look.press(Qt.Key.Key_F1)
+        until(lambda: picker.property("open") is True, "Start opens the card's options")
+        return [a["act"] for a in read(page, "actions")]
+
+    def pending(session):
+        return until(
+            lambda: (r := next(r for r in read(page, "articles") if r["session"] == session))["state"] == "pending" and r, f"{session} goes to the journal"
+        )
+
+    until(lambda: {r["state"] for r in read(page, "articles")} == {"written", "failed", "none", "deferred"})
+    titles = [t.property("text") for t in descendants(page, "newsTitle")]
+    assert len(titles) == len(read(page, "articles")) and all(titles), "every card has a title"
+
+    pick(row("written")["session"])
+    acts = options()
+    assert {"read", "rewrite", "remove"} <= set(acts) and "write" not in acts
+    look.press(Qt.Key.Key_Escape)
+    until(lambda: picker.property("open") is False)
+
+    session = row("none")["session"]
+    pick(session)
+    acts = options()
+    assert "write" in acts and not {"read", "remove"} & set(acts), f"none: {acts}"
+    look.press(Qt.Key.Key_Down, acts.index("write") - picker.property("index"))
+    look.press(Qt.Key.Key_Return)
+    pending(session)
+
+    session = row("failed")["session"]
+    pick(session)
+    acts = options()
+    assert {"write", "remove"} <= set(acts) and "read" not in acts, f"failed: {acts}"
+    look.press(Qt.Key.Key_Escape)
+    until(lambda: picker.property("open") is False)
+    article = look.open("pages/ArticlePage.qml", {"gameId": game, "session": session})
+    until(lambda: descendant(article, "articleState").isVisible(), "the album's way in: the article says why it has no text")
+    look.press(Qt.Key.Key_Return)
+    pending(session)
+    look.press(Qt.Key.Key_Escape)
+    until(lambda: look.root.property("topPage") == page)
+
+    session = row("deferred")["session"]
+    pick(session)
+    look.press(Qt.Key.Key_Return)
+    pending(session)
+    assert look.root.property("topPage") == page, "A on an unwritten entry asks for it, with no blank article"
+    settle(look.window)
+    assert all(t.property("text") for t in descendants(page, "newsTitle")), "an entry being written has a title too"
+
+
+@switch2
 def test_the_switch2_album_holds_the_shots_too(look):
     top = look.open("pages/AlbumPage.qml")
     shown = until(lambda: read(top, "shown"))

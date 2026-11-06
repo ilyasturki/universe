@@ -12,3 +12,16 @@ function channels(rows) {
     }
     return out;
 }
+
+// An entry nobody has written yet: never asked for, put off after a failure, or given up on.
+function blank(row) {
+    return row.state === "none" || row.state === "deferred" || row.state === "failed";
+}
+
+function heading(row) {
+    if (row.state === "pending")
+        return "Writing the entry…";
+    if (row.state === "none")
+        return "No entry yet";
+    return row.title;
+}
