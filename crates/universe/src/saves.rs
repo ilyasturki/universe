@@ -13,8 +13,12 @@ use crate::{Error, Result};
 pub const BIN: &str = "ludusavi";
 /// Where a backup records the prefix's files: the same path wherever the prefix sits, so a backup outlives a move or a reset.
 const PREFIX_IN_BACKUPS: &str = "/universe/prefix";
-/// One under the 255 ludusavi takes: a restore keeps one backup more for its time.
-pub const MOST_KEPT: u32 = 254;
+/// Beside the games' folders, so a staged backup moves into one with a rename; the lock makes one enough.
+const STAGING: &str = ".staging";
+/// ludusavi's limit while staging: at one it merges into a folder shared with the mapping.
+const STAGED_LIMIT: u32 = 2;
+/// ludusavi's folder for the Unix root, the only drive on Linux.
+const ROOT_DRIVE: &str = "drive-0";
 // A first run downloads ludusavi's manifest (17 MB) before it scans.
 const TIMEOUT: Duration = Duration::from_secs(600);
 
@@ -254,16 +258,26 @@ fn config_yaml(ask: Option<&Ask>, dir: &Path, keep: u32) -> Value {
     })
 }
 
-/// The config is rewritten for each call, so calls from every process wait on one lock.
-async fn run(bin: &Path, ask: Option<&Ask>, dir: &Path, keep: u32, args: Vec<std::ffi::OsString>) -> Result<Value> {
+/// ludusavi's config is rewritten for each call and a game's backups change under a backup or a restore: every process waits on one lock.
+async fn hold() -> Result<std::fs::File> {
     let cfg_dir = config_dir();
     std::fs::create_dir_all(&cfg_dir)?;
     let lock = std::fs::File::create(cfg_dir.join("universe.lock"))?;
-    let lock = crate::core::blocking(move || {
+    crate::core::blocking(move || {
         rustix::fs::flock(&lock, rustix::fs::FlockOperation::LockExclusive).map_err(|e| Error::Io(format!("ludusavi lock: {e}")))?;
         Ok(lock)
     })
-    .await?;
+    .await
+}
+
+async fn run(bin: &Path, ask: Option<&Ask>, dir: &Path, keep: u32, args: Vec<std::ffi::OsString>) -> Result<Value> {
+    let _held = hold().await?;
+    call(bin, ask, dir, keep, args).await
+}
+
+/// The caller holds the lock.
+async fn call(bin: &Path, ask: Option<&Ask>, dir: &Path, keep: u32, args: Vec<std::ffi::OsString>) -> Result<Value> {
+    let cfg_dir = config_dir();
     std::fs::write(cfg_dir.join("config.yaml"), serde_json::to_vec_pretty(&config_yaml(ask, dir, keep))?)?;
     let mut cmd = command(bin);
     crate::dies_with_parent(&mut cmd)
@@ -276,7 +290,6 @@ async fn run(bin: &Path, ask: Option<&Ask>, dir: &Path, keep: u32, args: Vec<std
         .stderr(std::process::Stdio::piped())
         .kill_on_drop(true);
     let out = tokio::time::timeout(TIMEOUT, cmd.output()).await.map_err(|_| Error::Io("ludusavi did not finish in 10 minutes".into()))??;
-    drop(lock);
     let reply: Value = serde_json::from_slice(&out.stdout).unwrap_or(Value::Null);
     if let Some(unknown) = reply["errors"]["unknownGames"].as_array().filter(|u| !u.is_empty()) {
         let names: Vec<&str> = unknown.iter().filter_map(Value::as_str).collect();
@@ -398,39 +411,132 @@ fn outcome(reply: &Value, name: &str) -> Outcome {
 }
 
 fn kept(config: &Config) -> u32 {
-    config.saves.keep.clamp(1, MOST_KEPT)
+    config.saves.keep.clamp(1, 255)
 }
 
 /// Unchanged saves make no new backup; the oldest beyond `saves.keep` goes.
 pub async fn backup(ask: &Ask, config: &Config, id: &str) -> Result<Outcome> {
-    backup_keeping(ask, config, id, kept(config)).await
+    let _held = hold().await?;
+    back_up(ask, config, &dir(config, id), Some(kept(config) as usize)).await
 }
 
-async fn backup_keeping(ask: &Ask, config: &Config, id: &str, keep: u32) -> Result<Outcome> {
-    let dir = dir(config, id);
-    forget_unwritten(&dir)?;
-    let limit = keep.to_string();
-    let mut args = backup_args("backup", ask, &dir, &["--full-limit", &limit, "--differential-limit", "0"]);
+/// The caller holds the lock. ludusavi writes to an empty folder: what fails there touches no backup, and only a whole one joins them.
+async fn back_up(ask: &Ask, config: &Config, dir: &Path, keep: Option<usize>) -> Result<Outcome> {
+    let stage = config.saves_root().join(STAGING);
+    clear(&stage)?;
+    std::fs::create_dir_all(&stage)?;
+    let seeded = seed(dir, &stage, &ask.name)?;
+    let limit = STAGED_LIMIT.to_string();
+    let mut args = backup_args("backup", ask, &stage, &["--full-limit", &limit, "--differential-limit", "0"]);
     args.push(ask.name.clone().into());
-    let reply = run(&ask.bin, Some(ask), &dir, keep, args).await?;
-    Ok(outcome(&reply, &ask.name))
+    let done = call(&ask.bin, Some(ask), &stage, STAGED_LIMIT, args).await.and_then(|reply| {
+        admit(&stage, dir, seeded, keep)?;
+        Ok(outcome(&reply, &ask.name))
+    });
+    let _ = clear(&stage);
+    done
 }
 
-/// An empty `backup` is the latest. The saves it replaces are backed up first, and it fails rather than lose them.
+fn clear(folder: &Path) -> Result<()> {
+    match std::fs::remove_dir_all(folder) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.into()),
+        _ => Ok(()),
+    }
+}
+
+/// The record of the game's last backup, staged with no folder behind it: ludusavi compares the saves with its hashes. Returns the records staged.
+fn seed(dir: &Path, stage: &Path, name: &str) -> Result<usize> {
+    for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+        let file = entry.path().join("mapping.yaml");
+        let Some(mut doc) = mapping(&file).filter(|doc| doc["name"].as_str() == Some(name)) else { continue };
+        let Some(listed) = records(&mut doc) else { continue };
+        let Some(last) = listed.pop().filter(|b| whole(&entry.path(), b)) else { return Ok(0) };
+        *listed = vec![last];
+        let folder = stage.join(entry.file_name());
+        std::fs::create_dir_all(&folder)?;
+        std::fs::write(folder.join("mapping.yaml"), dump(&doc, &file)?)?;
+        return Ok(1);
+    }
+    Ok(0)
+}
+
+/// A backup that lost a file can't stand for the saves, unchanged or not.
+fn whole(game: &Path, record: &yaml_rust2::Yaml) -> bool {
+    let Some(folder) = record["name"].as_str().map(|id| game.join(id)).filter(|f| f.is_dir()) else { return false };
+    record["files"].as_hash().into_iter().flatten().all(|(path, file)| {
+        let stored = folder.join(ROOT_DRIVE).join(path.as_str().unwrap_or_default().trim_start_matches('/'));
+        stored.metadata().is_ok_and(|m| m.is_file() && Some(m.len() as i64) == file["size"].as_i64())
+    })
+}
+
+/// The staged backup joins the game's under an id of its own, ludusavi's being unique to the second, then the oldest beyond `keep` go.
+fn admit(stage: &Path, dir: &Path, seeded: usize, keep: Option<usize>) -> Result<()> {
+    use yaml_rust2::Yaml;
+    for entry in std::fs::read_dir(stage)?.flatten() {
+        let Some(staged) = mapping(&entry.path().join("mapping.yaml")) else { continue };
+        let Some(record) = staged["backups"].as_vec().filter(|listed| listed.len() > seeded).and_then(|listed| listed.last()) else { continue };
+        let Some(staged_id) = record["name"].as_str() else { continue };
+        let game = dir.join(entry.file_name());
+        std::fs::create_dir_all(&game)?;
+        let file = game.join("mapping.yaml");
+        let unreadable = || Error::Io(format!("{}: not a mapping ludusavi wrote", file.display()));
+        let mut doc = if file.exists() { mapping(&file).ok_or_else(unreadable)? } else { staged.clone() };
+        let listed = records(&mut doc).ok_or_else(unreadable)?;
+        // ludusavi 0.31 leaves a copy that failed under a redirect in its mapping, with no folder behind it.
+        listed.retain(|b| b["name"].as_str().is_some_and(|id| game.join(id).exists()));
+        let id = (1..).map(|n| if n == 1 { staged_id.to_string() } else { format!("{staged_id}-{n}") }).find(|id| !game.join(id).exists()).unwrap_or_default();
+        std::fs::rename(entry.path().join(staged_id), game.join(&id))?;
+        let mut record = record.clone();
+        set(&mut record, "name", Yaml::String(id));
+        listed.push(record);
+        if let Some(keep) = keep {
+            listed.drain(..listed.len().saturating_sub(keep));
+        }
+        let left: Vec<String> = listed.iter().filter_map(|b| b["name"].as_str().map(String::from)).collect();
+        set(&mut doc, "drives", staged["drives"].clone());
+        crate::game::atomic_write(&file, dump(&doc, &file)?.as_bytes())?;
+        sweep(&game, &left);
+    }
+    Ok(())
+}
+
+/// The folders no record names. A `.` backup is the game's folder itself, its files under `drive-*`.
+fn sweep(game: &Path, left: &[String]) {
+    let solo = left.iter().any(|id| id == ".");
+    for entry in std::fs::read_dir(game).into_iter().flatten().flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if (name.starts_with("backup-") && !left.contains(&name)) || (name.starts_with("drive-") && !solo) {
+            if let Err(e) = std::fs::remove_dir_all(entry.path()) {
+                tracing::warn!("{}: {e}", entry.path().display());
+            }
+        }
+    }
+}
+
+/// An empty `backup` is the latest. Saves it would replace are backed up first, and it fails rather than lose them; nothing to replace asks for no backup.
 /// A prefix's files land in the prefix the game has now, or will have: a reset leaves no folder, and ludusavi makes it.
 pub async fn restore(ask: &Ask, config: &Config, id: &str, backup: &str) -> Result<Outcome> {
     let dir = dir(config, id);
+    let _held = hold().await?;
     let listed = backups(&dir);
     let picked = if backup.is_empty() { listed.iter().find(|b| b.name == ask.name).or(listed.first()) } else { listed.iter().find(|b| b.id == backup) };
     let picked = picked.ok_or_else(|| Error::NotFound(format!("{id} has no backup {backup}").trim_end().to_string()))?;
-    // One over the limit: the backup to restore may be the oldest. The next backup prunes back down.
-    match backup_keeping(ask, config, id, kept(config) + 1).await {
-        Ok(_) | Err(Error::NotFound(_)) => {}
-        Err(e) => return Err(Error::Invalid(format!("refusing to restore {id}: the saves on disk could not be backed up: {e}"))),
+    let restoring = |extra: &[&str]| {
+        let mut args = backup_args("restore", ask, &dir, &[&["--backup", &picked.id], extra].concat());
+        args.push(picked.name.clone().into());
+        args
+    };
+    let plan = call(&ask.bin, Some(ask), &dir, kept(config), restoring(&["--preview"])).await?;
+    let files = plan["games"][&picked.name]["files"].as_object().into_iter().flatten();
+    let replaced: Vec<&String> = files.filter(|(_, f)| f["change"] == "Different").map(|(path, _)| path).collect();
+    if !replaced.is_empty() {
+        let refused = |why: String| Error::Invalid(format!("refusing to restore {id}: the saves on disk could not be backed up: {why}"));
+        let safe = back_up(ask, config, &dir, None).await.map_err(|e| refused(e.to_string()))?;
+        if let Some(missed) = replaced.iter().find(|path| !safe.files.iter().any(|f| f.path == ***path)) {
+            return Err(refused(format!("ludusavi finds no {missed} for {}", ask.name)));
+        }
     }
-    let mut args = backup_args("restore", ask, &dir, &["--backup", &picked.id]);
-    args.push(picked.name.clone().into());
-    let reply = run(&ask.bin, Some(ask), &dir, kept(config), args).await?;
+    let reply = call(&ask.bin, Some(ask), &dir, kept(config), restoring(&[])).await?;
     Ok(outcome(&reply, &picked.name))
 }
 
@@ -450,22 +556,27 @@ fn mapping(file: &Path) -> Option<yaml_rust2::Yaml> {
     yaml_rust2::YamlLoader::load_from_str(&text).ok()?.into_iter().next()
 }
 
-/// ludusavi 0.31 leaves a copy that failed under a redirect in its mapping, with no folder behind it, and calls those saves unchanged from then on.
-fn forget_unwritten(dir: &Path) -> Result<()> {
-    use yaml_rust2::Yaml;
-    for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
-        let file = entry.path().join("mapping.yaml");
-        let Some(mut doc) = mapping(&file) else { continue };
-        let Some(Yaml::Array(listed)) = doc.as_mut_hash().and_then(|d| d.get_mut(&Yaml::String("backups".into()))) else { continue };
-        let before = listed.len();
-        listed.retain(|b| b["name"].as_str().is_none_or(|id| entry.path().join(id).exists()));
-        if listed.len() != before {
-            let mut text = String::new();
-            yaml_rust2::YamlEmitter::new(&mut text).dump(&doc).map_err(|e| Error::Io(format!("{}: {e}", file.display())))?;
-            crate::game::atomic_write(&file, text.as_bytes())?;
-        }
+fn field<'a>(doc: &'a mut yaml_rust2::Yaml, key: &str) -> Option<&'a mut yaml_rust2::Yaml> {
+    doc.as_mut_hash()?.get_mut(&yaml_rust2::Yaml::String(key.into()))
+}
+
+fn set(doc: &mut yaml_rust2::Yaml, key: &str, value: yaml_rust2::Yaml) {
+    if let Some(slot) = field(doc, key) {
+        *slot = value;
     }
-    Ok(())
+}
+
+fn records(doc: &mut yaml_rust2::Yaml) -> Option<&mut Vec<yaml_rust2::Yaml>> {
+    match field(doc, "backups")? {
+        yaml_rust2::Yaml::Array(listed) => Some(listed),
+        _ => None,
+    }
+}
+
+fn dump(doc: &yaml_rust2::Yaml, file: &Path) -> Result<String> {
+    let mut text = String::new();
+    yaml_rust2::YamlEmitter::new(&mut text).dump(doc).map_err(|e| Error::Io(format!("{}: {e}", file.display())))?;
+    Ok(text)
 }
 
 /// Newest first.

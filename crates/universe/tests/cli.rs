@@ -356,6 +356,200 @@ fn a_ludusavi_lookup_dies_with_the_cli_killed_mid_way() {
     assert!(!outlived, "ludusavi {pid} outlived the CLI");
 }
 
+const FIXTURE_SAVES: &str = "drive_c/users/steamuser/AppData/Roaming/Fixture";
+
+/// Fixture Game in a Proton prefix, keeping `keep` backups, with the real ludusavi behind a script on PATH.
+struct SavedGame {
+    dir: tempfile::TempDir,
+    path: String,
+    live: std::path::PathBuf,
+}
+
+impl SavedGame {
+    /// `before` is shell, run ahead of every backup that writes; `$path` is where ludusavi will write it.
+    fn new(keep: u32, before: impl Fn(&std::path::Path) -> String) -> SavedGame {
+        let real = std::env::split_paths(&std::env::var_os("PATH").unwrap())
+            .map(|d| d.join("ludusavi"))
+            .find(|p| p.is_file())
+            .expect("ludusavi is not on PATH: the dev shell and the Nix check have it");
+        let dir = no_desktop();
+        std::fs::write(dir.path().join("config/config.toml"), format!("schema = 1\n[desktop]\nprofile = \"none\"\n[saves]\nkeep = {keep}\n")).unwrap();
+        let bin = dir.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let script = format!(
+            "#!/bin/sh\npath=; prev=\nfor a in \"$@\"; do [ \"$prev\" = --path ] && path=$a; prev=$a; done\ncase \" $* \" in *\" --preview \"*) ;; *\" backup \"*)\n{}\n;; esac\nexec {} \"$@\"\n",
+            before(dir.path()),
+            real.display()
+        );
+        std::fs::write(bin.join("ludusavi"), script).unwrap();
+        std::fs::set_permissions(bin.join("ludusavi"), std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+        let tools = dir.path().join("data/ludusavi");
+        std::fs::create_dir_all(&tools).unwrap();
+        std::fs::write(tools.join("manifest.yaml"), "Fixture Game:\n  files:\n    \"<winAppData>/Fixture\":\n      when:\n        - os: windows\n").unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+        std::fs::write(tools.join("cache.yaml"), format!("manifests:\n  \"https://raw.githubusercontent.com/mtkennerly/ludusavi-manifest/master/data/manifest.yaml\":\n    checked: \"{now}\"\n    updated: \"{now}\"\n")).unwrap();
+        let exe = dir.path().join("Game.exe");
+        std::fs::write(&exe, b"MZ").unwrap();
+        let added = universe(&dir, &["add", exe.to_str().unwrap(), "--runner", "proton", "--title", "Fixture Game", "--json"], &[]);
+        assert!(added.status.success(), "{}", text(&added.stderr));
+        let live = dir.path().join("data/prefixes/fixture-game").join(FIXTURE_SAVES);
+        std::fs::create_dir_all(&live).unwrap();
+        let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap_or_default());
+        SavedGame { dir, path, live }
+    }
+
+    fn saves(&self, args: &[&str]) -> std::process::Output {
+        universe(&self.dir, &[&["saves"], args].concat(), &[("PATH", &self.path)])
+    }
+
+    fn spawn_backup(&self) -> std::process::Child {
+        command(&self.dir, &["saves", "backup", "fixture-game"], &[("PATH", &self.path)])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap()
+    }
+
+    fn put(&self, slot: &str, bytes: &str) {
+        std::fs::write(self.live.join(slot), bytes).unwrap();
+    }
+
+    fn read(&self, slot: &str) -> String {
+        std::fs::read_to_string(self.live.join(slot)).unwrap()
+    }
+
+    /// What each backup holds of `slot`, read from the backup itself.
+    fn held(&self, slot: &str) -> Vec<String> {
+        let list = self.saves(&["list", "fixture-game", "--json"]);
+        let data: serde_json::Value = serde_json::from_slice(&list.stdout).unwrap_or_else(|e| panic!("{e}: {}", text(&list.stderr)));
+        let file = |b: &serde_json::Value| std::path::Path::new(b["path"].as_str().unwrap()).join("drive-0/universe/prefix").join(FIXTURE_SAVES).join(slot);
+        data["backups"].as_array().unwrap().iter().map(|b| std::fs::read_to_string(file(b)).unwrap_or_default()).collect()
+    }
+
+    fn mapping(&self) -> std::path::PathBuf {
+        self.dir.path().join("data/saves/fixture-game/Fixture Game/mapping.yaml")
+    }
+}
+
+/// ludusavi cannot write slot2.sav while `obstruct` exists, whichever folder of the second it picks.
+fn slot2_obstructed(dir: &std::path::Path) -> String {
+    format!(
+        "if [ -e {flag} ]; then\nrel=drive-0/universe/prefix/{FIXTURE_SAVES}/slot2.sav\nrm -rf \"$path/Fixture Game/$rel\"\nmkdir -p \"$path/Fixture Game/$rel/taken\"\nfor s in 0 1 2 3; do mkdir -p \"$path/Fixture Game/backup-$(date -u -d \"+$s seconds\" +%Y%m%dT%H%M%SZ)/$rel/taken\"; done\nfi",
+        flag = dir.join("obstruct").display()
+    )
+}
+
+fn clear_obstruction(game: &SavedGame) {
+    fn remove_slot2_folders(dir: &std::path::Path) {
+        for entry in std::fs::read_dir(dir).into_iter().flatten().flatten().filter(|e| e.path().is_dir()) {
+            if entry.file_name() == "slot2.sav" {
+                std::fs::remove_dir_all(entry.path()).unwrap();
+            } else {
+                remove_slot2_folders(&entry.path());
+            }
+        }
+    }
+    std::fs::remove_file(game.dir.path().join("obstruct")).unwrap();
+    remove_slot2_folders(&game.dir.path().join("data/saves"));
+}
+
+#[test]
+fn a_restore_whose_backup_failed_part_way_refuses_and_its_retry_keeps_every_save() {
+    let game = SavedGame::new(2, slot2_obstructed);
+    game.put("slot1.sav", "one");
+    game.put("slot2.sav", "two");
+    assert!(game.saves(&["backup", "fixture-game"]).status.success());
+    game.put("slot1.sav", "newer one");
+    game.put("slot2.sav", "newer two");
+
+    std::fs::write(game.dir.path().join("obstruct"), "").unwrap();
+    let refused = game.saves(&["restore", "fixture-game", "--yes"]);
+    assert!(!refused.status.success(), "{}", text(&refused.stdout));
+    assert_eq!((game.read("slot1.sav").as_str(), game.read("slot2.sav").as_str()), ("newer one", "newer two"));
+
+    clear_obstruction(&game);
+    let retry = game.saves(&["restore", "fixture-game", "--yes"]);
+    assert!(retry.status.success(), "{}", text(&retry.stderr));
+    assert_eq!((game.read("slot1.sav").as_str(), game.read("slot2.sav").as_str()), ("one", "two"));
+    assert!(
+        game.held("slot1.sav").contains(&"newer one".to_string()) && game.held("slot2.sav").contains(&"newer two".to_string()),
+        "{:?}",
+        game.held("slot2.sav")
+    );
+}
+
+#[test]
+fn a_backup_that_failed_part_way_at_a_limit_of_one_loses_nothing_and_its_retry_is_whole() {
+    let game = SavedGame::new(1, slot2_obstructed);
+    game.put("slot1.sav", "one");
+    game.put("slot2.sav", "two");
+    assert!(game.saves(&["backup", "fixture-game"]).status.success());
+    game.put("slot1.sav", "newer one");
+    game.put("slot2.sav", "newer two");
+
+    std::fs::write(game.dir.path().join("obstruct"), "").unwrap();
+    assert!(!game.saves(&["backup", "fixture-game"]).status.success());
+    clear_obstruction(&game);
+    assert!(game.held("slot2.sav").contains(&"two".to_string()) || game.held("slot2.sav").contains(&"newer two".to_string()), "{:?}", game.held("slot2.sav"));
+
+    let retry = game.saves(&["backup", "fixture-game"]);
+    assert!(retry.status.success(), "{}", text(&retry.stderr));
+    assert_eq!((game.held("slot1.sav"), game.held("slot2.sav")), (vec!["newer one".to_string()], vec!["newer two".to_string()]));
+}
+
+#[test]
+fn a_backup_in_another_process_survives_the_repair_of_a_stale_mapping() {
+    use std::io::Write;
+    use std::os::unix::fs::OpenOptionsExt;
+    // Each backup sees saves of its own: a game still writing them.
+    let game = SavedGame::new(5, |dir| {
+        let (count, save) = (dir.join("runs"), dir.join("data/prefixes/fixture-game").join(FIXTURE_SAVES).join("slot1.sav"));
+        format!("n=$(($(cat {0} 2>/dev/null || echo 0) + 1))\necho $n > {0}\nprintf save-%s $n > {1}", count.display(), save.display())
+    });
+    game.put("slot1.sav", "");
+    assert!(game.saves(&["backup", "fixture-game"]).status.success());
+
+    let mapping = game.mapping();
+    let phantom =
+        "  - name: backup-20000101T000000Z\n    when: \"2000-01-01T00:00:00Z\"\n    os: linux\n    files: {}\n    registry:\n      hash: ~\n    children: []\n";
+    let stale = std::fs::read_to_string(&mapping).unwrap().trim_end().to_string() + "\n" + phantom;
+    let beside = mapping.with_file_name("stale.yaml");
+    std::fs::write(&beside, &stale).unwrap();
+    // A fifo in the mapping's place stops the first process between reading the mapping and acting on it.
+    std::fs::remove_file(&mapping).unwrap();
+    rustix::fs::mknodat(rustix::fs::CWD, &mapping, rustix::fs::FileType::Fifo, rustix::fs::Mode::from_raw_mode(0o600), 0).unwrap();
+
+    let first = game.spawn_backup();
+    let started = std::time::Instant::now();
+    let mut reading = loop {
+        match std::fs::OpenOptions::new().write(true).custom_flags(libc::O_NONBLOCK).open(&mapping) {
+            Ok(fifo) => break fifo,
+            Err(_) if started.elapsed().as_secs() < 10 => std::thread::sleep(std::time::Duration::from_millis(5)),
+            Err(e) => panic!("the first backup never read the mapping: {e}"),
+        }
+    };
+    std::fs::rename(&beside, &mapping).unwrap();
+
+    let mut second = game.spawn_backup();
+    let window = std::time::Instant::now();
+    while second.try_wait().unwrap().is_none() && window.elapsed().as_millis() < 500 {
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    reading.write_all(stale.as_bytes()).unwrap();
+    drop(reading);
+    for process in [first.wait_with_output(), second.wait_with_output()] {
+        let done = process.unwrap();
+        assert!(done.status.success(), "{}", text(&done.stderr));
+    }
+
+    let runs: u32 = std::fs::read_to_string(game.dir.path().join("runs")).unwrap().trim().parse().unwrap();
+    let held = game.held("slot1.sav");
+    for run in 1..=runs {
+        assert!(held.contains(&format!("save-{run}")), "backup {run} of {runs} is gone: {held:?}");
+    }
+    assert!(!std::fs::read_to_string(&mapping).unwrap().contains("backup-20000101T000000Z"), "the record with no folder is forgotten");
+}
+
 fn files_under(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
     std::fs::read_dir(dir).into_iter().flatten().flatten().flat_map(|e| if e.path().is_dir() { files_under(&e.path()) } else { vec![e.path()] }).collect()
 }

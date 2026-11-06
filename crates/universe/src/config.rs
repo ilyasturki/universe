@@ -116,11 +116,11 @@ impl Default for SavesConfig {
 }
 
 impl SavesConfig {
+    /// ludusavi takes 1 to 255 full backups.
     pub fn validate_keep(value: &str) -> crate::Result<u32> {
-        let most = crate::saves::MOST_KEPT;
         match value.trim().parse::<u32>() {
-            Ok(n) if (1..=most).contains(&n) => Ok(n),
-            _ => Err(crate::Error::Invalid(format!("saves.keep must be a number of backups from 1 to {most}, not '{value}'"))),
+            Ok(n) if (1..=255).contains(&n) => Ok(n),
+            _ => Err(crate::Error::Invalid(format!("saves.keep must be a number of backups from 1 to 255, not '{value}'"))),
         }
     }
 }

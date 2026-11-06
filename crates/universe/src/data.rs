@@ -859,7 +859,6 @@ mod tests {
         assert_eq!(data["saves"]["files"][0]["bytes"], 5);
         assert_eq!(data["saves"]["backups"].as_array().unwrap().len(), 1);
 
-        next_second().await;
         std::fs::write(save(&elsewhere), b"second").unwrap();
         core.move_prefix("fixture-game").await.unwrap();
         let moved = prefixes.join("fixture-game");
@@ -896,11 +895,6 @@ mod tests {
         data["saves"]["backups"].as_array().unwrap().iter().map(|b| b["id"].as_str().unwrap().to_string()).collect()
     }
 
-    /// ludusavi names a backup to the second: two in one second share a folder.
-    async fn next_second() {
-        tokio::time::sleep(Duration::from_millis(1100)).await;
-    }
-
     #[tokio::test]
     async fn a_restore_backs_up_the_saves_it_replaces_and_keeps_the_backup_it_restores() {
         use std::os::unix::fs::PermissionsExt;
@@ -910,10 +904,8 @@ mod tests {
         std::fs::write(&save, b"oldest").unwrap();
         core.saves_backup("fixture-game").await.unwrap();
         let oldest = backup_ids(&core).await[0].clone();
-        next_second().await;
         std::fs::write(&save, b"newer").unwrap();
         core.saves_backup("fixture-game").await.unwrap();
-        next_second().await;
         std::fs::write(&save, b"unsaved progress").unwrap();
 
         assert!(matches!(core.saves_restore("fixture-game", "no-such-backup").await, Err(Error::NotFound(_))));
@@ -931,7 +923,6 @@ mod tests {
         let after = backup_ids(&core).await;
         assert!(after.contains(&oldest), "{after:?}: the backup restored is not pruned for the one before it");
 
-        next_second().await;
         core.saves_restore("fixture-game", &after[0]).await.unwrap();
         assert_eq!(std::fs::read(&save).unwrap(), b"unsaved progress", "the saves a restore replaced come back");
     }
@@ -950,9 +941,166 @@ mod tests {
 
         core.saves_backup("fixture-game").await.unwrap();
         assert_eq!(backup_ids(&core).await.len(), 1);
+    }
 
-        assert!(matches!(core.set_setting("saves.keep", "255").await, Err(Error::Invalid(_))), "ludusavi's 255 leaves a restore no room for one more");
-        core.set_setting("saves.keep", &saves::MOST_KEPT.to_string()).await.unwrap();
+    #[tokio::test]
+    async fn a_backup_in_ludusavis_shared_folder_restores_and_goes_when_it_is_pruned() {
+        let env = paths::test_env();
+        let (core, save) = game_keeping(&env, 1).await;
+        std::fs::write(&save, b"shared").unwrap();
+        core.saves_backup("fixture-game").await.unwrap();
+        let id = backup_ids(&core).await[0].clone();
+        let folder = saves::dir(&Config::load().unwrap(), "fixture-game").join("Fixture Game");
+        std::fs::rename(folder.join(&id).join("drive-0"), folder.join("drive-0")).unwrap();
+        std::fs::remove_dir(folder.join(&id)).unwrap();
+        let text = std::fs::read_to_string(folder.join("mapping.yaml")).unwrap();
+        std::fs::write(folder.join("mapping.yaml"), text.replace(&format!("name: {id}"), "name: \".\"")).unwrap();
+        assert_eq!(held(&core).await, ["shared"]);
+
+        std::fs::write(&save, b"progress").unwrap();
+        core.saves_restore("fixture-game", ".").await.unwrap();
+        assert_eq!(std::fs::read(&save).unwrap(), b"shared");
+        assert_eq!(held(&core).await, ["progress", "shared"]);
+
+        std::fs::write(&save, b"later").unwrap();
+        core.saves_backup("fixture-game").await.unwrap();
+        assert_eq!(held(&core).await, ["later"]);
+        assert!(!folder.join("drive-0").exists());
+    }
+
+    /// What each backup holds of the save, newest first, read from the backup itself: empty where the file is gone.
+    async fn held(core: &Core) -> Vec<String> {
+        let data = core.game_data("fixture-game").await.unwrap();
+        let file = |b: &Value| Path::new(b["path"].as_str().unwrap()).join("drive-0/universe/prefix/drive_c/users/steamuser/AppData/Roaming/Fixture/slot1.sav");
+        data["saves"]["backups"].as_array().unwrap().iter().map(|b| String::from_utf8_lossy(&std::fs::read(file(b)).unwrap_or_default()).into_owned()).collect()
+    }
+
+    #[tokio::test]
+    async fn restores_in_the_second_of_their_backup_keep_it_and_each_save_they_replace() {
+        let env = paths::test_env();
+        let (core, save) = game_keeping(&env, 2).await;
+        let into_second = 1_000_000_000 - chrono::Utc::now().timestamp_subsec_nanos() as u64;
+        tokio::time::sleep(Duration::from_nanos(into_second)).await;
+
+        std::fs::write(&save, b"selected").unwrap();
+        core.saves_backup("fixture-game").await.unwrap();
+        let selected = backup_ids(&core).await[0].clone();
+        for progress in ["first run", "second run", "third run"] {
+            std::fs::write(&save, progress).unwrap();
+            core.saves_restore("fixture-game", &selected).await.unwrap();
+            assert_eq!(std::fs::read(&save).unwrap(), b"selected");
+        }
+        let held = held(&core).await;
+        for kept in ["selected", "first run", "second run", "third run"] {
+            assert!(held.iter().any(|h| h == kept), "{kept} is gone from {held:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn the_backup_restored_survives_used_up_headroom_and_a_lowered_limit() {
+        let env = paths::test_env();
+        let (core, save) = game_keeping(&env, 3).await;
+        for bytes in ["oldest", "middle", "newest"] {
+            std::fs::write(&save, bytes).unwrap();
+            core.saves_backup("fixture-game").await.unwrap();
+        }
+        let oldest = backup_ids(&core).await[2].clone();
+        core.set_setting("saves.keep", "1").await.unwrap();
+
+        for progress in ["first run", "second run"] {
+            std::fs::write(&save, progress).unwrap();
+            core.saves_restore("fixture-game", &oldest).await.unwrap();
+            assert_eq!(std::fs::read(&save).unwrap(), b"oldest");
+            assert!(held(&core).await.iter().any(|h| h == "oldest"));
+        }
+    }
+
+    #[tokio::test]
+    async fn a_profile_keeping_255_restores_the_oldest_of_its_255_backups() {
+        let env = paths::test_env();
+        let (core, save) = game_keeping(&env, 255).await;
+        std::fs::write(&save, b"save-000").unwrap();
+        core.saves_backup("fixture-game").await.unwrap();
+        let oldest = backup_ids(&core).await[0].clone();
+        let folder = saves::dir(&Config::load().unwrap(), "fixture-game").join("Fixture Game");
+        let text = std::fs::read_to_string(folder.join("mapping.yaml")).unwrap();
+        let (head, record) = text.split_once("backups:\n").unwrap();
+        let record = record.trim_end().to_string() + "\n";
+        let when = record.lines().find_map(|l| l.trim().strip_prefix("when: ")).unwrap();
+        let mut records = record.clone();
+        for n in 1..255 {
+            let id = format!("backup-20990101T00{:02}{:02}Z", n / 60, n % 60);
+            records += &record.replace(&oldest, &id).replace(when, &format!("\"2099-01-01T00:{:02}:{:02}Z\"", n / 60, n % 60));
+            let copy = folder.join(&id).join("drive-0/universe/prefix/drive_c/users/steamuser/AppData/Roaming/Fixture");
+            std::fs::create_dir_all(&copy).unwrap();
+            std::fs::write(copy.join("slot1.sav"), format!("save-{n:03}")).unwrap();
+        }
+        std::fs::write(folder.join("mapping.yaml"), format!("{head}backups:\n{records}")).unwrap();
+        assert_eq!(backup_ids(&core).await.len(), 255);
+
+        std::fs::write(&save, b"progress").unwrap();
+        core.saves_restore("fixture-game", &oldest).await.unwrap();
+        assert_eq!(std::fs::read(&save).unwrap(), b"save-000");
+        let held = held(&core).await;
+        assert!(held.iter().any(|h| h == "save-000") && held.iter().any(|h| h == "progress"), "{} backups", held.len());
+    }
+
+    #[tokio::test]
+    async fn a_restore_refuses_saves_it_cannot_identify_and_goes_ahead_where_none_are_there() {
+        let env = paths::test_env();
+        let (core, save) = game_keeping(&env, 2).await;
+        saves::tests::offline_manifest("Fixture Game:\n  files:\n    \"<winAppData>/Fixture\":\n      when:\n        - os: windows\nOther Game:\n  files:\n    \"<winAppData>/Other\":\n      when:\n        - os: windows\n");
+        std::fs::write(&save, b"backed up").unwrap();
+        core.saves_backup("fixture-game").await.unwrap();
+        std::fs::write(&save, b"progress").unwrap();
+
+        let toml = core.get("fixture-game").await.unwrap().game.toml_path();
+        for title in ["No Such Title", "Other Game"] {
+            crate::game::set_key(&toml, "saves.name", title).unwrap();
+            core.reload_all().await;
+            let refused = core.saves_restore("fixture-game", "").await;
+            assert!(matches!(&refused, Err(Error::Invalid(m)) if m.contains("backed up")), "{title}: {refused:?}");
+            assert_eq!(std::fs::read(&save).unwrap(), b"progress", "{title}");
+        }
+
+        std::fs::remove_dir_all(save.ancestors().nth(7).unwrap()).unwrap();
+        core.saves_restore("fixture-game", "").await.unwrap();
+        assert_eq!(std::fs::read(&save).unwrap(), b"backed up", "no prefix, nothing replaced: the title needs no knowing");
+    }
+
+    #[tokio::test]
+    async fn a_backup_that_fails_at_the_limit_costs_no_real_backup() {
+        use std::os::unix::fs::PermissionsExt;
+        let env = paths::test_env();
+        let (core, save) = game_keeping(&env, 2).await;
+        for bytes in ["oldest", "newest"] {
+            std::fs::write(&save, bytes).unwrap();
+            core.saves_backup("fixture-game").await.unwrap();
+        }
+        std::fs::write(&save, b"progress").unwrap();
+        std::fs::set_permissions(&save, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let failed = core.saves_backup("fixture-game").await;
+        std::fs::set_permissions(&save, std::fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(failed.is_err(), "{failed:?}");
+        assert_eq!(held(&core).await, ["newest", "oldest"]);
+
+        core.saves_backup("fixture-game").await.unwrap();
+        assert_eq!(held(&core).await, ["progress", "newest"], "the oldest goes once the new backup is whole");
+    }
+
+    #[tokio::test]
+    async fn an_unchanged_save_missing_from_its_backup_is_backed_up_again() {
+        let env = paths::test_env();
+        let (core, save) = game_keeping(&env, 1).await;
+        std::fs::write(&save, b"kept").unwrap();
+        core.saves_backup("fixture-game").await.unwrap();
+        let data = core.game_data("fixture-game").await.unwrap();
+        let stored = Path::new(data["saves"]["backups"][0]["path"].as_str().unwrap())
+            .join("drive-0/universe/prefix/drive_c/users/steamuser/AppData/Roaming/Fixture/slot1.sav");
+        std::fs::remove_file(stored).unwrap();
+
+        core.saves_backup("fixture-game").await.unwrap();
+        assert_eq!(held(&core).await, ["kept"]);
     }
 
     #[test]
