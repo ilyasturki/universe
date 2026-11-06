@@ -42,10 +42,17 @@ def make_png(path, color="blue"):
     ffmpeg("-f", "lavfi", "-i", f"color=c={color}:size=64x48:duration=0.1:rate=10", "-frames:v", "1", "-update", "1", str(path))
 
 
-def make_mkv(path, source, seconds):
-    path.parent.mkdir(parents=True, exist_ok=True)
+def lavfi(source, seconds, size, rate):
     sep = ":" if "=" in source else "="
-    ffmpeg("-f", "lavfi", "-i", f"{source}{sep}duration={seconds}:size=320x240:rate=10", "-c:v", "mpeg4", "-q:v", "5", str(path))
+    return f"{source}{sep}duration={seconds}:size={size}:rate={rate}"
+
+
+def make_mkv(path, source, seconds, size="320x240", rate=10, ending=None):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    graph = lavfi(source, seconds, size, rate)
+    if ending:
+        graph = f"{graph}[a];{lavfi(*ending, size, rate)}[b];[a][b]concat"
+    ffmpeg("-f", "lavfi", "-i", graph, "-c:v", "mpeg4", "-q:v", "5", str(path))
 
 
 def write_shim(path, body):
@@ -88,12 +95,12 @@ def test_extract_frames_from_mkv(tmp_path, testsrc):
 
 def test_extract_frames_dedupes_static_and_drops_black(tmp_path):
     static = tmp_path / "static.mkv"
-    make_mkv(static, "smptebars", 100)
+    make_mkv(static, "smptebars", 100, size="64x48", rate=1)
     start = datetime(2026, 9, 11, 12, 0, 0)
-    assert len(img.extract_frames(str(static), [], img.Timeline(start), 6, str(tmp_path / "f1"), 100)) == 1
+    assert len(img.extract_frames(str(static), [], img.Timeline(start), 4, str(tmp_path / "f1"), 100)) == 1
     black = tmp_path / "black.mkv"
-    make_mkv(black, "color=c=black", 100)
-    assert img.extract_frames(str(black), [], img.Timeline(start), 6, str(tmp_path / "f2"), 100) == []
+    make_mkv(black, "color=c=black", 100, size="64x48", rate=1)
+    assert img.extract_frames(str(black), [], img.Timeline(start), 1, str(tmp_path / "f2"), 100) == []
 
 
 def test_timeline_skips_the_pauses_both_ways():
@@ -115,8 +122,8 @@ def test_extract_frames_places_a_shot_after_a_pause_earlier_in_the_file(tmp_path
     rec = testsrc
     t0 = datetime(2026, 9, 11, 12, 0, 0)
     shot = img.Image(str(tmp_path / "s.png"), t0 + timedelta(seconds=100))
-    straight = img.extract_frames(str(rec), [shot], img.Timeline(t0), 10, str(tmp_path / "f1"), 120)
-    paused = img.extract_frames(str(rec), [shot], img.Timeline(t0, [(t0 + timedelta(seconds=20), t0 + timedelta(seconds=80))]), 10, str(tmp_path / "f2"), 120)
+    straight = img.extract_frames(str(rec), [shot], img.Timeline(t0), 5, str(tmp_path / "f1"), 120)
+    paused = img.extract_frames(str(rec), [shot], img.Timeline(t0, [(t0 + timedelta(seconds=20), t0 + timedelta(seconds=80))]), 5, str(tmp_path / "f2"), 120)
     # The shot sits at 100 s straight (past the tail window: one gap), at 40 s once the minute-long pause is skipped (two gaps).
     assert max(f.off for f in straight if f.gi == 0) > 40 and not any(f.gi == 1 for f in straight)
     assert all(f.off < 40 for f in paused if f.gi == 0)
@@ -233,7 +240,7 @@ def failed_file(journal_dir):
 
 def test_stub_pipeline_writes_entry_note_and_memory(tmp_path, fakebin):
     rec = tmp_path / "rec.mkv"
-    ffmpeg("-f", "lavfi", "-i", "testsrc=duration=200:size=64x48:rate=1", "-c:v", "mpeg4", "-q:v", "5", str(rec))
+    make_mkv(rec, "testsrc2", 200 - img.TAIL_WINDOW_SEC, size="160x120", rate=1, ending=("smptebars", img.TAIL_WINDOW_SEC))
     shots_dir = tmp_path / "games" / "testgame" / "screenshots"
     for name in ("20260911-120130.png", "20260911-120245.png", "20260911-130000.png"):
         add_shot(tmp_path, name)
@@ -252,7 +259,10 @@ def test_stub_pipeline_writes_entry_note_and_memory(tmp_path, fakebin):
         + "\n"
     )
 
-    res, journal_dir = run_process(tmp_path, fakebin, {"max_images": img.GALLERY_FRAME_TARGET}, {"FAKE_UNIVERSE_EXIT": "1"}, recording=rec)
+    more_frames_before_the_ending_than_gallery_slots = img.GALLERY_FRAME_TARGET + img.TAIL_RESERVE
+    res, journal_dir = run_process(
+        tmp_path, fakebin, {"max_images": more_frames_before_the_ending_than_gallery_slots}, {"FAKE_UNIVERSE_EXIT": "1"}, recording=rec
+    )
     assert res.returncode == 0, res.stderr
     assert "core unavailable" in res.stderr
 
@@ -276,6 +286,9 @@ def test_stub_pipeline_writes_entry_note_and_memory(tmp_path, fakebin):
     assert frames == [f"attachments/{SID}-{n}.png" for n in range(1, len(frames) + 1)]
     assert all((shots_dir / f).stat().st_size > 0 for f in shots)
     assert all((journal_dir / f).stat().st_size > 0 for f in frames)
+    last_frame = img.grab_frame(str(journal_dir / frames[-1]), 0, str(tmp_path / "last.png"))[0]
+    ending = img.grab_frame(str(rec), 199, str(tmp_path / "ending.png"))[0]
+    assert img.hamming(last_frame, ending) < img.DUP_DISTANCE
 
     args = (fakebin / "universe.args").read_text().splitlines()
     assert args[:2] == ["journal-add", SID]
@@ -403,8 +416,8 @@ def test_the_check_hook_says_whether_codex_is_signed_in(tmp_path, fakebin):
 
 def test_blank_recording_marks_the_session_failed(tmp_path, fakebin):
     rec = tmp_path / "rec.mkv"
-    make_mkv(rec, "color=c=black", 60)
-    res, journal_dir = run_process(tmp_path, fakebin, {}, recording=rec)
+    make_mkv(rec, "color=c=black", 60, size="64x48", rate=1)
+    res, journal_dir = run_process(tmp_path, fakebin, {"max_images": 1}, recording=rec)
     assert res.returncode == 1 and "holds no picture" in res.stderr
     assert not (fakebin / "universe.args").exists()
     assert failed_file(journal_dir) == "the recording holds no picture and no screenshot covers the session"
