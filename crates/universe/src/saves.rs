@@ -259,7 +259,7 @@ fn config_yaml(ask: Option<&Ask>, dir: &Path, keep: u32) -> Value {
 }
 
 /// ludusavi's config is rewritten for each call and a game's backups change under a backup or a restore: every process waits on one lock.
-async fn hold() -> Result<std::fs::File> {
+pub(crate) async fn hold() -> Result<std::fs::File> {
     let cfg_dir = config_dir();
     std::fs::create_dir_all(&cfg_dir)?;
     let lock = std::fs::File::create(cfg_dir.join("universe.lock"))?;
@@ -460,10 +460,11 @@ fn seed(dir: &Path, stage: &Path, name: &str) -> Result<usize> {
     Ok(0)
 }
 
-/// A backup that lost a file can't stand for the saves, unchanged or not.
+/// A backup that lost a file can't stand for the saves, unchanged or not, and ludusavi drops a first record listing no file.
 fn whole(game: &Path, record: &yaml_rust2::Yaml) -> bool {
     let Some(folder) = record["name"].as_str().map(|id| game.join(id)).filter(|f| f.is_dir()) else { return false };
-    record["files"].as_hash().into_iter().flatten().all(|(path, file)| {
+    let Some(files) = record["files"].as_hash().filter(|files| !files.is_empty()) else { return false };
+    files.iter().all(|(path, file)| {
         let stored = folder.join(ROOT_DRIVE).join(path.as_str().unwrap_or_default().trim_start_matches('/'));
         stored.metadata().is_ok_and(|m| m.is_file() && Some(m.len() as i64) == file["size"].as_i64())
     })
@@ -528,7 +529,8 @@ pub async fn restore(ask: &Ask, config: &Config, id: &str, backup: &str) -> Resu
     };
     let plan = call(&ask.bin, Some(ask), &dir, kept(config), restoring(&["--preview"])).await?;
     let files = plan["games"][&picked.name]["files"].as_object().into_iter().flatten();
-    let replaced: Vec<&String> = files.filter(|(_, f)| f["change"] == "Different").map(|(path, _)| path).collect();
+    // ludusavi's preview calls a file it can't read `New`.
+    let replaced: Vec<&String> = files.filter(|(path, f)| f["change"] != "Same" && Path::new(path).exists()).map(|(path, _)| path).collect();
     if !replaced.is_empty() {
         let refused = |why: String| Error::Invalid(format!("refusing to restore {id}: the saves on disk could not be backed up: {why}"));
         let safe = back_up(ask, config, &dir, None).await.map_err(|e| refused(e.to_string()))?;

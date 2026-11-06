@@ -366,7 +366,7 @@ struct SavedGame {
 }
 
 impl SavedGame {
-    /// `before` is shell, run ahead of every backup that writes; `$path` is where ludusavi will write it.
+    /// `before` is shell, run ahead of every backup that writes; `$path` is where ludusavi will write it. A `crash` file kills the CLI once such a backup is written.
     fn new(keep: u32, before: impl Fn(&std::path::Path) -> String) -> SavedGame {
         let real = std::env::split_paths(&std::env::var_os("PATH").unwrap())
             .map(|d| d.join("ludusavi"))
@@ -377,9 +377,10 @@ impl SavedGame {
         let bin = dir.path().join("bin");
         std::fs::create_dir_all(&bin).unwrap();
         let script = format!(
-            "#!/bin/sh\npath=; prev=\nfor a in \"$@\"; do [ \"$prev\" = --path ] && path=$a; prev=$a; done\ncase \" $* \" in *\" --preview \"*) ;; *\" backup \"*)\n{}\n;; esac\nexec {} \"$@\"\n",
+            "#!/bin/sh\npath=; prev=; writes=\nfor a in \"$@\"; do [ \"$prev\" = --path ] && path=$a; prev=$a; done\ncase \" $* \" in *\" --preview \"*) ;; *\" backup \"*)\nwrites=1\n{}\n;; esac\n{} \"$@\"\nstatus=$?\n[ -n \"$writes\" ] && [ -e {} ] && kill -9 $PPID\nexit $status\n",
             before(dir.path()),
-            real.display()
+            real.display(),
+            dir.path().join("crash").display()
         );
         std::fs::write(bin.join("ludusavi"), script).unwrap();
         std::fs::set_permissions(bin.join("ludusavi"), std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
@@ -403,7 +404,11 @@ impl SavedGame {
     }
 
     fn spawn_backup(&self) -> std::process::Child {
-        command(&self.dir, &["saves", "backup", "fixture-game"], &[("PATH", &self.path)])
+        self.spawn(&["backup", "fixture-game"])
+    }
+
+    fn spawn(&self, args: &[&str]) -> std::process::Child {
+        command(&self.dir, &[&["saves"], args].concat(), &[("PATH", &self.path)])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::piped())
             .spawn()
@@ -548,6 +553,78 @@ fn a_backup_in_another_process_survives_the_repair_of_a_stale_mapping() {
         assert!(held.contains(&format!("save-{run}")), "backup {run} of {runs} is gone: {held:?}");
     }
     assert!(!std::fs::read_to_string(&mapping).unwrap().contains("backup-20000101T000000Z"), "the record with no folder is forgotten");
+}
+
+#[test]
+fn a_restore_and_an_export_in_another_process_wait_out_a_running_backup() {
+    let game = SavedGame::new(5, |dir| format!("touch {0}\nwhile [ -e {1} ]; do sleep 0.02; done", dir.join("started").display(), dir.join("hold").display()));
+    game.put("slot1.sav", "selected");
+    assert!(game.saves(&["backup", "fixture-game"]).status.success());
+    let list: serde_json::Value = serde_json::from_slice(&game.saves(&["list", "fixture-game", "--json"]).stdout).unwrap();
+    let selected = list["backups"][0]["id"].as_str().unwrap().to_string();
+    game.put("slot1.sav", "progress");
+
+    let (started, hold, zips) = (game.dir.path().join("started"), game.dir.path().join("hold"), game.dir.path().join("zips"));
+    std::fs::remove_file(&started).unwrap();
+    std::fs::write(&hold, "").unwrap();
+    let backup = game.spawn_backup();
+    let waiting = std::time::Instant::now();
+    while !started.exists() {
+        assert!(waiting.elapsed().as_secs() < 10, "the backup never reached ludusavi");
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    let mut restore = game.spawn(&["restore", "fixture-game", &selected, "--yes"]);
+    let mut export = game.spawn(&["export", "fixture-game", zips.to_str().unwrap()]);
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    assert!(restore.try_wait().unwrap().is_none(), "the restore ran beside a backup");
+    assert!(export.try_wait().unwrap().is_none(), "the export ran beside a backup");
+    assert_eq!(game.read("slot1.sav"), "progress");
+
+    std::fs::remove_file(&hold).unwrap();
+    for process in [backup.wait_with_output(), restore.wait_with_output(), export.wait_with_output()] {
+        let done = process.unwrap();
+        assert!(done.status.success(), "{}", text(&done.stderr));
+    }
+    assert_eq!(game.read("slot1.sav"), "selected");
+    let held = game.held("slot1.sav");
+    assert!(held.contains(&"selected".to_string()) && held.contains(&"progress".to_string()), "{held:?}");
+    assert!(!game.dir.path().join("data/saves/.staging").exists());
+}
+
+#[test]
+fn a_crash_between_staging_and_commit_costs_nothing_and_its_leftovers_go_with_the_retry() {
+    let game = SavedGame::new(2, |_| String::new());
+    let (crash, staging) = (game.dir.path().join("crash"), game.dir.path().join("data/saves/.staging"));
+
+    game.put("slot1.sav", "first");
+    std::fs::write(&crash, "").unwrap();
+    assert!(!game.saves(&["backup", "fixture-game"]).status.success());
+    assert!(files_under(&staging).iter().any(|f| f.ends_with("slot1.sav")), "the crash came before ludusavi staged");
+    assert!(game.held("slot1.sav").is_empty());
+    std::fs::write(staging.join("Fixture Game/mapping.yaml"), "backups: [").unwrap();
+    std::fs::remove_file(&crash).unwrap();
+    assert!(game.saves(&["backup", "fixture-game"]).status.success());
+    assert_eq!(game.held("slot1.sav"), ["first"], "a mapping torn by the crash is not read");
+
+    game.put("slot1.sav", "progress");
+    std::fs::write(&crash, "").unwrap();
+    assert!(!game.saves(&["restore", "fixture-game", "--yes"]).status.success());
+    assert!(files_under(&staging).iter().any(|f| f.ends_with("slot1.sav")), "the crash came before ludusavi staged");
+    assert_eq!((game.read("slot1.sav").as_str(), game.held("slot1.sav")), ("progress", vec!["first".to_string()]));
+    std::fs::remove_file(&crash).unwrap();
+
+    // What a crash leaves between the rename into the backups and the mapping's write.
+    let orphan = game.mapping().with_file_name("backup-20000101T000000Z");
+    std::fs::create_dir_all(orphan.join("drive-0")).unwrap();
+    assert_eq!(game.held("slot1.sav"), ["first"]);
+
+    let retry = game.saves(&["restore", "fixture-game", "--yes"]);
+    assert!(retry.status.success(), "{}", text(&retry.stderr));
+    assert_eq!(game.read("slot1.sav"), "first");
+    let mut held = game.held("slot1.sav");
+    held.sort();
+    assert_eq!(held, ["first", "progress"]);
+    assert!(!staging.exists() && !orphan.exists());
 }
 
 fn files_under(dir: &std::path::Path) -> Vec<std::path::PathBuf> {

@@ -444,7 +444,12 @@ impl Core {
         self.get(id).await?;
         let config = self.config.read().await.clone();
         let (id, to) = (id.to_string(), paths::expand(to));
-        blocking(move || saves::export(&config, &id, &to)).await
+        let held = saves::hold().await?;
+        blocking(move || {
+            let _held = held;
+            saves::export(&config, &id, &to)
+        })
+        .await
     }
 
     /// winecfg, winetricks or an .exe in the game's prefix as a unit of its own (`{"tool", "unit"}`), or `kill`: the prefix's Wine stopped (`{"tool", "stopped"}`, its wineservers).
@@ -994,6 +999,7 @@ mod tests {
         for kept in ["selected", "first run", "second run", "third run"] {
             assert!(held.iter().any(|h| h == kept), "{kept} is gone from {held:?}");
         }
+        assert_eq!(held[0], "third run", "the backup made last is the latest, in one second too");
     }
 
     #[tokio::test]
@@ -1043,16 +1049,34 @@ mod tests {
         assert_eq!(std::fs::read(&save).unwrap(), b"save-000");
         let held = held(&core).await;
         assert!(held.iter().any(|h| h == "save-000") && held.iter().any(|h| h == "progress"), "{} backups", held.len());
+
+        std::fs::write(&save, b"more progress").unwrap();
+        core.saves_restore("fixture-game", &oldest).await.unwrap();
+        assert_eq!(std::fs::read(&save).unwrap(), b"save-000");
+        assert_eq!(backup_ids(&core).await.len(), 257, "a restore prunes nothing");
+
+        std::fs::write(&save, b"later").unwrap();
+        core.saves_backup("fixture-game").await.unwrap();
+        let after = self::held(&core).await;
+        assert_eq!(after.len(), 255);
+        assert!(after.iter().any(|h| h == "later") && !after.iter().any(|h| h.is_empty()));
     }
 
     #[tokio::test]
     async fn a_restore_refuses_saves_it_cannot_identify_and_goes_ahead_where_none_are_there() {
+        use std::os::unix::fs::PermissionsExt;
         let env = paths::test_env();
         let (core, save) = game_keeping(&env, 2).await;
         saves::tests::offline_manifest("Fixture Game:\n  files:\n    \"<winAppData>/Fixture\":\n      when:\n        - os: windows\nOther Game:\n  files:\n    \"<winAppData>/Other\":\n      when:\n        - os: windows\n");
         std::fs::write(&save, b"backed up").unwrap();
         core.saves_backup("fixture-game").await.unwrap();
         std::fs::write(&save, b"progress").unwrap();
+
+        std::fs::set_permissions(&save, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let unreadable = core.saves_restore("fixture-game", "").await;
+        std::fs::set_permissions(&save, std::fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(matches!(&unreadable, Err(Error::Invalid(m)) if m.contains("backed up")), "{unreadable:?}");
+        assert_eq!(std::fs::read(&save).unwrap(), b"progress", "a save ludusavi can't read is still a save");
 
         let toml = core.get("fixture-game").await.unwrap().game.toml_path();
         for title in ["No Such Title", "Other Game"] {
@@ -1101,6 +1125,23 @@ mod tests {
 
         core.saves_backup("fixture-game").await.unwrap();
         assert_eq!(held(&core).await, ["kept"]);
+    }
+
+    #[tokio::test]
+    async fn a_last_record_listing_no_file_stands_for_no_saves() {
+        let env = paths::test_env();
+        let (core, save) = game_keeping(&env, 3).await;
+        std::fs::write(&save, b"kept").unwrap();
+        core.saves_backup("fixture-game").await.unwrap();
+        let folder = saves::dir(&Config::load().unwrap(), "fixture-game").join("Fixture Game");
+        let mapping = folder.join("mapping.yaml");
+        let empty = "  - name: backup-20000101T000000Z\n    when: \"2000-01-01T00:00:00Z\"\n    os: linux\n    files: {}\n    registry:\n      hash: ~\n    children: []\n";
+        std::fs::write(&mapping, std::fs::read_to_string(&mapping).unwrap().trim_end().to_string() + "\n" + empty).unwrap();
+        std::fs::create_dir_all(folder.join("backup-20000101T000000Z")).unwrap();
+
+        std::fs::write(&save, b"changed").unwrap();
+        core.saves_backup("fixture-game").await.unwrap();
+        assert!(held(&core).await.iter().any(|h| h == "changed"), "the backup reported done is not kept");
     }
 
     #[test]
