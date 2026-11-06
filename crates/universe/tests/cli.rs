@@ -671,6 +671,18 @@ fn output_within(mut process: std::process::Child, limit: std::time::Duration) -
     Some(process.wait_with_output().unwrap())
 }
 
+/// Long enough for `process` to have ended on a loaded machine, were nothing holding it.
+fn waits(process: &mut std::process::Child) -> bool {
+    let started = std::time::Instant::now();
+    while started.elapsed() < speed_limit(500, 3000) {
+        if process.try_wait().unwrap().is_some() {
+            return false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    true
+}
+
 fn only_zip(folder: &std::path::Path) -> zip::ZipArchive<std::fs::File> {
     let found: Vec<_> = std::fs::read_dir(folder).unwrap().flatten().map(|e| e.path()).collect();
     assert_eq!(found.len(), 1, "{found:?}");
@@ -695,12 +707,20 @@ fn another_games_saves_answer_beside_a_long_export_within_its_budget() {
     let zips = game.dir.path().join("zips");
     let (export, mut fifo) = game.stopped_at_the_mapping(&["export", "fixture-game", zips.to_str().unwrap()], &mapping);
 
+    // Its own game's backup and restore wait for it, and hold up no other game while they do.
+    let waiting = [game.spawn_backup(), game.spawn(&["restore", "fixture-game", "--yes"])];
+    std::thread::sleep(std::time::Duration::from_millis(100));
+
     let limit = speed_limit(1500, 20000);
     let list = output_within(game.spawn(&["list", "other-game"]), limit);
     let backup = output_within(game.spawn(&["backup", "other-game"]), limit);
     fifo.write_all(mapping.as_bytes()).unwrap();
     drop(fifo);
     let done = export.wait_with_output().unwrap();
+    for process in waiting {
+        let ended = process.wait_with_output().unwrap();
+        assert!(ended.status.success(), "{}", text(&ended.stderr));
+    }
 
     for (what, ended) in [("list", list), ("backup", backup)] {
         let ended = ended.unwrap_or_else(|| panic!("another game's {what} waited for the export"));
@@ -724,8 +744,7 @@ fn an_export_beside_a_pruning_backup_zips_every_backup_whole() {
 
     game.put("slot1.sav", "newer");
     let mut backup = game.spawn_backup();
-    std::thread::sleep(std::time::Duration::from_millis(300));
-    let waited = backup.try_wait().unwrap().is_none();
+    let waited = waits(&mut backup);
     let held = exported.exists();
     fifo.write_all(mapping.as_bytes()).unwrap();
     drop(fifo);
@@ -739,6 +758,19 @@ fn an_export_beside_a_pruning_backup_zips_every_backup_whole() {
     assert!(read_zipped(&mut zip, "fixture-game/Fixture Game/mapping.yaml").contains(&id));
     assert_eq!(read_zipped(&mut zip, &format!("fixture-game/Fixture Game/{id}/drive-0/universe/prefix/{FIXTURE_SAVES}/slot1.sav")), "kept");
     assert_eq!(game.held("slot1.sav"), ["newer"]);
+
+    let mapping = std::fs::read_to_string(game.mapping()).unwrap();
+    let zips = game.dir.path().join("zips again");
+    let (export, mut fifo) = game.stopped_at_the_mapping(&["export", "fixture-game", zips.to_str().unwrap()], &mapping);
+    let mut restore = game.spawn(&["restore", "fixture-game", "--yes"]);
+    let waited = waits(&mut restore);
+    fifo.write_all(mapping.as_bytes()).unwrap();
+    drop(fifo);
+    for process in [export.wait_with_output(), restore.wait_with_output()] {
+        let done = process.unwrap();
+        assert!(done.status.success(), "{}", text(&done.stderr));
+    }
+    assert!(waited, "the restore ran beside the export");
 }
 
 #[test]
@@ -850,10 +882,12 @@ fn a_backup_reaches_the_disk_before_the_one_it_prunes_goes() {
     let calls: Vec<&str> = trace.lines().collect();
     let first = |what: &str, seen: &dyn Fn(&str) -> bool| calls.iter().position(|l| seen(l)).unwrap_or_else(|| panic!("no {what} in:\n{trace}"));
     let new = game.backup_folder().file_name().unwrap().to_string_lossy().into_owned();
-    let unlink = first("unlink of the old backup", &|l| l.contains("unlinkat(") && l.contains(&format!("/{old}/")));
-    let file = first("fsync of the new file", &|l| l.contains("fsync(") && l.contains(&format!("/{new}/")) && l.contains("slot1.sav>"));
-    let folder = first("fsync of the new folder", &|l| l.contains("fsync(") && l.contains(&format!("/{new}>")));
+    let unlink = first("unlink of the old backup", &|l| l.contains("unlinkat(") && l.contains(&format!("/{old}/")) && !l.contains(".staging"));
     let moved = first("rename into the store", &|l| l.contains("rename") && l.contains(".staging") && l.contains(&format!("/{new}\"")));
+    // Its name while staged: within the second of the old backup, the store gives it another.
+    let staged = calls[moved].split(".staging/Fixture Game/").nth(1).and_then(|l| l.split('"').next()).unwrap();
+    let file = first("fsync of the new file", &|l| l.contains("fsync(") && l.contains(&format!("/{staged}/")) && l.contains("slot1.sav>"));
+    let folder = first("fsync of the new folder", &|l| l.contains("fsync(") && l.contains(&format!("/{staged}>")));
     let written = first("fsync of the mapping", &|l| l.contains("fsync(") && l.contains("/mapping.tmp>"));
     let committed = first("rename of the mapping", &|l| l.contains("rename") && l.contains("mapping.tmp"));
     let store = |after: usize| calls[after..].iter().position(|l| l.contains("fsync(") && l.contains("/Fixture Game>")).map(|at| at + after);
