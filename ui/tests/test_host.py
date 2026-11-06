@@ -142,7 +142,9 @@ def test_a_core_that_will_not_open_holds_a_page_that_retries_or_quits_on_the_pad
     finally:
         ui.kill()
     assert ui.returncode == 0 and "mark home" in stderr and "Traceback" not in stderr, stderr
-    assert stderr.count("the core did not open") == 2, "A on the file still broken stays on the page"
+    reasons = [line for line in stderr.splitlines() if "the core did not open" in line]
+    assert len(reasons) == 2, "A on the file still broken stays on the page"
+    assert all("config.toml" in line for line in reasons), "the reason names the file: " + stderr
     assert done.read_text() == "0", "the script carried over to the home page ended it"
 
 
