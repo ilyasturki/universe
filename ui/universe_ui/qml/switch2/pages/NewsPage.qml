@@ -79,9 +79,17 @@ FocusScope {
                 label: "Write it again",
                 act: "rewrite"
             });
+        else if (row.state === "none")
+            items.push({
+                label: "Write the entry",
+                act: "write"
+            });
         else if (Feed.blank(row))
             items.push({
-                label: row.state === "none" ? "Write the entry" : "Try again now",
+                label: row.state === "failed" ? "Read why it failed" : "Read why it waits",
+                act: "read"
+            }, {
+                label: "Try again now",
                 act: "write"
             });
         if (row.hasRecording)

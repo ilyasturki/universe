@@ -509,25 +509,31 @@ def test_each_switch2_news_card_offers_what_its_state_allows(look, fake):
     look.press(Qt.Key.Key_Return)
     pending(session)
 
-    session = row("failed")["session"]
-    pick(session)
-    acts = options()
-    assert {"write", "remove"} <= set(acts) and "read" not in acts, f"failed: {acts}"
-    look.press(Qt.Key.Key_Escape)
-    until(lambda: picker.property("open") is False)
-    article = look.open("pages/ArticlePage.qml", {"gameId": game, "session": session})
-    until(lambda: descendant(article, "articleState").isVisible(), "the album's way in: the article says why it has no text")
+    def why(state):
+        entry = row(state)
+        pick(entry["session"])
+        acts = options()
+        assert {"read", "write", "remove"} <= set(acts), f"{state}: {acts}"
+        look.press(Qt.Key.Key_Down, acts.index("read") - picker.property("index"))
+        look.press(Qt.Key.Key_Return)
+        article = until(lambda: (top := look.root.property("topPage")) != page and top, f"Read opens the {state} entry")
+        said = until(lambda: (s := descendant(article, "articleState")) and s.isVisible() and s.property("text"), "the article says why it has no text")
+        assert entry["reason"] in said and entry["retryText"] in said
+        settle(look.window)
+        assert row(state)["session"] == entry["session"], "reading the reason starts no write"
+        return entry["session"]
+
+    session = why("failed")
     look.press(Qt.Key.Key_Return)
     pending(session)
     look.press(Qt.Key.Key_Escape)
     until(lambda: look.root.property("topPage") == page)
 
-    session = row("deferred")["session"]
-    pick(session)
-    acts = options()
-    assert {"write", "remove"} <= set(acts) and "read" not in acts, f"deferred: {acts}"
+    session = why("deferred")
+    assert row("deferred")["retryText"], "a deferred entry names its next try"
     look.press(Qt.Key.Key_Escape)
-    until(lambda: picker.property("open") is False)
+    until(lambda: look.root.property("topPage") == page)
+    pick(session)
     look.press(Qt.Key.Key_Return)
     pending(session)
     assert look.root.property("topPage") == page, "A on an unwritten entry asks for it, with no blank article"
