@@ -315,6 +315,11 @@ fn a_write_keeps_a_linked_config_linked_and_a_store_link_says_who_owns_it() {
 }
 
 fn left_open(dir: &tempfile::TempDir, game: &str, session: &str) -> (std::path::PathBuf, std::path::PathBuf) {
+    left_open_after(dir, game, session, "")
+}
+
+/// `first` runs in the undo before it notes itself in the returned `undone`.
+fn left_open_after(dir: &tempfile::TempDir, game: &str, session: &str, first: &str) -> (std::path::PathBuf, std::path::PathBuf) {
     let marker = dir.path().join("state/current-session.json");
     let undone = dir.path().join("undone");
     std::fs::create_dir_all(marker.parent().unwrap()).unwrap();
@@ -325,7 +330,7 @@ fn left_open(dir: &tempfile::TempDir, game: &str, session: &str) -> (std::path::
         "unit": format!("universe-game-{game}-{session}.service"),
         "screen": "",
         "started_at": "2026-11-06T00:00:00+00:00",
-        "undo": [{"step": "post_command", "command": format!("echo undone >> {}", undone.display()), "cwd": "/", "env": {}}],
+        "undo": [{"step": "post_command", "command": format!("{first}echo undone >> {}", undone.display()), "cwd": "/", "env": {}}],
     });
     std::fs::write(&marker, current.to_string()).unwrap();
     (marker, undone)
@@ -342,14 +347,14 @@ fn a_session_that_cannot_be_filed_waits_aside_and_one_that_cannot_wait_says_what
     std::fs::create_dir_all(&rows).unwrap();
     let (marker, undone) = left_open(&dir, "quest", "20261106-000000");
 
-    let aside = dir.path().join("state/unfiled-sessions");
+    let aside = dir.path().join("state/closing-sessions");
     std::fs::write(&aside, "").unwrap();
     let out = universe(&dir, &["storage"], &[NO_BUS]);
     assert!(out.status.success(), "{}", text(&out.stderr));
     assert!(marker.exists() && !undone.exists(), "kept nowhere else, the row and its undo stay on the marker");
     let out = universe(&dir, &["play", "quest", "--no-wait"], &[NO_BUS]);
     let err = text(&out.stderr);
-    assert!(!out.status.success() && err.contains("sessions.jsonl") && err.contains("unfiled-sessions"), "{err}");
+    assert!(!out.status.success() && err.contains("closing-sessions"), "{err}");
     assert!(marker.exists(), "a launch does not write over it");
 
     std::fs::remove_file(&aside).unwrap();
@@ -374,14 +379,109 @@ fn a_session_that_cannot_be_filed_waits_aside_and_one_that_cannot_wait_says_what
     assert_eq!(std::fs::read_to_string(&undone).unwrap().lines().count(), 1);
 }
 
+fn add_game(dir: &tempfile::TempDir, title: &str) {
+    let exe = dir.path().join(format!("{title}.sh"));
+    std::fs::write(&exe, "").unwrap();
+    let added = universe(dir, &["add", exe.to_str().unwrap(), "--runner", "linux", "--title", title, "--json"], &[]);
+    assert!(added.status.success(), "{}", text(&added.stderr));
+}
+
+fn lines(path: &std::path::Path) -> usize {
+    std::fs::read_to_string(path).map_or(0, |t| t.lines().count())
+}
+
+fn shim(dir: &std::path::Path, name: &str, body: &str) -> String {
+    std::fs::create_dir_all(dir).unwrap();
+    std::fs::write(dir.join(name), format!("#!/bin/sh\n{body}")).unwrap();
+    std::fs::set_permissions(dir.join(name), std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    format!("{}:{}", dir.display(), std::env::var("PATH").unwrap_or_default())
+}
+
+#[test]
+fn a_close_held_in_the_journal_while_another_files_the_session_files_it_once() {
+    let dir = no_desktop();
+    add_game(&dir, "Quest");
+    add_game(&dir, "Other");
+    let rows = dir.path().join("data/games/quest/sessions.jsonl");
+    std::fs::create_dir_all(&rows).unwrap();
+    let other = dir.path().join("data/games/other/sessions.jsonl");
+    std::fs::write(&other, "{\"session\":\"20261101-000000\",\"game\":\"other\"}\n").unwrap();
+    let (marker, undone) = left_open(&dir, "quest", "20261106-000000");
+    let quick = shim(&dir.path().join("quick"), "journalctl", "");
+    let (entered, release) = (dir.path().join("entered"), dir.path().join("release"));
+    let path = shim(&dir.path().join("held"), "journalctl", &format!("touch {}\nwhile [ ! -e {} ]; do sleep 0.02; done\n", entered.display(), release.display()));
+    let mut held = command(&dir, &["storage"], &[NO_BUS, ("PATH", &path)]).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn().unwrap();
+    let started = std::time::Instant::now();
+    while !entered.exists() {
+        if started.elapsed().as_secs() >= 10 || held.try_wait().unwrap().is_some() {
+            let _ = held.kill();
+            panic!("the first open never read the journal");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+
+    let out = universe(&dir, &["storage"], &[NO_BUS, ("PATH", &quick)]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert!(!marker.exists() && lines(&undone) == 1, "the second open closed it, its history still broken");
+    std::fs::remove_dir(&rows).unwrap();
+    let out = universe(&dir, &["storage"], &[NO_BUS, ("PATH", &quick)]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert_eq!(lines(&rows), 1, "the third open filed it");
+    std::fs::write(&release, "").unwrap();
+    assert!(held.wait().unwrap().success());
+    let out = universe(&dir, &["storage"], &[NO_BUS, ("PATH", &quick)]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+
+    let filed = std::fs::read_to_string(&rows).unwrap();
+    assert_eq!(filed.lines().count(), 1, "{filed}");
+    let row: serde_json::Value = serde_json::from_str(filed.trim()).unwrap();
+    assert_eq!((row["session"].as_str(), row["unit"].as_str()), (Some("20261106-000000"), Some("universe-game-quest-20261106-000000.service")));
+    assert_eq!(lines(&undone), 1);
+    assert_eq!(std::fs::read_to_string(&other).unwrap(), "{\"session\":\"20261101-000000\",\"game\":\"other\"}\n");
+}
+
+#[test]
+fn a_close_killed_mid_way_finishes_on_the_next_open_and_repeats_nothing() {
+    use std::os::unix::process::ExitStatusExt;
+    let dir = no_desktop();
+    add_game(&dir, "Quest");
+    let rows = dir.path().join("data/games/quest/sessions.jsonl");
+    std::fs::create_dir_all(&rows).unwrap();
+    let ended = dir.path().join("ended");
+    let crash_once = |name: &str| format!("[ -e {0} ] || {{ touch {0}; kill -9 $PPID; exit 1; }}\n", dir.path().join(name).display());
+    shim(&dir.path().join("modules/end/bin"), "end", &format!("{}echo \"$GAME_ID\" >> {}\n", crash_once("hook-crashed"), ended.display()));
+    std::fs::write(dir.path().join("modules/end/module.toml"), "api = 2\nid = \"end\"\n[hooks]\nsession-end = \"bin/end\"\n").unwrap();
+    let config = dir.path().join("config/config.toml");
+    std::fs::write(&config, std::fs::read_to_string(&config).unwrap() + "[modules]\nenabled = [\"end\"]\n").unwrap();
+    let (marker, undone) = left_open_after(&dir, "quest", "20261106-000000", &crash_once("undo-crashed"));
+
+    let storage = || universe(&dir, &["storage"], &[NO_BUS]);
+    assert_eq!(storage().status.signal(), Some(9), "killed in the undo");
+    assert!(!marker.exists() && lines(&undone) == 0);
+    assert_eq!(storage().status.signal(), Some(9), "the next open undid it, then was killed in the session-end hook");
+    assert_eq!((lines(&undone), lines(&ended)), (1, 0));
+    for _ in 0..2 {
+        let out = storage();
+        assert!(out.status.success(), "{}", text(&out.stderr));
+        assert_eq!((lines(&undone), lines(&ended)), (1, 1), "each ran once");
+    }
+    std::fs::remove_dir(&rows).unwrap();
+    let out = storage();
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let filed = std::fs::read_to_string(&rows).unwrap();
+    assert_eq!(filed.lines().count(), 1, "{filed}");
+    assert_eq!(serde_json::from_str::<serde_json::Value>(filed.trim()).unwrap()["session"], "20261106-000000");
+    assert_eq!((lines(&undone), lines(&ended)), (1, 1));
+}
+
 #[test]
 fn a_session_of_a_game_with_no_folder_is_dropped_without_failing_the_open() {
     let dir = no_desktop();
     let (marker, undone) = left_open(&dir, "gone", "20261106-000000");
-    let aside = dir.path().join("state/unfiled-sessions");
+    let aside = dir.path().join("state/closing-sessions");
     std::fs::create_dir_all(&aside).unwrap();
     let waiting = aside.join("20261105-000000.gone.json");
-    std::fs::write(&waiting, serde_json::json!({"session": "20261105-000000", "game": "gone"}).to_string()).unwrap();
+    std::fs::write(&waiting, serde_json::json!({"row": {"session": "20261105-000000", "game": "gone"}}).to_string()).unwrap();
     let out = universe(&dir, &["storage"], &[NO_BUS]);
     assert!(out.status.success(), "{}", text(&out.stderr));
     assert!(!marker.exists() && !waiting.exists(), "no folder to file a row in: nothing is owed");

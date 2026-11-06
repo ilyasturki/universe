@@ -147,17 +147,35 @@ fn take_marker(session_id: &str) -> Option<Marker> {
     Some(m)
 }
 
-fn unfiled_file(game: &str, session_id: &str) -> std::path::PathBuf {
-    paths::unfiled_sessions_dir().join(format!("{session_id}.{game}.json"))
+/// A session being closed, claimed once from its marker: each step is noted as it completes, so a close cut short
+/// resumes where it stopped and repeats nothing it finished.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct Closing {
+    row: Session,
+    #[serde(default)]
+    filed: bool,
+    /// What is left to undo, in begin order.
+    #[serde(default)]
+    undo: Vec<Undo>,
+    /// None for a session closed without its marker: the session-end hooks get the game's own environment.
+    #[serde(default)]
+    hook_env: Option<Vec<(String, String)>>,
+    /// The session-end hooks ran and the saves backup started.
+    #[serde(default)]
+    ended: bool,
 }
 
-fn keep_unfiled(row: &Session) -> std::io::Result<()> {
+fn closing_file(game: &str, session_id: &str) -> std::path::PathBuf {
+    paths::closing_sessions_dir().join(format!("{session_id}.{game}.json"))
+}
+
+fn write_closing(c: &Closing) -> std::io::Result<()> {
     use std::io::Write;
-    let p = unfiled_file(&row.game, &row.session);
-    std::fs::create_dir_all(paths::unfiled_sessions_dir())?;
+    let p = closing_file(&c.row.game, &c.row.session);
+    std::fs::create_dir_all(paths::closing_sessions_dir())?;
     let tmp = p.with_extension("tmp");
     let kept = std::fs::File::create(&tmp)
-        .and_then(|mut f| f.write_all(serde_json::to_string(row)?.as_bytes()).and_then(|()| f.sync_all()))
+        .and_then(|mut f| f.write_all(serde_json::to_string(c)?.as_bytes()).and_then(|()| f.sync_all()))
         .and_then(|()| std::fs::rename(&tmp, &p));
     if kept.is_err() {
         let _ = std::fs::remove_file(&tmp);
@@ -165,74 +183,146 @@ fn keep_unfiled(row: &Session) -> std::io::Result<()> {
     kept
 }
 
-fn read_unfiled(file: &Path) -> Option<Session> {
-    let row = std::fs::read(file).map_err(|e| e.to_string()).and_then(|text| serde_json::from_slice(&text).map_err(|e| e.to_string()));
-    row.inspect_err(|e| tracing::warn!("{}: {e}", file.display())).ok()
+fn read_closing(file: &Path) -> Option<Closing> {
+    let c = std::fs::read(file).map_err(|e| e.to_string()).and_then(|text| serde_json::from_slice(&text).map_err(|e| e.to_string()));
+    c.inspect_err(|e| tracing::warn!("{}: {e}", file.display())).ok()
 }
 
 /// Oldest first.
-fn unfiled_rows() -> Vec<(std::path::PathBuf, Session)> {
-    let Ok(dir) = std::fs::read_dir(paths::unfiled_sessions_dir()) else { return vec![] };
+fn closings() -> Vec<Closing> {
+    let Ok(dir) = std::fs::read_dir(paths::closing_sessions_dir()) else { return vec![] };
     let mut files: Vec<_> = dir.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|e| e == "json")).collect();
     files.sort();
-    files.into_iter().filter_map(|p| read_unfiled(&p).map(|row| (p, row))).collect()
+    files.iter().filter_map(|p| read_closing(p)).collect()
 }
 
-pub(crate) fn unfiled_game(session_id: &str) -> Option<String> {
-    unfiled_rows().into_iter().map(|(_, row)| row).find(|row| row.session == session_id).map(|row| row.game)
+pub(crate) fn closing_game(session_id: &str) -> Option<String> {
+    closings().into_iter().find(|c| c.row.session == session_id && !c.filed).map(|c| c.row.game)
 }
 
-/// `false` when no row of the session waits.
-pub(crate) fn change_unfiled(game: &str, session_id: &str, f: impl FnOnce(&mut Session)) -> Result<bool> {
-    let file = unfiled_file(game, session_id);
-    if !file.exists() {
-        return Ok(false);
-    }
+/// The record changed under the marker's lock, re-read so no writer's change is lost; `None` when it is gone.
+fn change_closing(game: &str, session_id: &str, f: impl FnOnce(&mut Closing)) -> Result<Option<Closing>> {
+    let file = closing_file(game, session_id);
     let _lock = marker_lock()?;
-    let Some(mut row) = read_unfiled(&file) else { return Ok(false) };
-    f(&mut row);
-    keep_unfiled(&row)?;
-    Ok(true)
+    if !file.exists() {
+        return Ok(None);
+    }
+    let Some(mut c) = read_closing(&file) else { return Ok(None) };
+    f(&mut c);
+    write_closing(&c)?;
+    Ok(Some(c))
 }
 
-/// The `(game, session)` of each row it filed. The marker's lock is what lands a row once when several processes open at the same time.
-fn file_unfiled() -> Vec<(String, String)> {
-    if !paths::unfiled_sessions_dir().is_dir() {
-        return vec![];
+/// `false` when no row of the session waits: it is in its history, or was never kept.
+pub(crate) fn change_unfiled(game: &str, session_id: &str, f: impl FnOnce(&mut Session)) -> Result<bool> {
+    let mut changed = false;
+    change_closing(game, session_id, |c| {
+        if !c.filed {
+            f(&mut c.row);
+            changed = true;
+        }
+    })?;
+    Ok(changed)
+}
+
+/// The record with its own lock held, for one process at a time to run its steps: `None` when it is gone or another
+/// process holds it. Both files go together under the marker's lock, so no one locks a lock file already let go.
+fn hold_closing(game: &str, session_id: &str) -> Result<Option<(std::fs::File, Closing)>> {
+    let file = closing_file(game, session_id);
+    let _lock = marker_lock()?;
+    if !file.exists() {
+        return Ok(None);
     }
-    let _lock = match marker_lock() {
-        Ok(lock) => lock,
-        Err(e) => {
-            tracing::warn!("marker lock: {e}");
-            return vec![];
+    let held = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(file.with_extension("lock"))?;
+    match held.try_lock() {
+        Ok(()) => Ok(read_closing(&file).map(|c| (held, c))),
+        Err(std::fs::TryLockError::WouldBlock) => Ok(None),
+        Err(std::fs::TryLockError::Error(e)) => Err(e.into()),
+    }
+}
+
+/// The row into its history, once: the history read under the same lock shows whether it is there already. A game with no folder takes none.
+fn file_closing(game: &str, session_id: &str) -> Result<()> {
+    let file = closing_file(game, session_id);
+    let _lock = marker_lock()?;
+    let Some(mut c) = read_closing(&file).filter(|c| !c.filed) else { return Ok(()) };
+    let dir = paths::game_dir(game);
+    if std::fs::metadata(&dir).is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound) {
+        tracing::warn!("session {session_id} of {game} dropped: the game has no folder");
+    } else {
+        let history = dir.join("sessions.jsonl");
+        // A history it cannot read cannot show the row is not there already.
+        if !sessions::read(&history)?.iter().any(|s| s.session == session_id) {
+            sessions::append(&history, &c.row)?;
+        }
+    }
+    c.filed = true;
+    Ok(write_closing(&c)?)
+}
+
+/// The session's close, claimed by one process under the marker's lock: its record written, then its marker removed.
+/// A record already there, or a marker `seen` before the journal read and gone since, means another process claimed it.
+/// Without a marker the row goes only into a history that reads without it.
+fn claim_closing(game: &str, session_id: &str, seen: bool, row: impl FnOnce(Option<&Marker>) -> Session) -> Result<()> {
+    let _lock = marker_lock()?;
+    let marker = read_marker().filter(|m| m.current.session_id == session_id);
+    if closing_file(game, session_id).exists() {
+        if marker.is_some() {
+            remove_marker();
+        }
+        return Ok(());
+    }
+    let c = match &marker {
+        Some(m) => Closing { row: row(Some(m)), undo: m.undo.clone(), hook_env: Some(m.hook_env.clone()), ..Closing::default() },
+        None if seen => return Ok(()),
+        None => {
+            let dir = paths::game_dir(game);
+            let unfiled = dir.is_dir() && sessions::read(&dir.join("sessions.jsonl")).is_ok_and(|rows| rows.iter().all(|s| s.session != session_id));
+            if !unfiled {
+                return Ok(());
+            }
+            Closing { row: row(None), ..Closing::default() }
         }
     };
-    let mut filed = vec![];
-    for (file, row) in unfiled_rows() {
-        let dir = paths::game_dir(&row.game);
-        if std::fs::metadata(&dir).is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound) {
-            tracing::warn!("session {} of {} dropped: the game has no folder", row.session, row.game);
-            let _ = std::fs::remove_file(&file);
-            continue;
-        }
-        let history = dir.join("sessions.jsonl");
-        let appended = sessions::read(&history).and_then(|rows| match rows.iter().any(|s| s.session == row.session) {
-            true => Ok(false),
-            false => sessions::append(&history, &row).map(|()| true),
-        });
-        match appended {
-            Ok(appended) => {
-                if let Err(e) = std::fs::remove_file(&file) {
-                    tracing::warn!("{}: {e}", file.display());
-                }
-                if appended {
-                    filed.push((row.game, row.session));
-                }
-            }
-            Err(e) => tracing::warn!("session {} of {} still waits: {e}", row.session, row.game),
-        }
+    write_closing(&c).map_err(|e| {
+        let title = marker.as_ref().map_or(game, |m| m.current.title.as_str());
+        Error::Io(format!(
+            "the last session of {title} could not be closed: {} refuses its record ({e}). Free some disk space or make that folder writable, then try again",
+            paths::closing_sessions_dir().display()
+        ))
+    })?;
+    remove_marker();
+    Ok(())
+}
+
+/// The row of a session that just ended, from its marker when there is one, else from the unit's log.
+fn closed_session(game: &str, session_id: &str, exit: Option<i32>, ended: Option<chrono::DateTime<chrono::Local>>, marker: Option<&Marker>, log: &crate::host::UnitLog) -> Session {
+    let unit = marker.map(|m| m.current.unit.clone()).unwrap_or_else(|| format!("{}.service", launcher::unit_name(game, session_id)));
+    let started = marker
+        .and_then(|m| chrono::DateTime::parse_from_rfc3339(&m.current.started_at).ok().map(|t| t.with_timezone(&chrono::Local)))
+        .or(log.started)
+        .or_else(|| sessions::parse_session_id(session_id))
+        .unwrap_or_else(chrono::Local::now);
+    let ended = ended.or(log.ended).unwrap_or_else(chrono::Local::now);
+    let log_dir = paths::session_log_dir(game, session_id);
+    let crashed = launcher::crash_report_in(&log_dir);
+    // Made for a crash report that never came: no debug_log on the row.
+    let _ = std::fs::remove_dir(&log_dir);
+    Session {
+        session: session_id.into(),
+        game: game.into(),
+        started_at: started.to_rfc3339(),
+        ended_at: ended.to_rfc3339(),
+        duration_s: (ended - started).num_seconds().max(0) as u64,
+        source: "universe".into(),
+        unit,
+        screen: marker.map(|m| m.current.screen.clone()).unwrap_or_default(),
+        exit: exit.or(log.exit).unwrap_or(-1),
+        stopped: Some(marker.is_some_and(|m| m.stopped)),
+        crashed,
+        command: marker.map(|m| m.command.clone()).unwrap_or_default(),
+        ..Default::default()
     }
-    filed
 }
 
 /// A change to the session's marker, in place and only while it is that session's: a temp file renamed over it, so
@@ -301,14 +391,18 @@ impl Core {
     }
 
     /// A marker without an active unit (crash, reboot) is closed now; one that cannot be read goes, or every launch would be `Busy`.
-    /// One of a game with no folder goes too, undone and with no row. An `Err` that leaves the marker owes a row kept nowhere else: a launch waits for it.
+    /// Then every close left unfinished resumes. An `Err` leaves a marker its close could not be kept for: a launch waits for it.
     pub async fn reconcile(&self) -> Result<()> {
-        for (id, session_id) in file_unfiled() {
-            if let Err(e) = self.reload_game(&id).await {
-                tracing::warn!("{id}: {e}");
+        let left_open = self.close_left_open().await;
+        for c in closings() {
+            if let Err(e) = self.finish_closing(&c.row.game, &c.row.session).await {
+                tracing::warn!("session {} of {}: {e}", c.row.session, c.row.game);
             }
-            self.post_process(&id, &session_id).await;
         }
+        left_open
+    }
+
+    async fn close_left_open(&self) -> Result<()> {
         let path = paths::current_session_file();
         let Ok(text) = std::fs::read_to_string(&path) else { return Ok(()) };
         let m: Marker = match serde_json::from_str(&text) {
@@ -329,7 +423,7 @@ impl Core {
     /// A closed session's row: in its history, or waiting for it.
     pub async fn closed_row(&self, id: &str, session_id: &str) -> Option<Session> {
         let filed = sessions::read(&self.get(id).await.ok()?.game.sessions_path()).unwrap_or_default().into_iter().find(|s| s.session == session_id);
-        filed.or_else(|| Some(unfiled_file(id, session_id)).filter(|f| f.exists()).and_then(|f| read_unfiled(&f)))
+        filed.or_else(|| Some(closing_file(id, session_id)).filter(|f| f.exists()).and_then(|f| read_closing(&f)).map(|c| c.row))
     }
 
     /// Every game launched afterwards is bound to the scope, so it goes down with the launcher; idempotent.
@@ -641,50 +735,82 @@ impl Core {
         self.host.units.start(&spec).await
     }
 
-    /// Run by `ExecStopPost`, or by `reconcile` for a session left open; idempotent. Without a marker (a reboot) the times come from the unit's log.
+    /// Run by `ExecStopPost`, or by `reconcile` for a session left open; idempotent across processes. Without a marker
+    /// (a reboot) the times come from the unit's log.
     pub async fn session_end(&self, id: &str, session_id: &str, exit: Option<i32>, ended: Option<chrono::DateTime<chrono::Local>>) -> Result<()> {
         let _ = std::fs::remove_file(display_file(session_id));
-        let marker = read_marker().filter(|m| m.current.session_id == session_id);
-        let filed = match self.get(id).await {
-            Err(e) => Err(e),
-            Ok(_) if unfiled_file(id, session_id).exists() => Ok(None),
-            Ok(r) if sessions::read(&r.game.sessions_path()).unwrap_or_default().iter().any(|s| s.session == session_id) => Ok(None),
-            // A row kept nowhere keeps the marker, its undo with it: `reconcile` tries again on the next open.
-            Ok(r) => Ok(Some((self.file_session(&r, session_id, exit, ended, marker.as_ref()).await?, r))),
-        };
-        // Taken again: a change since the first read may have added an undo step.
-        if let Some(m) = marker.as_ref().and_then(|_| take_marker(session_id)) {
-            self.rollback(&m.undo).await;
+        let seen = read_marker().filter(|m| m.current.session_id == session_id);
+        if seen.is_some() || !closing_file(id, session_id).exists() {
+            let unit = seen.as_ref().map(|m| m.current.unit.clone()).unwrap_or_else(|| format!("{}.service", launcher::unit_name(id, session_id)));
+            let log = self.host.units.log(&unit).await;
+            claim_closing(id, session_id, seen.is_some(), |marker| closed_session(id, session_id, exit, ended, marker, &log))?;
         }
-        let Some(((session, in_history), r)) = filed? else { return Ok(()) };
+        self.finish_closing(id, session_id).await
+    }
+
+    /// The close's steps not yet noted done, in order: the row filed, the undo, the session-end hooks, then `post-process` once the row is in.
+    /// A history that refuses the row leaves the record for the next reconcile.
+    async fn finish_closing(&self, id: &str, session_id: &str) -> Result<()> {
+        let Some((held, mut c)) = hold_closing(id, session_id)? else { return Ok(()) };
+        if !c.filed {
+            match file_closing(id, session_id) {
+                Ok(()) => c.filed = true,
+                Err(e) => tracing::warn!("session {session_id} of {id} waits for its history: {e}"),
+            }
+        }
+        while let Some(step) = c.undo.last().cloned() {
+            self.rollback(std::slice::from_ref(&step)).await;
+            c.undo.pop();
+            change_closing(id, session_id, |kept| {
+                kept.undo.pop();
+            })?;
+        }
+        if !c.ended {
+            self.run_session_end(id, &c).await;
+            change_closing(id, session_id, |kept| kept.ended = true)?;
+        }
+        if let Err(e) = self.reload_game(id).await {
+            tracing::warn!("{id}: {e}");
+        }
+        if !c.filed {
+            return Ok(());
+        }
+        {
+            let file = closing_file(id, session_id);
+            let _lock = marker_lock()?;
+            std::fs::remove_file(&file)?;
+            let _ = std::fs::remove_file(file.with_extension("lock"));
+        }
+        drop(held);
+        self.post_process(id, session_id).await;
+        Ok(())
+    }
+
+    async fn run_session_end(&self, id: &str, c: &Closing) {
+        let Ok(r) = self.get(id).await else { return };
         let cfg = self.config.read().await.clone();
-        let mut env_end = match &marker {
-            Some(m) => HookEnv { vars: m.hook_env.clone() },
+        let mut env_end = match &c.hook_env {
+            Some(vars) => HookEnv { vars: vars.clone() },
             None => {
                 let mut e = self.hook_env_base(&r);
-                e.set("SESSION_ID", session_id);
-                e.set("SESSION_UNIT", session.unit.clone());
-                e.set("SESSION_SCREEN", session.screen.clone());
-                e.set("SESSION_STARTED_AT", session.started_at.clone());
+                e.set("SESSION_ID", c.row.session.clone());
+                e.set("SESSION_UNIT", c.row.unit.clone());
+                e.set("SESSION_SCREEN", c.row.screen.clone());
+                e.set("SESSION_STARTED_AT", c.row.started_at.clone());
                 e
             }
         };
-        env_end.set("SESSION_ENDED_AT", session.ended_at.clone());
-        env_end.set("SESSION_DURATION_S", session.duration_s.to_string());
+        env_end.set("SESSION_ENDED_AT", c.row.ended_at.clone());
+        env_end.set("SESSION_DURATION_S", c.row.duration_s.to_string());
         for m in self.hook_modules(&r, "session-end").await {
             let env = self.module_env(&m, Some(&r.game), &cfg, &env_end);
             if let Err(e) = modules::run_blocking(&m, "session-end", &env).await {
                 tracing::warn!("session-end {}: {e}", m.id());
             }
         }
-        self.reload_game(id).await?;
         if cfg.saves.auto_backup && crate::saves::backs_up(&r.game, &cfg) {
-            self.start_saves_backup(&r.game.id, session_id).await;
+            self.start_saves_backup(&r.game.id, &c.row.session).await;
         }
-        if in_history {
-            self.post_process(id, session_id).await;
-        }
-        Ok(())
     }
 
     /// A unit of its own: ludusavi's first run fetches it and its manifest, too long for `ExecStopPost`.
@@ -700,56 +826,6 @@ impl Core {
         if let Err(e) = self.host.units.start(&spec).await {
             tracing::warn!("saves backup of {id}: {e}");
         }
-    }
-
-    async fn file_session(
-        &self,
-        r: &Resolved,
-        session_id: &str,
-        exit: Option<i32>,
-        ended: Option<chrono::DateTime<chrono::Local>>,
-        marker: Option<&Marker>,
-    ) -> Result<(Session, bool)> {
-        let unit = marker.map(|m| m.current.unit.clone()).unwrap_or_else(|| format!("{}.service", launcher::unit_name(&r.game.id, session_id)));
-        let log = self.host.units.log(&unit).await;
-        let started = marker
-            .and_then(|m| chrono::DateTime::parse_from_rfc3339(&m.current.started_at).ok().map(|t| t.with_timezone(&chrono::Local)))
-            .or(log.started)
-            .or_else(|| sessions::parse_session_id(session_id))
-            .unwrap_or_else(chrono::Local::now);
-        let ended = ended.or(log.ended).unwrap_or_else(chrono::Local::now);
-        let log_dir = paths::session_log_dir(&r.game.id, session_id);
-        let crashed = launcher::crash_report_in(&log_dir);
-        // Made for a crash report that never came: no debug_log on the row.
-        let _ = std::fs::remove_dir(&log_dir);
-        let session = Session {
-            session: session_id.into(),
-            game: r.game.id.clone(),
-            started_at: started.to_rfc3339(),
-            ended_at: ended.to_rfc3339(),
-            duration_s: (ended - started).num_seconds().max(0) as u64,
-            source: "universe".into(),
-            unit,
-            screen: marker.map(|m| m.current.screen.clone()).unwrap_or_default(),
-            exit: exit.or(log.exit).unwrap_or(-1),
-            stopped: Some(marker.is_some_and(|m| m.stopped)),
-            crashed,
-            command: marker.map(|m| m.command.clone()).unwrap_or_default(),
-            ..Default::default()
-        };
-        let history = r.game.sessions_path();
-        // A history it cannot read cannot show the row is not there already.
-        let Err(e) = sessions::read(&history).and_then(|_| sessions::append(&history, &session)) else { return Ok((session, true)) };
-        tracing::warn!("session {session_id} of {} waits for {}: {e}", r.game.id, history.display());
-        keep_unfiled(&session).map_err(|kept| {
-            Error::Io(format!(
-                "the last session of {} could not be saved to {} ({e}) or kept in {} ({kept}): free some disk space or make those folders writable, then try again",
-                r.game.title,
-                history.display(),
-                paths::unfiled_sessions_dir().display()
-            ))
-        })?;
-        Ok((session, false))
     }
 
     /// What a `post-process` hook is told about one session of `r`, whether it just ended or is being written again later.
@@ -1149,6 +1225,9 @@ pub(crate) mod tests {
         let sid = core.launch("sample", "", "").await.unwrap();
         memory.drop_unit(&format!("universe-game-sample-{sid}.service"));
         assert!(core.current().await.is_none());
+        let m = read_marker().unwrap();
+        let row = closed_session("sample", &sid, None, None, Some(&m), &Default::default());
+        write_closing(&Closing { row, undo: m.undo.clone(), hook_env: Some(m.hook_env), ..Closing::default() }).expect("a close cut between its record and the marker's removal");
         core.reconcile().await.unwrap();
         let rows = sessions::read(&core.get("sample").await.unwrap().game.sessions_path()).unwrap();
         assert_eq!(rows.len(), 1);
@@ -1157,6 +1236,7 @@ pub(crate) mod tests {
         assert!(sb.post_ran.exists());
         let calls = memory.calls();
         assert_eq!(calls.last().map(String::as_str), Some("cursor:restore"));
+        assert_eq!(calls.iter().filter(|c| *c == "cursor:restore").count(), 1, "undone once");
         assert!(core.launch("sample", "", "").await.is_ok(), "the next launch is not Busy");
     }
 
@@ -1215,7 +1295,7 @@ pub(crate) mod tests {
         let other_rows = std::fs::read(&other_history).unwrap();
         assert_eq!(sessions::read(&other_history).unwrap().len(), 1);
 
-        let waiting: Vec<_> = std::fs::read_dir(paths::unfiled_sessions_dir()).unwrap().flatten().map(|e| e.path()).collect();
+        let waiting: Vec<_> = closings().iter().map(|c| closing_file(&c.row.game, &c.row.session)).collect();
         assert_eq!(waiting.len(), 1, "{waiting:?}");
         let kept = std::fs::read(&waiting[0]).unwrap();
         std::fs::remove_dir(&history).unwrap();
@@ -1230,8 +1310,8 @@ pub(crate) mod tests {
 
         std::fs::write(&waiting[0], kept).unwrap();
         let (_core, memory) = open().await;
-        assert_eq!(sessions::read(&history).unwrap().len(), 1, "a stop between the line and the file's removal files nothing twice");
-        assert!(memory.spec(&post_process).is_none());
+        assert_eq!(sessions::read(&history).unwrap().len(), 1, "a stop between the line and the record's note files nothing twice");
+        assert!(memory.spec(&post_process).is_some(), "post-process, which follows the note, runs");
         assert!(!waiting[0].exists());
         assert_eq!(std::fs::read(&other_history).unwrap(), other_rows, "the other game's history is as it was");
     }

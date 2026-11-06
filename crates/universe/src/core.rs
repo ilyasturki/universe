@@ -1383,7 +1383,7 @@ impl Core {
             .iter()
             .find(|g| g.sessions.iter().any(|s| s.session == session_id))
             .map(|g| g.game.id.clone())
-            .or_else(|| crate::session::unfiled_game(session_id))
+            .or_else(|| crate::session::closing_game(session_id))
     }
 
     pub async fn file_recording(&self, session_id: &str, path: &str, timeline: Option<&crate::recording::Timeline>) -> Result<String> {

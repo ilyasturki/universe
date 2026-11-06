@@ -148,8 +148,8 @@ pub fn current_session_file() -> PathBuf {
     state_home().join("current-session.json")
 }
 
-pub fn unfiled_sessions_dir() -> PathBuf {
-    state_home().join("unfiled-sessions")
+pub fn closing_sessions_dir() -> PathBuf {
+    state_home().join("closing-sessions")
 }
 
 /// Where a launch with `debug_log` on sends Proton's and DXVK's files.

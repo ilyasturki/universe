@@ -39,13 +39,21 @@ operation; a dash means the surface doesn't expose it.
   On every open the core **reconciles**: a marker with no live unit is closed from `journalctl`
   timestamps, one it cannot read is dropped, and one of a game with no folder is undone and dropped
   with no row. A launch that fails after an effect began undoes the same list.
-- A row whose `sessions.jsonl` cannot be read or written **waits** in `state/unfiled-sessions/`, one
-  file per session: the session ends all the same (undo, `session-end` hooks, saves backup, marker
-  gone) and any game launches. Every reconcile, on open and before `launch`, files the rows their
-  history takes under the marker's lock, each once and in order, then runs their `post-process`
-  hooks; a row whose game has no folder is dropped. `recording-file` lands on the waiting row.
-  A row that cannot wait either keeps the marker and its undo: the open goes on, the next one tries
-  again, and `launch` refuses, naming both paths, until it can.
+- A session **closes** through a record, `state/closing-sessions/<session>.<id>.json`: its row, the
+  undo left and the hook environment. One process claims the close under the marker's lock, the
+  record written before the marker goes; a record already there, or a marker it saw before reading
+  `journalctl` and that is gone since, means another process claimed it, and it files nothing. Its
+  steps run in order under the record's own lock (`flock`, skipped by any other process while held):
+  the row filed into `sessions.jsonl` under the marker's lock, which reads the history first and
+  appends only a row it lacks; the undo, a step at a time; the `session-end` hooks and the saves
+  backup; then the record goes and `post-process` runs. Each step is noted in the record once done,
+  so a close cut short (a crash, a kill) resumes on the next reconcile where it stopped, and each
+  step runs once. A history that cannot be read or written leaves only the record: the undo and the
+  hooks run all the same, any game launches, and every reconcile, on open and before `launch`, files
+  the rows their history takes, each once and in order; a row whose game has no folder is dropped.
+  `recording-file` lands on the waiting row. Without a marker, a row goes only into a history that
+  reads without it. A record that cannot be written keeps the marker and its undo: the open goes on,
+  the next one tries again, and `launch` refuses, naming the folder, until it can.
 - Asynchronous hooks (`post-launch`, `post-process`) run as transient units. A `post-launch` hook
   that starts a process meant to last the whole session (the recorder) must put it in its own unit
   with `BindsTo=$SESSION_UNIT After=$SESSION_UNIT`, so it stops with the game even if nothing else
@@ -399,7 +407,7 @@ every 10 s, since the 30-minute timeout writes no file.
 | `current()` | `current()` | `universe status` | `{session_id, id, title, unit, screen, started_at, gamescope_pid, launcher_pid, app_pid}` (`gamescope_pid` is the launcher's gamescope the game was started into and `launcher_pid` that launcher, both `0` for a gamescope of the game's own; `app_pid` the process that called `launch`), or `None`. The CLI wraps it: `status --json` prints `{"current": … or null, "recent": [the 10 newest session rows across the library], "pending_journals": [see Journal]}` |
 | `sessions(id)` | `sessions(id)` | `universe sessions <name>` | `[SessionRow]`, newest first (by `ended_at`); `id = ""` spans every visible game (not removed, not hidden) |
 | `session_log(id, session_id, tail)` | `session_log(id, session_id="", tail=0)` | `universe logs <name> [session] [-n N] [-f]` | what a session's processes wrote (see Logs): `[{time, source, priority, message}]`, oldest first, the last `tail` lines (0: all). `session_id` `""` is the running session, else the newest played; `NotFound` for a session that never was, `[]` once the journal has let the unit go, and for an import |
-| `session_end(id, session_id, exit, ended)` | — | `universe session-end <id> <session>` | closes the session, idempotent. Run by systemd's `ExecStopPost`, or by reconciliation |
+| `session_end(id, session_id, exit, ended)` | — | `universe session-end <id> <session>` | closes the session, idempotent across processes and crashes: one row per session, each closing step once. Run by systemd's `ExecStopPost`, or by reconciliation |
 | `closed_row(id, session_id)` | — | — | the closed session's line, from `sessions.jsonl` or waiting to reach it; none while it runs or when it has no line |
 
 One `sessions.jsonl` line:
