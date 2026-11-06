@@ -15,7 +15,7 @@ import pytest
 from looks import LOOKS, FocusTrace, Look, current_row, read, settle
 from PySide6.QtCore import QObject, Qt
 from PySide6.QtTest import QTest
-from uitest import record, until
+from uitest import descendant, record, until
 
 universe_core = pytest.importorskip("universe_core")
 # Each starts the real core's processes (a store source, a private bus, its systemd): load stretches any of them past the budget.
@@ -547,39 +547,47 @@ def down_to_bring_back(look, page, ident):
 
 @pytest.mark.parametrize("name", LOOKS)
 def test_a_hidden_and_a_removed_game_come_back_by_keys(journey, name):
-    for ident in ("hidden-game", "removed-game"):
+    lutris(journey, gog_games(journey))
+    for ident in ("first-game", "hidden-game", "removed-game"):
         journey.write(f"data/games/{ident}/game.toml", f'schema = 1\nid = "{ident}"\ntitle = "{ident}"\n[launch]\nrunner = "linux"\nexe = "/games/{ident}"\n')
     config = journey.config / "config.toml"
     config.write_text(config.read_text() + f'[paths]\nrecordings_root = "{journey.root}/recordings"\n')
     clip = journey.write("recordings/removed-game/20260913-120000.mkv", b"clip")
     look = journey.start(look=name)
     client, api = journey.client, journey.api
-    assert client.set("hidden-game", "hidden", "true") and client.remove("removed-game", False)
+    form = api.screens.add
+    assert client.set("first-game", "hidden", "true") and client.set("hidden-game", "hidden", "true") and client.remove("removed-game", False)
+    until(lambda: api.allGames.byId("removed-game") is None, "the removed game has left the library")
     archived = clip.parents[1] / ".archive" / "removed-game" / clip.name
     assert archived.read_bytes() == b"clip" and not clip.exists()
 
     page = look.open("pages/AddGamePage.qml", None if look.stacked else {"add": True})
-    trace = FocusTrace(look.window)
     down_to_bring_back(look, page, "removed-game")
+    trace = FocusTrace(look.window, page=page)
     look.press(Qt.Key.Key_Return)
-    game = until(lambda: api.allGames.byId("removed-game"), "the removed game is back in the library")
-    assert game.hidden is False
+    game = api.allGames.byId("removed-game")
+    assert game is not None and game.hidden is False, "the press itself puts it back in the library"
     on_disk = journey.game("removed-game")
     assert on_disk.get("removed_at", "") == "" and on_disk.get("hidden", False) is False
     assert clip.read_bytes() == b"clip" and not archived.exists(), "its recordings are out of the archive"
 
-    until(lambda: current_row(page).get("game") != "removed-game", "its row goes, and the cursor with it, the list's last")
-    assert current_row(page).get("key"), "the cursor past the list's end comes back onto a row"
-    if look.name == "ps5":
-        look.press(Qt.Key.Key_Left)
-    down_to_bring_back(look, page, "hidden-game")
+    until(lambda: current_row(page).get("game") == "hidden-game", "its row goes, the list's last: the cursor takes the row above it")
     look.press(Qt.Key.Key_Return)
-    game = until(lambda: api.allGames.byId("hidden-game"), "the hidden game is back in the library")
+    game = until(lambda: api.allGames.byId("hidden-game"), "the second A brings that game back")
     assert game.hidden is False and journey.game("hidden-game").get("hidden", False) is False
 
-    until(lambda: not [r for r in api.screens.add.rows if r["key"] == "bring_back"], "nothing left to bring back: the group goes")
+    until(lambda: current_row(page).get("game") == "first-game", "again the row above")
+    look.press(Qt.Key.Key_Return)
+    until(lambda: api.allGames.byId("first-game"), "the group's last row brings its game back")
+    until(lambda: not [r for r in form.rows if r["key"] == "bring_back"], "nothing left to bring back: the group goes")
+    until(lambda: current_row(page).get("key") == "lutris", "the cursor takes the row above the group")
     settle(look.window)
-    assert trace.stop().foreign("addGamePage") == [], "every frame of the rows' going: the focus on the page"
-    assert current_row(page).get("key"), "the cursor stands on a row that is still there"
     if look.name == "ps5":
         assert page.property("part") == len(read(page, "parts")) - 1, "the group gone, the part before it is the open one"
+        assert descendant(page, "partList").property("index") == page.property("part"), "the part list marks the open part"
+    trace.stop()
+    assert trace.foreign("addGamePage") == [], "every frame of the rows' going: the focus on the page"
+    assert "pick_file" not in trace.cursor, "no frame leaves the cursor on the file picker's row"
+
+    look.press(Qt.Key.Key_Return)
+    until(lambda: form.lutris and form.lutris["imported"] == ["dishonored"], "A on that row opens the Lutris import")

@@ -203,6 +203,23 @@ FocusScope {
         index = s ? s.row : 0;
     }
 
+    // After a swap that took rows away: the cursor's row gone, the row above it takes the cursor, the first when there is none.
+    function land() {
+        if (stopOf(index))
+            return;
+        var above = null;
+        layout.stops.forEach(function (column) {
+            column.forEach(function (s) {
+                if (s.row < index && (!above || s.row > above.row))
+                    above = s;
+            });
+        });
+        if (above)
+            index = above.row;
+        else
+            reset();
+    }
+
     function go(stop) {
         index = stop.row;
         Sound.tick();

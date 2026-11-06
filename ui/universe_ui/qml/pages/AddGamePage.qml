@@ -64,7 +64,10 @@ FocusScope {
             importLutris();
         } else if (row.key === "bring_back") {
             Sound.enter();
+            cards.swapping = true;
             form.bringBack(row.game);
+            cards.swapping = false;
+            cards.land();
         }
     }
 

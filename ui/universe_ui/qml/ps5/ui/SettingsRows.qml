@@ -151,6 +151,17 @@ FocusScope {
         index = s.length > 0 ? s[0] : 0;
     }
 
+    // The cursor's row just went: the row above it takes the cursor, the first when there is none.
+    function land() {
+        var above = stops().filter(function (i) {
+            return i < index;
+        });
+        if (above.length > 0)
+            index = above[above.length - 1];
+        else
+            reset();
+    }
+
     function step(d) {
         var s = stops();
         var pos = s.indexOf(index);
@@ -203,7 +214,7 @@ FocusScope {
         // Not currentRow: its binding may still hold the old model's row here.
         const row = model[index];
         if (!row || row.heading)
-            reset();
+            land();
         view.scrollToCurrent();
     }
     onIndexChanged: view.scrollToCurrent()

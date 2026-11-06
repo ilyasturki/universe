@@ -170,6 +170,7 @@ FocusScope {
     SectionList {
         id: partList
 
+        objectName: "partList"
         x: Theme.dp(172)
         y: title.height + Theme.dp(10)
         width: Theme.dp(430)

@@ -128,16 +128,20 @@ def focus_names(window):
 
 
 class FocusTrace:
-    """Every frame the window draws while it runs: where the active focus sits, and how many rows of `menu` are lit."""
+    """Every frame the window draws while it runs: where the active focus sits, how many rows of `menu` are lit, and the row under `page`'s cursor."""
 
-    def __init__(self, window, menu=None):
+    def __init__(self, window, menu=None, page=None):
         self.window = window
         self.menu = menu
+        self.page = page
         self.frames = []
+        self.cursor = []
         window.frameSwapped.connect(self._frame)
 
     def _frame(self):
         self.frames.append((focus_names(self.window), len(lit_rows(self.menu)) if self.menu is not None else 0))
+        if self.page is not None:
+            self.cursor.append(current_row(self.page).get("key"))
 
     def stop(self):
         self.window.frameSwapped.disconnect(self._frame)
