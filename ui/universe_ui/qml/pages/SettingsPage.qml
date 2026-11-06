@@ -2068,16 +2068,6 @@ FocusScope {
         }
     }
 
-    Connections {
-        target: api.screens.storage
-        function onFinished(key, ok, message) {
-            if (ok)
-                Notices.show(message);
-            else
-                Notices.fail(message);
-        }
-    }
-
     ConfirmDialog {
         id: dialog
         objectName: "dialog"

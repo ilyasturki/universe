@@ -2,7 +2,7 @@ import threading
 
 import pytest
 from looks import activate, content_rows, focus_names, held_notices, notices
-from PySide6.QtCore import SIGNAL, Qt
+from PySide6.QtCore import SIGNAL, QObject, Qt
 from uitest import record, until
 
 from universe_ui.errors import UniverseError
@@ -145,6 +145,53 @@ def test_a_data_action_reports_once_whether_its_page_stays_or_closes(api, fake, 
     failing.clear()
     assert [error for error, _ in back_up(close=True)] == [False], "so does the success"
     assert [error for error, _ in back_up(close=False)] == [False], "one notice with the page still open"
+
+
+def test_a_leftover_trash_reports_once_whether_its_storage_page_stays_or_closes(api, fake, look, monkeypatch):
+    store = api.screens.storage
+    gate, real, failing, started = threading.Event(), fake.core.trash_leftover, [], []
+
+    def held(path):
+        started.append(path)
+        gate.wait(10)
+        if failing:
+            raise UniverseError("Io", "the trash is full")
+        return real(path)
+
+    monkeypatch.setattr(fake.core, "trash_leftover", held)
+    posted, clear = held_notices(look.engine)
+    shown = "storagePage" if look.stacked else "settingsCards"
+
+    def trash(close):
+        gate.clear()
+        clear()
+        page = look.open("pages/StoragePage.qml") if look.stacked else look.settings("storage")
+        until(lambda: any(k.startswith("trash:") for k in keys(store)) and not store.loading, "the leftovers are measured")
+        rows = store.rows if look.stacked else content_rows(page)
+        key = next(r["key"] for r in rows if r["key"].startswith("trash:"))
+        activate(page, rows, key=key)
+        dialog = look.dialog() if look.stacked else page.findChild(QObject, "dialog")
+        until(lambda: dialog.property("open") is True, "the trash asks first")
+        look.press(Qt.Key.Key_Right if look.stacked else Qt.Key.Key_Down)
+        until(lambda: dialog.property("index") == 1, "the cursor on Move to Trash")
+        look.press(Qt.Key.Key_Return)
+        until(lambda: dialog.property("open") is False)
+        until(lambda: started, "Trash starts it")
+        started.clear()
+        while close and shown in focus_names(look.window):
+            look.press(Qt.Key.Key_Escape)
+        if not close:
+            assert store.receivers(SIGNAL("finished(QString,bool,QString)")) == 1, "Notices folds a repeated text, so one listener is the guard"
+        gate.set()
+        until(lambda: posted(), "the result reaches the notices")
+        until(lambda: key.partition(":")[2] in fake.core.trashed or failing)
+        return [(n["error"], n["text"]) for n in posted()]
+
+    failing.append(True)
+    assert trash(close=True) == [(True, "the trash is full")], "the failure outlives its page"
+    failing.clear()
+    assert [error for error, _ in trash(close=True)] == [False], "so does the success"
+    assert [error for error, _ in trash(close=False)] == [False], "one notice with the page still open"
 
 
 @pytest.mark.parametrize("look", ["reprise"], indirect=True)
