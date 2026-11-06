@@ -60,13 +60,20 @@ def test_the_game_defaults_switch_and_abouts_are_one(api, fake):
     until(lambda: changelog.opensAfterUpdate is False, "About's switch follows")
 
 
-def over_the_page(look, name):
-    """The Universe look's What's new: a dialog over the page it opened on, which stays the one shown under it."""
+def under(look, name):
+    """The Universe look's What's new holds the focus, and its page loads under it, often after it opened."""
     root = look.root
     dialog = look.find("whatsNew")
     until(lambda: dialog.property("activeFocus") is True)
-    assert dialog.property("open") is True and root.property("subOpen") is False
-    assert root.property("activePage").objectName() == name and root.property("returnLaunches") is None
+    until(lambda: (page := root.property("activePage")) is not None and page.objectName() == name, "the page loads under it")
+    assert dialog.property("activeFocus") is True, "the page landing under it leaves the focus in the dialog"
+
+
+def over_the_page(look, name):
+    """The Universe look's What's new: a dialog over the page it opened on, which stays the one shown under it."""
+    root = look.root
+    under(look, name)
+    assert look.find("whatsNew").property("open") is True and root.property("subOpen") is False and root.property("returnLaunches") is None
     settle(look.window)
     look.trace = FocusTrace(look.window)
 
@@ -98,6 +105,8 @@ def test_an_update_opens_whats_new_once_and_about_opens_the_changelog(look):
     page = look.page("changelogPage")
     until(lambda: page.property("fresh") is True, "the start opens what's new")
     assert versions(read(page, "releases")) == ["0.0.3", "0.0.2"]
+    if look.name == "reprise":
+        under(look, "homePage")
     shown = until(lambda: len(m := [i for i in named(page, "releaseMedia") if i.property("file")]) == 2 and m, "the highlights' media download")
     assert sorted(m.property("media")["kind"] for m in shown) == ["clip", "still"]
     still = until(lambda: next(iter(named(page, "releaseStill")), None), "the still is shown")
