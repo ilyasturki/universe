@@ -214,7 +214,7 @@ out its own compatdata instead, which stays Steam's), and each game's backups go
 | `reset_prefix(id)` | `reset_prefix(id)` | `universe data <name> reset-prefix` | the game's saves backed up, then its prefix to the trash: the next launch makes a fresh one. Only Universe's own prefix, used by no other game. `{trashed, backup}` |
 | `prefix_tool(id, tool, args)` | `prefix_tool(id, tool, args=[])` | `universe data <name> winecfg\|winetricks [verbs]\|run <exe> [args]\|kill` | `winecfg`, `winetricks` and `run`: a transient unit `universe-prefix-<id>-<tool>-<stamp>` running the tool in the game's prefix with the launch's environment, no gamescope: `umu-run winecfg`, `umu-run winetricks …`, `umu-run <exe>` for Proton; `wine winecfg`, `winetricks` with `WINE` set, `wine <exe>` for Wine. Winetricks with no verbs opens its GUI (`--gui`): umu-run refuses it bare; verbs given pass as they are. `{tool, unit}` once the tool's own process runs in the unit (`winecfg.exe`, `winetricks`, the exe's name), or after 60 s at most: umu sets its container up first. A unit that ends before then on a non-zero exit is `Io`: the tool, the exit status and the last line it wrote (winetricks exiting 127); a failure later goes unreported. A program that is not installed (and is no tool Universe fetches, as umu-run is) is `Unavailable`, named, and nothing starts. `kill`: what `wineserver -k` does, from the core itself: every wineserver serving the prefix gets SIGINT (it kills the prefix's programs, saves the registry and exits), SIGKILL after 5 s. A server is found by its working directory, Wine's `server-<dev>-<ino>` named after the prefix, so one in a sandbox's private `/tmp` (umu on NixOS) is found too, whatever started it, and no other prefix's. `{tool, stopped}`, `stopped` the servers stopped (0: nothing ran); `Busy` when one outlives SIGKILL |
 | `saves_backup(id)` | `saves_backup(id)` | `universe saves backup <name>` | a backup now, below; `Outcome {change, files: [{path, bytes}], bytes}`, `change` ludusavi's `new`, `different` or `same` (unchanged saves make no backup), `none` when it found nothing |
-| `saves_restore(id, backup)` | `saves_restore(id, backup="")` | `universe saves restore <name> [backup]` | a backup's saves put back, the latest when `backup` is empty; refused while the game runs |
+| `saves_restore(id, backup)` | `saves_restore(id, backup="")` | `universe saves restore <name> [backup]` | a backup's saves put back, the latest when `backup` is empty, after a backup of the saves it replaces; refused while the game runs, or when that backup fails |
 | `saves_export(id, to)` | `saves_export(id, to)` | `universe saves export <name> [dir]` | every backup of the game zipped into `<to>/<id>-saves-<stamp>.zip`, laid out as ludusavi lays them out: unpacked, any ludusavi restores from it |
 | `saves_cloud(id, action)` | `saves_cloud(id, action="status")` | `universe saves cloud <name> [--download\|--upload\|--keep-local\|--keep-cloud] [-y]` | the game's cloud saves through its source's `cloud-saves` verb (see Cloud saves): `status` reads the last sync's state, `download` and `upload` sync now, `keep-local` and `keep-cloud` settle a conflict. A `cloud` object; `Unavailable` for a game whose source has no `cloud-saves` capability; any action but `status` is refused while the game runs |
 | — | — | `universe saves list <name>` | the saves found and the backups kept: `game_data`'s `saves` |
@@ -274,7 +274,10 @@ process takes: no detected roots, the install folder's parent as an `other` root
 beside its files), the backup path, `full` retention `saves.keep` and no differential backups.
 A prefix is passed as `--wine-prefix` (its `pfx/` when it has one, Steam's layout) and redirected
 both ways to `/universe/prefix`: a backup records the prefix's files at that path and a restore puts
-them in the prefix the game has now, so a backup outlives a `move_prefix` or a reset. The title is
+them in the prefix the game has now, so a backup outlives a `move_prefix` or a reset: a restore
+after a reset makes the prefix's folder, and the next launch builds a Wine prefix around the saves. A
+restore backs up the saves it replaces first, with room for one backup over `saves.keep` so that
+the one being restored stays; the next backup prunes back down. The title is
 ludusavi's: found once with `ludusavi find` by the Steam id (`metadata.steam_appid`, a Steam game's
 `source.id`), the GOG id, then the title give or take an edition, and kept in `game.toml` as
 `saves.name`, which `set <name> saves.name="…"` changes for a title it does not find. ludusavi
@@ -1974,7 +1977,7 @@ whats_new = true                     # the first start after an update opens wha
 
 [saves]                              # see Game data
 auto_backup = true                   # a backup of the game's saves after each session
-keep = 5                             # backups kept per game (1 to 255), the oldest going first
+keep = 5                             # backups kept per game (1 to 254), the oldest going first
 
 [system]                             # the machine's controls as last set (see System), put back at the launcher's start outside Steam; "" leaves one as the system has it; a game's own game.toml [system] holds the same ids, brightness too
 tdp = ""                             # watts

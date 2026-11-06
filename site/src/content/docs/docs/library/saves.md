@@ -20,11 +20,11 @@ Some emulators, such as Eden, Ryujinx and PCSX2, keep every game's saves in one 
 The game menu (**Start** on a game) › **Manage** › **Data and saves** has:
 
 - **Back Up Now**;
-- **Restore the Latest Backup**, which replaces the saves on disk;
+- **Restore the Latest Backup**, which backs up the saves on disk, then replaces them;
 - **Export the Backups**, which writes every backup into one zip in your home folder;
 - the list of backups, where **A** restores one, after asking.
 
-Restoring is refused while the game runs. You can leave the page while an action runs: its result, or why it failed, shows when it ends.
+Restoring is refused while the game runs. After **Reset the Prefix…**, restoring puts the saves back in the game's fresh prefix, so you can do it before the next launch. You can leave the page while an action runs: its result, or why it failed, shows when it ends.
 
 ## Cloud saves
 

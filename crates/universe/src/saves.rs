@@ -13,6 +13,8 @@ use crate::{Error, Result};
 pub const BIN: &str = "ludusavi";
 /// Where a backup records the prefix's files: the same path wherever the prefix sits, so a backup outlives a move or a reset.
 const PREFIX_IN_BACKUPS: &str = "/universe/prefix";
+/// One under the 255 ludusavi takes: a restore keeps one backup more for its time.
+pub const MOST_KEPT: u32 = 254;
 // A first run downloads ludusavi's manifest (17 MB) before it scans.
 const TIMEOUT: Duration = Duration::from_secs(600);
 
@@ -246,7 +248,7 @@ fn config_yaml(ask: Option<&Ask>, dir: &Path, keep: u32) -> Value {
         "release": {"check": false},
         "roots": roots,
         "redirects": redirects,
-        "backup": {"path": dir, "retention": {"full": keep.clamp(1, 255), "differential": 0}, "format": {"chosen": "simple"}},
+        "backup": {"path": dir, "retention": {"full": keep, "differential": 0}, "format": {"chosen": "simple"}},
         "restore": {"path": dir},
         "customGames": custom,
     })
@@ -339,7 +341,7 @@ pub async fn ask(game: &Game, config: &Config, fetch: bool) -> Result<Ask> {
         game.saves.name.clone()
     };
     let prefix = matches!(spec.kind, Kind::Proton | Kind::Wine) || spec.via_proton;
-    let prefix = prefix.then(|| wine_prefix(&crate::launcher::prefix_of(game, config))).filter(|p| p.is_dir());
+    let prefix = prefix.then(|| wine_prefix(&crate::launcher::prefix_of(game, config)));
     let root = (!game.source.dir.is_empty()).then(|| paths::expand(&game.source.dir)).and_then(|d| d.parent().map(Path::to_path_buf));
     Ok(Ask { bin, name, prefix, files: vec![], root })
 }
@@ -349,7 +351,7 @@ fn backup_args(verb: &str, ask: &Ask, dir: &Path, extra: &[&str]) -> Vec<std::ff
     args.extend(extra.iter().map(|a| a.into()));
     args.extend(["--api".into(), "--force".into(), "--path".into(), dir.as_os_str().to_owned()]);
     if verb == "backup" {
-        if let Some(p) = &ask.prefix {
+        if let Some(p) = ask.prefix.as_ref().filter(|p| p.is_dir()) {
             args.extend(["--wine-prefix".into(), p.as_os_str().to_owned()]);
         }
     }
@@ -377,7 +379,7 @@ pub async fn locate(ask: &Ask, config: &Config, id: &str) -> Result<Vec<Found>> 
     let dir = dir(config, id);
     let mut args = backup_args("backup", ask, &dir, &["--preview"]);
     args.push(ask.name.clone().into());
-    let reply = run(&ask.bin, Some(ask), &dir, config.saves.keep, args).await?;
+    let reply = run(&ask.bin, Some(ask), &dir, kept(config), args).await?;
     Ok(files_of(&reply, &ask.name))
 }
 
@@ -395,29 +397,41 @@ fn outcome(reply: &Value, name: &str) -> Outcome {
     Outcome { bytes: files.iter().map(|f| f.bytes).sum(), change, files }
 }
 
+fn kept(config: &Config) -> u32 {
+    config.saves.keep.clamp(1, MOST_KEPT)
+}
+
 /// Unchanged saves make no new backup; the oldest beyond `saves.keep` goes.
 pub async fn backup(ask: &Ask, config: &Config, id: &str) -> Result<Outcome> {
+    backup_keeping(ask, config, id, kept(config)).await
+}
+
+async fn backup_keeping(ask: &Ask, config: &Config, id: &str, keep: u32) -> Result<Outcome> {
     let dir = dir(config, id);
-    let keep = config.saves.keep.clamp(1, 255).to_string();
-    let mut args = backup_args("backup", ask, &dir, &["--full-limit", &keep, "--differential-limit", "0"]);
+    forget_unwritten(&dir)?;
+    let limit = keep.to_string();
+    let mut args = backup_args("backup", ask, &dir, &["--full-limit", &limit, "--differential-limit", "0"]);
     args.push(ask.name.clone().into());
-    let reply = run(&ask.bin, Some(ask), &dir, config.saves.keep, args).await?;
+    let reply = run(&ask.bin, Some(ask), &dir, keep, args).await?;
     Ok(outcome(&reply, &ask.name))
 }
 
-/// An empty `backup` is the latest; a prefix's files land in the prefix the game has now.
+/// An empty `backup` is the latest. The saves it replaces are backed up first, and it fails rather than lose them.
+/// A prefix's files land in the prefix the game has now, or will have: a reset leaves no folder, and ludusavi makes it.
 pub async fn restore(ask: &Ask, config: &Config, id: &str, backup: &str) -> Result<Outcome> {
     let dir = dir(config, id);
     let listed = backups(&dir);
     let picked = if backup.is_empty() { listed.iter().find(|b| b.name == ask.name).or(listed.first()) } else { listed.iter().find(|b| b.id == backup) };
-    let name = picked.map(|b| b.name.clone()).ok_or_else(|| Error::NotFound(format!("{id} has no backup {backup}").trim_end().to_string()))?;
-    let mut args = backup_args("restore", ask, &dir, &[]);
-    if !backup.is_empty() {
-        args.extend(["--backup".into(), backup.into()]);
+    let picked = picked.ok_or_else(|| Error::NotFound(format!("{id} has no backup {backup}").trim_end().to_string()))?;
+    // One over the limit: the backup to restore may be the oldest. The next backup prunes back down.
+    match backup_keeping(ask, config, id, kept(config) + 1).await {
+        Ok(_) | Err(Error::NotFound(_)) => {}
+        Err(e) => return Err(Error::Invalid(format!("refusing to restore {id}: the saves on disk could not be backed up: {e}"))),
     }
-    args.push(name.clone().into());
-    let reply = run(&ask.bin, Some(ask), &dir, config.saves.keep, args).await?;
-    Ok(outcome(&reply, &name))
+    let mut args = backup_args("restore", ask, &dir, &["--backup", &picked.id]);
+    args.push(picked.name.clone().into());
+    let reply = run(&ask.bin, Some(ask), &dir, kept(config), args).await?;
+    Ok(outcome(&reply, &picked.name))
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -431,21 +445,41 @@ pub struct Backup {
     pub path: String,
 }
 
+fn mapping(file: &Path) -> Option<yaml_rust2::Yaml> {
+    let text = std::fs::read_to_string(file).ok()?;
+    yaml_rust2::YamlLoader::load_from_str(&text).ok()?.into_iter().next()
+}
+
+/// ludusavi 0.31 leaves a copy that failed under a redirect in its mapping, with no folder behind it, and calls those saves unchanged from then on.
+fn forget_unwritten(dir: &Path) -> Result<()> {
+    use yaml_rust2::Yaml;
+    for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+        let file = entry.path().join("mapping.yaml");
+        let Some(mut doc) = mapping(&file) else { continue };
+        let Some(Yaml::Array(listed)) = doc.as_mut_hash().and_then(|d| d.get_mut(&Yaml::String("backups".into()))) else { continue };
+        let before = listed.len();
+        listed.retain(|b| b["name"].as_str().is_none_or(|id| entry.path().join(id).exists()));
+        if listed.len() != before {
+            let mut text = String::new();
+            yaml_rust2::YamlEmitter::new(&mut text).dump(&doc).map_err(|e| Error::Io(format!("{}: {e}", file.display())))?;
+            crate::game::atomic_write(&file, text.as_bytes())?;
+        }
+    }
+    Ok(())
+}
+
 /// Newest first.
 pub fn backups(dir: &Path) -> Vec<Backup> {
     let mut out = Vec::new();
     for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
-        let Some(doc) = std::fs::read_to_string(entry.path().join("mapping.yaml"))
-            .ok()
-            .and_then(|t| yaml_rust2::YamlLoader::load_from_str(&t).ok())
-            .and_then(|d| d.into_iter().next())
-        else {
-            continue;
-        };
+        let Some(doc) = mapping(&entry.path().join("mapping.yaml")) else { continue };
         let name = doc["name"].as_str().unwrap_or_default().to_string();
         for b in doc["backups"].as_vec().into_iter().flatten() {
             let Some(id) = b["name"].as_str() else { continue };
             let path = entry.path().join(id);
+            if !path.exists() {
+                continue;
+            }
             out.push(Backup {
                 id: id.to_string(),
                 name: name.clone(),

@@ -202,7 +202,7 @@ pub fn fill(list: &gtk::ListBox, data: &Value, reload: Reload) {
             let (gid, backup, again) = (id.clone(), text(b, "id"), reload.clone());
             restore.connect_clicked(move |button| {
                 let (gid, backup, again, anchor) = (gid.clone(), backup.clone(), again.clone(), button.clone().upcast::<gtk::Widget>());
-                let body = gettext("The saves on disk now are replaced by this backup's.");
+                let body = gettext("The saves on disk now are backed up, then replaced by this backup's.");
                 confirm(button.upcast_ref(), &gettext("Restore This Backup?"), &body, &gettext("_Restore"), move || {
                     let (gid, backup) = (gid.clone(), backup.clone());
                     act(

@@ -841,10 +841,7 @@ mod tests {
     #[tokio::test]
     async fn saves_are_backed_up_and_restored_through_ludusavi_into_the_prefix_the_game_has_now() {
         let env = paths::test_env();
-        if saves::installed().is_none() {
-            eprintln!("ludusavi is not on PATH: the dev shell and the Nix check have it");
-            return;
-        }
+        assert!(saves::installed().is_some(), "ludusavi is not on PATH: the dev shell and the Nix check have it");
         let prefixes = library(&env);
         saves::tests::offline_manifest("Fixture Game:\n  files:\n    \"<winAppData>/Fixture\":\n      when:\n        - os: windows\n");
         let elsewhere = env.path().join("elsewhere/fixture");
@@ -862,6 +859,7 @@ mod tests {
         assert_eq!(data["saves"]["files"][0]["bytes"], 5);
         assert_eq!(data["saves"]["backups"].as_array().unwrap().len(), 1);
 
+        next_second().await;
         std::fs::write(save(&elsewhere), b"second").unwrap();
         core.move_prefix("fixture-game").await.unwrap();
         let moved = prefixes.join("fixture-game");
@@ -873,8 +871,85 @@ mod tests {
         assert!(zip.is_file() && zip.starts_with(env.path().join("exports")));
 
         let reset = core.reset_prefix("fixture-game").await.unwrap();
-        assert_eq!(reset["backup"]["change"], "same", "the saves are backed up before the prefix goes");
+        assert_eq!(reset["backup"]["change"], "different", "the saves are backed up before the prefix goes");
         assert!(!moved.exists());
+
+        core.saves_restore("fixture-game", "").await.unwrap();
+        assert_eq!(std::fs::read(save(&moved)).unwrap(), b"first", "the backup outlives the reset: its saves land in the prefix the game will have");
+    }
+
+    /// Fixture Game on a profile keeping `keep` backups, and where its save sits in its prefix.
+    async fn game_keeping(env: &paths::TestEnv, keep: u32) -> (Core, PathBuf) {
+        assert!(saves::installed().is_some(), "ludusavi is not on PATH: the dev shell and the Nix check have it");
+        let prefix = library(env).join("fixture-game");
+        let config = env.path().join("config/config.toml");
+        std::fs::write(&config, std::fs::read_to_string(&config).unwrap() + &format!("[saves]\nkeep = {keep}\n")).unwrap();
+        saves::tests::offline_manifest("Fixture Game:\n  files:\n    \"<winAppData>/Fixture\":\n      when:\n        - os: windows\n");
+        let save = prefix.join("drive_c/users/steamuser/AppData/Roaming/Fixture/slot1.sav");
+        std::fs::create_dir_all(save.parent().unwrap()).unwrap();
+        proton_game(env, "Fixture Game", &prefix);
+        (open().await.0, save)
+    }
+
+    async fn backup_ids(core: &Core) -> Vec<String> {
+        let data = core.game_data("fixture-game").await.unwrap();
+        data["saves"]["backups"].as_array().unwrap().iter().map(|b| b["id"].as_str().unwrap().to_string()).collect()
+    }
+
+    /// ludusavi names a backup to the second: two in one second share a folder.
+    async fn next_second() {
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+    }
+
+    #[tokio::test]
+    async fn a_restore_backs_up_the_saves_it_replaces_and_keeps_the_backup_it_restores() {
+        use std::os::unix::fs::PermissionsExt;
+        let env = paths::test_env();
+        let (core, save) = game_keeping(&env, 2).await;
+
+        std::fs::write(&save, b"oldest").unwrap();
+        core.saves_backup("fixture-game").await.unwrap();
+        let oldest = backup_ids(&core).await[0].clone();
+        next_second().await;
+        std::fs::write(&save, b"newer").unwrap();
+        core.saves_backup("fixture-game").await.unwrap();
+        next_second().await;
+        std::fs::write(&save, b"unsaved progress").unwrap();
+
+        assert!(matches!(core.saves_restore("fixture-game", "no-such-backup").await, Err(Error::NotFound(_))));
+        assert_eq!(backup_ids(&core).await.len(), 2, "a backup that isn't there backs up nothing");
+
+        let folder = saves::dir(&Config::load().unwrap(), "fixture-game").join("Fixture Game");
+        std::fs::set_permissions(&folder, std::fs::Permissions::from_mode(0o555)).unwrap();
+        let refused = core.saves_restore("fixture-game", &oldest).await;
+        std::fs::set_permissions(&folder, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(matches!(&refused, Err(Error::Invalid(m)) if m.contains("backed up")), "{refused:?}");
+        assert_eq!(std::fs::read(&save).unwrap(), b"unsaved progress", "saves that can't be backed up stay");
+
+        core.saves_restore("fixture-game", &oldest).await.unwrap();
+        assert_eq!(std::fs::read(&save).unwrap(), b"oldest");
+        let after = backup_ids(&core).await;
+        assert!(after.contains(&oldest), "{after:?}: the backup restored is not pruned for the one before it");
+
+        next_second().await;
+        core.saves_restore("fixture-game", &after[0]).await.unwrap();
+        assert_eq!(std::fs::read(&save).unwrap(), b"unsaved progress", "the saves a restore replaced come back");
+    }
+
+    #[tokio::test]
+    async fn the_one_backup_kept_survives_its_restore_and_the_next_backup_prunes_back_to_the_limit() {
+        let env = paths::test_env();
+        let (core, save) = game_keeping(&env, 1).await;
+        std::fs::write(&save, b"kept").unwrap();
+        core.saves_backup("fixture-game").await.unwrap();
+        std::fs::write(&save, b"unsaved progress").unwrap();
+
+        core.saves_restore("fixture-game", "").await.unwrap();
+        assert_eq!(std::fs::read(&save).unwrap(), b"kept", "the latest is the one asked for, not the backup a restore makes");
+        assert_eq!(backup_ids(&core).await.len(), 2);
+
+        core.saves_backup("fixture-game").await.unwrap();
+        assert_eq!(backup_ids(&core).await.len(), 1);
     }
 
     #[test]

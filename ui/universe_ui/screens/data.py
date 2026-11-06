@@ -31,7 +31,7 @@ ROOTS = {
 LEFTOVERS = {"prefix": "Prefix no game uses", "recordings": "Archived recordings", "game": "Removed game", "logs": "Removed game's logs"}
 QUESTIONS = {
     "reset": ("Reset the prefix?", "Its saves are backed up first. The next launch makes a fresh prefix.", "Reset"),
-    "restore": ("Restore this backup?", "The saves on disk now are replaced.", "Restore"),
+    "restore": ("Restore this backup?", "The saves on disk now are backed up, then replaced.", "Restore"),
     "move": ("Move the prefix into Universe's prefixes?", "Every game using it follows. Across drives this copies it, which can take a while.", "Move"),
     "trash": ("Move this to the trash?", "It can be brought back from the trash until it is emptied.", "Move to Trash"),
     "keep_local": ("Keep the saves on this device?", "The cloud's saves are replaced by these.", "Keep These"),
@@ -98,7 +98,7 @@ def game_rows(data):
         last = f"Last {_day(backups[0]['when'])}" if backups else "None yet"
         detail = f"Kept in {_home(saves.get('dir'))}, the last {keep}" + (", one after each session." if saves.get("auto") else ".")
         rows.append(_action("backup", "Back Up Now", last, detail))
-        rows.append(_action("restore", "Restore the Latest Backup", "", "The saves on disk now are replaced.", disabled=not backups))
+        rows.append(_action("restore", "Restore the Latest Backup", "", "The saves on disk now are backed up, then replaced.", disabled=not backups))
         rows.append(_action("export", "Export the Backups", "", "One zip in your home folder.", disabled=not backups))
     rows.extend(_cloud_rows(saves.get("cloud")))
     if saves.get("engine") and backups:
