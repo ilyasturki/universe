@@ -508,6 +508,11 @@ class KeyScript(QObject):
     def start(self, delay_ms):
         QTimer.singleShot(delay_ms, self._timer.start)
 
+    def stop(self):
+        """What is left of the script, for the window that takes it over."""
+        self._timer.stop()
+        return " ".join(self._queue)
+
     def _step(self):
         if not self._queue:
             self._timer.stop()

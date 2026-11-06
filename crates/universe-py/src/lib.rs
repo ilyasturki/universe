@@ -650,9 +650,10 @@ impl Core {
 }
 
 /// The launcher's gamescope command for `screen` from the config alone, so a host re-execs before opening the core; `None` on the desktop.
+/// A config that won't load gives the defaults: the launcher inside gamescope is what tells the player.
 #[pyfunction]
 fn host_gamescope(py: Python<'_>, screen: String) -> PyResult<Option<Vec<String>>> {
-    let config = universe::config::Config::load().map_err(err)?;
+    let config = universe::config::Config::load().unwrap_or_default();
     let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().map_err(|e| err(e.into()))?;
     Ok(py.detach(|| rt.block_on(universe::launcher::host_gamescope_for(&config, &screen))).map(|(p, a)| std::iter::once(p).chain(a).collect()))
 }

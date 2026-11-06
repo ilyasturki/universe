@@ -80,6 +80,57 @@ def build_client(args):
     return CoreClient(universe_core.Core())
 
 
+def size_window(window, size):
+    try:
+        w, h = (int(v) for v in size.lower().split("x"))
+        window.setWidth(w)
+        window.setHeight(h)
+    except ValueError:
+        pass
+
+
+def failure_screen(app, args, error):
+    """The core's failure on screen until it opens; its client, or None when the player leaves."""
+    from PySide6.QtCore import QCoreApplication, QTimer, QUrl
+    from PySide6.QtQml import QQmlApplicationEngine
+
+    from .failure import Failure
+    from .gamepad import GamepadThread, KeyScript
+
+    failure = Failure(error, lambda: build_client(args), session=args.session, fullscreen=args.fullscreen)
+    engine = QQmlApplicationEngine()
+    engine.rootContext().setContextProperty("failure", failure)
+    engine.load(QUrl.fromLocalFile(str(QML_DIR / "failure.qml")))
+    if not engine.rootObjects():
+        print("universe-ui: failure.qml failed to load", file=sys.stderr)
+        return None
+    window = cast("QQuickWindow", engine.rootObjects()[0])
+    mark_ready()
+    if not args.fullscreen:
+        size_window(window, args.size)
+    window.requestActivate()
+    quit_on_signals(app)
+    gamepad = None if args.no_gamepad else GamepadThread(app)
+    if gamepad is not None:
+        gamepad.start()
+    script = None
+    if args.keys:
+        script = KeyScript(args.keys, args.key_gap, window, gamepad=gamepad, parent=app)
+        script.start(args.key_delay)
+    if args.quit_after > 0:
+        QTimer.singleShot(args.quit_after, failure, app.quit)
+
+    app.exec()
+    if gamepad is not None:
+        gamepad.stop()
+        # A press queued while the core opened would land on the home page.
+        QCoreApplication.removePostedEvents(gamepad)
+    QCoreApplication.removePostedEvents(window)
+    if script is not None:
+        args.keys = script.stop()
+    return failure.client
+
+
 # A session chain that covers the start itself passes --no-boot; a forced --boot still yields to Settings › Themes.
 def boot_wanted(args, client, restarts=0):
     if args.boot is not None:
@@ -425,7 +476,15 @@ def run(argv=None):
     from .screens.power import FAKE as FAKE_POWER
 
     # The fake library paints its art with fonts, which need the app.
-    client = build_client(args)
+    try:
+        client = build_client(args)
+    except Exception as error:
+        if args.overlay:
+            raise
+        client = failure_screen(app, args, error)
+        if client is None:
+            mark_done(0)
+            return 0
     # The game ended before its display came up: nothing to cover.
     if args.overlay and not client.currentSession:
         return 0
@@ -466,12 +525,7 @@ def run(argv=None):
         mark_ready()
         api.attachWindow(window)
     if not args.fullscreen and not args.overlay:
-        try:
-            w, h = (int(v) for v in args.size.lower().split("x"))
-            window.setWidth(w)
-            window.setHeight(h)
-        except ValueError:
-            pass
+        size_window(window, args.size)
     # Under Steam nothing opens the dock over a game: Steam keeps the Steam button and its overlay.
     if client.nested and not client.underSteam and not args.overlay:
         overlay = create_overlay(engine, window.screen().size())

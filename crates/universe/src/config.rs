@@ -382,7 +382,7 @@ impl Config {
 
     pub fn load_from(path: &Path) -> crate::Result<Config> {
         match std::fs::read_to_string(path) {
-            Ok(s) => Ok(toml::from_str(&s)?),
+            Ok(s) => toml::from_str(&s).map_err(|e| crate::Error::Invalid(format!("{}: {e}", path.display()))),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Config::default()),
             Err(e) => Err(e.into()),
         }

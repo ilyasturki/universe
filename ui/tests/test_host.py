@@ -10,6 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from looks import LOOKS
 
 from universe_ui import host
 
@@ -103,6 +104,41 @@ def test_a_session_takes_the_screen_restarts_a_dead_launcher_without_the_intro_a
     run = gamescope("dies", "--session")
     assert (run.code, len(run.gamescopes)) == (1, 1), "no desktop to fall back to: the display manager shows its greeter again"
     assert subprocess.run([str(LAUNCHER), "--session", "--windowed"], capture_output=True, check=False).returncode == 2
+
+
+@pytest.mark.slow
+def test_a_core_that_will_not_open_holds_a_page_that_retries_or_quits_on_the_pad(gamescope, tmp_path):
+    env = gamescope.env
+    game = tmp_path / "game.sh"
+    game.write_text("#!/bin/sh\n")
+    game.chmod(0o755)
+    subprocess.run([os.environ["UNIVERSE_BIN"], "add", "--runner", "linux", str(game)], env=env, check=True, capture_output=True)
+    Path(env["UNIVERSE_STATE_HOME"]).mkdir(exist_ok=True)
+    Path(env["UNIVERSE_STATE_HOME"], "onboarded").touch()
+    config = Path(env["UNIVERSE_CONFIG_HOME"]) / "config.toml"
+    config.parent.mkdir(exist_ok=True)
+    config.write_text("not toml [")
+
+    run = gamescope("quits", "--session")
+    assert (run.code, len(run.launchers)) == (3, 1), "gamescope comes up to show the page, on the defaults: " + run.stderr
+
+    for look, keys in zip(LOOKS, ("Pad:B", "Pad:Down Pad:A", "Pad:Right Pad:A"), strict=True):
+        run = gamescope("up", "--windowed", "--theme", look, "--key-delay", "300", "--keys", keys)
+        assert run.code == 0 and "Traceback" not in run.stderr, run.stderr
+
+    up, done, shot = tmp_path / "up", tmp_path / "done", tmp_path / "failed.png"
+    keys = f"A Shot:{shot} Await A Ready Mark:home Quit"
+    argv = [str(LAUNCHER), "--windowed", "--no-gamepad", "--key-delay", "300", "--key-gap", "50", "--keys", keys]
+    ui = subprocess.Popen(argv, env={**env, host.READY_ENV: str(up), host.DONE_ENV: str(done)}, stdin=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    deadline = time.monotonic() + 10
+    while not shot.exists() and ui.poll() is None and time.monotonic() < deadline:
+        time.sleep(0.02)
+    assert up.exists() and shot.exists(), "the page is on screen, and gamescope told so"
+    config.write_text("")
+    _, stderr = ui.communicate("\n", timeout=20)
+    assert ui.returncode == 0 and "mark home" in stderr and "Traceback" not in stderr, stderr
+    assert stderr.count("the core did not open") == 2, "A on the file still broken stays on the page"
+    assert done.read_text() == "0", "a plain end to run_session, no crash"
 
 
 def test_a_gamescope_that_shows_nothing_is_stopped(gamescope, monkeypatch):
