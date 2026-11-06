@@ -23,7 +23,7 @@ Big Screen says what stopped it, such as a mistake in a hand-edited settings fil
 
 Press **Start** on the game › **Manage** › **Sessions and logs**, or during a game HOME › **Game** › **Sessions**. Each session says how it ended, and **A** (**Read the log**) shows its log, the launch command first.
 
-System check's **Game logs kept across reboots** says whether they survive a reboot.
+The logs survive a reboot only when the system keeps its journal. System check's **Game logs kept across reboots** says whether it does.
 
 ## How a session ended
 
@@ -36,11 +36,11 @@ A Proton game that crashed may still read **Quit** when Proton filed no report.
 
 ## A session that wasn't saved
 
-When Universe can't save a session, on a full disk for example, you can go on playing. It holds the session and adds it to **Sessions and logs** once it can, the next time Universe starts or a game launches.
+When Universe can't save a session, on a full disk for example, you can go on playing. It adds the session to **Sessions and logs** the next time Universe starts or a game launches.
 
-If it can't hold the session either, a launch is refused and names the folder it needs. [Free some disk space](/docs/library/disk-space/) or make it writable from a file manager or a terminal, then launch again.
+If it can't hold the session either, a launch is refused and names the folder it needs. [Free some disk space](/docs/library/disk-space/) or make it writable, then launch again.
 
-If Universe stops while it puts things back after a game, or while a game starts, it puts them back the next time it starts. What it was in the middle of may run again.
+If Universe stops while a game starts, or while it puts things back after one, it finishes the next time it starts and may repeat the step it was on.
 
 ## Debug log
 
