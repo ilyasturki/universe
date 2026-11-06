@@ -1,5 +1,6 @@
 import hashlib
 import os
+import threading
 
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QFontMetricsF, QImage, QLinearGradient, QPainter, QPen
@@ -67,7 +68,9 @@ def _paint(path, size, ident, title, kind):
         p.setPen(QColor(255, 255, 255, 220))
         p.drawText(QRectF(w * 0.07, h * 0.78, w * 0.86, h * 0.16), int(Qt.AlignmentFlag.AlignVCenter), title)
     p.end()
-    image.save(path)
+    part = f"{path}.{os.getpid()}.{threading.get_ident()}{os.path.splitext(path)[1]}"
+    image.save(part)
+    os.replace(part, path)
 
 
 KEYLESS = ("steam", "gamesdb", "gamesdb")

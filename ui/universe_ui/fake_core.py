@@ -602,11 +602,18 @@ class FakeCore:
         out = os.path.join(self._cache, f"changelog-{name}")
         if not os.path.exists(out):
             source = "testsrc=size=640x360:rate=30:duration=2"
-            subprocess.run(
-                ["ffmpeg", "-loglevel", "error", "-y", "-f", "lavfi", "-i", source, "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", out],
-                check=True,
-                timeout=30,
-            )
+            fd, part = tempfile.mkstemp(suffix=".mp4", dir=self._cache)
+            os.close(fd)
+            try:
+                subprocess.run(
+                    ["ffmpeg", "-loglevel", "error", "-y", "-f", "lavfi", "-i", source, "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", part],
+                    check=True,
+                    timeout=30,
+                )
+                os.replace(part, out)
+            finally:
+                with contextlib.suppress(FileNotFoundError):
+                    os.unlink(part)
         return out
 
     def whats_new(self):
