@@ -9,9 +9,10 @@ function recording(shell, screens, row, done) {
     shell.dialogAsk({ message: "Remove this recording?", detail: detail, buttons: buttons, index: 0, danger: buttons.length - 1 }, function(i) {
         if (i < 1)
             return;
+        if (!screens.album.remove(row.gameId, row.session))
+            return;
         if (i === 2)
             screens.news.remove(row.gameId, row.session);
-        screens.album.remove(row.gameId, row.session);
         done();
     });
 }
@@ -37,8 +38,8 @@ function entry(shell, screens, row, done) {
     shell.dialogAsk({ message: pending ? "Cancel this entry?" : "Remove this entry?", detail: detail, buttons: buttons, index: 0, danger: buttons.length - 1 }, function(i) {
         if (i < 1)
             return;
-        if (i === 2)
-            screens.album.remove(row.gameId, row.session);
+        if (i === 2 && !screens.album.remove(row.gameId, row.session))
+            return;
         screens.news.remove(row.gameId, row.session);
         done();
     });

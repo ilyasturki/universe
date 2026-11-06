@@ -318,11 +318,11 @@ FocusScope {
         } else if (action === "remove!" || action === "remove-both!") {
             Sound.enter();
             var gameId = current.gameId, session = current.session, written = current.state !== "none";
-            if (action === "remove-both!")
-                api.screens.recordings.remove(gameId, session);
-            if (written)
-                store.remove(gameId, session);
-            mode = 0;
+            if (action !== "remove-both!" || api.screens.recordings.remove(gameId, session)) {
+                if (written)
+                    store.remove(gameId, session);
+                mode = 0;
+            }
         }
         if (action !== "remove")
             page.forceActiveFocus();
@@ -691,6 +691,7 @@ FocusScope {
     ActionMenu {
         id: menu
 
+        objectName: "journalMenu"
         anchors.fill: parent
         z: 5
 

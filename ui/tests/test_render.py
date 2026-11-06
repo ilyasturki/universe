@@ -245,6 +245,64 @@ def test_the_media_tab_removes_a_recording_and_a_journal_entry_alone(look, api, 
     until(lambda: not journaled(game, session), "the entry, its recording gone, is asked about alone")
 
 
+def test_trash_both_keeps_the_entry_and_its_page_when_the_recording_stays(look, api, fake, monkeypatch):
+    from universe_ui.fake_core import UniverseError
+
+    def refused(ident, session_id):
+        raise UniverseError("Io", "the trash refused the file")
+
+    game = "the-technomancer"
+
+    def recorded():
+        return {line["session"] for line in fake.sessions(game) if line.get("recording")}
+
+    session = next(e["session"] for e in fake.journal(game) if e.get("state", "written") == "written" and e["session"] in recorded())
+
+    def journaled():
+        return any(e["session"] == session for e in fake.journal(game))
+
+    def trash_both():
+        if look.stacked:
+            top = look.root.property("topPage")
+            look.press(Qt.Key.Key_F1)
+            if look.name == "ps5":
+                menu = look.menu()
+                until(lambda: menu.property("open") is True)
+                look.press(Qt.Key.Key_Down, [i["act"] for i in read(menu, "items")].index("remove") - menu.property("index"))
+                look.press(Qt.Key.Key_Return)
+            dialog = look.dialog()
+            until(lambda: dialog.property("open") is True, "Trash both asks first")
+            look.press(Qt.Key.Key_Right, 2)
+            look.press(Qt.Key.Key_Return)
+            until(lambda: dialog.property("open") is False)
+            settle(look.window)
+            return look.root.property("topPage") == top
+        menu = page.findChild(QObject, "journalMenu")
+        look.press(Qt.Key.Key_F1)
+        for action in ("remove", "remove-both!"):
+            until(lambda action=action: menu.property("open") and action in [i.get("action") for i in read(menu, "items")], f"no {action}")
+            look.press(Qt.Key.Key_Down, [i.get("action") for i in read(menu, "items")].index(action) - menu.property("index"))
+            look.press(Qt.Key.Key_Return)
+        until(lambda: not menu.property("open"))
+        settle(look.window)
+        return page.property("activeFocus") and page.property("mode") == 1
+
+    if look.stacked:
+        page = look.open("pages/ArticlePage.qml", {"gameId": game, "session": session})
+        until(lambda: read(page, "row"))
+    else:
+        page = look.open("pages/JournalPage.qml", {"game": api.allGames.byId(game), "session": session})
+        until(lambda: (read(page, "current") or {}).get("session") == session)
+        look.press(Qt.Key.Key_Return)
+        until(lambda: page.property("mode") == 1, "A reads the entry")
+    monkeypatch.setattr(fake.core, "remove_recording", refused)
+    assert trash_both(), "the page stays on the entry"
+    assert journaled() and session in recorded(), "the recording stayed: so does its entry"
+    monkeypatch.undo()
+    assert not trash_both(), "trashed: the page leaves the entry"
+    until(lambda: not journaled() and session not in recorded(), "both go once the trash takes the file")
+
+
 def test_the_top_bar_marks_an_entry_being_written_and_the_notices_follow_it(look, api, fake, monkeypatch):
     look.home()
     mark = look.find("journalMark")
