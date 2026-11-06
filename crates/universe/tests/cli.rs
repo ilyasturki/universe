@@ -559,7 +559,9 @@ fn a_backup_in_another_process_survives_the_repair_of_a_stale_mapping() {
 #[test]
 fn a_restore_and_an_export_in_another_process_wait_out_a_running_backup() {
     // Only the first backup to get here stops: one that overtakes it runs through.
-    let game = SavedGame::new(5, |dir| format!("if mkdir {0} 2>/dev/null; then while [ -e {1} ]; do sleep 0.02; done; fi", dir.join("started").display(), dir.join("hold").display()));
+    let game = SavedGame::new(5, |dir| {
+        format!("if mkdir {0} 2>/dev/null; then while [ -e {1} ]; do sleep 0.02; done; fi", dir.join("started").display(), dir.join("hold").display())
+    });
     game.put("slot1.sav", "selected");
     assert!(game.saves(&["backup", "fixture-game"]).status.success());
     let list: serde_json::Value = serde_json::from_slice(&game.saves(&["list", "fixture-game", "--json"]).stdout).unwrap();
