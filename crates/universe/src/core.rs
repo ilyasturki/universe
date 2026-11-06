@@ -356,6 +356,11 @@ impl Core {
         games.iter().filter(|g| g.game.removed_at.is_empty()).map(|g| g.to_json()).collect()
     }
 
+    pub async fn removed(&self) -> Vec<serde_json::Value> {
+        let games = self.games.read().await;
+        games.iter().filter(|g| !g.game.removed_at.is_empty()).map(|g| g.to_json()).collect()
+    }
+
     pub async fn get(&self, id: &str) -> Result<Resolved> {
         let games = self.games.read().await;
         games.iter().find(|g| g.game.id == id).cloned().ok_or_else(|| Error::NotFound(id.into()))

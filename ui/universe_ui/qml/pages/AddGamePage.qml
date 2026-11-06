@@ -29,7 +29,8 @@ FocusScope {
     ]
 
     readonly property real sideMargin: Theme.dp(90)
-    // The file, the stores and Lutris as one list, with no card titles.
+    readonly property var row: cards.currentRow
+    // One list, with no card titles.
     readonly property var groups: form.groups.length === 0 ? [] : [Object.assign({}, form.groups[0], {
             rows: [].concat.apply([], form.groups.map(function (g) {
                 return g.rows;
@@ -61,6 +62,9 @@ FocusScope {
             page.installRequested(row.source, ready ? "install" : "source");
         } else if (row.key === "lutris") {
             importLutris();
+        } else if (row.key === "bring_back") {
+            Sound.enter();
+            form.bringBack(row.game);
         }
     }
 

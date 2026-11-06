@@ -977,6 +977,17 @@ class FakeCore:
         else:
             self._write_game(game)
 
+    def removed(self):
+        return [self._resolved(g) for g in self._data["games"] if g.get("removed")]
+
+    def restore(self, ident):
+        game = self._game(ident)
+        if not game.get("removed"):
+            raise UniverseError("Invalid", f"{ident} is in the library")
+        game.update({"removed": False, "removed_at": "", "hidden": False})
+        self._write_game(game)
+        return []
+
     def uninstall_via(self, ident):
         source = self._game(ident).get("source")
         kind = str(source.get("kind") or "") if isinstance(source, dict) else str(source or "")

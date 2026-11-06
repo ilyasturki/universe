@@ -194,7 +194,9 @@ FocusScope {
     }
 
     onModelChanged: {
-        if (!currentRow || currentRow.heading)
+        // Not currentRow: its binding may still hold the old model's row here.
+        const row = model[index];
+        if (!row || row.heading)
             reset();
         view.scrollToCurrent();
     }

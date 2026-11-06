@@ -13,9 +13,22 @@ def test_add_form_rows(api, fake):
     form.load()
     assert sorted(i for g in form.groups for i in g["rows"]) == list(range(len(form.rows))), "every row sits in one card"
     kinds = [{form.rows[i]["key"] for i in g["rows"]} for g in form.groups]
-    assert sorted(kinds, key=min) == [{"lutris"}, {"pick_file"}, {"store"}], "a card for each way in"
+    assert sorted(kinds, key=min) == [{"bring_back"}, {"lutris"}, {"pick_file"}, {"store"}], "a card for each way in"
     stores = {r["source"]: (r["loggedIn"], r["available"]) for r in form.rows if r["key"] == "store"}
     assert stores == {"gog": (True, True), "epic": (False, False), "itch": (False, False), "steam": (False, False)}, "off: set it up first"
+
+
+def test_bring_back_lists_hidden_and_removed_games_and_goes_with_the_last(api, fake):
+    form = api.screens.add
+    fake.core.remove("the-technomancer", False)
+    form.load()
+    assert {r["game"]: r["display"] for r in form.rows if r["key"] == "bring_back"} == {"cyberpunk-2077": "Hidden", "the-technomancer": "Removed"}
+    said = record(form.message)
+    form.bringBack("the-technomancer")
+    form.bringBack("cyberpunk-2077")
+    assert len(said) == 2 and api.allGames.byId("the-technomancer") is not None and api.allGames.byId("cyberpunk-2077") is not None
+    assert not [r for r in form.rows if r["key"] == "bring_back"]
+    assert not [g for g in form.groups if not g["rows"]], "no card is left empty"
 
 
 def test_runner_proposed_from_the_file(api, fake):

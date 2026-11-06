@@ -244,6 +244,8 @@ ERRORS = [
     ("NotFound", "remove_journal_entry", "the-technomancer", "20990101-000000"),
     ("Invalid", "set_controller_macro", {"family": "*", "button": "south", "trigger": "press", "action": "nope"}),
     ("Invalid", "add_game", {"runner": "nope", "exe": "/x"}),
+    ("NotFound", "restore", "nope"),
+    ("Invalid", "restore", "the-technomancer"),
     ("NotFound", "session_log", "the-technomancer", "20990101-000000"),
     ("NotFound", "media_set_slot", "the-technomancer", "box_front", "/nowhere/cover.png"),
     ("Unavailable", "achievements", "the-technomancer"),

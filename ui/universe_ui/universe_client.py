@@ -206,6 +206,18 @@ class CoreClient(QObject):
     def remove(self, ident, purge):
         return self._done(self._core.remove, ident, purge)
 
+    @Slot(result="QVariant")
+    def removed(self):
+        return self._guarded([], self._core.removed)
+
+    # The recordings left archived, a file of that name being back in place; None when the game did not come back.
+    @Slot(str, result="QVariant")
+    def restore(self, ident):
+        kept = self._guarded(None, self._core.restore, ident)
+        if kept is not None:
+            self.libraryChanged.emit([ident])
+        return kept
+
     @Slot(str, result=bool)
     def uninstall(self, ident):
         return self._done(self._core.uninstall, ident)

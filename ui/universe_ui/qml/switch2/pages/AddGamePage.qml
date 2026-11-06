@@ -13,6 +13,7 @@ FocusScope {
     focus: true
 
     readonly property var form: api.screens.add
+    readonly property var currentRow: rows.currentRow
 
     readonly property var hints: {
         var row = rows.currentRow;
@@ -60,6 +61,9 @@ FocusScope {
                 });
         } else if (row.key === "lutris") {
             importLutris();
+        } else if (row.key === "bring_back") {
+            Sound.play("ok");
+            form.bringBack(row.game);
         }
     }
 

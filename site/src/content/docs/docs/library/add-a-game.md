@@ -22,3 +22,9 @@ Universe takes the folder holding a Windows game's `.exe` as its install folder.
 ## Its artwork
 
 A game you add by hand gets its art, description and screenshots the next time Universe starts. To fetch them now, open the game menu (**Start** on the game) › **Manage** › **Artwork**, then **Start** › **Fetch missing art**. Settings › **Artwork** fetches it for every game missing some ([Artwork](/docs/library/artwork/)).
+
+## Bringing a game back
+
+A game you hid or removed has a row at the end of **Add a game**. Press **A** on it and the game is back in every list. A removed game brings its recordings back with it.
+
+The rows are there only while a game is hidden or removed.

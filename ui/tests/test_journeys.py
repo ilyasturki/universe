@@ -12,7 +12,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
-from looks import Look, current_row, read, settle
+from looks import LOOKS, FocusTrace, Look, current_row, read, settle
 from PySide6.QtCore import QObject, Qt
 from PySide6.QtTest import QTest
 from uitest import record, until
@@ -528,3 +528,58 @@ def test_a_macro_bound_on_a_pad_button_lands_in_the_config_the_watcher_rereads(j
     )
     assert watcher.commands[-1] == {"cmd": "reload"}, "the running watcher rereads it"
     until(lambda: (row().get("hold") or {}).get("action") == "mangohud", "the row shows the hold's macro")
+
+
+def down_to_bring_back(look, page, ident):
+    """The cursor on `ident`'s row of Add a Game by keys: the PS5 holds the group as a sub-section of its own."""
+    if look.name == "ps5":
+        parts = read(page, "parts")
+        at = next(i for i, part in enumerate(parts) if any(r.get("game") == ident for r in part["rows"]))
+        look.press(Qt.Key.Key_Down, at - page.property("part"))
+        until(lambda: page.property("part") == at, "the part under the cursor opens")
+        look.press(Qt.Key.Key_Right)
+    for _ in range(12):
+        if current_row(page).get("game") == ident:
+            return
+        look.press(Qt.Key.Key_Down)
+    raise AssertionError(f"no key reaches {ident}: {current_row(page)}")
+
+
+@pytest.mark.parametrize("name", LOOKS)
+def test_a_hidden_and_a_removed_game_come_back_by_keys(journey, name):
+    for ident in ("hidden-game", "removed-game"):
+        journey.write(f"data/games/{ident}/game.toml", f'schema = 1\nid = "{ident}"\ntitle = "{ident}"\n[launch]\nrunner = "linux"\nexe = "/games/{ident}"\n')
+    config = journey.config / "config.toml"
+    config.write_text(config.read_text() + f'[paths]\nrecordings_root = "{journey.root}/recordings"\n')
+    clip = journey.write("recordings/removed-game/20260913-120000.mkv", b"clip")
+    look = journey.start(look=name)
+    client, api = journey.client, journey.api
+    assert client.set("hidden-game", "hidden", "true") and client.remove("removed-game", False)
+    archived = clip.parents[1] / ".archive" / "removed-game" / clip.name
+    assert archived.read_bytes() == b"clip" and not clip.exists()
+
+    page = look.open("pages/AddGamePage.qml", None if look.stacked else {"add": True})
+    trace = FocusTrace(look.window)
+    down_to_bring_back(look, page, "removed-game")
+    look.press(Qt.Key.Key_Return)
+    game = until(lambda: api.allGames.byId("removed-game"), "the removed game is back in the library")
+    assert game.hidden is False
+    on_disk = journey.game("removed-game")
+    assert on_disk.get("removed_at", "") == "" and on_disk.get("hidden", False) is False
+    assert clip.read_bytes() == b"clip" and not archived.exists(), "its recordings are out of the archive"
+
+    until(lambda: current_row(page).get("game") != "removed-game", "its row goes, and the cursor with it, the list's last")
+    assert current_row(page).get("key"), "the cursor past the list's end comes back onto a row"
+    if look.name == "ps5":
+        look.press(Qt.Key.Key_Left)
+    down_to_bring_back(look, page, "hidden-game")
+    look.press(Qt.Key.Key_Return)
+    game = until(lambda: api.allGames.byId("hidden-game"), "the hidden game is back in the library")
+    assert game.hidden is False and journey.game("hidden-game").get("hidden", False) is False
+
+    until(lambda: not [r for r in api.screens.add.rows if r["key"] == "bring_back"], "nothing left to bring back: the group goes")
+    settle(look.window)
+    assert trace.stop().foreign("addGamePage") == [], "every frame of the rows' going: the focus on the page"
+    assert current_row(page).get("key"), "the cursor stands on a row that is still there"
+    if look.name == "ps5":
+        assert page.property("part") == len(read(page, "parts")) - 1, "the group gone, the part before it is the open one"

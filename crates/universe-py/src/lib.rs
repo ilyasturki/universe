@@ -120,6 +120,9 @@ impl Core {
     fn list(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.value_infallible(py, |c| c.list())
     }
+    fn removed(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.value_infallible(py, |c| c.removed())
+    }
     fn get(&self, py: Python<'_>, id: String) -> PyResult<Py<PyAny>> {
         self.value(py, |c| async move { c.get(&id).await.map(|r| r.to_json()) })
     }
@@ -131,6 +134,9 @@ impl Core {
     }
     fn remove(&self, py: Python<'_>, id: String, purge: bool) -> PyResult<()> {
         self.run(py, |c| async move { c.remove(&id, purge).await })
+    }
+    fn restore(&self, py: Python<'_>, id: String) -> PyResult<Py<PyAny>> {
+        self.value(py, |c| async move { c.restore(&id).await })
     }
     fn uninstall(&self, py: Python<'_>, id: String) -> PyResult<()> {
         self.run(py, |c| async move { c.uninstall(&id).await })

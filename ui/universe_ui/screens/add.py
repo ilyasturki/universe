@@ -4,7 +4,7 @@ from PySide6.QtCore import Signal, Slot
 
 from ..qt import QVARIANT, Property
 from .runners import _found, suggested_title
-from .settings import RowsForm, _group, _row, login_words
+from .settings import RowsForm, _group, _plural, _row, login_words
 
 LINUX_EXTENSIONS = {"", "sh", "x86_64", "x86", "appimage"}
 
@@ -81,7 +81,42 @@ class AddGameForm(RowsForm):
             }
         )
         groups.append(_group("Lutris", [len(rows) - 1], caps=True))
+        away = self._bring_back_rows()
+        if away:
+            groups.append(_group("Bring back", list(range(len(rows), len(rows) + len(away))), caps=True))
+            rows.extend(away)
         self._set_rows(rows, groups)
+
+    def _bring_back_rows(self):
+        hidden = [g for g in self._client.list() if g.get("hidden")]
+        rows = []
+        for game in sorted(hidden + self._client.removed(), key=lambda g: g.get("title", g["id"]).casefold()):
+            removed = bool(game.get("removed"))
+            row = _row("Bring back", "bring_back", game.get("title", game["id"]), "action", "")
+            row.update(
+                display="Removed" if removed else "Hidden",
+                action="Bring back",
+                detail="Comes back with its recordings." if removed else "",
+                game=game["id"],
+            )
+            rows.append(row)
+        return rows
+
+    @Slot(str)
+    def bringBack(self, ident):
+        game = self._client.game(ident)
+        if game.get("removed"):
+            kept = self._client.restore(ident)
+            back = kept is not None
+        else:
+            kept = []
+            back = bool(game) and self._client.set(ident, "hidden", "false")
+            if back:
+                self._client.libraryChanged.emit([ident])
+        self.load()
+        if back:
+            archived = f" · {_plural(len(kept), 'recording')} {'stays' if len(kept) == 1 else 'stay'} archived" if kept else ""
+            self.message.emit(f"{game.get('title', ident)} is back in the library{archived}")
 
     def _lutris_display(self):
         if self._lutris_error:

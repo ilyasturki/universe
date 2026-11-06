@@ -15,6 +15,7 @@ FocusScope {
     focus: true
 
     readonly property var form: api.screens.add
+    readonly property var currentRow: rows.currentRow
     readonly property bool strip: true
     property int part: 0
     // "parts" or "rows"
@@ -68,6 +69,9 @@ FocusScope {
                 });
         } else if (row.key === "lutris") {
             importLutris();
+        } else if (row.key === "bring_back") {
+            Sound.play("ok");
+            form.bringBack(row.game);
         }
     }
 
@@ -129,6 +133,8 @@ FocusScope {
     }
 
     onPartChanged: Qt.callLater(rows.reset)
+    onPartsChanged: if (part >= parts.length)
+        partList.index = part = parts.length - 1
 
     Connections {
         target: page.form
