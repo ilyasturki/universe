@@ -20,10 +20,13 @@ pub enum Step {
     Size(i32, i32),
     Button(String),
     Has(String),
+    Lacks(String),
     CloseToast,
     View(String),
     Dialog(String),
     Copy(PathBuf, PathBuf),
+    Feed(PathBuf, PathBuf),
+    Move(PathBuf, PathBuf),
     Unreadable(String),
 }
 
@@ -45,10 +48,13 @@ fn step(word: &str) -> Option<Step> {
         "size" => arg.split_once('x').and_then(|(w, h)| Some(Step::Size(w.parse().ok()?, h.parse().ok()?))),
         "button" => Some(Step::Button(arg.into())),
         "has" => Some(Step::Has(arg.replace('~', " "))),
+        "lacks" => Some(Step::Lacks(arg.replace('~', " "))),
         "toast" => (arg == "close").then_some(Step::CloseToast),
         "view" => Some(Step::View(arg.into())),
         "dialog" => Some(Step::Dialog(arg.into())),
         "copy" => arg.split_once(':').map(|(from, to)| Step::Copy(from.into(), to.into())),
+        "feed" => arg.split_once(':').map(|(from, to)| Step::Feed(from.into(), to.into())),
+        "move" => arg.split_once(':').map(|(from, to)| Step::Move(from.into(), to.into())),
         _ => None,
     }
 }
@@ -100,6 +106,14 @@ async fn run_step(window: &gtk::Window, step: Step) -> Result<(), String> {
                 .ok_or_else(|| format!("no visible button that can run {detailed}"))?;
             println!("has: {detailed}");
         }
+        Step::Lacks(detailed) => {
+            let (name, target) = gio::Action::parse_detailed_name(&detailed).map_err(|e| format!("{detailed}: {e}"))?;
+            drawn(window).await?;
+            if button(window, &name, target.as_ref()).is_some_and(|b| b.is_sensitive()) {
+                return Err(format!("a visible button can run {detailed}"));
+            }
+            println!("lacks: {detailed}");
+        }
         Step::CloseToast => {
             let close = until(|| {
                 widgets(window.upcast_ref())
@@ -146,6 +160,20 @@ async fn run_step(window: &gtk::Window, step: Step) -> Result<(), String> {
             let part = to.with_extension("part");
             std::fs::copy(&from, &part).and_then(|_| std::fs::rename(&part, &to)).map_err(|e| format!("copy {} to {}: {e}", from.display(), to.display()))?;
         }
+        Step::Feed(from, to) => {
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            let target = to.clone();
+            // Opening a FIFO to write waits for its reader, so off the main loop.
+            std::thread::spawn(move || {
+                let _ = tx.send(std::fs::read(&from).and_then(|text| std::fs::write(&target, text)));
+            });
+            match glib::future_with_timeout(LOADING_TIMEOUT, rx).await {
+                Ok(Ok(Ok(()))) => {}
+                Ok(Ok(Err(e))) => return Err(format!("feed {}: {e}", to.display())),
+                _ => return Err(format!("nothing read {} in {} s", to.display(), LOADING_TIMEOUT.as_secs())),
+            }
+        }
+        Step::Move(from, to) => std::fs::rename(&from, &to).map_err(|e| format!("move {} to {}: {e}", from.display(), to.display()))?,
         Step::Shot(path) => {
             loaded(window).await?;
             drawn(window).await?;

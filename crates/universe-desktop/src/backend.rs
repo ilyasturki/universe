@@ -43,6 +43,17 @@ where
     run(async move { f(core).await }).await
 }
 
+/// `run` on a blocking thread of the runtime: a read that never returns (a FIFO, a drive that stopped answering) holds
+/// none of the workers every other core task needs.
+pub async fn blocking<T: Send + 'static>(work: impl Future<Output = T> + Send + 'static) -> T {
+    let handle = runtime().clone();
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    runtime().spawn_blocking(move || {
+        let _ = tx.send(handle.block_on(work));
+    });
+    rx.await.expect("a core task panicked")
+}
+
 /// `call` for a core future the compiler cannot prove `Send` (`launch`, a source's verbs): polled to the end on a blocking thread
 /// of the runtime.
 pub async fn pinned<T, F, Fut>(f: F) -> T
@@ -60,8 +71,12 @@ where
     rx.await.expect("a core task panicked")
 }
 
+pub fn is_open() -> bool {
+    CORE.get().is_some()
+}
+
 pub async fn open() -> universe::Result<()> {
-    let core = run(Core::open()).await?;
+    let core = blocking(Core::open()).await?;
     let _ = CORE.set(Arc::new(core));
     Ok(())
 }

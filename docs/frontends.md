@@ -1736,8 +1736,14 @@ on the widgets on screen, so a page's own group answers: `win.open-game::<id>` o
 up to 10 s: `button:ACTION` clicks the button on screen that runs ACTION and fails when it is disabled,
 `has:ACTION[::TARGET]` only checks that one is there and enabled, `view:NAME` waits for a stack page by
 name (`failed`, `library`, `store`), `dialog:RESPONSE` for an alert whose default response is RESPONSE,
-`toast:close` for a toast, which it closes; `copy:FROM:TO` renames a copy of FROM into place. A start
-still running after 30 s (`UNIVERSE_DESKTOP_LOADING_LIMIT_S`) fails, so **Try Again** can start
-another. `tools/desktop-test` runs these against a broken, a hanging and a repaired config. A scripted run
+`toast:close` for a toast, which it closes; `lacks:ACTION` checks once that no enabled button runs
+ACTION; `copy:FROM:TO` renames a copy of FROM into place, `move:FROM:TO` renames FROM, and
+`feed:FROM:TO` writes FROM's bytes through TO, a FIFO's waiting reader included. A start still
+running after 30 s (`UNIVERSE_DESKTOP_LOADING_LIMIT_S`) fails, so **Try Again** can start another:
+the core opens and the library is read on blocking threads, so a read that never returns holds none
+of the core's workers, and once the core is open a Try Again goes on from the stage that stalled.
+Every attempt runs on; the first to reach the library wins, and an error counts only from the latest
+attempt while no library is up. `tools/desktop-test` runs these against a broken, a hanging and a
+repaired config, opens that end after their give-up, and a drive that never answers. A scripted run
 is `NON_UNIQUE`, adopts no scope, sweeps no journal, checks no updates and saves no state; it cannot
 open a popover or answer a dialog. `man universe-desktop` has the options and keys.

@@ -45,8 +45,6 @@ mod imp {
         #[template_child]
         pub failed_page: TemplateChild<adw::StatusPage>,
         #[template_child]
-        pub retry_button: TemplateChild<gtk::Button>,
-        #[template_child]
         pub failed_file_button: TemplateChild<gtk::Button>,
         #[template_child]
         pub library_page: TemplateChild<LibraryPage>,
@@ -258,13 +256,10 @@ impl Window {
                 action.set_enabled(self.app().is_ready());
             }
         }
-        let failed = self.app().failure().is_some();
         if let Some(action) = self.lookup_action("retry").and_downcast::<gio::SimpleAction>() {
-            action.set_enabled(failed);
+            action.set_enabled(self.app().failure().is_some());
         }
-        let imp = self.imp();
-        imp.retry_button.set_visible(failed);
-        imp.failed_file_button.set_visible(self.app().failed_file().is_some());
+        self.imp().failed_file_button.set_visible(self.app().failed_file().is_some());
     }
 
     /// The first-run flow is behind the player, in every frontend.
@@ -424,23 +419,6 @@ impl Window {
         } else if let Some(failure) = app.failure() {
             self.core_failed(&failure);
         }
-        let win = self.downgrade();
-        glib::timeout_add_seconds_local_once(crate::app::loading_limit_s(), move || {
-            win.upgrade().inspect(|win| win.give_up_loading());
-        });
-    }
-
-    fn give_up_loading(&self) {
-        let imp = self.imp();
-        if imp.stack.visible_child_name().as_deref() != Some("library") || !imp.library_page.is_loading() {
-            return;
-        }
-        let stuck = gettext("The library was read, but this window has not shown it after {limit} seconds.")
-            .replace("{limit}", &crate::app::loading_limit_s().to_string());
-        tracing::error!("{stuck}");
-        self.sync_core_actions();
-        imp.failed_page.set_description(Some(&glib::markup_escape_text(&stuck)));
-        imp.stack.set_visible_child_name("failed");
     }
 
     fn core_ready(&self) {

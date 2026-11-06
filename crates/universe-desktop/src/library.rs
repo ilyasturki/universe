@@ -55,7 +55,7 @@ impl Library {
     pub async fn refresh(&self, ids: &[String]) {
         let whole = ids.is_empty();
         let wanted: Vec<String> = ids.to_vec();
-        let rows = backend::run(async move {
+        let rows = backend::blocking(async move {
             let core = backend::core();
             let config = core.config.read().await.clone();
             let games = core.games.read().await;

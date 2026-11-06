@@ -57,8 +57,6 @@ mod imp {
         pub opening: Cell<bool>,
         /// Counts the opens started; an open given up on, or one a retry superseded, reports nothing when it ends.
         pub attempt: Cell<u32>,
-        /// An open got the core: one that ends after it runs no further.
-        pub claimed: Cell<bool>,
         /// The settings file the core could not read, when that is why it failed.
         pub failed_file: RefCell<Option<std::path::PathBuf>>,
         pub scripted: Cell<bool>,
@@ -714,59 +712,67 @@ impl Application {
         glib::timeout_add_seconds_local_once(loading_limit_s(), move || {
             app.upgrade().inspect(|app| app.give_up(attempt));
         });
-        let app = self.clone();
-        glib::spawn_future_local(async move {
-            app.set_stage(gettext("opening the core"));
-            if let Err(e) = backend::open().await {
-                if app.imp().attempt.get() == attempt && app.imp().opening.get() {
-                    let file = backend::run(async { universe::config::Config::load().is_err().then(universe::paths::config_file) }).await;
-                    app.fail(e.to_string(), file);
+        glib::spawn_future_local(self.clone().start(attempt));
+    }
+
+    /// One open, from the first stage the core still lacks: a Try Again after the core opened goes on from the stage that
+    /// stalled. Attempts given up on run on, and the first to reach the library wins.
+    async fn start(self, attempt: u32) {
+        if !backend::is_open() {
+            self.set_stage(gettext("opening the core"));
+            let opened = backend::open().await;
+            if self.is_ready() {
+                return;
+            }
+            if let Err(e) = opened {
+                if self.imp().attempt.get() == attempt {
+                    let file = backend::blocking(async { universe::config::Config::load().is_err().then(universe::paths::config_file) }).await;
+                    self.fail(e.to_string(), file);
                 }
                 return;
             }
-            if app.imp().claimed.replace(true) {
-                return;
+        }
+        let scripted = self.scripted();
+        if !scripted {
+            self.set_stage(gettext("moving into its launcher scope"));
+            if let Err(e) = backend::call(|core| async move { core.adopt_scope().await }).await {
+                tracing::warn!("adopt_scope: {e}");
             }
-            let scripted = app.scripted();
-            if !scripted {
-                app.set_stage(gettext("moving into its launcher scope"));
-                if let Err(e) = backend::call(|core| async move { core.adopt_scope().await }).await {
-                    tracing::warn!("adopt_scope: {e}");
-                }
-                glib::spawn_future_local(backend::pinned(|core| async move { core.apply_system().await }));
+            glib::spawn_future_local(backend::pinned(|core| async move { core.apply_system().await }));
+        }
+        self.set_stage(gettext("watching for library changes"));
+        let options = changes::Options { journal_sweep: !scripted, ..changes::Options::default() };
+        let watched = backend::run(changes::watch(backend::core(), options)).await;
+        self.set_stage(gettext("reading the library"));
+        self.library().refresh(&[]).await;
+        self.set_stage(gettext("reading the recordings"));
+        self.start_frames().await;
+        if self.imp().ready.replace(true) {
+            return;
+        }
+        let events = match watched {
+            Ok((watch, events)) => {
+                self.imp().watch.replace(Some(watch));
+                Some(events)
             }
-            app.set_stage(gettext("watching for library changes"));
-            let options = changes::Options { journal_sweep: !scripted, ..changes::Options::default() };
-            let core = backend::core();
-            let events = match backend::run(changes::watch(core, options)).await {
-                Ok((watch, events)) => {
-                    app.imp().watch.replace(Some(watch));
-                    Some(events)
-                }
-                Err(e) => {
-                    tracing::warn!("change watch: {e}");
-                    None
-                }
-            };
-            app.set_stage(gettext("reading the library"));
-            app.library().refresh(&[]).await;
-            app.set_stage(gettext("reading the recordings"));
-            app.start_frames().await;
-            app.imp().failure.take();
-            app.imp().failed_file.take();
-            app.imp().ready.set(true);
-            app.imp().opening.set(false);
-            app.set_core_actions(true);
-            app.emit_by_name::<()>("core-ready", &[]);
-            if let Some(events) = events {
-                app.follow(events);
+            Err(e) => {
+                tracing::warn!("change watch: {e}");
+                None
             }
-            glib::timeout_future_seconds(5).await;
-            if !scripted && !app.windows().is_empty() {
-                app.check_updates(None);
-                app.fetch_unfetched();
-            }
-        });
+        };
+        self.imp().failure.take();
+        self.imp().failed_file.take();
+        self.imp().opening.set(false);
+        self.set_core_actions(true);
+        self.emit_by_name::<()>("core-ready", &[]);
+        if let Some(events) = events {
+            self.follow(events);
+        }
+        glib::timeout_future_seconds(5).await;
+        if !scripted && !self.windows().is_empty() {
+            self.check_updates(None);
+            self.fetch_unfetched();
+        }
     }
 
     /// Once the core has opened, or failed to.
@@ -815,6 +821,9 @@ impl Application {
 
     /// The frame sampler runs on the core's runtime; what it lands is announced on the main loop.
     async fn start_frames(&self) {
+        if self.imp().frames.borrow().is_some() {
+            return;
+        }
         let (frames, mut landed) = backend::run(async { Frames::start() }).await;
         self.imp().frames.replace(Some(frames));
         let app = self.downgrade();

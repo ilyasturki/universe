@@ -15,9 +15,16 @@ failed page offers Show Settings File, keeps the library's actions off, and
 after Try Again on a repaired config opens the library; a signed-out store and
 a listing without the game each answer Install with a message; a game page
 follows its store coming back; the service recovers the same way; a config
-that never reads (a FIFO) fails after UNIVERSE_DESKTOP_LOADING_LIMIT_S, and
-again after Try Again. Each run is a script of steps (button:, has:, view:,
-dialog:, toast:, copy:, action:, shot:; docs/frontends.md has them).
+that never reads (a FIFO) fails after UNIVERSE_DESKTOP_LOADING_LIMIT_S and
+again within twice that of each of five Try Agains, then opens once repaired.
+Opens that end after their give-up: an error shows, an error while a Try Again
+runs does not, and one that wins keeps the library when the Try Again then
+fails. Where FUSE is at hand, a drive that never answers holds the library's
+read: Try Again goes on from there, not opening the core again, and once the
+drive is unmounted opens the library. A store game installed again elsewhere
+through the CLI plays from there. Each run is a script of steps (button:, has:,
+lacks:, view:, dialog:, toast:, copy:, feed:, move:, action:, shot:;
+docs/frontends.md has them).
 
 Fails when weston or the app does not start, a script step fails (an action
 missing, a button missing or disabled, a view, dialog or toast not shown, a
@@ -54,12 +61,19 @@ tmp="$(mktemp -d)"
 weston_pid=
 bus_pid=
 catalogue_pid=
+drive_pid=
 apps=()
 cleanup() {
     for app_pid in "${apps[@]}"; do kill -KILL -- "-$app_pid" 2>/dev/null || true; done
     [ -n "$weston_pid" ] && kill "$weston_pid" 2>/dev/null
     [ -n "$bus_pid" ] && kill "$bus_pid" 2>/dev/null
     [ -n "$catalogue_pid" ] && kill "$catalogue_pid" 2>/dev/null
+    # Its server gone, the drive answers every read that still waits on it with an error.
+    if [ -n "$drive_pid" ]; then
+        kill "$drive_pid" 2>/dev/null || true
+        wait "$drive_pid" 2>/dev/null || true
+        fusermount3 -u -z "$tmp/drive" 2>/dev/null || true
+    fi
     rm -rf "$tmp"
 }
 trap cleanup EXIT
@@ -82,7 +96,7 @@ left_behind() {
 shots=(media platform library hidden store game data preferences updates not-installed)
 mkdir -p "$out" "$tmp"/{data,config,state,cache,games,run,bin}
 service_shots=(service service-media service-store)
-for shot in "${shots[@]}" "${service_shots[@]}" failed recovered install stuck; do rm -f "$out/$shot.png"; done
+for shot in "${shots[@]}" "${service_shots[@]}" failed recovered install stuck drive; do rm -f "$out/$shot.png"; done
 chmod 700 "$tmp/run"
 started=$SECONDS
 
@@ -318,11 +332,92 @@ done
 printf 'broken = [\n' >"$UNIVERSE_CONFIG_HOME/config.toml"
 run service-recovery "view:failed $repaired" --gapplication-service
 
-# A config nobody writes: reading it never ends, so each open is given up on after the limit.
-rm "$UNIVERSE_CONFIG_HOME/config.toml"
-mkfifo "$UNIVERSE_CONFIG_HOME/config.toml"
-UNIVERSE_DESKTOP_LOADING_LIMIT_S=2 run stuck "view:failed button:win.retry view:failed shot:$out/stuck.png $repaired"
+# A config nobody writes: reading it never ends, so each open is given up on after the limit, counted from its Try Again.
+config="$UNIVERSE_CONFIG_HOME/config.toml"
+rm "$config"
+mkfifo "$config"
+stuck_limit=2
+script="view:failed"
+for _ in $(seq 5); do script+=" button:win.retry view:failed"; done
+UNIVERSE_DESKTOP_LOADING_LIMIT_S=$stuck_limit run stuck "$script shot:$out/stuck.png $repaired"
 [ -s "$out/stuck.png" ] || fail "no stuck.png ($out/stuck.log)"
+python3 - "$out/stuck.log" "$stuck_limit" <<'GAPS' || fail "stuck: a Try Again was not given up on within twice the limit of the one before ($out/stuck.log)"
+import datetime, re, sys
+stamps = [datetime.datetime.fromisoformat(m[1]) for m in re.finditer(r"(\d{4}-\d\d-\d\dT[\d:.]+)Z\S* \S*ERROR\S* Universe Desktop has been", open(sys.argv[1]).read())]
+gaps = [(b - a).total_seconds() for a, b in zip(stamps, stamps[1:])]
+print("stuck: give-ups", len(stamps), "gaps", " ".join(f"{g:.1f}" for g in gaps))
+sys.exit(len(stamps) < 6 or max(gaps) >= 2 * int(sys.argv[2]))
+GAPS
+
+# Opens that end after their give-up. Each FIFO has a second name, so a feed: reaches whoever waits on it once the config
+# has moved on; schema 2 is read without being written back.
+printf 'schema = 2\n' >"$tmp/fed.toml"
+printf 'broken = [\n' >"$tmp/broken.toml"
+fifos() {
+    rm -f "$config" "$tmp"/{a,b,b-next}.fifo
+    mkfifo "$tmp/a.fifo" "$tmp/b.fifo"
+    ln "$tmp/a.fifo" "$config"
+    ln "$tmp/b.fifo" "$tmp/b-next.fifo"
+}
+retry_on_b="view:failed move:$tmp/b-next.fifo:$config button:win.retry wait:500"
+fifos
+UNIVERSE_DESKTOP_LOADING_LIMIT_S=2 run late-error "view:failed copy:$tmp/broken.toml:$config feed:$tmp/fed.toml:$tmp/a.fifo has:win.show-failed-file $repaired"
+fifos
+UNIVERSE_DESKTOP_LOADING_LIMIT_S=2 run late-stale "$retry_on_b copy:$tmp/broken.toml:$config feed:$tmp/fed.toml:$tmp/a.fifo wait:500 lacks:win.show-failed-file copy:$tmp/repaired.toml:$config feed:$tmp/fed.toml:$tmp/b.fifo view:library"
+fifos
+UNIVERSE_DESKTOP_LOADING_LIMIT_S=2 run late-won "$retry_on_b copy:$tmp/repaired.toml:$config feed:$tmp/fed.toml:$tmp/a.fifo view:library copy:$tmp/broken.toml:$config feed:$tmp/fed.toml:$tmp/b.fifo wait:500 view:library"
+rm -f "$tmp"/{a,b,b-next}.fifo
+cp "$tmp/repaired.toml" "$config"
+
+# A drive that stopped answering, as a network share can: FUSE's kernel side, its server never replying. The library is
+# read after the core opened, so its Try Again goes on from there; unmounting the drive lazily, as the player would,
+# leaves the reads already waiting on it waiting.
+drive_runs=()
+if command -v fusermount3 >/dev/null && [ -w /dev/fuse ]; then
+    mkdir "$tmp/drive"
+    python3 -c '
+import array, os, socket, subprocess, sys, time
+mount, unmount, ready = sys.argv[1:]
+ours, theirs = socket.socketpair()
+subprocess.run(["fusermount3", "-o", f"rootmode=40000,user_id={os.getuid()},group_id={os.getgid()}", "--", mount],
+    env=dict(os.environ, _FUSE_COMMFD=str(theirs.fileno())), pass_fds=[theirs.fileno()], check=True)
+fds = array.array("i")
+_, ancillary, _, _ = ours.recvmsg(1, socket.CMSG_LEN(fds.itemsize))
+fds.frombytes(ancillary[0][2][:fds.itemsize])
+open(ready, "w").close()
+while not os.path.exists(unmount):
+    time.sleep(0.05)
+subprocess.run(["fusermount3", "-u", "-z", mount], check=True)
+time.sleep(3600)
+' "$tmp/drive" "$tmp/unmount" "$tmp/drive-ready" &
+    drive_pid=$!
+    for _ in $(seq 100); do
+        [ -e "$tmp/drive-ready" ] && break
+        sleep 0.1
+    done
+    [ -e "$tmp/drive-ready" ] || fail "the stand-in drive did not mount in 10 s"
+    mkdir "$UNIVERSE_DATA_HOME/games/store-drive"
+    cat >"$UNIVERSE_DATA_HOME/games/store-drive/game.toml" <<EOF
+schema = 1
+id = "store-drive"
+title = "Game on a Lost Drive"
+platform = "PC (Linux)"
+[source]
+kind = "desktop-smoke"
+id = "789"
+dir = "$tmp/drive/game"
+EOF
+    # The core is open: a config that never reads would hold a Try Again that opened it again.
+    mkfifo "$tmp/c.fifo"
+    script="view:failed move:$tmp/c.fifo:$config"
+    for _ in $(seq 3); do script+=" button:win.retry view:failed"; done
+    UNIVERSE_DESKTOP_LOADING_LIMIT_S=2 run drive "$script shot:$out/drive.png copy:$tmp/fed.toml:$tmp/unmount wait:1000 button:win.retry view:library"
+    rm -r "$UNIVERSE_DATA_HOME/games/store-drive" "$config"
+    cp "$tmp/repaired.toml" "$config"
+    drive_runs=("$out/drive.log")
+else
+    echo "desktop-test: no FUSE here, so no drive that stops answering: the drive run is skipped" >&2
+fi
 
 # A store game whose folder went with an unmounted drive, installed again elsewhere through the CLI, plays from there.
 sed -i "s|^id = \"123\"$|&\ndir = \"$tmp/unmounted\"\n[launch]\nrunner = \"linux\"\nexe = \"$tmp/unmounted/game.sh\"|" "$store_game"
@@ -331,7 +426,7 @@ sed -i "s|^    info)|    install) mkdir -p '$moved' \&\& printf '#!/bin/sh\\n' >
 "$cli" install 123 --source desktop-smoke >"$out/reinstall.log" 2>&1 || fail "the CLI did not install the moved game ($out/reinstall.log)"
 run moved "action:win.open-game::store-smoke has:game.play"
 
-if grep -E 'panicked at|CRITICAL|WARNING \*\*' "$out"/{app,service,recovery,service-recovery,stuck,moved}.log; then
+if grep -E 'panicked at|CRITICAL|WARNING \*\*' "$out"/{app,service,recovery,service-recovery,stuck,late-error,late-stale,late-won,moved}.log "${drive_runs[@]}"; then
     fail "the app emitted a panic or GTK warning"
 fi
 echo "desktop-test: $((${#shots[@]} + ${#service_shots[@]} + 4)) surfaces shot in $out ($((SECONDS - started)) s)"
