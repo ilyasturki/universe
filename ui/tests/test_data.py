@@ -183,7 +183,7 @@ def test_a_leftover_trash_reports_once_whether_its_storage_page_stays_or_closes(
         if not close:
             assert store.receivers(SIGNAL("finished(QString,bool,QString)")) == 1, "Notices folds a repeated text, so one listener is the guard"
         gate.set()
-        until(lambda: posted(), "the result reaches the notices")
+        until(posted, "the result reaches the notices")
         until(lambda: key.partition(":")[2] in fake.core.trashed or failing)
         return [(n["error"], n["text"]) for n in posted()]
 
