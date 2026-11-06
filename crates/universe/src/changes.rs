@@ -18,7 +18,7 @@ use crate::{paths, Error, Result};
 const PENDING_POLL: Duration = Duration::from_secs(10);
 const SWEEP_FLOOR: Duration = Duration::from_secs(60);
 const SWEEP_CEILING: Duration = Duration::from_secs(30 * 60);
-// `session-end` files the line before it removes the marker: one still there this long after the unit went was left by a failed end.
+// A marker still there this long after the unit went was left by a failed end.
 const MARKER_GRACE: Duration = Duration::from_secs(5);
 const GAME_PARTS: [&str; 6] = ["journal", "journal/attachments", "media", "media/picked", "media/picked/screenshots", "screenshots"];
 

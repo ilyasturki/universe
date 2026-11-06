@@ -491,6 +491,243 @@ fn a_session_of_a_game_with_no_folder_is_dropped_without_failing_the_open() {
     assert!(undone.exists(), "what the launch began is undone all the same");
 }
 
+const PAUSE_C: &str = r#"
+#define _GNU_SOURCE
+#include <dlfcn.h>
+#include <fcntl.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+static int matches(const char *path) {
+    const char *suffix = getenv("PAUSE_SUFFIX");
+    if (!suffix || !path) return 0;
+    size_t n = strlen(path), m = strlen(suffix);
+    return n >= m && strcmp(path + n - m, suffix) == 0;
+}
+
+static void pause_once(void) {
+    char entered[4096], release[4096];
+    snprintf(entered, sizeof entered, "%s/entered", getenv("PAUSE_DIR"));
+    snprintf(release, sizeof release, "%s/release", getenv("PAUSE_DIR"));
+    if (access(entered, F_OK) == 0) return;
+    FILE *f = fopen(entered, "w");
+    if (f) fclose(f);
+    while (access(release, F_OK) != 0 && access(getenv("PAUSE_DIR"), F_OK) == 0) usleep(20000);
+}
+
+int rename(const char *from, const char *to) {
+    int (*real)(const char *, const char *) = dlsym(RTLD_NEXT, "rename");
+    if (matches(from)) pause_once();
+    return real(from, to);
+}
+
+int linkat(int fromdir, const char *from, int todir, const char *to, int flags) {
+    int (*real)(int, const char *, int, const char *, int) = dlsym(RTLD_NEXT, "linkat");
+    if (matches(to)) pause_once();
+    return real(fromdir, from, todir, to, flags);
+}
+
+int open64(const char *path, int flags, ...) {
+    int (*real)(const char *, int, ...) = dlsym(RTLD_NEXT, "open64");
+    va_list ap;
+    va_start(ap, flags);
+    int mode = (flags & O_CREAT) ? va_arg(ap, int) : 0;
+    va_end(ap);
+    int fd = real(path, flags, mode);
+    if (fd >= 0 && (flags & O_CREAT) && matches(path)) pause_once();
+    return fd;
+}
+"#;
+
+/// An `LD_PRELOAD` library: the first call of a process writing a path that ends in `PAUSE_SUFFIX` (a rename from it, a link or a
+/// create to it) touches `PAUSE_DIR/entered` and waits for `PAUSE_DIR/release`, or for `PAUSE_DIR` to go. `None`, the reason printed, without a C compiler.
+fn pause_shim(dir: &std::path::Path) -> Option<std::path::PathBuf> {
+    let (src, lib) = (dir.join("pause.c"), dir.join("pause.so"));
+    std::fs::write(&src, PAUSE_C).unwrap();
+    match Command::new("cc").args(["-shared", "-fPIC", "-o"]).arg(&lib).arg(&src).arg("-ldl").status() {
+        Ok(s) if s.success() => Some(lib),
+        other => {
+            eprintln!("skipped: no C compiler to build the pause shim ({other:?})");
+            None
+        }
+    }
+}
+
+fn wait_for(file: &std::path::Path, child: &mut std::process::Child) {
+    let started = std::time::Instant::now();
+    while !file.exists() {
+        if started.elapsed().as_secs() >= 10 || child.try_wait().unwrap().is_some() {
+            let _ = child.kill();
+            panic!("{} never came", file.display());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+}
+
+/// The process is waiting for an flock another holds.
+fn waits_on_a_lock(pid: u32) -> bool {
+    std::fs::read_to_string("/proc/locks").unwrap().lines().any(|l| {
+        let f: Vec<&str> = l.split_whitespace().collect();
+        f.get(1) == Some(&"->") && f.get(5) == Some(&pid.to_string().as_str())
+    })
+}
+
+fn rows_of(path: &std::path::Path) -> Vec<serde_json::Value> {
+    std::fs::read_to_string(path).unwrap_or_default().lines().map(|l| serde_json::from_str(l).unwrap()).collect()
+}
+
+#[test]
+fn a_recording_filed_while_a_close_files_its_row_leaves_both_rows() {
+    let dir = no_desktop();
+    let Some(lib) = pause_shim(dir.path()) else { return };
+    add_game(&dir, "Quest");
+    let rows = dir.path().join("data/games/quest/sessions.jsonl");
+    std::fs::write(&rows, "{\"session\":\"20261105-000000\",\"game\":\"quest\"}\n").unwrap();
+    let clip = dir.path().join("clip.mkv");
+    std::fs::write(&clip, "x").unwrap();
+    let (pause, videos) = (dir.path().join("pause"), dir.path().join("Videos"));
+    std::fs::create_dir_all(&pause).unwrap();
+    let env = [NO_BUS, ("XDG_VIDEOS_DIR", videos.to_str().unwrap())];
+    let held = [("LD_PRELOAD", lib.to_str().unwrap()), ("PAUSE_SUFFIX", "sessions.tmp"), ("PAUSE_DIR", pause.to_str().unwrap())];
+    let mut filing = command(&dir, &["recording-file", "20261105-000000", clip.to_str().unwrap()], &[&env[..], &held].concat())
+        .stdout(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    wait_for(&pause.join("entered"), &mut filing);
+
+    left_open(&dir, "quest", "20261106-000000");
+    let mut closing = command(&dir, &["storage"], &env).stdout(std::process::Stdio::null()).spawn().unwrap();
+    let started = std::time::Instant::now();
+    while closing.try_wait().unwrap().is_none() && !waits_on_a_lock(closing.id()) {
+        assert!(started.elapsed().as_secs() < 10, "the close neither filed its row nor waited for the history");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    std::fs::write(pause.join("release"), "").unwrap();
+    assert!(filing.wait().unwrap().success());
+    assert!(closing.wait().unwrap().success());
+
+    let filed = rows_of(&rows);
+    assert_eq!(filed.iter().map(|r| r["session"].as_str().unwrap()).collect::<Vec<_>>(), ["20261105-000000", "20261106-000000"]);
+    assert!(filed[0]["recording"].as_str().unwrap().ends_with("quest/20261105-000000.mkv"), "{}", filed[0]);
+    assert_eq!((filed[1]["unit"].as_str(), filed[1]["source"].as_str()), (Some("universe-game-quest-20261106-000000.service"), Some("universe")));
+}
+
+fn set_commands(dir: &tempfile::TempDir, pre: &str, post: &str) {
+    let out = universe(dir, &["set", "quest", &format!("pre_command={pre}"), &format!("post_command={post}")], &[]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+}
+
+fn gate(dir: &std::path::Path) -> String {
+    format!("touch {0}/entered; while [ ! -e {0}/release ] && [ -d {0} ]; do sleep 0.02; done", dir.display())
+}
+
+#[test]
+fn a_launch_marker_appears_whole_and_an_open_leaves_a_starting_session_alone() {
+    let dir = no_desktop();
+    let Some(lib) = pause_shim(dir.path()) else { return };
+    add_game(&dir, "Quest");
+    let (written, starting) = (dir.path().join("written"), dir.path().join("starting"));
+    for d in [&written, &starting] {
+        std::fs::create_dir_all(d).unwrap();
+    }
+    let undone = dir.path().join("undone");
+    set_commands(&dir, &gate(&starting), &format!("echo undone >> {}", undone.display()));
+    let held = [NO_BUS, ("LD_PRELOAD", lib.to_str().unwrap()), ("PAUSE_SUFFIX", "current-session.json"), ("PAUSE_DIR", written.to_str().unwrap())];
+    let mut play =
+        command(&dir, &["play", "quest", "--no-wait"], &held).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn().unwrap();
+    let marker = dir.path().join("state/current-session.json");
+    let open = || {
+        let out = universe(&dir, &["storage"], &[NO_BUS]);
+        assert!(out.status.success(), "{}", text(&out.stderr));
+    };
+
+    wait_for(&written.join("entered"), &mut play);
+    open();
+    std::fs::write(written.join("release"), "").unwrap();
+    wait_for(&starting.join("entered"), &mut play);
+    let read = || serde_json::from_str::<serde_json::Value>(&std::fs::read_to_string(&marker).unwrap()).unwrap();
+    assert_eq!(read()["id"], "quest", "the open in the marker's write dropped nothing");
+    open();
+    assert_eq!(read()["id"], "quest", "a session still starting is not closed");
+    assert_eq!(lines(&undone), 0);
+
+    std::fs::write(starting.join("release"), "").unwrap();
+    assert!(!play.wait().unwrap().success(), "no systemd: the start fails");
+    assert!(!marker.exists());
+    assert_eq!(lines(&undone), 1, "undone once");
+    assert_eq!(lines(&dir.path().join("data/games/quest/sessions.jsonl")), 0, "a game that never started has no row");
+    assert!(files_under(&dir.path().join("state/closing-sessions")).iter().all(|f| f.extension().is_none_or(|e| e != "json")));
+}
+
+#[test]
+fn a_launch_killed_before_its_game_started_is_undone_on_the_next_open() {
+    use std::os::unix::process::ExitStatusExt;
+    let dir = no_desktop();
+    add_game(&dir, "Quest");
+    let undone = dir.path().join("undone");
+    let crash_once = |name: &str| format!("[ -e {0} ] || {{ touch {0}; kill -9 $PPID; exit 1; }}; ", dir.path().join(name).display());
+    let play = || universe(&dir, &["play", "quest", "--no-wait"], &[NO_BUS]);
+    let open = || {
+        let out = universe(&dir, &["storage"], &[NO_BUS]);
+        assert!(out.status.success(), "{}", text(&out.stderr));
+    };
+
+    set_commands(&dir, &crash_once("pre-crashed"), &format!("echo undone >> {}", undone.display()));
+    assert_eq!(play().status.signal(), Some(9), "killed in pre_command");
+    assert_eq!(lines(&undone), 0);
+    open();
+    assert_eq!(lines(&undone), 1, "the next open undid what the launch began");
+
+    set_commands(&dir, ":", &format!("{}echo undone >> {}", crash_once("undo-crashed"), undone.display()));
+    assert_eq!(play().status.signal(), Some(9), "the start failed, then the undo was killed");
+    assert_eq!(lines(&undone), 1);
+    for _ in 0..2 {
+        open();
+        assert_eq!(lines(&undone), 2, "the next open undid it, once");
+    }
+    assert!(!dir.path().join("state/current-session.json").exists());
+    assert_eq!(lines(&dir.path().join("data/games/quest/sessions.jsonl")), 0, "neither launch left a row");
+}
+
+#[test]
+fn a_close_whose_record_cannot_be_noted_runs_every_step_and_ends_once_writable() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = no_desktop();
+    add_game(&dir, "Quest");
+    let ended = dir.path().join("ended");
+    shim(&dir.path().join("modules/end/bin"), "end", &format!("echo \"$GAME_ID\" >> {}\n", ended.display()));
+    std::fs::write(dir.path().join("modules/end/module.toml"), "api = 2\nid = \"end\"\n[hooks]\nsession-end = \"bin/end\"\n").unwrap();
+    let config = dir.path().join("config/config.toml");
+    std::fs::write(&config, std::fs::read_to_string(&config).unwrap() + "[modules]\nenabled = [\"end\"]\n").unwrap();
+    let undone = dir.path().join("undone");
+    let step = |n: &str| serde_json::json!({"step": "post_command", "command": format!("echo {n} >> {}", undone.display()), "cwd": "/", "env": {}});
+    let aside = dir.path().join("state/closing-sessions");
+    std::fs::create_dir_all(&aside).unwrap();
+    let record = aside.join("20261106-000000.quest.json");
+    let row = serde_json::json!({"session": "20261106-000000", "game": "quest", "unit": "universe-game-quest-20261106-000000.service"});
+    std::fs::write(&record, serde_json::json!({"row": row, "undo": [step("first"), step("second")]}).to_string()).unwrap();
+    std::fs::write(record.with_extension("lock"), "").unwrap();
+    std::fs::set_permissions(&aside, std::fs::Permissions::from_mode(0o500)).unwrap();
+    let rows = dir.path().join("data/games/quest/sessions.jsonl");
+
+    let out = universe(&dir, &["storage"], &[NO_BUS]);
+    std::fs::set_permissions(&aside, std::fs::Permissions::from_mode(0o700)).unwrap();
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert!(text(&out.stderr).contains(&aside.display().to_string()), "{}", text(&out.stderr));
+    assert_eq!(std::fs::read_to_string(&undone).unwrap(), "second\nfirst\n", "every step ran, the last first");
+    assert_eq!((lines(&ended), lines(&rows)), (1, 1));
+    assert!(record.exists(), "kept for the next open");
+
+    let out = universe(&dir, &["storage"], &[NO_BUS]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert!(!record.exists());
+    assert_eq!(lines(&rows), 1, "filed once");
+    assert_eq!((lines(&undone), lines(&ended)), (4, 2), "the steps it could not note ran again");
+}
+
 #[test]
 fn journal_add_files_an_entry_the_journal_lists_and_calls_only_a_refusal_invalid() {
     let dir = tempfile::tempdir().unwrap();

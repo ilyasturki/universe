@@ -54,6 +54,9 @@ pub struct Marker {
     /// None in a marker written before it existed: the game's settings stand in.
     #[serde(default)]
     pub runtime: Option<Runtime>,
+    /// Its unit not started yet: while its launcher holds the starting lock, no one else closes it.
+    #[serde(default)]
+    pub starting: bool,
 }
 
 /// What HOME changed in the running game alone, seeded from its settings at launch: the next launch starts from them again.
@@ -110,20 +113,24 @@ pub fn read_marker() -> Option<Marker> {
     serde_json::from_str(&s).ok()
 }
 
+/// Whole or not there at all: written aside, then linked in, which refuses a marker already there.
 fn write_marker(m: &Marker) -> Result<()> {
+    use std::io::Write;
     let p = paths::current_session_file();
     std::fs::create_dir_all(p.parent().unwrap())?;
-    let mut f = match std::fs::OpenOptions::new().write(true).create_new(true).open(&p) {
-        Ok(f) => f,
+    let tmp = p.with_extension(format!("json.{}", std::process::id()));
+    let linked = std::fs::File::create(&tmp)
+        .and_then(|mut f| f.write_all(serde_json::to_string(m)?.as_bytes()).and_then(|()| f.sync_all()))
+        .and_then(|()| std::fs::hard_link(&tmp, &p));
+    let _ = std::fs::remove_file(&tmp);
+    match linked {
+        Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
             let other = read_marker().map(|m| format!("{} ({})", m.current.title, m.current.session_id)).unwrap_or_else(|| "another launch".into());
-            return Err(Error::Busy(format!("{other} is running")));
+            Err(Error::Busy(format!("{other} is running")))
         }
-        Err(e) => return Err(e.into()),
-    };
-    use std::io::Write;
-    f.write_all(serde_json::to_string(m)?.as_bytes())?;
-    Ok(())
+        Err(e) => Err(e.into()),
+    }
 }
 
 fn remove_marker() {
@@ -139,12 +146,34 @@ fn marker_lock() -> Result<std::fs::File> {
     Ok(f)
 }
 
-/// The session's marker, removed: `None` when it is gone or another session's.
-fn take_marker(session_id: &str) -> Option<Marker> {
-    let _lock = marker_lock().inspect_err(|e| tracing::warn!("marker lock: {e}")).ok();
-    let m = read_marker().filter(|m| m.current.session_id == session_id)?;
-    remove_marker();
-    Some(m)
+fn starting_lock_file() -> std::path::PathBuf {
+    paths::current_session_file().with_extension("starting")
+}
+
+/// Held by a launch from its marker's write until its unit started.
+fn hold_starting() -> Result<std::fs::File> {
+    let f = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(starting_lock_file())?;
+    f.lock()?;
+    Ok(f)
+}
+
+/// A live launch holds the starting lock; a free one means its launcher died before the unit started.
+fn still_starting() -> bool {
+    let Ok(f) = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(starting_lock_file()) else { return false };
+    matches!(f.try_lock(), Err(std::fs::TryLockError::WouldBlock))
+}
+
+/// What the launch is about to begin, on its marker before it begins.
+fn note_undo(session_id: &str, step: Undo) -> Result<()> {
+    let mut kept = false;
+    update_marker(session_id, |m| {
+        m.undo.push(step);
+        kept = true;
+    })?;
+    if !kept {
+        return Err(Error::Io(format!("the marker of session {session_id} is gone")));
+    }
+    Ok(())
 }
 
 /// A session being closed, claimed once from its marker: each step is noted as it completes, so a close cut short
@@ -163,6 +192,9 @@ struct Closing {
     /// The session-end hooks ran and the saves backup started.
     #[serde(default)]
     ended: bool,
+    /// A launch whose unit never started: its undo alone, no row, no hooks.
+    #[serde(default)]
+    failed_launch: bool,
 }
 
 fn closing_file(game: &str, session_id: &str) -> std::path::PathBuf {
@@ -242,28 +274,34 @@ fn hold_closing(game: &str, session_id: &str) -> Result<Option<(std::fs::File, C
 }
 
 /// The row into its history, once: the history read under the same lock shows whether it is there already. A game with no folder takes none.
-fn file_closing(game: &str, session_id: &str) -> Result<()> {
+/// The inner `Err`: the row is in, but the record refused the note.
+fn file_closing(game: &str, session_id: &str) -> Result<std::io::Result<()>> {
     let file = closing_file(game, session_id);
     let _lock = marker_lock()?;
-    let Some(mut c) = read_closing(&file).filter(|c| !c.filed) else { return Ok(()) };
+    let Some(mut c) = read_closing(&file).filter(|c| !c.filed) else { return Ok(Ok(())) };
     let dir = paths::game_dir(game);
     if std::fs::metadata(&dir).is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound) {
         tracing::warn!("session {session_id} of {game} dropped: the game has no folder");
     } else {
-        let history = dir.join("sessions.jsonl");
         // A history it cannot read cannot show the row is not there already.
-        if !sessions::read(&history)?.iter().any(|s| s.session == session_id) {
-            sessions::append(&history, &c.row)?;
-        }
+        sessions::append_new(&dir.join("sessions.jsonl"), &c.row)?;
     }
     c.filed = true;
-    Ok(write_closing(&c)?)
+    Ok(write_closing(&c))
+}
+
+/// How a close is claimed: from a session that ended (`seen` its marker before the journal read; `ran` per the journal), or by the
+/// launch whose start failed.
+#[derive(Clone, Copy)]
+enum Claim {
+    Ended { seen: bool, ran: bool },
+    FailedLaunch,
 }
 
 /// The session's close, claimed by one process under the marker's lock: its record written, then its marker removed.
 /// A record already there, or a marker `seen` before the journal read and gone since, means another process claimed it.
-/// Without a marker the row goes only into a history that reads without it.
-fn claim_closing(game: &str, session_id: &str, seen: bool, row: impl FnOnce(Option<&Marker>) -> Session) -> Result<()> {
+/// Without a marker the row goes only into a history that reads without it. A marker still starting is its launcher's alone.
+fn claim_closing(game: &str, session_id: &str, claim: Claim, row: impl FnOnce(Option<&Marker>) -> Session) -> Result<()> {
     let _lock = marker_lock()?;
     let marker = read_marker().filter(|m| m.current.session_id == session_id);
     if closing_file(game, session_id).exists() {
@@ -272,9 +310,25 @@ fn claim_closing(game: &str, session_id: &str, seen: bool, row: impl FnOnce(Opti
         }
         return Ok(());
     }
+    let never_started = |m: &Marker| match claim {
+        Claim::FailedLaunch => Some(true),
+        Claim::Ended { .. } if m.starting && still_starting() => None,
+        Claim::Ended { ran, .. } => Some(m.starting && !ran),
+    };
     let c = match &marker {
-        Some(m) => Closing { row: row(Some(m)), undo: m.undo.clone(), hook_env: Some(m.hook_env.clone()), ..Closing::default() },
-        None if seen => return Ok(()),
+        Some(m) => match never_started(m) {
+            None => return Ok(()),
+            Some(true) => Closing {
+                row: Session { session: session_id.into(), game: game.into(), ..Session::default() },
+                filed: true,
+                undo: m.undo.clone(),
+                ended: true,
+                failed_launch: true,
+                ..Closing::default()
+            },
+            Some(false) => Closing { row: row(Some(m)), undo: m.undo.clone(), hook_env: Some(m.hook_env.clone()), ..Closing::default() },
+        },
+        None if matches!(claim, Claim::FailedLaunch | Claim::Ended { seen: true, .. }) => return Ok(()),
         None => {
             let dir = paths::game_dir(game);
             let unfiled = dir.is_dir() && sessions::read(&dir.join("sessions.jsonl")).is_ok_and(|rows| rows.iter().all(|s| s.session != session_id));
@@ -415,12 +469,15 @@ impl Core {
         let m: Marker = match serde_json::from_str(&text) {
             Ok(m) => m,
             Err(e) => {
-                tracing::warn!("{}: unreadable marker dropped: {e}", path.display());
-                remove_marker();
+                let _lock = marker_lock()?;
+                if std::fs::read_to_string(&path).is_ok_and(|now| now == text) {
+                    tracing::warn!("{}: unreadable marker dropped: {e}", path.display());
+                    remove_marker();
+                }
                 return Ok(());
             }
         };
-        if self.host.units.is_active(&m.current.unit).await {
+        if self.host.units.is_active(&m.current.unit).await || (m.starting && marker_lock().map(|_lock| still_starting())?) {
             return Ok(());
         }
         tracing::warn!("session {} of {} was left open; closing it", m.current.session_id, m.current.id);
@@ -430,7 +487,7 @@ impl Core {
     /// A closed session's row: in its history, or waiting for it.
     pub async fn closed_row(&self, id: &str, session_id: &str) -> Option<Session> {
         let filed = sessions::read(&self.get(id).await.ok()?.game.sessions_path()).unwrap_or_default().into_iter().find(|s| s.session == session_id);
-        filed.or_else(|| Some(closing_file(id, session_id)).filter(|f| f.exists()).and_then(|f| read_closing(&f)).map(|c| c.row))
+        filed.or_else(|| Some(closing_file(id, session_id)).filter(|f| f.exists()).and_then(|f| read_closing(&f)).filter(|c| !c.failed_launch).map(|c| c.row))
     }
 
     /// Every game launched afterwards is bound to the scope, so it goes down with the launcher; idempotent.
@@ -555,12 +612,7 @@ impl Core {
             launcher_pid,
             app_pid: std::process::id(),
         };
-        let mut undo = Vec::new();
-        if let Err(e) = self.begin(&r, &plan, &current, base.vars.clone(), runtime, &mut undo).await {
-            take_marker(&session_id);
-            self.rollback(&undo).await;
-            return Err(e);
-        }
+        self.begin(&r, &plan, &current, base.vars.clone(), runtime).await?;
         for m in self.hook_modules(&r, "post-launch").await {
             let env = self.module_env(&m, Some(&r.game), &cfg, &base);
             if let Err(e) = modules::run_async(&self.host.units, &m, "post-launch", &env, &session_id, Some(&unit)).await {
@@ -585,19 +637,50 @@ impl Core {
         Ok(session_id)
     }
 
-    /// Each effect pushes its undo as it begins; the marker carries the list before the unit starts.
-    async fn begin(&self, r: &Resolved, plan: &Plan, current: &Current, hook_env: Vec<(String, String)>, runtime: Runtime, undo: &mut Vec<Undo>) -> Result<()> {
+    /// The marker first, still starting, then each effect noted on it as it begins, then the unit. A start that fails closes
+    /// the session through its record, with no row.
+    async fn begin(&self, r: &Resolved, plan: &Plan, current: &Current, hook_env: Vec<(String, String)>, runtime: Runtime) -> Result<()> {
+        let _starting = hold_starting()?;
+        let marker = Marker { current: current.clone(), hook_env, command: plan.command_line(), runtime: Some(runtime), starting: true, ..Marker::default() };
+        write_marker(&marker)?;
+        let (id, session_id) = (&current.id, &current.session_id);
+        match self.start(r, plan, current).await {
+            Ok(()) => {
+                if let Err(e) = update_marker(session_id, |m| m.starting = false) {
+                    tracing::warn!("session {session_id} of {id}: {e}");
+                }
+                Ok(())
+            }
+            Err(e) => {
+                let closed = claim_closing(id, session_id, Claim::FailedLaunch, |_| Session::default());
+                match closed {
+                    Ok(()) => self.finish_closing(id, session_id).await.unwrap_or_else(|e| tracing::warn!("session {session_id} of {id}: {e}")),
+                    Err(e) => tracing::warn!("{e}"),
+                }
+                Err(e)
+            }
+        }
+    }
+
+    async fn start(&self, r: &Resolved, plan: &Plan, current: &Current) -> Result<()> {
+        let session_id = &current.session_id;
         if !plan.post_command.trim().is_empty() {
-            undo.push(Undo::PostCommand { command: plan.post_command.clone(), cwd: plan.cwd.to_string_lossy().to_string(), env: plan.env.clone() });
+            note_undo(
+                session_id,
+                Undo::PostCommand { command: plan.post_command.clone(), cwd: plan.cwd.to_string_lossy().to_string(), env: plan.env.clone() },
+            )?;
         }
         launcher::run_shell(&plan.pre_command, &plan.env, &plan.cwd).await?;
         if r.effective.hide_cursor {
             let restore = self.host.shell.cursor_enable().await;
-            undo.push(Undo::Cursor { restore });
+            if let Err(e) = note_undo(session_id, Undo::Cursor { restore: restore.clone() }) {
+                self.host.shell.cursor_restore(&restore).await;
+                return Err(e);
+            }
         }
         if current.gamescope_pid != 0 && !self.under_steam() && launcher::mangoapp_installed() {
+            note_undo(session_id, Undo::Hud)?;
             self.apply_mangoapp(r.effective.mangohud, true)?;
-            undo.push(Undo::Hud);
         }
         let own: Vec<(&String, &String)> = r.game.system.iter().filter(|(_, v)| !v.is_empty()).collect();
         if !own.is_empty() {
@@ -605,7 +688,7 @@ impl Core {
             let before: BTreeMap<String, String> =
                 own.iter().filter_map(|(id, _)| controls.iter().find(|c| c.id == id.as_str())).map(|c| (c.id.to_string(), c.value.clone())).collect();
             if !before.is_empty() {
-                undo.push(Undo::System { before: before.clone() });
+                note_undo(session_id, Undo::System { before: before.clone() })?;
             }
             for (id, value) in own.into_iter().filter(|(id, _)| before.contains_key(*id)) {
                 if let Err(e) = self.apply_system_one(id, value).await {
@@ -613,7 +696,6 @@ impl Core {
                 }
             }
         }
-        write_marker(&Marker { current: current.clone(), hook_env, undo: undo.clone(), command: plan.command_line(), stopped: false, runtime: Some(runtime) })?;
         tracing::info!("launch {}: {}", r.game.id, plan.command_line());
         let budget: u64 = 60 + self.hook_modules(r, "session-end").await.iter().map(|m| m.timeout().as_secs()).sum::<u64>();
         let mut env = passthrough_env();
@@ -750,31 +832,49 @@ impl Core {
         if seen.is_some() || !closing_file(id, session_id).exists() {
             let unit = seen.as_ref().map(|m| m.current.unit.clone()).unwrap_or_else(|| format!("{}.service", launcher::unit_name(id, session_id)));
             let log = self.host.units.log(&unit).await;
-            claim_closing(id, session_id, seen.is_some(), |marker| closed_session(id, session_id, exit, ended, marker, &log))?;
+            let claim = Claim::Ended { seen: seen.is_some(), ran: log.started.is_some() };
+            claim_closing(id, session_id, claim, |marker| closed_session(id, session_id, exit, ended, marker, &log))?;
         }
         self.finish_closing(id, session_id).await
     }
 
     /// The close's steps not yet noted done, in order: the row filed, the undo, the session-end hooks, then `post-process` once the row is in.
-    /// A history that refuses the row leaves the record for the next reconcile.
+    /// A history that refuses the row leaves the record for the next reconcile; a record that refuses its notes runs every step still,
+    /// and stays for the next open to run them again.
     async fn finish_closing(&self, id: &str, session_id: &str) -> Result<()> {
         let Some((held, mut c)) = hold_closing(id, session_id)? else { return Ok(()) };
+        let mut refused = false;
+        let mut noted = |kept: Result<()>| match kept {
+            Err(e) if !refused => {
+                tracing::warn!(
+                    "{}: the close of session {session_id} of {id} cannot be noted there, so the next open repeats it: {e}",
+                    paths::closing_sessions_dir().display()
+                );
+                refused = true;
+            }
+            _ => {}
+        };
         if !c.filed {
             match file_closing(id, session_id) {
-                Ok(()) => c.filed = true,
+                Ok(kept) => {
+                    c.filed = true;
+                    noted(kept.map_err(Into::into));
+                }
                 Err(e) => tracing::warn!("session {session_id} of {id} waits for its history: {e}"),
             }
         }
-        while let Some(step) = c.undo.last().cloned() {
+        while let Some(step) = c.undo.pop() {
             self.rollback(std::slice::from_ref(&step)).await;
-            c.undo.pop();
-            change_closing(id, session_id, |kept| {
-                kept.undo.pop();
-            })?;
+            noted(
+                change_closing(id, session_id, |kept| {
+                    kept.undo.pop();
+                })
+                .map(drop),
+            );
         }
         if !c.ended {
             self.run_session_end(id, &c).await;
-            change_closing(id, session_id, |kept| kept.ended = true)?;
+            noted(change_closing(id, session_id, |kept| kept.ended = true).map(drop));
         }
         if let Err(e) = self.reload_game(id).await {
             tracing::warn!("{id}: {e}");
@@ -785,11 +885,19 @@ impl Core {
         {
             let file = closing_file(id, session_id);
             let _lock = marker_lock()?;
-            std::fs::remove_file(&file)?;
+            if let Err(e) = std::fs::remove_file(&file) {
+                tracing::warn!(
+                    "{}: the close of session {session_id} of {id} cannot end there, so the next open repeats it: {e}",
+                    paths::closing_sessions_dir().display()
+                );
+                return Ok(());
+            }
             let _ = std::fs::remove_file(file.with_extension("lock"));
         }
         drop(held);
-        self.post_process(id, session_id).await;
+        if !c.failed_launch {
+            self.post_process(id, session_id).await;
+        }
         Ok(())
     }
 
@@ -1219,7 +1327,11 @@ pub(crate) mod tests {
         for _ in 0..20 {
             write_marker(&marker("a")).unwrap();
             let changes: Vec<_> = (0..3).map(|_| std::thread::spawn(move || (0..10).for_each(|_| drop(flip("a"))))).collect();
-            assert!(take_marker("a").is_some());
+            {
+                let _lock = marker_lock().unwrap();
+                assert!(read_marker().is_some());
+                remove_marker();
+            }
             changes.into_iter().for_each(|t| t.join().unwrap());
             assert!(read_marker().is_none(), "a change after the end put no marker back");
         }
@@ -1246,6 +1358,38 @@ pub(crate) mod tests {
         assert_eq!(calls.last().map(String::as_str), Some("cursor:restore"));
         assert_eq!(calls.iter().filter(|c| *c == "cursor:restore").count(), 1, "undone once");
         assert!(core.launch("sample", "", "").await.is_ok(), "the next launch is not Busy");
+    }
+
+    #[tokio::test]
+    async fn a_launch_still_starting_outlives_another_open_and_runs() {
+        let sb = sandbox();
+        let (core, memory) = open().await;
+        let gate = sb.post_ran.with_file_name("gate");
+        let mut g = core.get("sample").await.unwrap().game;
+        g.launch.pre_command = format!("touch {0}.entered; while [ ! -e {0}.release ] && [ -e {0} ]; do sleep 0.02; done", gate.display());
+        std::fs::write(&gate, "").unwrap();
+        g.save().unwrap();
+        core.reload_game("sample").await.unwrap();
+        let other = async {
+            while !gate.with_extension("entered").exists() {
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+            let (other, _) = open().await;
+            let left = read_marker().is_some_and(|m| m.starting);
+            drop(other);
+            std::fs::write(gate.with_extension("release"), "").unwrap();
+            assert!(left, "another open leaves the marker of a launch still starting");
+        };
+        let (sid, ()) = tokio::join!(core.launch("sample", "", ""), other);
+        let sid = sid.unwrap();
+        assert!(read_marker().is_some_and(|m| m.current.session_id == sid && !m.starting && m.undo.len() == 2));
+        assert_eq!(core.current().await.map(|c| c.session_id), Some(sid.clone()));
+        assert!(!sb.post_ran.exists() && closings().is_empty(), "nothing undone, nothing closed");
+
+        memory.finish(&format!("universe-game-sample-{sid}.service"), 0);
+        core.session_end("sample", &sid, None, None).await.unwrap();
+        assert!(sb.post_ran.exists());
+        assert_eq!(sessions::read(&core.get("sample").await.unwrap().game.sessions_path()).unwrap().len(), 1);
     }
 
     #[tokio::test]

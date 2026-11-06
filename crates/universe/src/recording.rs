@@ -115,25 +115,22 @@ pub fn file(game: &Game, session_id: &str, src: &Path, recordings_root: &Path, t
         s.recording_started_at = timeline.started_at.clone();
         s.recording_pauses = timeline.pauses.clone();
     };
-    let found = crate::session::change_unfiled(&game.id, session_id, set)? || sessions::update(&game.sessions_path(), session_id, set)?;
-    if !found {
+    if !crate::session::change_unfiled(&game.id, session_id, set)? {
         let (started_at, ended_at) = session_times(session_id, duration_s);
-        sessions::append(
-            &game.sessions_path(),
-            &Session {
-                session: session_id.into(),
-                game: game.id.clone(),
-                started_at,
-                ended_at,
-                duration_s,
-                source: "import-recording".into(),
-                recording: Some(ds),
-                recording_duration_s: duration_s,
-                recording_started_at: timeline.started_at,
-                recording_pauses: timeline.pauses,
-                ..Default::default()
-            },
-        )?;
+        let new = || Session {
+            session: session_id.into(),
+            game: game.id.clone(),
+            started_at,
+            ended_at,
+            duration_s,
+            source: "import-recording".into(),
+            recording: Some(ds.clone()),
+            recording_duration_s: duration_s,
+            recording_started_at: timeline.started_at.clone(),
+            recording_pauses: timeline.pauses.clone(),
+            ..Default::default()
+        };
+        sessions::upsert(&game.sessions_path(), session_id, set, new)?;
     }
     Ok(dest)
 }

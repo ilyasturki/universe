@@ -140,21 +140,64 @@ pub fn read(path: &Path) -> crate::Result<Vec<Session>> {
     Ok(out)
 }
 
+/// Every writer of a history holds it, across games: a rewrite never drops a line appended meanwhile.
+fn lock() -> crate::Result<std::fs::File> {
+    let p = crate::paths::state_home().join("sessions.lock");
+    std::fs::create_dir_all(crate::paths::state_home())?;
+    let f = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(p)?;
+    f.lock()?;
+    Ok(f)
+}
+
 pub fn append(path: &Path, s: &Session) -> crate::Result<()> {
+    let _lock = lock()?;
+    append_held(path, s)
+}
+
+/// `false` when the history holds the session already.
+pub fn append_new(path: &Path, s: &Session) -> crate::Result<bool> {
+    let _lock = lock()?;
+    if read(path)?.iter().any(|r| r.session == s.session) {
+        return Ok(false);
+    }
+    append_held(path, s).map(|()| true)
+}
+
+/// On disk when it returns.
+fn append_held(path: &Path, s: &Session) -> crate::Result<()> {
     let mut line = serde_json::to_string(s)?;
     line.push('\n');
     // A full disk can cut a line short: this one must not land on its tail.
     if std::fs::read(path).is_ok_and(|text| text.last().is_some_and(|c| *c != b'\n')) {
         line.insert(0, '\n');
     }
+    let created = !path.exists();
     path.parent()
         .map_or(Ok(()), std::fs::create_dir_all)
         .and_then(|()| std::fs::OpenOptions::new().create(true).append(true).open(path))
-        .and_then(|mut f| f.write_all(line.as_bytes()))
+        .and_then(|mut f| f.write_all(line.as_bytes()).and_then(|()| f.sync_all()))
+        .and_then(|()| match path.parent().filter(|_| created) {
+            Some(dir) => std::fs::File::open(dir)?.sync_all(),
+            None => Ok(()),
+        })
         .map_err(|e| crate::Error::Io(format!("{}: {e}", path.display())))
 }
 
-pub fn update<F: FnMut(&mut Session)>(path: &Path, session_id: &str, mut f: F) -> crate::Result<bool> {
+pub fn update<F: FnMut(&mut Session)>(path: &Path, session_id: &str, f: F) -> crate::Result<bool> {
+    let _lock = lock()?;
+    update_held(path, session_id, f)
+}
+
+/// The session's row changed, or `new`'s added when there is none.
+pub fn upsert<F: FnMut(&mut Session)>(path: &Path, session_id: &str, f: F, new: impl FnOnce() -> Session) -> crate::Result<()> {
+    let _lock = lock()?;
+    if !update_held(path, session_id, f)? {
+        append_held(path, &new())?;
+    }
+    Ok(())
+}
+
+fn update_held<F: FnMut(&mut Session)>(path: &Path, session_id: &str, mut f: F) -> crate::Result<bool> {
     let mut all = read(path)?;
     let mut found = false;
     for s in all.iter_mut() {
@@ -165,7 +208,9 @@ pub fn update<F: FnMut(&mut Session)>(path: &Path, session_id: &str, mut f: F) -
     }
     if found {
         let text: String = all.iter().map(|s| serde_json::to_string(s).unwrap() + "\n").collect();
-        crate::game::atomic_write(path, text.as_bytes())?;
+        let tmp = path.with_extension("tmp");
+        std::fs::File::create(&tmp).and_then(|mut f| f.write_all(text.as_bytes()).and_then(|()| f.sync_all()))?;
+        std::fs::rename(&tmp, path)?;
     }
     Ok(found)
 }

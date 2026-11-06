@@ -30,26 +30,40 @@ operation; a dash means the surface doesn't expose it.
   game it launches carries `BindsTo=` + `After=` that scope: the game goes down with the launcher
   (a crash, a kill, Ctrl-C), `session-end` still runs. `universe play --no-wait`, hooks and anything
   else that never adopted a scope leave the game to systemd alone: it outlives them.
-- `state/current-session.json` (written `O_EXCL`) is the marker for the running session: the session
+- `state/current-session.json` is the marker for the running session, written aside and linked in, so
+  it is whole or absent and never replaces another: the session
   (`session_id`, `id`, `title`, `unit`, `screen`, `started_at`), the hook environment, the `undo`
-  list of the effects `launch` began and the `runtime` HOME changes in the game alone (`runtime()`).
+  list of the effects `launch` began, the `runtime` HOME changes in the game alone (`runtime()`) and
+  `starting`, true until the unit started.
   Every change to it and its removal at the session's end hold `state/current-session.lock` (`flock`),
   and a change lands only on the marker of its own session, so none brings back a marker the end took.
   The current session is the marker whose unit is still active.
   On every open the core **reconciles**: a marker with no live unit is closed from `journalctl`
   timestamps, one it cannot read is dropped, and one of a game with no folder is undone and dropped
-  with no row. A launch that fails after an effect began undoes the same list.
+  with no row. `launch` writes the marker first, `starting`, and notes each effect on it before the
+  effect begins (the cursor's right after, since hiding it returns what to put back), then starts
+  the unit. While it holds `state/current-session.starting` (`flock`), no other process closes a
+  starting marker; once that lock is free and the journal shows no start, the launch died first and
+  the marker closes as a failed launch. A launch whose unit fails to start closes the same way: through
+  a record with no row, its undo alone, no hooks; a launch whose marker another process took undoes
+  nothing itself.
 - A session **closes** through a record, `state/closing-sessions/<session>.<id>.json`: its row, the
   undo left and the hook environment. One process claims the close under the marker's lock, the
   record written before the marker goes; a record already there, or a marker it saw before reading
   `journalctl` and that is gone since, means another process claimed it, and it files nothing. Its
   steps run in order under the record's own lock (`flock`, skipped by any other process while held):
   the row filed into `sessions.jsonl` under the marker's lock, which reads the history first and
-  appends only a row it lacks; the undo, a step at a time; the `session-end` hooks and the saves
-  backup; then the record goes and `post-process` runs. Each step is noted in the record once done,
-  so a close cut short (a crash, a kill) resumes on the next reconcile where it stopped: a step
-  completed is never repeated, one cut mid-way runs again, and a cut between the record's removal
-  and `post-process` loses that hook. A history that cannot be read or written leaves only the record: the undo and the
+  appends only a row it lacks, synced to disk before the record notes it filed; the undo, a step at a
+  time; the `session-end` hooks and the saves backup, as one step; then the record goes and
+  `post-process` runs. Each step is noted in the record once done, so a close cut short (a crash, a
+  kill) resumes on the next reconcile where it stopped: a step noted is not repeated, one cut before
+  its note runs again (a cut in the second `session-end` hook runs the first again too, so a hook
+  must bear running twice), and a cut between the record's removal and `post-process` loses that
+  hook. A record whose folder refuses its notes (read-only, full) still runs every step and stays,
+  with a warning naming the folder: each open repeats the whole close until the folder takes it.
+  Every writer of a game's `sessions.jsonl` (a close, `recording-file`, an import, a recording
+  removed) holds `state/sessions.lock` (`flock`), so a rewrite never drops a row appended meanwhile.
+  A history that cannot be read or written leaves only the record: the undo and the
   hooks run all the same, any game launches, and every reconcile, on open and before `launch`, files
   the rows their history takes, each once and in order; a row whose game has no folder is dropped.
   `recording-file` lands on the waiting row. Without a marker, a row goes only into a history that
@@ -371,7 +385,7 @@ that appears (a new game, its first `journal/` or pick) is watched then and repo
 changed: what landed in it before the watch was not seen. The marker is polled (`Options.poll`,
 2 s) for as long as one exists — the game is a systemd unit, not a child, and `launch` writes the
 marker before the unit starts. A unit gone while its marker stays is a session still ending
-(`session-end` files the line, then removes the marker); five seconds on, it is reported ended all
+(`session-end` writes its record and removes the marker, then files the line); five seconds on, it is reported ended all
 the same.
 
 With `Options.journal_sweep` (the default) the watch also keeps the owed entries moving, the retry
@@ -408,7 +422,7 @@ every 10 s, since the 30-minute timeout writes no file.
 | `current()` | `current()` | `universe status` | `{session_id, id, title, unit, screen, started_at, gamescope_pid, launcher_pid, app_pid}` (`gamescope_pid` is the launcher's gamescope the game was started into and `launcher_pid` that launcher, both `0` for a gamescope of the game's own; `app_pid` the process that called `launch`), or `None`. The CLI wraps it: `status --json` prints `{"current": … or null, "recent": [the 10 newest session rows across the library], "pending_journals": [see Journal]}` |
 | `sessions(id)` | `sessions(id)` | `universe sessions <name>` | `[SessionRow]`, newest first (by `ended_at`); `id = ""` spans every visible game (not removed, not hidden) |
 | `session_log(id, session_id, tail)` | `session_log(id, session_id="", tail=0)` | `universe logs <name> [session] [-n N] [-f]` | what a session's processes wrote (see Logs): `[{time, source, priority, message}]`, oldest first, the last `tail` lines (0: all). `session_id` `""` is the running session, else the newest played; `NotFound` for a session that never was, `[]` once the journal has let the unit go, and for an import |
-| `session_end(id, session_id, exit, ended)` | — | `universe session-end <id> <session>` | closes the session, idempotent across processes and crashes: one row per session, each closing step once. Run by systemd's `ExecStopPost`, or by reconciliation |
+| `session_end(id, session_id, exit, ended)` | — | `universe session-end <id> <session>` | closes the session, idempotent across processes and crashes: one row per session, each closing step once unless a crash cuts it before it is noted (see Process model). Run by systemd's `ExecStopPost`, or by reconciliation |
 | `closed_row(id, session_id)` | — | — | the closed session's line, from `sessions.jsonl` or waiting to reach it; none while it runs or when it has no line |
 
 One `sessions.jsonl` line:
@@ -2085,7 +2099,7 @@ post-launch  = "bin/start"        # async (transient unit); anything that must l
 freeze       = "bin/freeze"       # blocking, right after the game's unit froze (HOME over the game); thaw = right after it thawed
 thaw         = "bin/thaw"
 reconnect    = "bin/reconnect"    # blocking, after a pad of the running game's was reconnected (the dock's Reconnect)
-session-end  = "bin/stop"         # short and blocking, inside the game unit's ExecStopPost; this is where a recording is filed
+session-end  = "bin/stop"         # short and blocking, inside the game unit's ExecStopPost; this is where a recording is filed; runs again after a crash cut it
 post-process = "bin/process"      # async (transient unit), after the session-end hooks
 screenshot   = "bin/shot"         # on demand: prints the png's path, and before it `grabbed` (flushed) the moment it holds the pixels
 check        = "bin/check"        # blocking, from doctor, while the module is on (available or not) and set up: one check per stdout line
