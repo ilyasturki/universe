@@ -1,7 +1,8 @@
+import threading
 from pathlib import Path
 
 import pytest
-from looks import settle
+from looks import LOOKS, settle
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtTest import QTest
 from uitest import record, rows_by_key, until
@@ -509,17 +510,40 @@ def test_watcher_without_a_binary(api, monkeypatch):
 POWER_MENU = {"reprise": "confirm", "switch2": "picker", "ps5": "popup"}
 
 
-def test_a_new_controller_waits_until_the_power_menu_closes(look, api):
+# Start on Switch 2's Home opens a page, not a menu.
+COVERS = [(name, cover) for name in LOOKS for cover in ("power menu", "game menu", "launch") if (name, cover) != ("switch2", "game menu")]
+
+
+@pytest.mark.parametrize(("look", "cover"), COVERS, indirect=["look"])
+def test_a_new_controller_waits_until_what_covers_home_closes(look, api, fake, monkeypatch, cover):
     controller = api.screens.controller
     offers = record(controller.walkOffered)
-    menu = look.find(POWER_MENU[look.name])
-    QTest.keyPress(look.window, Qt.Key.Key_Escape)
-    until(lambda: menu.property("open"), "B held opens the power menu")
-    QTest.keyRelease(look.window, Qt.Key.Key_Escape)
+    look.home()
+    if cover == "launch":
+        mapped, real = threading.Event(), fake.core.wait_session_window
+        monkeypatch.setattr(fake.core, "wait_session_window", lambda *args: (mapped.wait(5), real(*args))[1])
+        look.press(Qt.Key.Key_Return)
+        until(lambda: look.root.property("launching") is True, "A launches the game")
+        covering = lambda: look.root.property("launching") is True
+    elif cover == "game menu":
+        look.press(Qt.Key.Key_F1)
+        menu = look.menu()
+        until(lambda: menu.property("open"), "Start opens the game's menu")
+        covering = lambda: menu.property("open")
+    else:
+        menu = look.find(POWER_MENU[look.name])
+        QTest.keyPress(look.window, Qt.Key.Key_Escape)
+        until(lambda: menu.property("open"), "B held opens the power menu")
+        QTest.keyRelease(look.window, Qt.Key.Key_Escape)
+        covering = lambda: menu.property("open")
     controller.start(FakeWatcher("8bitdo-pro-3"))
     settle(look.window)
-    assert offers == [] and menu.property("open"), "a pad that comes under the menu is offered nothing yet"
-    look.press(Qt.Key.Key_Escape)
+    assert offers == [] and covering(), "a pad that comes under it is offered nothing yet"
+    if cover == "launch":
+        mapped.set()
+    else:
+        look.press(Qt.Key.Key_Escape)
     dialog = look.dialog()
-    until(lambda: offers and dialog.property("open") and not (menu is not dialog and menu.property("open")), "the offer comes once the menu closes")
+    asks_over = cover == "power menu" and menu is dialog
+    until(lambda: offers and dialog.property("open") and (asks_over or not covering()), "the offer comes once it is gone")
     assert [family for family, _ in offers] == ["8bitdo-pro-3"]

@@ -488,7 +488,7 @@ def test_the_skip_question_keeps_the_focus_when_the_machine_is_read(held_sources
         return
     look.press(Qt.Key.Key_Escape if answer == "b" else Qt.Key.Key_Return)
     until(lambda: not question.property("open"))
-    until(lambda: focused(look, "setupRows") or focused(look, "setupNav"))
+    until(lambda: focused(look, "setupRows"), "back on the launchers the machine holds")
     assert opened(look) and not empty.onboarded()
 
 
