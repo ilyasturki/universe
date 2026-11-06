@@ -1,7 +1,7 @@
 import threading
 
 import pytest
-from looks import activate, content_rows, focus_names, held_notices, notices
+from looks import FocusTrace, activate, content_rows, focus_names, held_notices, notices, settle
 from PySide6.QtCore import SIGNAL, QObject, Qt
 from uitest import record, until
 
@@ -226,7 +226,9 @@ def test_settings_storage_says_it_is_measuring_and_offers_a_retry_when_the_measu
     until(lambda: [r["key"] for r in content_rows(page)] == ["retry"], "a failed measure offers its retry")
     until(lambda: "settingsCards" in focus_names(look.window))
     failing.clear()
+    trace = FocusTrace(look.window)
     look.press(Qt.Key.Key_Return)
     until(lambda: "root:games" in [r["key"] for r in content_rows(page)], "A measures again")
+    settle(look.window)
+    assert trace.stop().foreign("settingsCards") == [], "the focus stays in the cards while the rows swap"
     assert "retry" not in [r["key"] for r in content_rows(page)]
-    assert "settingsCards" in focus_names(look.window), "the focus stays in the cards"

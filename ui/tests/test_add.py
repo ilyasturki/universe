@@ -106,6 +106,7 @@ def test_a_lutris_import_reports_once_whether_its_page_stays_or_closes(api, fake
             look.press(Qt.Key.Key_Escape)
         if not close:
             assert form.receivers(SIGNAL("message(QString)")) == 1, "Notices folds a repeated text, so one listener is the guard"
+            assert form.receivers(SIGNAL("failed(QString)")) == 1, "and one for a failure"
         gate.set()
         until(lambda: posted() and not form.busy, "the result reaches the notices")
         return [(n["error"], n["text"]) for n in posted()]
@@ -113,6 +114,7 @@ def test_a_lutris_import_reports_once_whether_its_page_stays_or_closes(api, fake
     failing.append(True)
     [(error, text)] = import_lutris(close=True)
     assert error and "pga.db is locked" in text, "the failure outlives its page"
+    assert [error for error, _ in import_lutris(close=False)] == [True], "one error with the page still open"
     failing.clear()
     assert [error for error, _ in import_lutris(close=True)] == [False], "so does the success"
     assert [error for error, _ in import_lutris(close=False)] == [False], "one notice with the page still open"
