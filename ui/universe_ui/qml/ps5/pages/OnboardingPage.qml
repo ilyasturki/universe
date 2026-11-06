@@ -241,6 +241,7 @@ FocusScope {
             y: column.rowsTop
             width: parent.width - Theme.dp(32)
             objectName: "setupRows"
+            visible: !page.form.loading
             height: Math.max(page.signing ? column.signRows : rows.rowHeight, Math.min(rows.contentHeight + Theme.dp(8), nav.y - column.gap - column.loginRoom - y))
             model: page.content
             focus: true

@@ -301,6 +301,7 @@ FocusScope {
             id: cards
 
             objectName: "setupRows"
+            visible: !page.form.loading
             x: panel.pad
             y: head.y + head.height + panel.gap
             width: parent.width - panel.pad * 2

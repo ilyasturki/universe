@@ -306,7 +306,7 @@ class Onboarding(RowsForm):
     def _refresh(self):
         step = self._step_id()
         entries = []
-        if step == "found":
+        if step == "found" and not self._loading:
             pending = self._pending()
             if len(pending) > 1:
                 row = _row("", "everything", "Add everything", "action", "", detail="Every launcher below, one after the other.")

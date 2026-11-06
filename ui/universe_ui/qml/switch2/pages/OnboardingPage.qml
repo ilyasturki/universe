@@ -215,6 +215,7 @@ FocusScope {
             id: rows
 
             objectName: "setupRows"
+            visible: !page.form.loading
             shell: page.shell
             x: card.pad
             y: head.y + head.height + card.gap + rows.room

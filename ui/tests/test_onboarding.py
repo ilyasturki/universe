@@ -403,6 +403,11 @@ def test_the_setup_in_each_look(stores_signed_out, held_sources, look, empty_api
         assert opened(look) and not empty.onboarded() and marked == []
     look.press(Qt.Key.Key_Up)
     assert focused(look, "setupNav"), "Up finds no row to reach while the machine is read"
+    until(lambda: not empty_api.screens.components.busy)
+    settle(look.window)
+    assert form.loading and "none" not in rows_by_key(form), "nothing is said found before Universe has looked"
+    page = until(lambda: (p := look.page("onboardingPage")).property("visible") and p)
+    assert not page.findChild(QObject, "setupRows").property("visible"), "nor that there is nothing"
     look.press(Qt.Key.Key_Escape)
     question = question_of(look)
     until(lambda: question.property("open"))
