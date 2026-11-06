@@ -12,7 +12,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
-from looks import LOOKS, FocusTrace, Look, current_row, read, settle
+from looks import LOOKS, FocusTrace, Look, current_row, held_notices, read, settle
 from PySide6.QtCore import QObject, Qt
 from PySide6.QtTest import QTest
 from uitest import descendant, record, until
@@ -563,10 +563,13 @@ def test_a_hidden_and_a_removed_game_come_back_by_keys(journey, name):
 
     page = look.open("pages/AddGamePage.qml", None if look.stacked else {"add": True})
     down_to_bring_back(look, page, "removed-game")
+    posted, clear = held_notices(look.engine)
+    clear()
     trace = FocusTrace(look.window, page=page)
     look.press(Qt.Key.Key_Return)
     game = api.allGames.byId("removed-game")
     assert game is not None and game.hidden is False, "the press itself puts it back in the library"
+    assert [n["error"] for n in posted()] == [False], "its result reaches the notices through main.qml"
     on_disk = journey.game("removed-game")
     assert on_disk.get("removed_at", "") == "" and on_disk.get("hidden", False) is False
     assert clip.read_bytes() == b"clip" and not archived.exists(), "its recordings are out of the archive"
