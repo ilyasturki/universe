@@ -643,6 +643,54 @@ fn a_history_cut_inside_a_character_lists_its_rows_and_takes_the_waiting_one_onc
     assert_eq!(lines(&undone), 1);
 }
 
+#[test]
+fn a_recording_filed_while_the_close_records_refuse_writes_keeps_its_link_or_its_clip() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = no_desktop();
+    add_game(&dir, "Quest");
+    let rows = dir.path().join("data/games/quest/sessions.jsonl");
+    std::fs::write(&rows, "{\"session\":\"20261105-000000\",\"game\":\"quest\"}\n").unwrap();
+    let aside = dir.path().join("state/closing-sessions");
+    std::fs::create_dir_all(&aside).unwrap();
+    let mut closes = vec![];
+    for (session, filed) in [("20261105-000000", true), ("20261106-000000", false)] {
+        let record = serde_json::json!({"row": {"session": session, "game": "quest"}, "filed": filed});
+        std::fs::write(aside.join(format!("{session}.quest.json")), record.to_string()).unwrap();
+        let held = std::fs::File::create(aside.join(format!("{session}.quest.lock"))).unwrap();
+        held.lock().unwrap();
+        closes.push(held);
+    }
+    let (pending, videos) = (dir.path().join("pending"), dir.path().join("Videos"));
+    std::fs::create_dir_all(&pending).unwrap();
+    let file = |session: &str| {
+        let clip = pending.join(format!("{session}.mkv"));
+        std::fs::write(&clip, "x").ok();
+        let out = universe(&dir, &["recording-file", session, clip.to_str().unwrap()], &[NO_BUS, ("XDG_VIDEOS_DIR", videos.to_str().unwrap())]);
+        (out, clip)
+    };
+
+    std::fs::set_permissions(&aside, std::fs::Permissions::from_mode(0o500)).unwrap();
+    let (filed, _) = file("20261105-000000");
+    let (waiting, clip) = file("20261106-000000");
+    std::fs::set_permissions(&aside, std::fs::Permissions::from_mode(0o700)).unwrap();
+    assert!(filed.status.success(), "{}", text(&filed.stderr));
+    let linked = rows_of(&rows)[0]["recording"].as_str().map(std::path::PathBuf::from).unwrap();
+    assert!(linked.ends_with("quest/20261105-000000.mkv") && linked.is_file(), "{linked:?}");
+    assert!(!waiting.status.success());
+    assert!(clip.is_file(), "left for the retry");
+
+    let (retried, clip) = file("20261106-000000");
+    assert!(retried.status.success(), "{}", text(&retried.stderr));
+    assert!(!clip.exists());
+    drop(closes);
+    let out = universe(&dir, &["storage"], &[NO_BUS]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let filed = rows_of(&rows);
+    assert_eq!(filed.iter().map(|r| r["session"].as_str().unwrap()).collect::<Vec<_>>(), ["20261105-000000", "20261106-000000"]);
+    let linked = filed[1]["recording"].as_str().map(std::path::PathBuf::from).unwrap();
+    assert!(linked.ends_with("quest/20261106-000000.mkv") && linked.is_file(), "{linked:?}");
+}
+
 fn set_commands(dir: &tempfile::TempDir, pre: &str, post: &str) {
     let out = universe(dir, &["set", "quest", &format!("pre_command={pre}"), &format!("post_command={post}")], &[]);
     assert!(out.status.success(), "{}", text(&out.stderr));

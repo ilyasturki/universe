@@ -66,7 +66,9 @@ operation; a dash means the surface doesn't expose it.
   A history that cannot be read or written leaves only the record: the undo and the
   hooks run all the same, any game launches, and every reconcile, on open and before `launch`, files
   the rows their history takes, each once and in order; a row whose game has no folder is dropped.
-  `recording-file` lands on the waiting row. Without a marker, a row goes only into a history that
+  `recording-file` lands on the waiting row, or on the history's once the row is filed, and moves
+  the clip only once it is linked: a link refused leaves the clip where it was, for the hook to
+  retry. Without a marker, a row goes only into a history that
   reads without it. A record that cannot be written keeps the marker and its undo: the open goes on,
   the next one tries again, and `launch` refuses, naming the folder, until it can.
 - Asynchronous hooks (`post-launch`, `post-process`) run as transient units. A `post-launch` hook

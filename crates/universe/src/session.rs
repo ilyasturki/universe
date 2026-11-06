@@ -238,16 +238,18 @@ pub(crate) fn closing_game(session_id: &str) -> Option<String> {
     closings().into_iter().find(|c| c.row.session == session_id && !c.filed).map(|c| c.row.game)
 }
 
-/// The record changed under the marker's lock, re-read so no writer's change is lost; `None` when it is gone.
-fn change_closing(game: &str, session_id: &str, f: impl FnOnce(&mut Closing)) -> Result<Option<Closing>> {
+/// The record changed under the marker's lock, re-read so no writer's change is lost, and written only when `f` says it changed it;
+/// `None` when it is gone.
+fn change_closing(game: &str, session_id: &str, f: impl FnOnce(&mut Closing) -> bool) -> Result<Option<Closing>> {
     let file = closing_file(game, session_id);
     let _lock = marker_lock()?;
     if !file.exists() {
         return Ok(None);
     }
     let Some(mut c) = read_closing(&file) else { return Ok(None) };
-    f(&mut c);
-    write_closing(&c)?;
+    if f(&mut c) {
+        write_closing(&c)?;
+    }
     Ok(Some(c))
 }
 
@@ -259,6 +261,7 @@ pub(crate) fn change_unfiled(game: &str, session_id: &str, f: impl FnOnce(&mut S
             f(&mut c.row);
             changed = true;
         }
+        changed
     })?;
     Ok(changed)
 }
@@ -871,16 +874,17 @@ impl Core {
         }
         while let Some(step) = c.undo.pop() {
             self.rollback(std::slice::from_ref(&step)).await;
-            noted(
-                change_closing(id, session_id, |kept| {
-                    kept.undo.pop();
-                })
-                .map(drop),
-            );
+            noted(change_closing(id, session_id, |kept| kept.undo.pop().is_some()).map(drop));
         }
         if !c.ended {
             self.run_session_end(id, &c).await;
-            noted(change_closing(id, session_id, |kept| kept.ended = true).map(drop));
+            noted(
+                change_closing(id, session_id, |kept| {
+                    kept.ended = true;
+                    true
+                })
+                .map(drop),
+            );
         }
         if let Err(e) = self.reload_game(id).await {
             tracing::warn!("{id}: {e}");

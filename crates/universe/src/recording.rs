@@ -102,12 +102,8 @@ pub fn file(game: &Game, session_id: &str, src: &Path, recordings_root: &Path, t
     std::fs::create_dir_all(&dir)?;
     let ext = src.extension().and_then(|s| s.to_str()).unwrap_or("mkv");
     let dest = dir.join(format!("{session_id}.{ext}"));
-    if dest != src && std::fs::rename(src, &dest).is_err() {
-        std::fs::copy(src, &dest)?;
-        std::fs::remove_file(src)?;
-    }
     let ds = dest.to_string_lossy().to_string();
-    let duration_s = probe_duration(&dest).unwrap_or(0);
+    let duration_s = probe_duration(src).unwrap_or(0);
     let timeline = timeline.cloned().unwrap_or_default();
     let set = |s: &mut Session| {
         s.recording = Some(ds.clone());
@@ -131,6 +127,11 @@ pub fn file(game: &Game, session_id: &str, src: &Path, recordings_root: &Path, t
             ..Default::default()
         };
         sessions::upsert(&game.sessions_path(), session_id, set, new)?;
+    }
+    // Linked first: a link refused leaves the clip where the hook's retry looks for it.
+    if dest != src && std::fs::rename(src, &dest).is_err() {
+        std::fs::copy(src, &dest)?;
+        std::fs::remove_file(src)?;
     }
     Ok(dest)
 }
