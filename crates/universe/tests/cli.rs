@@ -653,6 +653,18 @@ fn a_launch_marker_appears_whole_and_an_open_leaves_a_starting_session_alone() {
     open();
     assert_eq!(read()["id"], "quest", "a session still starting is not closed");
     assert_eq!(lines(&undone), 0);
+    let mut again =
+        command(&dir, &["play", "quest", "--no-wait"], &[NO_BUS]).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::piped()).spawn().unwrap();
+    let asked = std::time::Instant::now();
+    while again.try_wait().unwrap().is_none() {
+        if asked.elapsed().as_secs() >= 10 {
+            let _ = again.kill();
+            panic!("a second launch waited on the one starting");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let refused = again.wait_with_output().unwrap();
+    assert!(!refused.status.success() && text(&refused.stderr).contains("is starting"), "{}", text(&refused.stderr));
 
     std::fs::write(starting.join("release"), "").unwrap();
     assert!(!play.wait().unwrap().success(), "no systemd: the start fails");

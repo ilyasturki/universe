@@ -150,11 +150,17 @@ fn starting_lock_file() -> std::path::PathBuf {
     paths::current_session_file().with_extension("starting")
 }
 
-/// Held by a launch from its marker's write until its unit started.
+/// Held by a launch from its marker's write until its unit started; another launch meanwhile is `Busy` at once.
 fn hold_starting() -> Result<std::fs::File> {
     let f = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(starting_lock_file())?;
-    f.lock()?;
-    Ok(f)
+    match f.try_lock() {
+        Ok(()) => Ok(f),
+        Err(std::fs::TryLockError::WouldBlock) => {
+            let other = read_marker().map(|m| format!("{} ({})", m.current.title, m.current.session_id)).unwrap_or_else(|| "another launch".into());
+            Err(Error::Busy(format!("{other} is starting")))
+        }
+        Err(std::fs::TryLockError::Error(e)) => Err(e.into()),
+    }
 }
 
 /// A live launch holds the starting lock; a free one means its launcher died before the unit started.
