@@ -206,6 +206,13 @@ impl Window {
             })
             .build();
         let add_game = gio::ActionEntry::builder("add-game").activate(|win: &Self, _, _| crate::dialogs::add_game::present(win)).build();
+        let retry = gio::ActionEntry::builder("retry")
+            .activate(|win: &Self, _, _| {
+                win.app().open_core();
+                win.sync_core_actions();
+                win.imp().stack.set_visible_child_name("loading");
+            })
+            .build();
         let onboarding = gio::ActionEntry::builder("onboarding").activate(|win: &Self, _, _| crate::dialogs::onboarding::present(win)).build();
         let rescan = gio::ActionEntry::builder("rescan").activate(|win: &Self, _, _| win.rescan()).build();
         let entry = gio::ActionEntry::builder("open-journal-entry")
@@ -227,8 +234,19 @@ impl Window {
             })
             .build();
         let undo = gio::ActionEntry::builder("undo").activate(|win: &Self, _, _| win.undo()).build();
-        self.add_action_entries([show_sidebar, search, sort, show_hidden, view, add_game, onboarding, rescan, entry, game, undo]);
+        self.add_action_entries([show_sidebar, search, sort, show_hidden, view, add_game, retry, onboarding, rescan, entry, game, undo]);
         self.imp().library_page.set_show_hidden(state.show_hidden);
+    }
+
+    fn sync_core_actions(&self) {
+        for name in ["add-game", "onboarding", "rescan", "open-journal-entry"] {
+            if let Some(action) = self.lookup_action(name).and_downcast::<gio::SimpleAction>() {
+                action.set_enabled(self.app().is_ready());
+            }
+        }
+        if let Some(action) = self.lookup_action("retry").and_downcast::<gio::SimpleAction>() {
+            action.set_enabled(self.app().failure().is_some());
+        }
     }
 
     /// The first-run flow is behind the player, in every frontend.
@@ -342,6 +360,7 @@ impl Window {
 
     fn follow_core(&self) {
         let app = self.app();
+        self.sync_core_actions();
         if app.scripted() {
             self.set_maximized(false);
             self.set_default_size(1280, 800);
@@ -352,7 +371,7 @@ impl Window {
         self.setup_play_actions();
         let win = self.downgrade();
         app.library().connect_updated(move || {
-            win.upgrade().inspect(|win| win.rebuild_sidebar());
+            win.upgrade().filter(|win| win.app().is_ready()).inspect(|win| win.rebuild_sidebar());
         });
         let win = self.downgrade();
         app.connect_local("updates-changed", false, move |_| {
@@ -371,22 +390,21 @@ impl Window {
                 win.games_changed(ids);
             }
         });
+        let win = self.downgrade();
+        app.connect_local("core-ready", false, move |_| {
+            win.upgrade().inspect(|win| win.core_ready());
+            None
+        });
+        let win = self.downgrade();
+        app.connect_local("core-failed", false, move |args| {
+            let failure: String = args[1].get().unwrap_or_default();
+            win.upgrade().inspect(|win| win.core_failed(&failure));
+            None
+        });
         if app.is_ready() {
             self.core_ready();
         } else if let Some(failure) = app.failure() {
             self.core_failed(&failure);
-        } else {
-            let win = self.downgrade();
-            app.connect_local("core-ready", false, move |_| {
-                win.upgrade().inspect(|win| win.core_ready());
-                None
-            });
-            let win = self.downgrade();
-            app.connect_local("core-failed", false, move |args| {
-                let failure: String = args[1].get().unwrap_or_default();
-                win.upgrade().inspect(|win| win.core_failed(&failure));
-                None
-            });
         }
         let win = self.downgrade();
         glib::timeout_add_seconds_local_once(LOADING_LIMIT_S, move || {
@@ -409,6 +427,7 @@ impl Window {
     }
 
     fn core_ready(&self) {
+        self.sync_core_actions();
         self.rebuild_sidebar();
         if self.imp().state.borrow().onboarded {
             self.set_onboarded();
@@ -438,6 +457,7 @@ impl Window {
     }
 
     fn core_failed(&self, failure: &str) {
+        self.sync_core_actions();
         self.imp().failed_page.set_description(Some(&glib::markup_escape_text(failure)));
         self.imp().stack.set_visible_child_name("failed");
         if let Some(steps) = self.app().take_script() {
@@ -650,6 +670,12 @@ impl Window {
     pub fn game_action(&self, name: &str, game: &GameObject) {
         match name {
             "play" => self.play(game),
+            "install" => {
+                let row = game.row();
+                self.imp().store_page.install(&row.source, &row.store_id);
+                self.imp().navigation.pop_to_tag("home");
+                let _ = WidgetExt::activate_action(self, "win.view", Some(&"store".to_variant()));
+            }
             "details" => self.open_game(game),
             "open-folder" => self.open_folder(game),
             "settings" => crate::dialogs::game_settings::present(self, game),

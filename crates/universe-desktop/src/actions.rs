@@ -5,8 +5,22 @@ use crate::game::GameObject;
 use crate::window::Window;
 
 /// The `game.*` actions of a card or a page, run by the window on the game in hand at activation.
-pub const GAME: [&str; 13] =
-    ["play", "details", "settings", "artwork", "open-folder", "favorite", "unfavorite", "hide", "unhide", "update", "uninstall", "remove", "remove-purge"];
+pub const GAME: [&str; 14] = [
+    "play",
+    "install",
+    "details",
+    "settings",
+    "artwork",
+    "open-folder",
+    "favorite",
+    "unfavorite",
+    "hide",
+    "unhide",
+    "update",
+    "uninstall",
+    "remove",
+    "remove-purge",
+];
 
 pub fn install_game(widget: &impl IsA<gtk::Widget>, game: impl Fn() -> Option<GameObject> + Clone + 'static) -> gio::SimpleActionGroup {
     let group = gio::SimpleActionGroup::new();
@@ -25,6 +39,10 @@ pub fn install_game(widget: &impl IsA<gtk::Widget>, game: impl Fn() -> Option<Ga
     group
 }
 
+pub fn installable(row: &crate::game::Row) -> bool {
+    !row.installed && !row.has_install && !row.source.is_empty() && !row.store_id.is_empty()
+}
+
 /// Which of the actions apply to `game` as it is now.
 pub fn sync_game(group: &gio::SimpleActionGroup, game: Option<&GameObject>) {
     let (hidden, favorite) = game.map(|g| (g.hidden(), g.favorite())).unwrap_or_default();
@@ -34,6 +52,7 @@ pub fn sync_game(group: &gio::SimpleActionGroup, game: Option<&GameObject>) {
     let known = game.is_some();
     for (name, on) in [
         ("play", playable),
+        ("install", idle && game.is_some_and(|g| installable(&g.row()))),
         ("details", known),
         ("settings", known),
         ("artwork", known),
@@ -90,7 +109,7 @@ pub fn game_menu(widget: &impl IsA<gtk::Widget>, game: impl Fn() -> Option<GameO
 /// Keeps `sync_game` current while `game` is bound; the handlers go with `unbind`.
 pub fn follow_game(group: &gio::SimpleActionGroup, game: &GameObject) -> Vec<glib::SignalHandlerId> {
     sync_game(group, Some(game));
-    ["hidden", "favorite", "installed", "playing", "launching", "updatable", "has-install", "has-prefix"]
+    ["hidden", "favorite", "installed", "playing", "launching", "source", "updatable", "has-install", "has-prefix"]
         .into_iter()
         .map(|prop| {
             let group = group.clone();
@@ -126,5 +145,29 @@ mod tests {
         let steam = |status| Check { status, how: "manual", markable: true, ..Default::default() };
         assert!(!offers_update(steam("update")) && !offers_update(steam("unknown")), "Game Updates takes one updated by hand as current");
         assert!(!GAME.contains(&"mark-current"));
+    }
+
+    #[test]
+    fn an_uninstalled_store_game_offers_install() {
+        let offers_install = |row, playing, launching| {
+            let game = GameObject::new(row);
+            game.set_playing(playing);
+            game.set_launching(launching);
+            let group = gio::SimpleActionGroup::new();
+            for name in GAME {
+                group.add_action(&gio::SimpleAction::new(name, None));
+            }
+            sync_game(&group, Some(&game));
+            group.lookup_action("install").is_some_and(|action| action.is_enabled())
+        };
+        let store = crate::game::Row { source: "gog".into(), store_id: "123".into(), ..Default::default() };
+        assert!(offers_install(store.clone(), false, false));
+        assert!(!offers_install(crate::game::Row::default(), false, false));
+        assert!(!offers_install(crate::game::Row { source: "gog".into(), ..Default::default() }, false, false));
+        assert!(!offers_install(crate::game::Row { store_id: "123".into(), ..Default::default() }, false, false));
+        assert!(!offers_install(crate::game::Row { installed: true, ..store.clone() }, false, false));
+        assert!(!offers_install(crate::game::Row { has_install: true, ..store.clone() }, false, false));
+        assert!(!offers_install(store.clone(), true, false));
+        assert!(!offers_install(store, false, true));
     }
 }

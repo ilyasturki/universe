@@ -275,3 +275,11 @@ kind = "still"
 keys = "Wait:4 Up Wait:1 Up Wait:1 Left Wait:1 Left Wait:2 Expect: Return Wait:3 Type:about Wait:3 Expect: Return Wait:2 Expect: Return Wait:3 Down Down Down Expect: Return Wait:6 Shot:"
 alt = "First-run setup, opened again from About, listing games found in other launchers"
 fake = true
+
+[[take]]
+name = "desktop-game-page"
+look = "desktop"
+size = "1280x800"
+kind = "still"
+keys = "action:win.open-game::dead-cells wait:1500 shot:"
+alt = "A game's page with its primary action, settings, and Saves and Storage"

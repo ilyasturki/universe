@@ -171,6 +171,7 @@ mod imp {
         pub stores: RefCell<Vec<Value>>,
         pub source: RefCell<String>,
         pub games: RefCell<Vec<Value>>,
+        pub pending_install: RefCell<Option<(String, String)>>,
         pub error: RefCell<String>,
         pub free: Cell<u64>,
         pub loaded: Cell<bool>,
@@ -333,6 +334,17 @@ impl StorePage {
         }
     }
 
+    pub fn install(&self, source: &str, id: &str) {
+        let imp = self.imp();
+        imp.pending_install.replace(Some((source.to_string(), id.to_string())));
+        if *imp.source.borrow() != source {
+            self.set_source(source);
+        } else {
+            imp.loaded_at.set(None);
+            self.load(false);
+        }
+    }
+
     /// The listing on showing the page: the cached one and the disk, read again once `STALE`; `refresh` asks the store.
     pub fn load(&self, refresh: bool) {
         let imp = self.imp();
@@ -391,6 +403,25 @@ impl StorePage {
             app.check_updates(if refresh { None } else { Some(STALE) });
         }
         self.rebuild();
+        self.finish_install();
+    }
+
+    fn finish_install(&self) {
+        let imp = self.imp();
+        let Some((source, id)) = imp.pending_install.take() else { return };
+        if *imp.source.borrow() != source {
+            if imp.stores.borrow().iter().any(|store| text(store, "id") == source) {
+                self.install(&source, &id);
+            } else {
+                self.say(&gettext("Sign in to this game's store in Preferences, then try again."));
+            }
+        } else if imp.error.borrow().is_empty() {
+            if self.entry(&id).is_some() {
+                self.confirm_install(&id);
+            } else {
+                self.say(&gettext("This game was not found in the store listing. Refresh the store and try again."));
+            }
+        }
     }
 
     fn sync_busy(&self) {

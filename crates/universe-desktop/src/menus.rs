@@ -2,13 +2,14 @@ use gettextrs::gettext;
 use gtk::gio;
 use gtk::prelude::*;
 
-const SHOWN_WHEN_ENABLED: [&str; 7] = ["game.favorite", "game.unfavorite", "game.hide", "game.unhide", "game.update", "game.uninstall", "game.remove-purge"];
+const SHOWN_WHEN_ENABLED: [&str; 8] =
+    ["game.install", "game.favorite", "game.unfavorite", "game.hide", "game.unhide", "game.update", "game.uninstall", "game.remove-purge"];
 
 thread_local! {
     static MAIN: gio::Menu = sections();
     static GAME: gio::Menu = {
         let menu = gio::Menu::new();
-        menu.append_section(None, &section(&[(gettext("_Play"), "game.play"), (gettext("_Details"), "game.details")]));
+        menu.append_section(None, &section(&[(gettext("_Play"), "game.play"), (gettext("_Install…"), "game.install"), (gettext("_Details"), "game.details")]));
         menu.append_section(None, &section(&[(gettext("Game _Settings"), "game.settings"), (gettext("_Artwork"), "game.artwork")]));
         menu.append_section(
             None,

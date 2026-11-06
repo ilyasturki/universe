@@ -183,7 +183,7 @@ impl GamePage {
             page.upgrade().inspect(|page| page.refresh());
         };
         let mut handlers = imp.handlers.take();
-        for prop in ["title", "cover", "playing", "launching", "installed", "favorite", "update-mark", "version-facts"] {
+        for prop in ["title", "cover", "playing", "launching", "installed", "source", "has-install", "favorite", "update-mark", "version-facts"] {
             handlers.push(game.connect_notify_local(Some(prop), refresh.clone()));
         }
         let page = self.downgrade();
@@ -228,8 +228,12 @@ impl GamePage {
         imp.update_mark.set_label(&mark);
         imp.update_mark.set_visible(!mark.is_empty());
 
+        let installable = actions::installable(&row);
+        imp.play.set_action_name(Some(if installable { "game.install" } else { "game.play" }));
         let (label, icon) = if game.launching() {
             (gettext("Starting…"), "content-loading-symbolic")
+        } else if installable {
+            (gettext("Install"), "folder-download-symbolic")
         } else if !row.installed {
             (gettext("Not Installed"), "media-playback-start-symbolic")
         } else if row.hours > 0.0 {

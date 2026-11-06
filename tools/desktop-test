@@ -69,7 +69,7 @@ left_behind() {
     [ -z "$left" ] || fail "the app quit and left the processes above running ($2)"
 }
 
-shots=(media platform library hidden store game data preferences updates)
+shots=(media platform library hidden store game data preferences updates not-installed)
 mkdir -p "$out" "$tmp"/{data,config,state,cache,games,run,bin}
 service_shots=(service service-media service-store)
 for shot in "${shots[@]}" "${service_shots[@]}"; do rm -f "$out/$shot.png"; done
@@ -110,7 +110,7 @@ profile = "none"
 [modules]
 enabled = []
 [sources]
-enabled = []
+enabled = ["desktop-smoke"]
 EOF
 
 add() {
@@ -121,6 +121,34 @@ quest="$(add "$tmp/games/quest.sh" --runner linux --title "Smoke Quest")" || fai
 pocket="$(add "$tmp/games/pocket.gba" --runner mgba --title "Pocket Smoke")" || fail "the CLI added no game"
 IFS=$'\t' read -r game _ <<<"$quest"
 IFS=$'\t' read -r _ platform <<<"$pocket"
+
+mkdir -p "$tmp/sources/desktop-smoke" "$tmp/data/games/store-smoke"
+export UNIVERSE_SOURCES_PATH="$tmp/sources"
+cat >"$tmp/sources/desktop-smoke/source.toml" <<'EOF'
+api = 2
+id = "desktop-smoke"
+name = "Desktop Smoke"
+exe = "run"
+EOF
+cat >"$tmp/sources/desktop-smoke/run" <<'EOF'
+#!/bin/sh
+case "$1" in
+    status) echo '{"event":"logged_in","user":"desktop-smoke"}' ;;
+    library) echo '{"event":"game","id":"123","title":"Uninstalled Game","owned":true,"installed":false,"download_size":700,"disk_size":1000}' ;;
+    info) echo '{"event":"info","data":{},"download_size":700,"disk_size":1000}' ;;
+esac
+echo '{"event":"done"}'
+EOF
+chmod +x "$tmp/sources/desktop-smoke/run"
+cat >"$tmp/data/games/store-smoke/game.toml" <<'EOF'
+schema = 1
+id = "store-smoke"
+title = "Uninstalled Game"
+platform = "PC (Linux)"
+[source]
+kind = "desktop-smoke"
+id = "123"
+EOF
 
 socket="$tmp/run/wayland-0"
 XDG_RUNTIME_DIR="$tmp/run" weston --backend=headless --no-config --idle-time=0 --socket=wayland-0 --width=1920 --height=1200 \
@@ -154,7 +182,7 @@ for _ in $(seq 100); do
 done
 [ -S "$tmp/run/bus" ] || fail "dbus-daemon opened no socket in 10 s ($out/bus.log)"
 # Both runs on it: on the user's own bus, a Universe Desktop already open would take the first run's window.
-export DBUS_SESSION_BUS_ADDRESS="unix:path=$tmp/run/bus" GTK_A11Y=none
+export DBUS_SESSION_BUS_ADDRESS="unix:path=$tmp/run/bus" GTK_A11Y=none GSK_RENDERER=cairo
 name=io.github.ilyasturki.UniverseDesktop
 path=/io/github/ilyasturki/UniverseDesktop
 
@@ -166,6 +194,7 @@ script+=" action:win.show-hidden shot:$out/hidden.png"
 script+=" action:win.view::store shot:$out/store.png"
 script+=" action:win.open-game::$game shot:$out/game.png"
 script+=" action:page.data shot:$out/data.png"
+script+=" action:win.open-game::store-smoke shot:$out/not-installed.png"
 script+=" action:app.preferences shot:$out/preferences.png"
 script+=" action:prefs.game-updates shot:$out/updates.png"
 
@@ -216,4 +245,23 @@ left_behind "${apps[-1]}" "$out/service.log"
 for shot in "${service_shots[@]}"; do
     [ -s "$out/$shot.png" ] || fail "no $shot.png: the script did not run ($out/service.log)"
 done
-echo "desktop-test: $((${#shots[@]} + ${#service_shots[@]})) surfaces shot in $out ($((SECONDS - started)) s)"
+
+cp "$UNIVERSE_CONFIG_HOME/config.toml" "$tmp/repaired.toml"
+printf 'broken = [\n' >"$UNIVERSE_CONFIG_HOME/config.toml"
+script="view:failed action:win.add-game view:failed button:win.retry view:failed shot:$out/failed.png"
+script+=" copy:$tmp/repaired.toml:$UNIVERSE_CONFIG_HOME/config.toml button:win.retry view:library shot:$out/recovered.png"
+script+=" action:win.open-game::store-smoke button:game.install view:store dialog:install shot:$out/install.png"
+status=0
+timeout -k 5 "$limit" env -u DISPLAY WAYLAND_DISPLAY="$socket" GDK_BACKEND=wayland GDK_DISABLE=offload,dmabuf \
+    UNIVERSE_DESKTOP_SCRIPT="$script" "$app" >"$out/recovery.log" 2>&1 &
+apps+=($!)
+wait "${apps[-1]}" || status=$?
+[ "$status" = 0 ] || fail "startup recovery exited $status ($out/recovery.log)"
+left_behind "${apps[-1]}" "$out/recovery.log"
+for shot in failed recovered install; do
+    [ -s "$out/$shot.png" ] || fail "no $shot.png ($out/recovery.log)"
+done
+if grep -E 'panicked at|CRITICAL|WARNING \*\*' "$out/app.log" "$out/service.log" "$out/recovery.log"; then
+    fail "the app emitted a panic or GTK warning"
+fi
+echo "desktop-test: $((${#shots[@]} + ${#service_shots[@]} + 3)) surfaces shot in $out ($((SECONDS - started)) s)"

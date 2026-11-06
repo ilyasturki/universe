@@ -18,6 +18,10 @@ pub enum Step {
     Shot(PathBuf),
     Action(String),
     Size(i32, i32),
+    Button(String),
+    View(String),
+    Dialog(String),
+    Copy(PathBuf, PathBuf),
     Unreadable(String),
 }
 
@@ -37,6 +41,10 @@ fn step(word: &str) -> Option<Step> {
         "shot" => Some(Step::Shot(arg.into())),
         "action" => Some(Step::Action(arg.replace('~', " "))),
         "size" => arg.split_once('x').and_then(|(w, h)| Some(Step::Size(w.parse().ok()?, h.parse().ok()?))),
+        "button" => Some(Step::Button(arg.into())),
+        "view" => Some(Step::View(arg.into())),
+        "dialog" => Some(Step::Dialog(arg.into())),
+        "copy" => arg.split_once(':').map(|(from, to)| Step::Copy(from.into(), to.into())),
         _ => None,
     }
 }
@@ -44,15 +52,15 @@ fn step(word: &str) -> Option<Step> {
 pub async fn run(window: gtk::Window, steps: Vec<Step>) {
     window.settings().set_gtk_enable_animations(false);
     let mut failed = false;
-    if let Some(failure) = window.application().and_downcast::<crate::app::Application>().and_then(|app| app.failure()) {
-        eprintln!("script: the core did not open: {failure}");
-        failed = true;
-    }
     for step in steps {
         if let Err(e) = run_step(&window, step).await {
             eprintln!("script: {e}");
             failed = true;
         }
+    }
+    if let Some(failure) = window.application().and_downcast::<crate::app::Application>().and_then(|app| app.failure()) {
+        eprintln!("script: the core did not open: {failure}");
+        failed = true;
     }
     if failed {
         std::process::exit(1);
@@ -70,6 +78,48 @@ async fn run_step(window: &gtk::Window, step: Step) -> Result<(), String> {
             if !activate(window.upcast_ref(), &name, target.as_ref()) {
                 return Err(format!("no action {name}"));
             }
+        }
+        Step::Button(action) => {
+            loaded(window).await?;
+            drawn(window).await?;
+            let button = widgets(window.upcast_ref())
+                .into_iter()
+                .filter_map(|widget| widget.downcast::<gtk::Button>().ok())
+                .find(|button| button.action_name().as_deref() == Some(&action))
+                .ok_or_else(|| format!("no visible button for {action}"))?;
+            if !button.is_sensitive() {
+                return Err(format!("button for {action} is disabled"));
+            }
+            button.emit_clicked();
+        }
+        Step::View(name) => {
+            loaded(window).await?;
+            if !widgets(window.upcast_ref())
+                .iter()
+                .any(|widget| widget.downcast_ref::<adw::ViewStack>().is_some_and(|stack| stack.visible_child_name().as_deref() == Some(&name)))
+            {
+                return Err(format!("no visible view {name}"));
+            }
+            println!("view: {name}");
+        }
+        Step::Dialog(response) => {
+            let started = std::time::Instant::now();
+            loop {
+                if widgets(window.upcast_ref())
+                    .iter()
+                    .any(|widget| widget.downcast_ref::<adw::AlertDialog>().is_some_and(|dialog| dialog.default_response().as_deref() == Some(&response)))
+                {
+                    println!("dialog: {response}");
+                    break;
+                }
+                if started.elapsed() >= LOADING_TIMEOUT {
+                    return Err(format!("no visible dialog with response {response}"));
+                }
+                glib::timeout_future(Duration::from_millis(50)).await;
+            }
+        }
+        Step::Copy(from, to) => {
+            std::fs::copy(&from, &to).map_err(|e| format!("copy {} to {}: {e}", from.display(), to.display()))?;
         }
         Step::Shot(path) => {
             loaded(window).await?;
@@ -128,6 +178,22 @@ fn loading(root: &gtk::Widget) -> Option<adw::ViewStack> {
         }
     }
     None
+}
+
+fn widgets(root: &gtk::Widget) -> Vec<gtk::Widget> {
+    let mut widgets = vec![root.clone()];
+    let mut index = 0;
+    while index < widgets.len() {
+        let mut child = widgets[index].first_child();
+        while let Some(widget) = child {
+            child = widget.next_sibling();
+            if widget.is_mapped() {
+                widgets.push(widget);
+            }
+        }
+        index += 1;
+    }
+    widgets
 }
 
 /// Runs the action from the first widget on screen that reaches it: a page's own group (`store.`, a grid's `list.`) sits

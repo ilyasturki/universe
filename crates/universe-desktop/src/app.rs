@@ -48,6 +48,8 @@ mod imp {
     #[derive(Default)]
     pub struct Application {
         pub ready: Cell<bool>,
+        pub opening: Cell<bool>,
+        pub scripted: Cell<bool>,
         pub stage: RefCell<String>,
         pub failure: RefCell<Option<String>>,
         pub watch: RefCell<Option<changes::Watch>>,
@@ -168,12 +170,13 @@ impl Application {
             .property("resource-base-path", "/io/github/ilyasturki/UniverseDesktop")
             .property("flags", flags)
             .build();
+        app.imp().scripted.set(script.is_some());
         app.imp().script.replace(script);
         app
     }
 
     pub fn scripted(&self) -> bool {
-        self.imp().script.borrow().is_some()
+        self.imp().scripted.get()
     }
 
     pub fn take_script(&self) -> Option<Vec<Step>> {
@@ -662,12 +665,17 @@ impl Application {
     }
 
     /// The core opens off the main loop; the games it launches from here on are bound to this process, which owns them.
-    fn open_core(&self) {
+    pub fn open_core(&self) {
+        if self.is_ready() || self.imp().opening.replace(true) {
+            return;
+        }
+        self.imp().failure.take();
         let app = self.clone();
         glib::spawn_future_local(async move {
             app.set_stage(gettext("opening the core"));
             if let Err(e) = backend::open().await {
                 app.imp().failure.replace(Some(e.to_string()));
+                app.imp().opening.set(false);
                 app.emit_by_name::<()>("core-failed", &[&e.to_string()]);
                 return;
             }
@@ -697,12 +705,13 @@ impl Application {
             app.set_stage(gettext("reading the recordings"));
             app.start_frames().await;
             app.imp().ready.set(true);
+            app.imp().opening.set(false);
+            app.set_core_actions(true);
             app.emit_by_name::<()>("core-ready", &[]);
             if let Some(events) = events {
                 app.follow(events);
             }
             glib::timeout_future_seconds(5).await;
-            // The window has taken the script by now, so `scripted()` no longer tells.
             if !scripted && !app.windows().is_empty() {
                 app.check_updates(None);
                 app.fetch_unfetched();
@@ -883,8 +892,17 @@ impl Application {
         });
         self.add_action_entries([quit, about, whats_new, preferences, preferences_page, entry]);
         self.add_action_entries(dialogs);
+        self.set_core_actions(false);
         if glib::find_program_in_path(BIG_SCREEN).is_some() {
             self.add_action_entries([gio::ActionEntry::builder("big-screen").activate(|app: &Self, _, _| app.big_screen()).build()]);
+        }
+    }
+
+    fn set_core_actions(&self, enabled: bool) {
+        for name in ["whats-new", "preferences", "preferences-page", "system-check", "storage", "artwork", "open-journal-entry"] {
+            if let Some(action) = self.lookup_action(name).and_downcast::<gio::SimpleAction>() {
+                action.set_enabled(enabled);
+            }
         }
     }
 
