@@ -615,6 +615,34 @@ fn a_recording_filed_while_a_close_files_its_row_leaves_both_rows() {
     assert_eq!((filed[1]["unit"].as_str(), filed[1]["source"].as_str()), (Some("universe-game-quest-20261106-000000.service"), Some("universe")));
 }
 
+#[test]
+fn a_history_cut_inside_a_character_lists_its_rows_and_takes_the_waiting_one_once() {
+    let dir = no_desktop();
+    add_game(&dir, "Quest");
+    let rows = dir.path().join("data/games/quest/sessions.jsonl");
+    let torn = "{\"session\":\"20261105-000000\",\"game\":\"quest\",\"command\":\"/jeux/é";
+    let mut history = b"{\"session\":\"20261104-000000\",\"game\":\"quest\"}\n".to_vec();
+    history.extend_from_slice(&torn.as_bytes()[..torn.len() - 1]);
+    std::fs::write(&rows, &history).unwrap();
+    let (_, undone) = left_open(&dir, "quest", "20261106-000000");
+
+    for _ in 0..2 {
+        let out = universe(&dir, &["storage"], &[NO_BUS]);
+        assert!(out.status.success(), "{}", text(&out.stderr));
+    }
+    let out = universe(&dir, &["sessions", "quest", "--json"], &[NO_BUS]);
+    assert!(out.status.success() && text(&out.stderr).contains(&rows.display().to_string()), "{}", text(&out.stderr));
+    let listed: Vec<serde_json::Value> = serde_json::from_slice(&out.stdout).unwrap();
+    let mut ids: Vec<_> = listed.iter().map(|r| r["session"].as_str().unwrap().to_owned()).collect();
+    ids.sort();
+    assert_eq!(ids, ["20261104-000000", "20261106-000000"]);
+    let filed = String::from_utf8_lossy(&std::fs::read(&rows).unwrap()).into_owned();
+    let last: serde_json::Value = serde_json::from_str(filed.lines().last().unwrap()).unwrap();
+    assert_eq!((last["session"].as_str(), last["unit"].as_str()), (Some("20261106-000000"), Some("universe-game-quest-20261106-000000.service")));
+    assert_eq!(filed.matches("20261106-000000\"").count(), 1, "{filed}");
+    assert_eq!(lines(&undone), 1);
+}
+
 fn set_commands(dir: &tempfile::TempDir, pre: &str, post: &str) {
     let out = universe(dir, &["set", "quest", &format!("pre_command={pre}"), &format!("post_command={post}")], &[]);
     assert!(out.status.success(), "{}", text(&out.stderr));

@@ -127,8 +127,14 @@ pub fn read(path: &Path) -> crate::Result<Vec<Session>> {
         Err(e) => return Err(e.into()),
     };
     let mut out = Vec::new();
-    for line in std::io::BufReader::new(f).lines() {
-        let line = line?;
+    for line in std::io::BufReader::new(f).split(b'\n') {
+        let line = match String::from_utf8(line?) {
+            Ok(line) => line,
+            Err(e) => {
+                tracing::warn!("{}: bad session line: {e}", path.display());
+                continue;
+            }
+        };
         if line.trim().is_empty() {
             continue;
         }

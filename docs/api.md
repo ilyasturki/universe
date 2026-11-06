@@ -436,6 +436,9 @@ One `sessions.jsonl` line:
  "recording_started_at":"RFC3339 or empty","recording_pauses":[["RFC3339","RFC3339"]]}
 ```
 
+A line that does not decode, as UTF-8 or as JSON (a write cut short), is skipped with a warning
+naming the file, and the next row starts a line of its own.
+
 `recording_duration_s` is the media's length as `ffprobe` reported it when the file was filed or
 imported, `0` when unknown (older lines lack the key). `recording_started_at` and
 `recording_pauses` are the recorder's clock against the wall's: when it began, and the stretches it
