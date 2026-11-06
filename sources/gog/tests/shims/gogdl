@@ -5,9 +5,14 @@ import sys
 import time
 from pathlib import Path
 
+
+def log(entry):
+    with open(os.environ["SHIM_LOG"], "a") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
 args = sys.argv[1:]
-with open(os.environ["SHIM_LOG"], "a") as f:
-    f.write(json.dumps({"args": args, "config": os.environ.get("GOGDL_CONFIG_PATH")}) + "\n")
+log({"args": args, "config": os.environ.get("GOGDL_CONFIG_PATH")})
 while args and args[0].startswith("--"):
     args = args[2:]
 verb = args[0]
@@ -35,6 +40,7 @@ elif verb == "save-sync":
     import shutil
 
     if os.environ.get("SHIM_SYNC") == "hang":
+        log({"args": [], "hung": os.getpid()})
         time.sleep(60)
     if os.environ.get("SHIM_SYNC") == "fail":
         sys.exit(1)

@@ -1,6 +1,9 @@
 import json
 import os
+import subprocess
 import time
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -65,9 +68,34 @@ def put(folder, name, text, age_s=0):
     return path
 
 
+def logged(cloud):
+    return [json.loads(line) for line in cloud["log"].read_text().splitlines()] if cloud["log"].exists() else []
+
+
+def hung(cloud):
+    return [e["hung"] for e in logged(cloud) if "hung" in e]
+
+
+# The clock reaches the deadline only once the shim hangs, so however loaded the machine, the shim started before it.
+@pytest.fixture
+def deadline_once_hung(src, cloud, monkeypatch):
+    leap = 0
+
+    def popen(*args, **kwargs):
+        nonlocal leap
+        proc = subprocess.Popen(*args, **kwargs)
+        while proc.poll() is None and proc.pid not in hung(cloud):
+            time.sleep(0.005)
+        if proc.pid in hung(cloud):
+            leap = src.PRE_LAUNCH_BUDGET_S
+        return proc
+
+    monkeypatch.setattr(src, "subprocess", SimpleNamespace(**{**vars(subprocess), "Popen": popen}))
+    monkeypatch.setattr(src, "time", SimpleNamespace(**{**vars(time), "monotonic": lambda: time.monotonic() + leap}))
+
+
 def ran(cloud):
-    lines = [json.loads(line) for line in cloud["log"].read_text().splitlines()] if cloud["log"].exists() else []
-    return ["backup" if "universe" in e else e["args"][-1] for e in lines if "universe" in e or "save-sync" in e["args"]]
+    return ["backup" if "universe" in e else e["args"][-1] for e in logged(cloud) if "universe" in e or "save-sync" in e["args"]]
 
 
 def state(src):
@@ -129,15 +157,16 @@ def test_the_upload_after_a_session_leaves_gogdl_alone_with_no_saves_here(src, c
     assert ran(cloud) == [], "gogdl downloads into an empty folder whatever --skip-download says"
 
 
-def test_a_download_out_of_time_is_killed_and_the_game_launches_on_its_saves_whole(src, cloud, monkeypatch):
-    monkeypatch.setattr(src, "PRE_LAUNCH_BUDGET_S", 0.5)
-    monkeypatch.setattr(src, "SYNC_MIN_S", 0.1)
+def test_a_download_out_of_time_is_killed_and_the_game_launches_on_its_saves_whole(src, cloud, monkeypatch, deadline_once_hung):
     monkeypatch.setenv("SHIM_SYNC", "hang")
     src.update_cloud("1434554947", ts={"saves": "1"})
     put(cloud["local"], "profile.json", "local")
     started = time.monotonic()
     assert src.main(["pre-launch"]) == 0
     assert time.monotonic() - started < 15
+    assert ran(cloud) == ["--skip-upload"]
+    (pid,) = hung(cloud)
+    assert not Path(f"/proc/{pid}").exists()
     assert state(src)["state"] == "error" and state(src)["message"]
     assert (cloud["local"] / "profile.json").read_text() == "local"
     assert not (cloud["data"] / "staging" / "1434554947" / "saves").exists()

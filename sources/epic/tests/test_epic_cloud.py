@@ -1,7 +1,9 @@
 import json
 import os
+import subprocess
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -61,10 +63,35 @@ def put(folder, name, text, age_s=0):
     os.utime(path, (stamp, stamp))
 
 
+def logged(cloud):
+    return [json.loads(line) for line in cloud["log"].read_text().splitlines()] if cloud["log"].exists() else []
+
+
+def hung(cloud):
+    return [e["hung"] for e in logged(cloud) if "hung" in e]
+
+
+# The clock reaches the deadline only once the shim hangs, so however loaded the machine, the shim started before it.
+@pytest.fixture
+def deadline_once_hung(src, cloud, monkeypatch):
+    leap = 0
+
+    def popen(*args, **kwargs):
+        nonlocal leap
+        proc = subprocess.Popen(*args, **kwargs)
+        while proc.poll() is None and proc.pid not in hung(cloud):
+            time.sleep(0.005)
+        if proc.pid in hung(cloud):
+            leap = src.PRE_LAUNCH_BUDGET_S
+        return proc
+
+    monkeypatch.setattr(src, "subprocess", SimpleNamespace(**{**vars(subprocess), "Popen": popen}))
+    monkeypatch.setattr(src, "time", SimpleNamespace(**{**vars(time), "monotonic": lambda: time.monotonic() + leap}))
+
+
 def syncs(cloud):
-    lines = [json.loads(line) for line in cloud["log"].read_text().splitlines()] if cloud["log"].exists() else []
     out = []
-    for e in lines:
+    for e in logged(cloud):
         if "universe" in e:
             out.append("backup")
         elif "sync-saves" in e["args"]:
@@ -158,15 +185,15 @@ def test_offline_the_launch_goes_on_without_legendary(src, cloud, monkeypatch):
     assert state(src)["state"] == "offline"
 
 
-def test_a_download_killed_at_the_deadline_puts_legendarys_save_path_back(src, cloud, monkeypatch):
-    monkeypatch.setattr(src, "PRE_LAUNCH_BUDGET_S", 0.5)
-    monkeypatch.setattr(src, "SYNC_MIN_S", 0.1)
+def test_a_download_killed_at_the_deadline_puts_legendarys_save_path_back(src, cloud, monkeypatch, deadline_once_hung):
     monkeypatch.setenv("SHIM_MODE", "hangdown")
     put(cloud["local"], "slot1.sav", "old", age_s=900)
     src.update_cloud("Min", base={"cloud": src.utc_date(time.time() - 900), "local": time.time() - 900})
     put(cloud["cloud"], "slot1.sav", "played elsewhere")
     assert src.main(["pre-launch"]) == 0
     assert syncs(cloud) == [COMPARE, "--skip-upload"]
+    (pid,) = hung(cloud)
+    assert not Path(f"/proc/{pid}").exists()
     assert state(src)["state"] == "error"
     assert save_path(cloud) == str(cloud["local"])
     assert (cloud["local"] / "slot1.sav").read_text() == "old"
@@ -183,12 +210,13 @@ def test_a_save_path_legendary_holds_locked_fails_the_sync_rather_than_stay_on_t
     assert save_path(cloud) == str(cloud["local"])
 
 
-def test_a_sync_out_of_time_is_killed_and_the_game_launches_on_its_saves(src, cloud, monkeypatch):
-    monkeypatch.setattr(src, "PRE_LAUNCH_BUDGET_S", 0.5)
-    monkeypatch.setattr(src, "SYNC_MIN_S", 0.1)
+def test_a_sync_out_of_time_is_killed_and_the_game_launches_on_its_saves(src, cloud, monkeypatch, deadline_once_hung):
     monkeypatch.setenv("SHIM_MODE", "hang")
     put(cloud["local"], "slot1.sav", "local")
     assert src.main(["pre-launch"]) == 0
+    assert syncs(cloud) == [COMPARE]
+    (pid,) = hung(cloud)
+    assert not Path(f"/proc/{pid}").exists()
     assert state(src)["state"] == "error" and state(src)["message"]
     assert (cloud["local"] / "slot1.sav").read_text() == "local"
 
