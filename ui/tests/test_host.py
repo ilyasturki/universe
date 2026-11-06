@@ -123,8 +123,10 @@ def test_a_core_that_will_not_open_holds_a_page_that_retries_or_quits_on_the_pad
     assert (run.code, len(run.launchers)) == (3, 1), "gamescope comes up to show the page, on the defaults: " + run.stderr
 
     for look, keys in zip(LOOKS, ("Pad:B", "Pad:Down Pad:A", "Pad:Right Pad:A"), strict=True):
-        run = gamescope("up", "--windowed", "--theme", look, "--key-delay", "300", "--keys", keys)
+        left = tmp_path / f"left-{look}"
+        run = gamescope("up", "--windowed", "--theme", look, "--key-delay", "300", "--keys", keys, **{host.DONE_ENV: str(left)})
         assert run.code == 0 and "Traceback" not in run.stderr, run.stderr
+        assert left.read_text() == "0", "a plain end to run_session, no crash"
 
     up, done, shot = tmp_path / "up", tmp_path / "done", tmp_path / "failed.png"
     keys = f"A Shot:{shot} Await A Ready Mark:home Quit"
@@ -141,7 +143,7 @@ def test_a_core_that_will_not_open_holds_a_page_that_retries_or_quits_on_the_pad
         ui.kill()
     assert ui.returncode == 0 and "mark home" in stderr and "Traceback" not in stderr, stderr
     assert stderr.count("the core did not open") == 2, "A on the file still broken stays on the page"
-    assert done.read_text() == "0", "a plain end to run_session, no crash"
+    assert done.read_text() == "0", "the script carried over to the home page ended it"
 
 
 def test_a_gamescope_that_shows_nothing_is_stopped(gamescope, monkeypatch):
