@@ -275,3 +275,12 @@ kind = "still"
 keys = "Wait:4 Up Wait:1 Up Wait:1 Left Wait:1 Left Wait:2 Expect: Return Wait:3 Type:about Wait:3 Expect: Return Wait:2 Expect: Return Wait:3 Down Down Down Expect: Return Wait:6 Shot:"
 alt = "First-run setup, opened again from About, listing games found in other launchers"
 fake = true
+
+[[take]]
+name = "switch2-news"
+look = "switch2"
+size = "1920x1080"
+kind = "still"
+keys = "Wait:5 Click:714,840 Wait:4 Right Wait Right Wait:3 Shot:"
+alt = "Switch 2 News: written journal entries beside a session with no entry yet, A to write it"
+fake = true
