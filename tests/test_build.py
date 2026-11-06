@@ -41,7 +41,9 @@ def test_the_core_build_script_watches_real_paths_and_leaves_the_index_alone(tmp
     before = index.stat().st_mtime_ns
 
     script = tmp_path / "build-script"
-    subprocess.run(["rustc", "--edition=2021", ROOT / "crates/universe/build.rs", "-o", script], env={**os.environ, "CARGO_MANIFEST_DIR": str(manifest)}, check=True)
+    subprocess.run(
+        ["rustc", "--edition=2021", ROOT / "crates/universe/build.rs", "-o", script], env={**os.environ, "CARGO_MANIFEST_DIR": str(manifest)}, check=True
+    )
     env = {k: v for k, v in os.environ.items() if k != "UNIVERSE_GIT_REV"} | {"CARGO_PKG_VERSION": "0.0.0"}
     run = subprocess.run([script], env=env, check=True, capture_output=True, text=True)
 
