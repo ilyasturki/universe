@@ -213,6 +213,7 @@ impl Core {
     }
 
     /// A marker without an active unit (crash, reboot) is closed now; one that cannot be read goes, or every launch would be `Busy`.
+    /// One of a game with no folder goes too, undone and with no row. An `Err` that leaves the marker owes its row: a launch waits for it.
     pub async fn reconcile(&self) -> Result<()> {
         let path = paths::current_session_file();
         let Ok(text) = std::fs::read_to_string(&path) else { return Ok(()) };

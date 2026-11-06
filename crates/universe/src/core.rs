@@ -299,7 +299,9 @@ impl Core {
     pub async fn open_with(config: Config, host: Host) -> Result<Core> {
         std::fs::create_dir_all(paths::games_dir())?;
         let core = Core::new(config, host);
-        core.reconcile().await?;
+        if let Err(e) = core.reconcile().await {
+            tracing::warn!("session left open: {e}");
+        }
         Ok(core)
     }
 

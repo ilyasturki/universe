@@ -141,14 +141,13 @@ pub fn read(path: &Path) -> crate::Result<Vec<Session>> {
 }
 
 pub fn append(path: &Path, s: &Session) -> crate::Result<()> {
-    if let Some(p) = path.parent() {
-        std::fs::create_dir_all(p)?;
-    }
-    let mut f = std::fs::OpenOptions::new().create(true).append(true).open(path)?;
     let mut line = serde_json::to_string(s)?;
     line.push('\n');
-    f.write_all(line.as_bytes())?;
-    Ok(())
+    path.parent()
+        .map_or(Ok(()), std::fs::create_dir_all)
+        .and_then(|()| std::fs::OpenOptions::new().create(true).append(true).open(path))
+        .and_then(|mut f| f.write_all(line.as_bytes()))
+        .map_err(|e| crate::Error::Io(format!("{}: {e}", path.display())))
 }
 
 pub fn update<F: FnMut(&mut Session)>(path: &Path, session_id: &str, mut f: F) -> crate::Result<bool> {

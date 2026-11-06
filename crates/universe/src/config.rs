@@ -488,21 +488,29 @@ impl Config {
     }
 
     pub fn set_key(path: &Path, key: &str, value: &str) -> crate::Result<()> {
-        let text = std::fs::read_to_string(path).unwrap_or_default();
+        let text = match std::fs::read_to_string(path) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+            read => read.map_err(|e| crate::Error::Io(format!("{}: {e}", path.display())))?,
+        };
         let mut doc = document(&text)?;
         crate::game::set_dotted(&mut doc, key, value)?;
+        let text = doc.to_string();
+        toml::from_str::<Config>(&text).map_err(|e| crate::Error::Invalid(format!("{key} = {value}: {}", e.message())))?;
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        std::fs::write(path, doc.to_string()).map_err(|e| match e.kind() {
-            std::io::ErrorKind::PermissionDenied if Self::owner(path) == HOME_MANAGER => crate::Error::Invalid(format!(
+        // Opened first: a rename alone would go through on a read-only file, and `replace` follows only a link whose target exists.
+        let opened = std::fs::OpenOptions::new().write(true).create(true).truncate(false).open(path);
+        opened.and_then(|_| replace(path, text.as_bytes(), None)).map_err(|e| match e.kind() {
+            std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::ReadOnlyFilesystem if Self::owner(path) == HOME_MANAGER => crate::Error::Invalid(format!(
                 "{} is read-only: home-manager's programs.universe.settings owns it; set it to null to change settings here",
                 path.display()
             )),
-            std::io::ErrorKind::PermissionDenied => crate::Error::Invalid(format!("{} is read-only: make it writable to change settings here", path.display())),
+            std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::ReadOnlyFilesystem => {
+                crate::Error::Invalid(format!("{} is read-only: make it writable to change settings here", path.display()))
+            }
             _ => e.into(),
-        })?;
-        Ok(())
+        })
     }
 
     pub fn writable(path: &Path) -> bool {
@@ -512,7 +520,7 @@ impl Config {
     /// Who writes the file when the core may not: `home-manager` for a link into the Nix store, its
     /// `programs.universe.settings`; empty for a file of the user's own.
     pub fn owner(path: &Path) -> &'static str {
-        owner_under(path, Path::new("/nix/store"))
+        owner_under(path, &std::env::var_os("NIX_STORE_DIR").map_or_else(|| "/nix/store".into(), std::path::PathBuf::from))
     }
 }
 
@@ -644,6 +652,28 @@ mod tests {
         assert!(std::fs::symlink_metadata(&linked).unwrap().file_type().is_symlink(), "the link stays a link");
         assert!(std::fs::read_to_string(dotfiles.join("config.toml")).unwrap().starts_with("schema = 2\n"));
         assert_eq!(std::fs::read_dir(&dotfiles).unwrap().count(), 1, "no temporary file left");
+    }
+
+    #[test]
+    fn a_write_never_replaces_a_file_that_turned_unreadable_under_a_running_core() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "schema = 2\n# mine\n").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o200)).unwrap();
+        assert!(Config::set_key(&path, "launch.hdr", "true").is_err());
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "schema = 2\n# mine\n");
+    }
+
+    #[test]
+    fn a_first_write_through_a_dangling_link_creates_its_target() {
+        let dir = tempfile::tempdir().unwrap();
+        let link = dir.path().join("config.toml");
+        std::os::unix::fs::symlink(dir.path().join("dotfiles.toml"), &link).unwrap();
+        Config::set_key(&link, "launch.hdr", "true").unwrap();
+        assert!(std::fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
+        assert!(std::fs::read_to_string(dir.path().join("dotfiles.toml")).unwrap().contains("hdr = true"));
     }
 
     #[test]

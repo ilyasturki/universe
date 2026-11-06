@@ -230,7 +230,7 @@ fn a_rescan_tries_again_the_nodes_the_watcher_passed_over() {
 }
 
 #[test]
-fn a_write_out_of_range_or_to_a_read_only_config_is_refused() {
+fn a_write_the_config_cannot_hold_or_to_a_read_only_config_is_refused() {
     let dir = tempfile::tempdir().unwrap();
     let config = dir.path().join("config/config.toml");
     std::fs::create_dir_all(config.parent().unwrap()).unwrap();
@@ -241,6 +241,14 @@ fn a_write_out_of_range_or_to_a_read_only_config_is_refused() {
     }
     let settings: serde_json::Value = serde_json::from_slice(&universe(&dir, &["config", "get", "--json"], &[]).stdout).unwrap();
     assert_eq!(settings["controller"]["volume_step"], 10, "a percent from 1 to 100");
+    let held = std::fs::read(&config).unwrap();
+    for (key, value) in [("desktop.keep_awake", "maybe"), ("controller.hold_ms", "fast")] {
+        let out = universe(&dir, &["config", "set", key, value], &[]);
+        assert_eq!(out.status.code(), Some(1), "{key}: {}", text(&out.stderr));
+        assert!(text(&out.stderr).contains(key), "{}", text(&out.stderr));
+        assert_eq!(std::fs::read(&config).unwrap(), held, "{key} left the file byte for byte");
+    }
+    assert!(universe(&dir, &["ls"], &[]).status.success(), "the next command still opens");
     std::fs::set_permissions(&config, std::os::unix::fs::PermissionsExt::from_mode(0o444)).unwrap();
     let out = universe(&dir, &["config", "set", "launch.hdr", "true"], &[]);
     let err = String::from_utf8_lossy(&out.stderr).into_owned();
@@ -249,6 +257,111 @@ fn a_write_out_of_range_or_to_a_read_only_config_is_refused() {
     assert_eq!((&settings["config_writable"], &settings["config_owner"]), (&serde_json::json!(false), &serde_json::json!("")));
     let text = String::from_utf8_lossy(&universe(&dir, &["doctor"], &[]).stdout).into_owned();
     assert!(text.contains("read-only"), "{text:?}");
+}
+
+#[test]
+fn a_write_to_a_config_it_cannot_read_fails_and_leaves_it_in_place() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let config = dir.path().join("config/config.toml");
+    std::fs::create_dir_all(config.join("kept")).unwrap();
+    assert_eq!(universe(&dir, &["config", "set", "launch.hdr", "true"], &[]).status.code(), Some(1));
+    assert!(config.join("kept").is_dir(), "a directory stays what it was");
+    std::fs::remove_dir_all(&config).unwrap();
+
+    std::fs::write(&config, "schema = 2\n# mine\n").unwrap();
+    std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o000)).unwrap();
+    assert_eq!(universe(&dir, &["config", "set", "launch.hdr", "true"], &[]).status.code(), Some(1));
+    std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o644)).unwrap();
+    assert_eq!(std::fs::read_to_string(&config).unwrap(), "schema = 2\n# mine\n");
+}
+
+#[test]
+fn a_write_keeps_a_linked_config_linked_and_a_store_link_says_who_owns_it() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let config = dir.path().join("config/config.toml");
+    std::fs::create_dir_all(config.parent().unwrap()).unwrap();
+    let dotfiles = dir.path().join("dotfiles");
+    std::fs::create_dir_all(&dotfiles).unwrap();
+    std::fs::write(dotfiles.join("universe.toml"), "schema = 2\n# mine\n").unwrap();
+    std::os::unix::fs::symlink(dotfiles.join("universe.toml"), &config).unwrap();
+    let out = universe(&dir, &["config", "set", "launch.hdr", "true"], &[]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert_eq!(std::fs::read_link(&config).unwrap(), dotfiles.join("universe.toml"));
+    let written = std::fs::read_to_string(dotfiles.join("universe.toml")).unwrap();
+    assert!(written.contains("# mine") && written.contains("hdr = true"), "{written:?}");
+    assert_eq!(std::fs::read_dir(&dotfiles).unwrap().count(), 1, "no temporary file left");
+
+    let store = dir.path().join("store");
+    std::fs::create_dir_all(&store).unwrap();
+    let generated = store.join("universe-config.toml");
+    std::fs::write(&generated, "schema = 2\n").unwrap();
+    std::fs::set_permissions(&generated, std::fs::Permissions::from_mode(0o444)).unwrap();
+    std::fs::remove_file(&config).unwrap();
+    std::os::unix::fs::symlink(&generated, &config).unwrap();
+    let store_dir = store.to_str().unwrap();
+    let out = universe(&dir, &["config", "set", "launch.hdr", "true"], &[("NIX_STORE_DIR", store_dir)]);
+    let err = text(&out.stderr);
+    assert!(!out.status.success() && err.contains("read-only") && err.contains("home-manager"), "{err:?}");
+    assert_eq!(std::fs::read_to_string(&generated).unwrap(), "schema = 2\n");
+    assert_eq!(std::fs::read_link(&config).unwrap(), generated);
+}
+
+fn left_open(dir: &tempfile::TempDir, game: &str, session: &str) -> std::path::PathBuf {
+    let marker = dir.path().join("state/current-session.json");
+    std::fs::create_dir_all(marker.parent().unwrap()).unwrap();
+    let current = serde_json::json!({
+        "session_id": session,
+        "id": game,
+        "title": game,
+        "unit": format!("universe-game-{game}-{session}.service"),
+        "screen": "",
+        "started_at": "2026-11-06T00:00:00+00:00",
+    });
+    std::fs::write(&marker, current.to_string()).unwrap();
+    marker
+}
+
+#[test]
+fn a_session_that_cannot_be_filed_keeps_its_marker_and_the_core_opens_until_it_can() {
+    let dir = no_desktop();
+    let exe = dir.path().join("quest.sh");
+    std::fs::write(&exe, "").unwrap();
+    let added = universe(&dir, &["add", exe.to_str().unwrap(), "--runner", "linux", "--title", "Quest", "--json"], &[]);
+    assert!(added.status.success(), "{}", text(&added.stderr));
+    let rows = dir.path().join("data/games/quest/sessions.jsonl");
+    std::fs::create_dir_all(&rows).unwrap();
+    let marker = left_open(&dir, "quest", "20261106-000000");
+
+    let out = universe(&dir, &["storage"], &[NO_BUS]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert!(marker.exists(), "the row is still owed");
+    let out = universe(&dir, &["play", "quest", "--no-wait"], &[NO_BUS]);
+    assert!(!out.status.success() && text(&out.stderr).contains("sessions.jsonl"), "{}", text(&out.stderr));
+    assert!(marker.exists(), "a launch does not write over it");
+
+    std::fs::remove_dir(&rows).unwrap();
+    let out = universe(&dir, &["ls"], &[NO_BUS]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert!(!marker.exists());
+    let filed = std::fs::read_to_string(&rows).unwrap();
+    let row: serde_json::Value = serde_json::from_str(filed.trim()).unwrap();
+    assert_eq!(row["session"], "20261106-000000");
+}
+
+#[test]
+fn a_session_of_a_game_with_no_folder_is_dropped_without_failing_the_open() {
+    let dir = no_desktop();
+    let marker = left_open(&dir, "gone", "20261106-000000");
+    let undone = dir.path().join("undone");
+    let mut open: serde_json::Value = serde_json::from_slice(&std::fs::read(&marker).unwrap()).unwrap();
+    open["undo"] = serde_json::json!([{"step": "post_command", "command": format!("touch {}", undone.display()), "cwd": "/", "env": {}}]);
+    std::fs::write(&marker, open.to_string()).unwrap();
+    let out = universe(&dir, &["storage"], &[NO_BUS]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert!(!marker.exists(), "no folder to file a row in: nothing is owed");
+    assert!(undone.exists(), "what the launch began is undone all the same");
 }
 
 #[test]
