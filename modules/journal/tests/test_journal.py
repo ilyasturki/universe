@@ -8,6 +8,7 @@ import stat
 import subprocess
 import sys
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -238,6 +239,7 @@ def failed_file(journal_dir):
     return failed["reason"]
 
 
+@pytest.mark.slow
 def test_stub_pipeline_writes_entry_note_and_memory(tmp_path, fakebin):
     rec = tmp_path / "rec.mkv"
     make_mkv(rec, "testsrc2", 200 - img.TAIL_WINDOW_SEC, size="160x120", rate=1, ending=("smptebars", img.TAIL_WINDOW_SEC))
@@ -286,9 +288,11 @@ def test_stub_pipeline_writes_entry_note_and_memory(tmp_path, fakebin):
     assert frames == [f"attachments/{SID}-{n}.png" for n in range(1, len(frames) + 1)]
     assert all((shots_dir / f).stat().st_size > 0 for f in shots)
     assert all((journal_dir / f).stat().st_size > 0 for f in frames)
-    last_frame = img.grab_frame(str(journal_dir / frames[-1]), 0, str(tmp_path / "last.png"))[0]
-    ending = img.grab_frame(str(rec), 199, str(tmp_path / "ending.png"))[0]
-    assert img.hamming(last_frame, ending) < img.DUP_DISTANCE
+    second_inside_the_ending = 200 - img.TAIL_WINDOW_SEC / 2
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        last_frame = pool.submit(img.grab_frame, str(journal_dir / frames[-1]), 0, str(tmp_path / "last.png"))
+        ending = pool.submit(img.grab_frame, str(rec), second_inside_the_ending, str(tmp_path / "ending.png"))
+    assert img.hamming(last_frame.result()[0], ending.result()[0]) < img.DUP_DISTANCE
 
     args = (fakebin / "universe.args").read_text().splitlines()
     assert args[:2] == ["journal-add", SID]
