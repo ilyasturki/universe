@@ -843,6 +843,8 @@ def cmd_install(settings, args):
     index = library_index() or {}
     found = find_manifest(root, appid)
     title = title_of(found[1], appid) if found else str((index.get(appid) or {}).get("title") or appid)
+    if found and installed(found[1]) and not folder_of(*found).is_dir():
+        raise SourceError(f"Steam lists {title} as installed, but {folder_of(*found)} is gone: verify its files in Steam to download it again")
     if found is None or not installed(found[1]):
         if found is None and index and appid not in index:
             log(f"{title} is not in the listed library: Steam may show its store page rather than an install")

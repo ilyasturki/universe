@@ -76,6 +76,9 @@ elif verb in ("install", "update"):
     if mode == "fail":
         err("Failed to acquire installed data lock")
         sys.exit(0)
+    if verb == "install" and app in installed and installed[app]["version"] == os.environ.get("SHIM_LATEST", "1.0"):
+        print("[cli] INFO: Download size is 0, the game is either already up to date or has not changed. Exiting...", file=sys.stderr, flush=True)
+        sys.exit(0)
     if verb == "install":
         folder = Path(rest[rest.index("--base-path") + 1]) / os.environ.get("SHIM_FOLDER", app)
     else:
@@ -100,7 +103,9 @@ elif verb == "uninstall":
     if rest[0] in installed:
         import shutil
 
-        shutil.rmtree(installed.pop(rest[0])["install_path"], ignore_errors=True)
+        folder = installed.pop(rest[0])["install_path"]
+        if "--keep-files" not in rest:
+            shutil.rmtree(folder, ignore_errors=True)
         save()
 elif verb == "import":
     app, path = rest[0], rest[1]

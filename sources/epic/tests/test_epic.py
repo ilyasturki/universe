@@ -168,6 +168,18 @@ def test_install_streams_bytes_and_lands_the_game(env, run, monkeypatch):
     assert json.loads((env["data"] / "partials.json").read_text()) == {}, "a finished install leaves no partial"
 
 
+def test_a_game_whose_folder_vanished_installs_again(env, run, monkeypatch):
+    seed_cache(env, [{"id": "Min", "title": "Hades", "folder": "Hades", "owned_dlcs": []}])
+    install_state(env, {"Min": hades(env, install_path=str(env["tmp"] / "unmounted" / "Hades"))})
+    monkeypatch.setenv("SHIM_FOLDER", "Hades")
+    code, events, err = run("install", "Min")
+    assert code == 0, err
+    game = next(e for e in events if e["event"] == "game")
+    assert (game["installed"], game["dir"]) == (True, str(env["games"] / "Hades"))
+    assert (env["games"] / "Hades" / "Game.exe").is_file(), "downloaded again"
+    assert ["-y", "uninstall", "Min", "--keep-files"] in calls(env), "legendary forgets the old folder first"
+
+
 def test_an_install_legendary_gives_up_on_is_an_error(env, run, monkeypatch):
     monkeypatch.setenv("SHIM_MODE", "fail")
     code, events, err = run("install", "Min")

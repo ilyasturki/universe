@@ -3,6 +3,7 @@ import email.message
 import json
 import os
 import shlex
+import shutil
 import signal
 import stat
 import struct
@@ -398,6 +399,13 @@ def test_an_install_nobody_confirms_gives_up_and_an_installed_game_is_there_at_o
     code, events, _ = run("install", "480")
     assert code == 0 and [e["event"] for e in events] == ["game", "done"]
     assert len(calls(env, "systemd-run")) == 1
+
+
+def test_an_installed_game_whose_folder_vanished_is_no_install(env, run, client):
+    shutil.rmtree(env["lib"] / "steamapps" / "common" / "Spacewar")
+    code, events, _ = run("install", "480")
+    assert code == 1 and not games(events), "Steam's manifest still reads installed: no game is reported"
+    assert not calls(env, "systemd-run"), "and no install is started that Steam would not run"
 
 
 def test_uninstall_goes_through_steams_window_and_waits_for_the_manifest_to_go(env, run, settings, monkeypatch, client):

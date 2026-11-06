@@ -508,6 +508,13 @@ def cmd_install(settings, args):
         log(f"no sizes: {exc}")
         sizes = {}
     set_partial(app, {"dir": os.path.join(games_dir, known.get("folder") or app), "title": title, **sizes})
+    gone = installed_games(settings).get(app)
+    if gone and not os.path.isdir(gone.get("install_path") or ""):
+        # legendary diffs manifests, not the disk: a game it lists downloads nothing until it forgets the folder.
+        log(f"{title}: {gone.get('install_path')} is gone, installing again")
+        proc = legendary(settings, "uninstall", app, "--keep-files", yes=True)
+        if proc.returncode != 0:
+            raise failure("uninstall", proc)
     error = legendary_stream(
         settings,
         "install",
