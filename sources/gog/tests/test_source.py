@@ -1,11 +1,13 @@
 import contextlib
 import hashlib
+import io
 import json
 import os
 import shutil
 import sqlite3
 import subprocess
 import time
+import urllib.error
 import zlib
 from pathlib import Path
 
@@ -37,6 +39,13 @@ BUILDS = {
         {"build_id": "B2", "branch": None, "version_name": "1.1", "date_published": "2025-03-01T00:00:00+0000"},
     ]
 }
+
+
+def not_found(body):
+    return lambda url: urllib.error.HTTPError(url, 404, "Not Found", None, io.BytesIO(json.dumps(body).encode()))
+
+
+UNSUPPORTED_OS = not_found({"error": "not_found", "error_description": "Unsupported OS"})
 
 
 def write_info(folder, game_id, root_id, name, build="B1", exe="Game.exe"):
@@ -487,6 +496,35 @@ def test_updates_without_an_answer_fail_and_one_unanswered_install_is_named(web,
     assert "Mini Metro" in err and "boom" in err
 
 
+def test_a_game_with_no_build_for_the_depot_platform_is_an_answer(web, src, env, run, settings):
+    settings(platform="linux")
+    write_info(env["scan"] / "Current", "2", "2", "Current", build="B2")
+    products = "https://content-system.gog.com/products/"
+    fake_fetch(web, {f"{products}2/": BUILDS, products: UNSUPPORTED_OS})
+    code, events, err = run("update")
+    assert code == 0 and [(e["event"], e.get("id"), e.get("unanswered")) for e in events] == [("update", "2", None), ("done", None, None)]
+    assert "no build published for linux" in err
+
+    web.answers.clear()
+    fake_fetch(web, {products: UNSUPPORTED_OS})
+    code, events, _ = run("update")
+    assert code == 0 and events == [{"event": "done"}], "every install answered, none of them has a build to list"
+
+    for failure in (OSError("boom"), not_found({"error": "not_found"}), lambda url: urllib.error.HTTPError(url, 404, "Not Found", None, io.BytesIO(b"<html>"))):
+        web.answers.clear()
+        fake_fetch(web, {f"{products}2/": BUILDS, products: failure})
+        code, events, _ = run("update")
+        assert code == 0 and [(e["event"], e.get("id"), e.get("unanswered")) for e in events] == [
+            ("update", "2", None),
+            ("update", "1434554947", True),
+            ("done", None, None),
+        ], "only GOG's Unsupported OS is its word"
+        web.answers.clear()
+        fake_fetch(web, {products: failure})
+        code, events, _ = run("update")
+        assert code == 1 and events == []
+
+
 def test_updates_with_nothing_installed_ask_nobody(web, src, env, run):
     shutil.rmtree(env["scan"])
     code, events, _ = run("update")
@@ -589,6 +627,19 @@ def achievement(key, unlocked=None, visible=True):
 
 def fake_manifest(web, manifest=MANIFEST):
     web.answers["https://cdn/manifest"] = zlib.compress(json.dumps(manifest).encode())
+
+
+def test_a_games_client_comes_from_its_windows_builds_when_gog_has_none_for_the_depot_platform(web, src, env, settings):
+    settings(platform="linux")
+    fake_manifest(web)
+    fake_fetch(
+        web,
+        {
+            "https://content-system.gog.com/products/1434554947/os/linux/": UNSUPPORTED_OS,
+            "https://content-system.gog.com/products/1434554947/os/windows/": {"items": [{"link": "https://cdn/manifest"}]},
+        },
+    )
+    assert src.game_client(src.load_settings(), "1434554947")["client_id"] == MANIFEST["clientId"]
 
 
 def test_achievements_page_through_the_games_client(web, src, env, run, monkeypatch):

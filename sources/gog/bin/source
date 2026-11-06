@@ -15,6 +15,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import zlib
@@ -396,13 +397,32 @@ def product_art(product):
     return product.get("art") or ({"box_front": product["coverVertical"]} if product.get("coverVertical") else None)
 
 
+def unsupported_os(error):
+    if not isinstance(error, urllib.error.HTTPError):
+        return False
+    with contextlib.suppress(OSError, ValueError):
+        body = json.load(error)
+        return isinstance(body, dict) and body.get("error_description") == "Unsupported OS"
+    return False
+
+
+# GOG answers a game with no build for an OS with this 404, not with an empty list.
+def published_builds(game_id, platform):
+    try:
+        return fetch(BUILDS_URL.format(id=game_id, platform=platform)).get("items") or []
+    except SourceError as exc:
+        if unsupported_os(exc.__cause__):
+            return []
+        raise
+
+
 def fetch_build(settings, game_id):
-    data = fetch(BUILDS_URL.format(id=game_id, platform=settings["platform"]))
-    items = [b for b in data.get("items") or [] if b.get("branch") is None]
+    builds = published_builds(game_id, settings["platform"])
+    items = [b for b in builds if b.get("branch") is None]
     if not items:
         return None
     last = max(reversed(items), key=lambda b: b.get("date_published") or "")
-    names = {str(b.get("build_id")): b["version_name"] for b in data.get("items") or [] if b.get("version_name")}
+    names = {str(b.get("build_id")): b["version_name"] for b in builds if b.get("version_name")}
     return {"build": str(last.get("build_id")), "version": last.get("version_name") or "?", "date": str(last.get("date_published") or "")[:10], "names": names}
 
 
@@ -749,7 +769,7 @@ def game_client(settings, game_id):
         return clients[game_id]
     manifest = None
     for platform in dict.fromkeys([settings["platform"], "windows"]):
-        builds = fetch(BUILDS_URL.format(id=game_id, platform=platform)).get("items") or []
+        builds = published_builds(game_id, platform)
         if builds:
             raw = fetch_bytes(builds[0]["link"])
             with contextlib.suppress(zlib.error):

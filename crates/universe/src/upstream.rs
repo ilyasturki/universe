@@ -795,7 +795,7 @@ mod tests {
             games.join("Mini Metro").display()
         );
         let script = format!(
-            "#!/bin/sh\ncase \"$1\" in\nupdate) if [ -n \"$2\" ]; then sed -i s/M1/M2/ '{}'; echo '{event}'; else echo \"$1\" >> \"$SOURCE_DATA_DIR/asked\"; [ -e \"$SOURCE_DATA_DIR/down\" ] && exit 1; if [ -e \"$SOURCE_DATA_DIR/patchy\" ]; then {patchy}; else {listed}; fi; fi ;;\nesac\necho '{{\"event\":\"done\"}}'\n",
+            "#!/bin/sh\ncase \"$1\" in\nupdate) if [ -n \"$2\" ]; then sed -i s/M1/M2/ '{}'; echo '{event}'; else echo \"$1\" >> \"$SOURCE_DATA_DIR/asked\"; [ -e \"$SOURCE_DATA_DIR/down\" ] && exit 1; if [ -e \"$SOURCE_DATA_DIR/patchy\" ]; then {patchy}; elif [ ! -e \"$SOURCE_DATA_DIR/no-builds\" ]; then {listed}; fi; fi ;;\nesac\necho '{{\"event\":\"done\"}}'\n",
             mini.display()
         );
         let src = env.path().join("sources/gog");
@@ -865,6 +865,19 @@ mod tests {
         assert_eq!(v["witcher"]["store"], "gog");
         assert!(stale(), "a list with a hole in it is asked again");
         assert!(core.source_updates().await.unwrap().iter().all(|u| u["id"] != "20"), "an install with no answer is not pending");
+
+        std::fs::remove_file(flag("patchy")).unwrap();
+        for leaves_out in ["an install", "every install"] {
+            if leaves_out == "every install" {
+                file(&flag("no-builds"), b"");
+            }
+            age();
+            core.check_versions_with(&net, "").await.unwrap();
+            assert!(!stale(), "a store that has no build to list for {leaves_out} has answered");
+            let asked = lists();
+            core.check_versions_with(&net, "").await.unwrap();
+            assert_eq!(lists(), asked, "and it is not asked again");
+        }
     }
 
     #[tokio::test]
