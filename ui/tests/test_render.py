@@ -587,7 +587,10 @@ def test_trash_both_from_a_recording_keeps_both_and_the_cursor_when_the_trash_re
         raise UniverseError("Io", "the trash refused the file")
 
     game, session = "the-technomancer", "20260907-224100"
-    source, name, grid = {"switch2": ("pages/AlbumPage.qml", "albumPage", "albumGrid"), "ps5": ("pages/MediaGalleryPage.qml", "mediaGalleryPage", "galleryGrid")}[look.name]
+    source, name, grid = {
+        "switch2": ("pages/AlbumPage.qml", "albumPage", "albumGrid"),
+        "ps5": ("pages/MediaGalleryPage.qml", "mediaGalleryPage", "galleryGrid"),
+    }[look.name]
     page = look.open(source, {"gameId": game})
     grid = page.findChild(QObject, grid)
     menu, dialog = look.menu(), look.dialog()
