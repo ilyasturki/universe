@@ -14,7 +14,7 @@ FocusScope {
     property var args: ({})
     readonly property var form: api.screens.onboarding
     readonly property var login: api.screens.login
-    readonly property bool last: form.step >= form.steps.length - 1
+    readonly property bool last: !form.loading && form.step >= form.steps.length - 1
     property string source: ""
     // A store's sign-in card is up: the list keeps that store's rows alone, so they fit beside it.
     readonly property bool signing: loginCard.visible
@@ -24,7 +24,7 @@ FocusScope {
 
     readonly property string backLabel: form.step > 0 ? "Back" : form.added || form.again ? "Close" : "Skip setup"
     readonly property string nextLabel: last ? "Finish" : "Continue"
-    readonly property string acceptLabel: nav.activeFocus ? (nav.index === 1 ? nextLabel : backLabel) : selectLabel(cards.currentRow)
+    readonly property string acceptLabel: nav.activeFocus ? (nav.index === 1 ? form.loading ? "" : nextLabel : backLabel) : form.loading ? "" : selectLabel(cards.currentRow)
     readonly property var hints: prompts.open ? prompts.hints : editor.open ? editor.hints : confirm.open ? confirm.hints : [acceptLabel !== "" && {
             glyph: "A",
             label: acceptLabel,
@@ -34,11 +34,10 @@ FocusScope {
             glyph: "B",
             label: backLabel
         },
-        {
+        !form.loading && {
             glyph: "X",
             label: nextLabel
-        }
-    ].filter(Boolean)
+        }].filter(Boolean)
 
     Component.onCompleted: form.load()
 
@@ -141,6 +140,10 @@ FocusScope {
     }
 
     function advance() {
+        if (form.loading) {
+            Sound.edge();
+            return;
+        }
         Sound.enter();
         form.next();
     }
@@ -169,7 +172,7 @@ FocusScope {
     function settle() {
         cards.reset();
         nav.index = 1;
-        form.idle ? nav.forceActiveFocus() : cards.forceActiveFocus();
+        form.loading || form.idle ? nav.forceActiveFocus() : cards.forceActiveFocus();
     }
 
     Keys.onPressed: function (event) {
@@ -353,8 +356,9 @@ FocusScope {
                 PillButton {
                     glyph: "X"
                     label: page.nextLabel
+                    enabled: !page.form.loading
                     focused: nav.activeFocus && nav.index === 1
-                    dimmed: nav.activeFocus && nav.index !== 1
+                    dimmed: page.form.loading || nav.activeFocus && nav.index !== 1
                     onPicked: nav.pointTo(1)
                 }
             }
@@ -367,6 +371,10 @@ FocusScope {
             Keys.onLeftPressed: index = Sound.stepped(index, -1, 2)
             Keys.onRightPressed: index = Sound.stepped(index, 1, 2)
             Keys.onUpPressed: {
+                if (page.form.loading) {
+                    Sound.edge();
+                    return;
+                }
                 Sound.tick();
                 cards.forceActiveFocus();
             }
@@ -396,6 +404,7 @@ FocusScope {
 
     ConfirmDialog {
         id: confirm
+        objectName: "setupConfirm"
 
         anchors.fill: parent
         z: 4

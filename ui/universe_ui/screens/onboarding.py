@@ -382,6 +382,8 @@ class Onboarding(RowsForm):
 
     @Slot()
     def next(self):
+        if self._loading:
+            return
         if self._step >= len(self._steps) - 1:
             self.finish()
         else:

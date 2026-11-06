@@ -170,6 +170,7 @@ class ControllerScreen(AdvancedRows, QObject):
     mapping = Signal(int, int, str)
     walkChanged = Signal()
     walkOffered = Signal(str, str)
+    walkOffersPausedChanged = Signal()
     rescanRequested = Signal()
 
     def __init__(self, client, memory, power, parent=None):
@@ -196,6 +197,7 @@ class ControllerScreen(AdvancedRows, QObject):
         self._walk = None
         self._walk_seconds = 0
         self._offered = set()
+        self._walk_offers_paused = False
         self._walk_timer = QTimer(self)
         self._walk_timer.setInterval(1000)
         self._walk_timer.timeout.connect(self._walk_tick)
@@ -424,10 +426,31 @@ class ControllerScreen(AdvancedRows, QObject):
         self.devicesChanged.emit()
         self._offer(entry)
 
+    def _set_walk_offers_paused(self, paused):
+        if self._walk_offers_paused == paused:
+            return
+        self._walk_offers_paused = paused
+        self.walkOffersPausedChanged.emit()
+        if not paused:
+            QTimer.singleShot(0, self._offer_connected)
+
+    def _offer_connected(self):
+        if self._walk_offers_paused:
+            return
+        for entry in self._devices:
+            self._offer(entry)
+
     # A family seen for the first time, with nothing learned for it yet, gets the walk offered once: accepted or declined, it is remembered.
     def _offer(self, entry):
         family = entry["family"]
-        if family in self._offered or self._status != "ready" or self._passive or self._walk is not None or family not in self._families():
+        if (
+            self._walk_offers_paused
+            or family in self._offered
+            or self._status != "ready"
+            or self._passive
+            or self._walk is not None
+            or family not in self._families()
+        ):
             return
         self._offered.add(family)
         if family in (self._memory.get("controllerWalks") or {}) or _dig(self._client.config(), f"controller.buttons.{family}") not in (None, ""):
@@ -1000,3 +1023,4 @@ class ControllerScreen(AdvancedRows, QObject):
     testing = Property(bool, lambda self: self._testing, notify=testingChanged)
     walking = Property(bool, lambda self: self._walk is not None, notify=walkChanged)
     walkStep = Property(QVARIANT, _walk_step, notify=walkChanged)
+    walkOffersPaused = Property(bool, lambda self: self._walk_offers_paused, _set_walk_offers_paused, notify=walkOffersPausedChanged)

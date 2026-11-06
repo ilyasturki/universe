@@ -2,7 +2,7 @@ import json
 import threading
 
 import pytest
-from looks import SUBMIT, Look, activate, focus_names, page_name
+from looks import SUBMIT, FocusTrace, Look, activate, focus_names, page_name, settle
 from PySide6.QtCore import QObject, Qt
 from uitest import index_of, record, rows_by_key, until
 
@@ -321,6 +321,21 @@ def test_read_only_config_skips_preferences(empty_api, empty, config_owner, owne
 
 
 @pytest.fixture
+def held_sources(empty, monkeypatch):
+    gate, entered = threading.Event(), threading.Event()
+    real = empty.core.sources
+
+    def sources():
+        entered.set()
+        assert gate.wait(10), "sources was never released"
+        return real()
+
+    monkeypatch.setattr(empty.core, "sources", sources)
+    yield gate, entered
+    gate.set()
+
+
+@pytest.fixture
 def look(request, empty_api):
     """A look started on the empty library: the setup comes up over it."""
     shown = Look(empty_api, request.param)
@@ -366,8 +381,31 @@ def reopen(look):
     look.press(Qt.Key.Key_Return)
 
 
-def test_the_setup_in_each_look(stores_signed_out, look, empty_api, empty):
+def test_the_setup_in_each_look(stores_signed_out, held_sources, look, empty_api, empty, monkeypatch):
     form = empty_api.screens.onboarding
+    gate, entered = held_sources
+    until(lambda: entered.is_set() and opened(look) and form.loading)
+    marked, real_mark = [], empty.core.mark_onboarded
+
+    def mark():
+        marked.append(True)
+        real_mark()
+
+    monkeypatch.setattr(empty.core, "mark_onboarded", mark)
+    for key in (Qt.Key.Key_Return, Qt.Key.Key_I):
+        look.press(key)
+        assert opened(look) and not empty.onboarded() and marked == []
+    look.press(Qt.Key.Key_Escape)
+    question = look.page("onboardingPage").findChild(QObject, "setupConfirm") if look.name == "reprise" else look.dialog()
+    until(lambda: question.property("open"))
+    look.press(Qt.Key.Key_Return)
+    until(lambda: not question.property("open"))
+    assert opened(look) and not empty.onboarded() and marked == []
+    trace = FocusTrace(look.window)
+    gate.set()
+    until(lambda: not form.loading and focused(look, "setupRows"))
+    settle(look.window)
+    assert trace.stop().foreign("setupRows", "setupNav") == []
     until(lambda: opened(look) and not form.loading and form.stepId == "found" and form.count == 6)
     look.press(Qt.Key.Key_I)
     until(lambda: form.stepId == "stores", "X moves on")
@@ -442,3 +480,35 @@ def test_a_step_with_nothing_to_do_lands_on_its_button(look, empty_api, empty):
     until(lambda: form.idle is True and focused(look, "setupNav"), "the summary does nothing: Finish has the focus")
     look.press(Qt.Key.Key_Return)
     until(lambda: empty.onboarded() is True and not opened(look), "A finishes")
+
+
+@pytest.mark.parametrize("during_load", [True, False])
+def test_a_new_controller_waits_until_the_setup_closes(held_sources, look, empty_api, empty, during_load):
+    from universe_ui.screens.controller import FakeWatcher
+
+    form = empty_api.screens.onboarding
+    gate, entered = held_sources
+    until(lambda: opened(look) and entered.is_set() and form.loading)
+    if not during_load:
+        gate.set()
+        until(lambda: not form.loading)
+    controller = empty_api.screens.controller
+    offers = record(controller.walkOffered)
+    watcher = FakeWatcher("8bitdo-pro-3")
+    controller.start(watcher)
+    settle(look.window)
+    assert not look.dialog().property("open"), "the controller offer must not cover setup"
+    assert offers == [] and not controller.walking and controller.learning == ""
+    watcher.emit(watcher.device())
+    look.press(Qt.Key.Key_Escape)
+    look.press(SECOND[look.name])
+    look.press(Qt.Key.Key_Return)
+    until(lambda: not opened(look) and look.dialog().property("open"))
+    assert [family for family, _ in offers] == ["8bitdo-pro-3"]
+    gate.set()
+    look.press(Qt.Key.Key_Escape)
+    until(lambda: not look.dialog().property("open"))
+    assert not controller.walking
+    watcher.emit(watcher.device())
+    settle(look.window)
+    assert len(offers) == 1 and not look.dialog().property("open")

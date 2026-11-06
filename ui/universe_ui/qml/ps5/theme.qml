@@ -65,6 +65,12 @@ FocusScope {
         value: api.home.underGame || !api.focus.active
     }
 
+    Binding {
+        target: api.screens.controller
+        property: "walkOffersPaused"
+        value: root.topPage !== null && root.topPage.objectName === "onboardingPage" || root.modal
+    }
+
     // args travel as JSON: a library reload can delete a Game under a page, so pages carry ids.
     readonly property ListModel stack: ListModel {}
     readonly property int depth: stack.count

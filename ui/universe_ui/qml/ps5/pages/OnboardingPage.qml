@@ -18,7 +18,7 @@ FocusScope {
     readonly property bool strip: true
     readonly property var form: api.screens.onboarding
     readonly property var login: api.screens.login
-    readonly property bool last: form.step >= form.steps.length - 1
+    readonly property bool last: !form.loading && form.step >= form.steps.length - 1
     property string source: ""
     // A store's sign-in card is up: the list keeps that store's rows alone, so they fit beside it.
     readonly property bool signing: qrCard.visible
@@ -27,21 +27,19 @@ FocusScope {
     readonly property string nextLabel: last ? "Finish" : "Continue"
     readonly property var hints: {
         var row = rows.currentRow;
-        var label = nav.activeFocus ? (nav.index === 1 ? nextLabel : backLabel) : !row || row.heading || row.type === "info" || row.type === "static" ? "OK" : row.type === "bool" ? "Toggle" : row.type === "action" ? row.action || "Select" : "Change";
+        var label = nav.activeFocus ? (nav.index === 1 ? form.loading ? "" : nextLabel : backLabel) : form.loading ? "" : !row || row.heading || row.type === "info" || row.type === "static" ? "OK" : row.type === "bool" ? "Toggle" : row.type === "action" ? row.action || "Select" : "Change";
         return [
             {
                 glyph: "B",
                 label: backLabel
             },
-            {
+            !form.loading && {
                 glyph: "X",
                 label: nextLabel
-            },
-            {
+            }, label !== "" && {
                 glyph: "A",
                 label: label
-            }
-        ];
+            }].filter(Boolean);
     }
 
     Component.onCompleted: form.load()
@@ -92,6 +90,10 @@ FocusScope {
     }
 
     function advance() {
+        if (form.loading) {
+            Sound.play("edge");
+            return;
+        }
         Sound.play("ok");
         form.next();
     }
@@ -117,7 +119,7 @@ FocusScope {
     function settle() {
         rows.reset();
         nav.index = 1;
-        form.idle ? nav.forceActiveFocus() : rows.forceActiveFocus();
+        form.loading || form.idle ? nav.forceActiveFocus() : rows.forceActiveFocus();
     }
 
     Keys.onPressed: function (event) {
@@ -181,6 +183,7 @@ FocusScope {
             anchors.horizontalCenter: parent.horizontalCenter
             y: Theme.dp(92)
             spacing: Theme.dp(12)
+            visible: !page.form.loading && page.form.steps.length > 1
 
             Repeater {
                 model: page.form.steps.length
@@ -283,6 +286,8 @@ FocusScope {
                         text: modelData
                         width: Theme.dp(320)
                         focused: nav.activeFocus && index === nav.index
+                        enabled: index === 0 || !page.form.loading
+                        opacity: enabled ? 1 : 0.5
                         direct: true
                         onPicked: {
                             nav.index = index;
@@ -295,6 +300,10 @@ FocusScope {
             Keys.onLeftPressed: index = Sound.stepped(index, -1, 2)
             Keys.onRightPressed: index = Sound.stepped(index, 1, 2)
             Keys.onUpPressed: {
+                if (page.form.loading) {
+                    Sound.play("edge");
+                    return;
+                }
                 Sound.play("tick");
                 rows.forceActiveFocus();
             }

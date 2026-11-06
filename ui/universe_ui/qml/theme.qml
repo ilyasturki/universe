@@ -156,6 +156,12 @@ FocusScope {
         value: api.home.underGame || !api.focus.active
     }
 
+    Binding {
+        target: api.screens.controller
+        property: "walkOffersPaused"
+        value: root.subOpen && root.subSource.endsWith("OnboardingPage.qml") || confirm.open || root.launching || root.menuOpen
+    }
+
     function goToTab(index) {
         tabIndex = index;
     }

@@ -16,7 +16,7 @@ FocusScope {
 
     readonly property var form: api.screens.onboarding
     readonly property var login: api.screens.login
-    readonly property bool last: form.step >= form.steps.length - 1
+    readonly property bool last: !form.loading && form.step >= form.steps.length - 1
     property string source: ""
     // A store's sign-in card is up: the list keeps that store's rows alone, so they fit beside it.
     readonly property bool signing: qrCard.visible
@@ -25,13 +25,13 @@ FocusScope {
     readonly property string nextLabel: last ? "Finish" : "Continue"
     readonly property var hints: {
         var row = rows.currentRow;
-        var label = nav.activeFocus ? (nav.index === 1 ? nextLabel : backLabel) : !row || row.heading || row.type === "info" || row.type === "static" ? "OK" : row.type === "bool" ? "Toggle" : row.type === "action" ? row.action || "Select" : "Change";
-        return [
+        var label = nav.activeFocus ? (nav.index === 1 ? form.loading ? "" : nextLabel : backLabel) : form.loading ? "" : !row || row.heading || row.type === "info" || row.type === "static" ? "OK" : row.type === "bool" ? "Toggle" : row.type === "action" ? row.action || "Select" : "Change";
+        return label ? [
             {
                 glyph: "A",
                 label: label
             }
-        ];
+        ] : [];
     }
 
     Component.onCompleted: form.load()
@@ -79,6 +79,10 @@ FocusScope {
     }
 
     function advance() {
+        if (form.loading) {
+            Sound.play("edge");
+            return;
+        }
         Sound.play("ok");
         form.next();
     }
@@ -104,7 +108,7 @@ FocusScope {
     function settle() {
         rows.reset();
         nav.index = 1;
-        form.idle ? nav.forceActiveFocus() : rows.forceActiveFocus();
+        form.loading || form.idle ? nav.forceActiveFocus() : rows.forceActiveFocus();
     }
 
     Keys.onPressed: function (event) {
@@ -182,6 +186,7 @@ FocusScope {
             spacing: Theme.dp(6)
 
             Label {
+                visible: !page.form.loading && page.form.steps.length > 1
                 text: (page.form.step + 1) + " / " + page.form.steps.length
                 color: Theme.textSecondary
                 font.pixelSize: Theme.dp(Theme.fontTiny)
@@ -275,6 +280,7 @@ FocusScope {
                     x: index * width
                     width: nav.width / 2
                     height: nav.height
+                    opacity: index === 1 && page.form.loading ? 0.5 : 1
 
                     Rectangle {
                         anchors.left: parent.left
@@ -313,6 +319,10 @@ FocusScope {
             Keys.onLeftPressed: index = Sound.stepped(index, -1, 2)
             Keys.onRightPressed: index = Sound.stepped(index, 1, 2)
             Keys.onUpPressed: {
+                if (page.form.loading) {
+                    Sound.play("edge");
+                    return;
+                }
                 Sound.play("tick");
                 rows.forceActiveFocus();
             }
