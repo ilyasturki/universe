@@ -470,6 +470,7 @@ def test_each_switch2_news_card_offers_what_its_state_allows(look, fake):
     game = "the-technomancer"
     failed = next(e for e in fake.core._data["journal"][game] if e["session"] == "20260907-224100")
     failed.update(state="failed", title="", paragraphs=["codex timed out after 30 min"])
+    next(s for s in fake.core._data["sessions"][game] if s["session"] == failed["session"])["recording"] = None
     page = look.open("pages/NewsPage.qml")
     grid = page.findChild(QObject, "newsGrid")
     picker = look.find("picker")
