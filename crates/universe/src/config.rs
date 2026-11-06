@@ -502,10 +502,9 @@ impl Config {
         // Opened first: a rename alone would go through on a read-only file, and `replace` follows only a link whose target exists.
         let opened = std::fs::OpenOptions::new().write(true).create(true).truncate(false).open(path);
         opened.and_then(|_| replace(path, text.as_bytes(), None)).map_err(|e| match e.kind() {
-            std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::ReadOnlyFilesystem if Self::owner(path) == HOME_MANAGER => crate::Error::Invalid(format!(
-                "{} is read-only: home-manager's programs.universe.settings owns it; set it to null to change settings here",
-                path.display()
-            )),
+            std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::ReadOnlyFilesystem if Self::owner(path) == HOME_MANAGER => crate::Error::Invalid(
+                format!("{} is read-only: home-manager's programs.universe.settings owns it; set it to null to change settings here", path.display()),
+            ),
             std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::ReadOnlyFilesystem => {
                 crate::Error::Invalid(format!("{} is read-only: make it writable to change settings here", path.display()))
             }
