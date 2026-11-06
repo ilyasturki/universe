@@ -229,6 +229,14 @@ def test_the_pad_thread_starts_on_sdl3_and_stops(app, caplog):
     assert caplog.messages == [], "every SDL 3 call it makes resolves and SDL_Init takes the gamepad subsystem"
 
 
+def test_a_key_queued_before_stop_never_arrives(received):
+    thread = gamepad.GamepadThread()
+    thread.key.emit(int(Qt.Key.Key_Return), True, False)
+    thread.stop()
+    QCoreApplication.sendPostedEvents(thread)
+    assert received() == []
+
+
 def test_post_key_needs_a_focus_window(app):
     assert gamepad.post_key(Qt.Key.Key_Return, True) is False
 

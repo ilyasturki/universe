@@ -302,6 +302,8 @@ class GamepadThread(QThread):
     def stop(self):
         self.requestInterruption()
         self.wait()
+        # A key left queued posts to whichever window has the focus when it runs: Home, once the failure page has gone.
+        QCoreApplication.removePostedEvents(self)
 
     def run(self):
         try:
