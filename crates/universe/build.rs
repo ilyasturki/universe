@@ -20,13 +20,17 @@ fn git_rev() -> Option<String> {
     if Path::new(&git(&["rev-parse", "--show-toplevel"])?).canonicalize().ok()? != root {
         return None;
     }
-    for path in ["HEAD", "index"] {
-        if let Some(p) = git(&["rev-parse", "--git-path", path]) {
-            println!("cargo:rerun-if-changed={p}");
+    // Cargo reads a relative path from the crate, and counts a missing one, such as a packed ref's, as changed on every build.
+    let watch = |path: &str| {
+        if let Some(p) = git(&["rev-parse", "--git-path", path]).map(|p| root.join(p)).filter(|p| p.exists()) {
+            println!("cargo:rerun-if-changed={}", p.display());
         }
+    };
+    for path in ["HEAD", "index", "packed-refs"] {
+        watch(path);
     }
-    if let Some(head) = git(&["symbolic-ref", "-q", "HEAD"]).and_then(|r| git(&["rev-parse", "--git-path", &r])) {
-        println!("cargo:rerun-if-changed={head}");
+    if let Some(head) = git(&["symbolic-ref", "-q", "HEAD"]) {
+        watch(&head);
     }
     let short = git(&["rev-parse", "--short", "HEAD"])?;
     // Without --no-optional-locks, status refreshes the index watched above and reruns this script.

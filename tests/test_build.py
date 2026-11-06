@@ -22,7 +22,7 @@ def test_a_second_cargo_build_compiles_nothing():
     assert cargo_build() == []
 
 
-def test_the_core_build_script_leaves_the_git_index_it_watches_alone(tmp_path):
+def test_the_core_build_script_watches_real_paths_and_leaves_the_index_alone(tmp_path):
     repo = tmp_path / "repo"
     manifest = repo / "crates/universe"
     manifest.mkdir(parents=True)
@@ -35,6 +35,7 @@ def test_the_core_build_script_leaves_the_git_index_it_watches_alone(tmp_path):
     git("init", "-q")
     git("add", ".")
     git("commit", "-qm", "first")
+    git("pack-refs", "--all")
     os.utime(tracked, (1, 1))
     index = repo / ".git/index"
     before = index.stat().st_mtime_ns
@@ -47,6 +48,9 @@ def test_the_core_build_script_leaves_the_git_index_it_watches_alone(tmp_path):
     assert "cargo:rustc-env=UNIVERSE_BUILD=0.0.0 (" in run.stdout, "the script read the rev, and the tree as clean"
     assert "-dirty" not in run.stdout
     assert index.stat().st_mtime_ns == before
+    watched = [manifest / line.removeprefix("cargo:rerun-if-changed=") for line in run.stdout.splitlines() if line.startswith("cargo:rerun-if-changed=")]
+    assert index.resolve() in [path.resolve() for path in watched if path.exists()]
+    assert [path for path in watched if not path.exists()] == [], "cargo counts a missing path as changed on every build"
 
 
 def test_just_develop_installs_again_for_a_source_file_only(tmp_path):
