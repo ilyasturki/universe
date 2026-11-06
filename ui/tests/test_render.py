@@ -524,6 +524,10 @@ def test_each_switch2_news_card_offers_what_its_state_allows(look, fake):
 
     session = row("deferred")["session"]
     pick(session)
+    acts = options()
+    assert {"write", "remove"} <= set(acts) and "read" not in acts, f"deferred: {acts}"
+    look.press(Qt.Key.Key_Escape)
+    until(lambda: picker.property("open") is False)
     look.press(Qt.Key.Key_Return)
     pending(session)
     assert look.root.property("topPage") == page, "A on an unwritten entry asks for it, with no blank article"

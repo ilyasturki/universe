@@ -65,13 +65,13 @@ FocusScope {
         {
             glyph: "B",
             label: "Back"
-        },
+        }
+    ].concat(blank ? [
         {
             glyph: "A",
-            label: "Write",
-            dim: !blank
+            label: "Write"
         }
-    ]
+    ] : [])
 
     signal closeRequested
 
@@ -310,7 +310,7 @@ FocusScope {
             Column {
                 width: parent.width
                 spacing: Theme.dp(10)
-                visible: page.row && page.row.next_up !== ""
+                visible: page.row && !page.blank && page.row.next_up !== ""
 
                 Label {
                     text: "Next up"
