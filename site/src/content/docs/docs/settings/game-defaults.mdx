@@ -13,11 +13,7 @@ Settings › **Game defaults** holds the values every game takes until its own G
 
 ## Display
 
-- **Gamescope**, on: games run inside gamescope.
-- **Resolution**, **Refresh rate** and **Adaptive sync**, on auto, follow the screen.
-- Behind **Y**: **Scaler**, **Filter**, **Sharpness**, **Gamescope arguments** and **Discrete GPU**.
-
-[Gamescope, HDR and frame rate](/docs/running/gamescope/) explains each one.
+**Gamescope**, on, runs games inside gamescope. **Resolution**, **Refresh rate** and **Adaptive sync**, on auto, follow the screen. [Gamescope, HDR and frame rate](/docs/running/gamescope/) explains these and the rows behind **Y**.
 
 ## Overlay
 
@@ -25,27 +21,23 @@ Settings › **Game defaults** holds the values every game takes until its own G
 - **Frame rate limit**, on auto: the refresh rate the game sees.
 - **Pause on HOME**, on: the game freezes while Universe covers it.
 - **Hide the cursor while playing**, on.
-- **Keep the screen awake**, on: no blanking or automatic suspend during a game.
+- **Keep the screen awake**, on.
 
 ## Saves and updates
 
-- **Back up after playing**, on, and behind **Y**, **Backups kept**, 5 ([Saves](/docs/library/saves/)).
+- **Back up after playing**, on, and behind **Y**, **Backups kept** ([Saves](/docs/library/saves/)).
 - **Show what's new after an update**, on, the same switch as in Settings › About.
-- **Game updates** opens the [list of updates](/docs/settings/game-defaults/#game-updates).
 
 ## Game updates
 
 **Game updates** lists the games with a newer release out. **A** on a game its store updates installs the update. On a game you update yourself, such as a repack, install the update, then choose **I have the latest version**.
 
-Behind **Y** are the games Universe can't check, because nothing tells it which build your files are. **A** shows your version and the date of the newest release, then **It's the latest** takes the game as up to date. After that, Universe flags the next release, and once the game's version changes it takes the game as up to date again by itself.
+Behind **Y** are the games Universe can't check, because nothing tells it which build your files are. **A** shows your version and the newest release's date, then **It's the latest** takes the game as up to date, and Universe flags the next release.
+
+A PC game is checked against Steam, so it needs its id: in its Game settings, **Desktop and library** › **Steam app id**, behind **Y**.
 
 ## Behind Y
 
-- **Environment**: the variables every game gets ([Environment variables](/docs/running/environment/)).
-- **Programs**: the gamescope and umu-run programs Universe runs.
-- **Folders**: **Games**, where stores install games, **Windows game folders**, **Save backups** and **Recordings**.
-- **API keys**: the [SteamGridDB key](/docs/library/artwork/#steamgriddb).
-- **Desktop**: the desktop Universe works with, found by itself on auto.
-- **Proton builds**: names for Proton builds in folders of your own.
+**Y** adds **Environment** ([the variables every game gets](/docs/running/environment/)), **Programs**, **Folders**, **API keys** (the [SteamGridDB key](/docs/library/artwork/#steamgriddb)), **Desktop** and **Proton builds**.
 
-A picker's first choice, "Default · …", goes back to the default. The Proton and Wine defaults, such as **Proton build** and **HDR**, are on the runner's page in Settings › [Emulators & Proton](/docs/settings/emulators-proton/).
+The Proton and Wine defaults are on the runner's page in Settings › [Emulators & Proton](/docs/settings/emulators-proton/).
