@@ -882,8 +882,6 @@ FocusScope {
         }
         // A pad of a family never set up: the walk through its buttons, offered once.
         function onWalkOffered(family, name) {
-            if (root.modal || root.launching)
-                return;
             dialogAsk({
                 message: "Set up the buttons of " + name + "?",
                 detail: "Universe already knows this controller. Pressing each button in turn makes sure every one is where it should be. You can also do it later, from Controllers.",

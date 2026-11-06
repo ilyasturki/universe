@@ -1,7 +1,9 @@
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QTimer
+from looks import settle
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtTest import QTest
 from uitest import record, rows_by_key, until
 
 from universe_ui.screens.controller import FakeWatcher, Watcher
@@ -502,3 +504,22 @@ def test_watcher_without_a_binary(api, monkeypatch):
     monkeypatch.setenv("PATH", "/nonexistent")
     assert api.screens.controller.start(Watcher()) is False
     assert not api.screens.controller.connected
+
+
+POWER_MENU = {"reprise": "confirm", "switch2": "picker", "ps5": "popup"}
+
+
+def test_a_new_controller_waits_until_the_power_menu_closes(look, api):
+    controller = api.screens.controller
+    offers = record(controller.walkOffered)
+    menu = look.find(POWER_MENU[look.name])
+    QTest.keyPress(look.window, Qt.Key.Key_Escape)
+    until(lambda: menu.property("open"), "B held opens the power menu")
+    QTest.keyRelease(look.window, Qt.Key.Key_Escape)
+    controller.start(FakeWatcher("8bitdo-pro-3"))
+    settle(look.window)
+    assert offers == [] and menu.property("open"), "a pad that comes under the menu is offered nothing yet"
+    look.press(Qt.Key.Key_Escape)
+    dialog = look.dialog()
+    until(lambda: offers and dialog.property("open") and not (menu is not dialog and menu.property("open")), "the offer comes once the menu closes")
+    assert [family for family, _ in offers] == ["8bitdo-pro-3"]

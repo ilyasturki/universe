@@ -183,7 +183,7 @@ FocusScope {
         landWaits = false;
         cards.reset();
         nav.index = 1;
-        form.loading || form.idle ? nav.forceActiveFocus() : cards.forceActiveFocus();
+        form.idle ? nav.forceActiveFocus() : cards.forceActiveFocus();
     }
 
     Keys.onPressed: function (event) {

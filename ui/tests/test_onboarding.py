@@ -401,6 +401,8 @@ def test_the_setup_in_each_look(stores_signed_out, held_sources, look, empty_api
     for key in (Qt.Key.Key_Return, Qt.Key.Key_I):
         look.press(key)
         assert opened(look) and not empty.onboarded() and marked == []
+    look.press(Qt.Key.Key_Up)
+    assert focused(look, "setupNav"), "Up finds no row to reach while the machine is read"
     look.press(Qt.Key.Key_Escape)
     question = question_of(look)
     until(lambda: question.property("open"))
