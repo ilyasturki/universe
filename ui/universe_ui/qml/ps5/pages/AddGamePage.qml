@@ -189,7 +189,6 @@ FocusScope {
         x: rows.x
         y: title.height + Theme.dp(24)
         width: rows.width
-        height: visible ? implicitHeight + Theme.dp(20) : 0
         visible: text !== ""
         text: page.form.busy ? "Reading the Lutris library…" : api.allGames.count === 0 ? "Your first game: a file on this machine, a store, or what Lutris already has." : ""
         color: Theme.textSecondary
@@ -202,7 +201,7 @@ FocusScope {
 
         shell: page.shell
         x: Theme.dp(672)
-        y: title.height + Theme.dp(24) + status.height
+        y: title.height + Theme.dp(24) + (status.visible ? status.implicitHeight + Theme.dp(20) : 0)
         width: parent.width - x - Theme.dp(Theme.columnRight + 16)
         height: parent.height - y - Theme.dp(96)
         model: page.partRows
