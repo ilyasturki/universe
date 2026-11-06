@@ -270,7 +270,7 @@ for a home screen.
 PC saves are ludusavi's (MIT; its manifest is compiled from PCGamingWiki): a fetched tool (see
 Fetched tools), with its own config, manifest and cache in `<data>/ludusavi/`, apart from a ludusavi
 the player runs. Each call writes `config.yaml` there whole (JSON, which is YAML) under a lock every
-process takes, held through a whole backup or restore: no detected roots, the install folder's parent
+process takes, held through a whole backup, restore or export: no detected roots, the install folder's parent
 as an `other` root (saves a game keeps beside its files), the backup path and no differential backups.
 ludusavi writes a backup to an empty `.staging` folder beside the games', given the record of the
 game's last whole backup to compare with. Only a backup it finished joins the game's folder, under an
