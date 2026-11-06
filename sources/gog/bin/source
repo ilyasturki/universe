@@ -25,7 +25,8 @@ from pathlib import Path
 AUTH_URL = "https://auth.gog.com/auth?client_id=46899977096215655&redirect_uri=https%3A%2F%2Fembed.gog.com%2Fon_login_success%3Forigin%3Dclient&response_type=code&layout=client2"
 LIBRARY_URL = "https://embed.gog.com/account/getFilteredProducts?mediaType=1&page={page}"
 USER_URL = "https://embed.gog.com/userData.json"
-AUTH_HOST = "auth.gog.com"
+# gogdl 1.3.0 to 1.4.0 log this only when the refresh never reached GOG; a refused one prints null silently.
+REFRESH_UNREACHABLE = "[AUTH] ERROR: Failed to refresh credentials"
 CATALOG_URL = "https://catalog.gog.com/v1/catalog"
 BUILDS_URL = "https://content-system.gog.com/products/{id}/os/{platform}/builds?generation=2"
 ACHIEVEMENTS_URL = "https://gameplay.gog.com/clients/{client}/users/{user}/achievements"
@@ -171,21 +172,26 @@ def forget_manifest(game_id):
     (gogdl_config() / "heroic_gogdl" / "manifests" / game_id).unlink(missing_ok=True)
 
 
-def gogdl_json(settings, *args):
+def gogdl_json_and_log(settings, *args):
     try:
         proc = subprocess.run(gogdl_command(settings, *args), env=gogdl_env(), capture_output=True, text=True, timeout=GOGDL_JSON_TIMEOUT_S, check=False)
     except FileNotFoundError:
         raise SourceError("gogdl is not installed") from None
     except subprocess.TimeoutExpired:
         raise SourceError(f"gogdl {args[0]} timed out after {GOGDL_JSON_TIMEOUT_S}s") from None
-    for line in proc.stderr.splitlines():
+    lines = proc.stderr.splitlines()
+    for line in lines:
         log(line)
     if proc.returncode != 0:
         raise SourceError(f"gogdl {args[0]} failed (exit {proc.returncode})")
     try:
-        return json.loads(proc.stdout)
+        return json.loads(proc.stdout), lines
     except ValueError:
         raise SourceError(f"gogdl {args[0]} printed no JSON") from None
+
+
+def gogdl_json(settings, *args):
+    return gogdl_json_and_log(settings, *args)[0]
 
 
 def kill_group(proc, grace=KILL_GRACE_S):
@@ -340,11 +346,10 @@ def has_session(settings):
 
 
 def access_token(settings):
-    creds = gogdl_json(settings, "auth")
+    creds, log_lines = gogdl_json_and_log(settings, "auth")
     token = creds.get("access_token") if isinstance(creds, dict) else None
     if not token:
-        # gogdl prints null for a refresh that failed and for one GOG refused: only the network tells them apart.
-        if has_session(settings) and not reachable(AUTH_HOST):
+        if REFRESH_UNREACHABLE in log_lines:
             raise Offline("GOG could not be reached.")
         raise SourceError("not logged in to GOG (run login)")
     return token

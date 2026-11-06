@@ -138,13 +138,12 @@ def test_status_names_the_user_only_while_gogdl_holds_a_session(web, src, env, r
 
 
 @pytest.mark.parametrize(
-    ("session", "offline", "signed_in"),
-    [({"refresh_token": "r"}, True, True), ({"refresh_token": "r"}, False, False), ({}, True, False)],
+    ("session", "gogdl", "signed_in"),
+    [({"refresh_token": "r"}, "offline", True), ({"refresh_token": "r"}, "noauth", False), ({}, "offline", False)],
     ids=["offline", "revoked", "no-refresh-token"],
 )
-def test_status_keeps_a_session_gogdl_could_not_refresh_only_offline(src, env, run, monkeypatch, session, offline, signed_in):
-    monkeypatch.setenv("SHIM_MODE", "noauth")
-    monkeypatch.setattr(src, "reachable", lambda host: not offline)
+def test_status_keeps_a_session_gogdl_could_not_refresh_only_offline(src, env, run, monkeypatch, session, gogdl, signed_in):
+    monkeypatch.setenv("SHIM_MODE", gogdl)
     auth = env["tmp"] / "auth" / "auth.json"
     auth.parent.mkdir(parents=True)
     auth.write_text(json.dumps({src.GALAXY_CLIENT_ID: {"access_token": "old", "expires_in": 3600, "loginTime": 1, **session}}))
@@ -161,8 +160,7 @@ def test_status_names_the_remembered_user_when_a_live_token_cannot_reach_gog(web
 
 
 def test_library_offline_says_so_rather_than_asking_to_sign_in_again(src, env, run, monkeypatch):
-    monkeypatch.setenv("SHIM_MODE", "noauth")
-    monkeypatch.setattr(src, "reachable", lambda host: False)
+    monkeypatch.setenv("SHIM_MODE", "offline")
     auth = env["tmp"] / "auth" / "auth.json"
     auth.parent.mkdir(parents=True)
     auth.write_text(json.dumps({src.GALAXY_CLIENT_ID: {"refresh_token": "r"}}))

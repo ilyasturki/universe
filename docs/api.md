@@ -921,10 +921,11 @@ download against the manifest it keeps per game (`heroic_gogdl/manifests/<id>`) 
 the disk, so `install` deletes that manifest when `scan` would find no install of the game in
 `games_dir`: however the folder went, the next `install` fetches every file. A folder back from the
 trash keeps its manifest until then. `status` says `logged_in` while gogdl gives a token. gogdl
-prints `null` both for a refresh that failed and for one GOG refused, so a `refresh_token` on file
-while `auth.gog.com` does not answer (2 s) still reads as `logged_in`, with the user name kept in
-`user.json`; `library` then fails with `GOG could not be reached.`, and the same `null` from a
-reachable GOG reads as signed out.
+prints `null` both for a refresh that never reached GOG and for one GOG refused, and logs
+`[AUTH] ERROR: Failed to refresh credentials` for the first alone (a connection error or timeout,
+TLS failures behind a captive portal included). With that line the session still reads as
+`logged_in`, with the user name kept in `user.json`, and `library` fails with
+`GOG could not be reached.`; a `null` without it reads as signed out.
 
 ### Epic Games
 

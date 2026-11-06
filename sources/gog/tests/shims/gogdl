@@ -17,7 +17,14 @@ log({"args": args, "config": os.environ.get("GOGDL_CONFIG_PATH")})
 while args and args[0].startswith("--"):
     args = args[2:]
 verb = args[0]
-if verb == "auth":
+if verb == "auth" and os.environ.get("SHIM_MODE") == "offline":
+    stored = json.loads(Path(sys.argv[sys.argv.index("--auth-config-path") + 1]).read_text())
+    # gogdl's refresh_credentials reads the refresh_token before it goes online: a KeyError, exit 1.
+    if "refresh_token" not in stored.get("46899977096215655", {}):
+        sys.exit(1)
+    print("[AUTH] ERROR: Failed to refresh credentials", file=sys.stderr)
+    print("null")
+elif verb == "auth":
     ok = ("--code" not in args or args[args.index("--code") + 1] == "good") and os.environ.get("SHIM_MODE") != "noauth"
     token = f"tok-{args[args.index('--client-id') + 1]}" if "--client-id" in args else "tok"
     refused = {"error": True} if "--code" in args else None
