@@ -2981,6 +2981,20 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_config_that_turned_unreadable_under_a_running_core_refuses_the_write_and_keeps_its_bytes() {
+        use std::os::unix::fs::PermissionsExt;
+        let _env = crate::paths::test_env();
+        let config = paths::config_file();
+        std::fs::write(&config, "schema = 2\n# mine\n").unwrap();
+        let core = Core::open().await.unwrap();
+        std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o200)).unwrap();
+        let set = core.set_setting("launch.hdr", "true").await;
+        std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(set.is_err());
+        assert_eq!(std::fs::read_to_string(&config).unwrap(), "schema = 2\n# mine\n");
+    }
+
+    #[tokio::test]
     async fn sizes_learnt_by_info_survive_a_refresh_and_leave_library_at_alone() {
         let _dir = fake_source(
             r#"library) echo '{"event":"game","id":"1","title":"One","owned":true,"installed":false}' ;;

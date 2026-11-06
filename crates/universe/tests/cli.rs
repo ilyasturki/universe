@@ -293,6 +293,12 @@ fn a_write_keeps_a_linked_config_linked_and_a_store_link_says_who_owns_it() {
     assert!(written.contains("# mine") && written.contains("hdr = true"), "{written:?}");
     assert_eq!(std::fs::read_dir(&dotfiles).unwrap().count(), 1, "no temporary file left");
 
+    std::fs::remove_file(dotfiles.join("universe.toml")).unwrap();
+    let out = universe(&dir, &["config", "set", "launch.hdr", "true"], &[]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert_eq!(std::fs::read_link(&config).unwrap(), dotfiles.join("universe.toml"), "a dangling link stays one");
+    assert!(std::fs::read_to_string(dotfiles.join("universe.toml")).unwrap().contains("hdr = true"), "its target is made");
+
     let store = dir.path().join("store");
     std::fs::create_dir_all(&store).unwrap();
     let generated = store.join("universe-config.toml");

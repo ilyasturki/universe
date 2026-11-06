@@ -654,28 +654,6 @@ mod tests {
     }
 
     #[test]
-    fn a_write_never_replaces_a_file_that_turned_unreadable_under_a_running_core() {
-        use std::os::unix::fs::PermissionsExt;
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("config.toml");
-        std::fs::write(&path, "schema = 2\n# mine\n").unwrap();
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o200)).unwrap();
-        assert!(Config::set_key(&path, "launch.hdr", "true").is_err());
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), "schema = 2\n# mine\n");
-    }
-
-    #[test]
-    fn a_first_write_through_a_dangling_link_creates_its_target() {
-        let dir = tempfile::tempdir().unwrap();
-        let link = dir.path().join("config.toml");
-        std::os::unix::fs::symlink(dir.path().join("dotfiles.toml"), &link).unwrap();
-        Config::set_key(&link, "launch.hdr", "true").unwrap();
-        assert!(std::fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
-        assert!(std::fs::read_to_string(dir.path().join("dotfiles.toml")).unwrap().contains("hdr = true"));
-    }
-
-    #[test]
     fn a_config_linked_into_the_store_is_home_managers() {
         let dir = tempfile::tempdir().unwrap();
         let store = dir.path().join("store");
