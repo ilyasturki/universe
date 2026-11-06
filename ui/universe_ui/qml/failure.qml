@@ -21,8 +21,7 @@ Window {
         border.width: Math.max(1, Theme.dp(2))
         border.color: Theme.surfaceBorder
 
-        // On the release: the window that opens next never hears half a press.
-        Keys.onReleased: function (event) {
+        Keys.onPressed: function (event) {
             if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && !event.isAutoRepeat) {
                 event.accepted = true;
                 action.picked();
@@ -70,7 +69,7 @@ Window {
         width: Math.min(parent.width - Theme.dp(Theme.edgeMargin) * 2, Theme.dp(1200))
         spacing: Theme.dp(32)
 
-        Keys.onReleased: function (event) {
+        Keys.onPressed: function (event) {
             if ((event.key === Qt.Key_Escape || event.key === Qt.Key_Backspace) && !event.isAutoRepeat) {
                 event.accepted = true;
                 failure.leave();

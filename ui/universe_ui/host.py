@@ -91,7 +91,7 @@ def size_window(window, size):
 
 def failure_screen(app, args, error):
     """The core's failure on screen until it opens; its client, or None when the player leaves."""
-    from PySide6.QtCore import QCoreApplication, QTimer, QUrl
+    from PySide6.QtCore import QTimer, QUrl
     from PySide6.QtQml import QQmlApplicationEngine
 
     from .failure import Failure
@@ -123,9 +123,6 @@ def failure_screen(app, args, error):
     app.exec()
     if gamepad is not None:
         gamepad.stop()
-        # A press queued while the core opened would land on the home page.
-        QCoreApplication.removePostedEvents(gamepad)
-    QCoreApplication.removePostedEvents(window)
     if script is not None:
         args.keys = script.stop()
     return failure.client
