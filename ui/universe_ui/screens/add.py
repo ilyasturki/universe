@@ -34,6 +34,7 @@ def _source_status(source):
 
 class AddGameForm(RowsForm):
     message = Signal(str)
+    failed = Signal(str)
     pendingChanged = Signal()
     lutrisChanged = Signal()
 
@@ -150,7 +151,7 @@ class AddGameForm(RowsForm):
             self.lutrisChanged.emit()
             self.load()
             if error:
-                self.message.emit(f"Lutris import failed: {error}")
+                self.failed.emit(f"Lutris import failed: {error}")
                 return
             imported = list(report.get("imported") or [])
             hours = round(sum(float(h) for h in (report.get("hours_imported") or {}).values()))

@@ -1,5 +1,10 @@
+import threading
+
+from looks import focus_names, held_notices
+from PySide6.QtCore import SIGNAL, Qt
 from uitest import record, settle, until
 
+from universe_ui.errors import UniverseError
 from universe_ui.screens.add import runner_candidates
 
 
@@ -70,3 +75,40 @@ def test_lutris_absent_is_shown_not_toasted(api, fake):
     assert form.lutris is None and form.lutrisError.endswith("pga.db") and errors == []
     form.importLutris()
     assert not form.busy, "nothing to apply"
+
+
+def test_a_lutris_import_reports_once_whether_its_page_stays_or_closes(api, fake, look, monkeypatch):
+    form = api.screens.add
+    gate, real, failing = threading.Event(), fake.core.import_lutris, []
+
+    def held(apply):
+        if apply:
+            gate.wait(10)
+            if failing:
+                raise UniverseError("Io", "pga.db is locked")
+        return real(apply)
+
+    monkeypatch.setattr(fake.core, "import_lutris", held)
+    posted, clear = held_notices(look.engine)
+
+    def import_lutris(close):
+        gate.clear()
+        clear()
+        look.open("pages/AddGamePage.qml", {"add": True})
+        form.previewLutris()
+        settle(form)
+        form.importLutris()
+        while close and "addGamePage" in focus_names(look.window):
+            look.press(Qt.Key.Key_Escape)
+        if not close:
+            assert form.receivers(SIGNAL("message(QString)")) == 1, "Notices folds a repeated text, so one listener is the guard"
+        gate.set()
+        until(lambda: posted() and not form.busy, "the result reaches the notices")
+        return [(n["error"], n["text"]) for n in posted()]
+
+    failing.append(True)
+    [(error, text)] = import_lutris(close=True)
+    assert error and "pga.db is locked" in text, "the failure outlives its page"
+    failing.clear()
+    assert [error for error, _ in import_lutris(close=True)] == [False], "so does the success"
+    assert [error for error, _ in import_lutris(close=False)] == [False], "one notice with the page still open"

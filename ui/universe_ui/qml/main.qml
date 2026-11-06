@@ -30,6 +30,27 @@ Window {
         }
     }
 
+    // Out here, an action's result outlives the page that started it.
+    Connections {
+        target: api.screens.gameData
+        function onFinished(key, ok, message) {
+            if (ok)
+                Notices.show(message);
+            else
+                Notices.fail(message);
+        }
+    }
+
+    Connections {
+        target: api.screens.add
+        function onMessage(text) {
+            Notices.show(text);
+        }
+        function onFailed(text) {
+            Notices.fail(text);
+        }
+    }
+
     // Outside the Loader, so a theme switch never replays it.
     Boot {
         anchors.fill: parent

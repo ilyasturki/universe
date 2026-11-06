@@ -132,9 +132,6 @@ FocusScope {
 
     Connections {
         target: page.form
-        function onMessage(text) {
-            page.shell.showToast(text);
-        }
         // A preview that just came back answers the press that asked for it.
         function onLutrisChanged() {
             if (page.form.lutris && !page.form.busy && rows.currentRow && rows.currentRow.key === "lutris" && rows.activeFocus)

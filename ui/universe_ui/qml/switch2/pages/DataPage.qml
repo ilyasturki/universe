@@ -2,7 +2,6 @@ import QtQuick
 import "../core"
 import "../sound"
 import "../ui"
-import "../../core" as Base
 
 FocusScope {
     id: page
@@ -63,16 +62,6 @@ FocusScope {
             if (i === 1)
                 store.act(row.key);
         });
-    }
-
-    Connections {
-        target: page.store
-        function onFinished(key, ok, message) {
-            if (ok)
-                Base.Notices.show(message);
-            else
-                Base.Notices.fail(message);
-        }
     }
 
     PageHeader {

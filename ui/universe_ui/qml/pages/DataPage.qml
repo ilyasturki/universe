@@ -122,16 +122,6 @@ FocusScope {
         });
     }
 
-    Connections {
-        target: page.store
-        function onFinished(key, ok, message) {
-            if (ok)
-                Notices.show(message);
-            else
-                Notices.fail(message);
-        }
-    }
-
     GameBackdrop {
         anchors.top: parent.top
         anchors.left: parent.left

@@ -1,6 +1,8 @@
+import threading
+
 import pytest
-from looks import focus_names, notices
-from PySide6.QtCore import Qt
+from looks import focus_names, held_notices, notices
+from PySide6.QtCore import SIGNAL, Qt
 from uitest import record, until
 
 from universe_ui.errors import UniverseError
@@ -108,6 +110,40 @@ def test_every_look_opens_a_games_data_page_and_the_storage_view(api, fake, look
     else:
         look.settings("storage")
     until(lambda: "root:games" in keys(api.screens.storage), "the Storage view walks every root")
+
+
+def test_a_data_action_reports_once_whether_its_page_stays_or_closes(api, fake, look, monkeypatch):
+    store = api.screens.gameData
+    gate, real, failing = threading.Event(), fake.core.saves_backup, []
+
+    def held(ident):
+        gate.wait(10)
+        if failing:
+            raise UniverseError("Io", "the saves folder could not be read")
+        return real(ident)
+
+    monkeypatch.setattr(fake.core, "saves_backup", held)
+    posted, clear = held_notices(look.engine)
+
+    def back_up(close):
+        gate.clear()
+        clear()
+        look.open("pages/DataPage.qml", look.game("the-technomancer"))
+        until(lambda: "backup" in keys(store))
+        assert store.act("backup") is True
+        while close and store.gameId:
+            look.press(Qt.Key.Key_Escape)
+        if not close:
+            assert store.receivers(SIGNAL("finished(QString,bool,QString)")) == 1, "Notices folds a repeated text, so one listener is the guard"
+        gate.set()
+        until(lambda: posted() and not store.busy, "the result reaches the notices")
+        return [(n["error"], n["text"]) for n in posted()]
+
+    failing.append(True)
+    assert back_up(close=True) == [(True, "the saves folder could not be read")], "the failure outlives its page"
+    failing.clear()
+    assert [error for error, _ in back_up(close=True)] == [False], "so does the success"
+    assert [error for error, _ in back_up(close=False)] == [False], "one notice with the page still open"
 
 
 @pytest.mark.parametrize("look", ["reprise"], indirect=True)

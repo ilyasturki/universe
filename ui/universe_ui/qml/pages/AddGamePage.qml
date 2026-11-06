@@ -115,9 +115,6 @@ FocusScope {
 
     Connections {
         target: page.form
-        function onMessage(text) {
-            page.message(text);
-        }
         // A preview that just came back answers the press that asked for it.
         function onLutrisChanged() {
             if (page.form.lutris && !page.form.busy && cards.currentRow && cards.currentRow.key === "lutris" && cards.activeFocus)

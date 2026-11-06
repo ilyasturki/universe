@@ -332,14 +332,28 @@ class Look:
         self.engine = None
 
 
-def notices(engine):
-    """Reads the message the look's Notices shows now."""
+def _notices_probe(engine):
     core = Path(__file__).resolve().parents[1] / "universe_ui" / "qml" / "core"
     component = QQmlComponent(engine, engine)
-    component.setData(
-        f'import QtQuick\nimport "{core.as_uri()}"\nQtObject {{ function current() {{ return Notices.current; }} }}'.encode(), QUrl("file:///probe.qml")
+    body = (
+        "function current() { return Notices.current; }\n"
+        "function held() { return (Notices.current ? [Notices.current] : []).concat(Notices.waiting); }\n"
+        "function clear() { Notices.waiting = []; Notices.current = null; }"
     )
+    component.setData(f'import QtQuick\nimport "{core.as_uri()}"\nQtObject {{ {body} }}'.encode(), QUrl("file:///probe.qml"))
     probe = component.create()
     assert probe is not None, [e.toString() for e in component.errors()]
     engine.setObjectOwnership(probe, QQmlEngine.ObjectOwnership.CppOwnership)
+    return probe
+
+
+def notices(engine):
+    """Reads the message the look's Notices shows now."""
+    probe = _notices_probe(engine)
     return lambda: call(probe, "current")
+
+
+def held_notices(engine):
+    """Reads every message the look's Notices holds, shown then waiting, and empties it."""
+    probe = _notices_probe(engine)
+    return (lambda: call(probe, "held")), (lambda: call(probe, "clear"))

@@ -11,7 +11,7 @@ Universe takes over the games other launchers installed, without moving a file. 
 
 The first run's **What's on this machine** step lists each launcher with **Add** ([First run](/docs/getting-started/first-run/)). A store you aren't signed in to finds nothing until you sign in.
 
-Later, **Add a game** › **Import from Lutris**, at the end of the Library, imports the Lutris games new to Universe.
+Later, **Add a game** › **Import from Lutris**, at the end of the Library, imports the Lutris games new to Universe. You can leave the page while it runs: the result, or why it failed, shows when it ends.
 
 ## What comes along from Lutris
 
