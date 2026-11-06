@@ -82,9 +82,17 @@ FocusScope {
 
     focus: true
 
+    property bool holdsStore: false
+
     Component.onCompleted: {
-        if (store.count === 0)
+        if (!store.live) {
             store.loadAll();
+            holdsStore = true;
+        }
+    }
+    Component.onDestruction: {
+        if (holdsStore)
+            store.unload();
     }
 
     function maxScroll() {

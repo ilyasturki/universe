@@ -544,6 +544,37 @@ def test_each_switch2_news_card_offers_what_its_state_allows(look, fake):
     assert all(t.property("text") for t in descendants(page, "newsTitle")), "an entry being written has a title too"
 
 
+@switch2
+def test_a_retry_from_an_article_opened_after_news_closed_shows_the_entry_being_written(look, fake):
+    game, session = "the-technomancer", "20260907-224100"
+    entry = next(e for e in fake.core._data["journal"][game] if e["session"] == session)
+    entry.update(state="failed", title="", paragraphs=["codex timed out after 30 min"])
+    news = look.open("pages/NewsPage.qml")
+    until(lambda: any(r["session"] == session for r in read(news, "articles")))
+    look.press(Qt.Key.Key_Escape)
+    until(lambda: look.root.property("topPage") != news, "B leaves News")
+    album = look.open("pages/AlbumPage.qml", {"gameId": game})
+    grid, picker = album.findChild(QObject, "albumGrid"), look.menu()
+    until(lambda: ("recording", session) in [(r["kind"], r["session"]) for r in read(album, "shown")])
+    grid.setProperty("index", [(r["kind"], r["session"]) for r in read(album, "shown")].index(("recording", session)))
+    until(lambda: (r := read(album, "current") or {}).get("session") == session and r["hasJournal"])
+    settle(look.window)
+    trace = FocusTrace(look.window)
+    look.press(Qt.Key.Key_F1)
+    until(lambda: picker.property("open") is True)
+    # Play, then the journal entry.
+    look.press(Qt.Key.Key_Down, 1 - picker.property("index"))
+    look.press(Qt.Key.Key_Return)
+    article = until(lambda: (top := look.root.property("topPage")) != album and top, "the album opens the entry")
+    until(lambda: (read(article, "row") or {}).get("state") == "failed")
+    settle(look.window)
+    assert trace.stop().foreign("albumPage", "picker", "articlePage") == [], "the focus goes from the album through its menu to the entry"
+    assert "A" in [h["glyph"] for h in read(article, "hints")]
+    look.press(Qt.Key.Key_Return)
+    until(lambda: read(article, "row")["state"] == "pending", "the article follows the retry it asked for")
+    assert "A" not in [h["glyph"] for h in read(article, "hints")], "a second A would ask again while the first runs"
+
+
 @stacked
 def test_removing_an_unwritten_session_s_recording_keeps_the_session_and_says_why_it_has_nothing_to_write(look, fake):
     game, session = "the-technomancer", "20260909-213045"

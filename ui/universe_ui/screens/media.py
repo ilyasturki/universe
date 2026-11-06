@@ -558,6 +558,7 @@ def _empty_row():
 class JournalList(QObject):
     rowsChanged = Signal()
     gameIdChanged = Signal()
+    liveChanged = Signal()
 
     def __init__(self, client, parent=None):
         super().__init__(parent)
@@ -578,6 +579,7 @@ class JournalList(QObject):
     def _load(self, game_id, all_games):
         self._game_id, self._all = game_id, all_games
         self.gameIdChanged.emit()
+        self.liveChanged.emit()
         lines = self._client.sessions(game_id)
         recorded = {(str(line.get("game") or ""), str(line.get("session") or "")) for line in lines if line.get("recording")}
         played = {}
@@ -654,6 +656,7 @@ class JournalList(QObject):
     @Slot()
     def unload(self):
         self._all = False
+        self.liveChanged.emit()
 
     @Slot(str, str, result=bool)
     def remove(self, game_id, session):
@@ -667,6 +670,8 @@ class JournalList(QObject):
     rows = Property(list, lambda self: [dict(r) for r in self._rows], notify=rowsChanged)
     count = Property(int, lambda self: len(self._rows), notify=rowsChanged)
     gameId = Property(str, lambda self: self._game_id, notify=gameIdChanged)
+    # Whether an entry written now reloads every game's rows; one game's load follows only that game.
+    live = Property(bool, lambda self: self._all, notify=liveChanged)
 
 
 POLL_MS = 10000
