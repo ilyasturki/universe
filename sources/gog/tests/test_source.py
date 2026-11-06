@@ -353,10 +353,10 @@ def test_install_over_a_whole_install_keeps_gogdls_manifest(src, env, run):
     assert run("install", "1434554947")[0] == 0
     manifest = env["data"] / "gogdl" / "heroic_gogdl" / "manifests" / "1434554947"
     assert manifest.is_file(), "the shim keeps gogdl's cache where gogdl does"
-    code, events, _ = run("install", "1434554947")
+    kept = manifest.stat().st_mtime_ns
+    code, events, err = run("install", "1434554947")
     assert code == 0 and events[-2]["installed"] is True
-    assert manifest.is_file(), "the install is there, so gogdl's diff still holds"
-    assert [c["args"][2] for c in calls(env)].count("download") == 2
+    assert "Nothing to do" in err and manifest.stat().st_mtime_ns == kept, "the install is there, so gogdl's diff fetches nothing"
 
 
 def test_install_stopped_by_sigterm_keeps_a_resumable_partial(src, env, run, interrupt, monkeypatch):
