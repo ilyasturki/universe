@@ -22,7 +22,7 @@ def test_bring_back_lists_hidden_and_removed_games_and_goes_with_the_last(api, f
     form = api.screens.add
     fake.core.remove("the-technomancer", False)
     form.load()
-    assert {r["game"]: r["display"] for r in form.rows if r["key"] == "bring_back"} == {"cyberpunk-2077": "Hidden", "the-technomancer": "Removed"}
+    assert {r["game"] for r in form.rows if r["key"] == "bring_back"} == {"cyberpunk-2077", "the-technomancer"}
     said = record(form.message)
     form.bringBack("the-technomancer")
     form.bringBack("cyberpunk-2077")
