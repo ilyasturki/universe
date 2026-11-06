@@ -165,4 +165,5 @@ def test_an_update_opens_whats_new_once_and_about_opens_the_changelog(look):
     invoke(about, "activate", rows.index(version), version)
     if look.name == "reprise":
         until(lambda: look.find("whatsNew").property("open") is True, "A on the version opens it too")
-    until(lambda: look.page("changelogPage").property("fresh") is False, "A on the version opens it too")
+    page = until(lambda: (p := look.page("changelogPage")).property("fresh") is False and p, "A on the version opens it too")
+    playing(page)
