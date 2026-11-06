@@ -84,11 +84,18 @@ mod tests {
     use super::*;
 
     fn actions(menu: &impl IsA<gio::MenuModel>) -> Vec<String> {
+        items(menu).into_iter().map(|(action, _)| action).collect()
+    }
+
+    /// Each item's action with its `hidden-when`.
+    fn items(menu: &impl IsA<gio::MenuModel>) -> Vec<(String, Option<String>)> {
         let mut out = Vec::new();
         for i in 0..menu.n_items() {
-            out.extend(menu.item_attribute_value(i, "action", None).and_then(|v| v.get::<String>()));
+            if let Some(action) = menu.item_attribute_value(i, "action", None).and_then(|v| v.get::<String>()) {
+                out.push((action, menu.item_attribute_value(i, "hidden-when", None).and_then(|v| v.get::<String>())));
+            }
             if let Some(section) = menu.item_link(i, "section") {
-                out.extend(actions(&section));
+                out.extend(items(&section));
             }
         }
         out
@@ -107,5 +114,7 @@ mod tests {
         for action in actions(&game()) {
             assert!(action.strip_prefix("game.").is_some_and(|name| crate::actions::GAME.contains(&name)), "{action}");
         }
+        let install = items(&game()).into_iter().find(|(action, _)| action == "game.install");
+        assert_eq!(install, Some(("game.install".into(), Some("action-disabled".into()))), "Install shows only on a game it can install");
     }
 }
