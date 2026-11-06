@@ -283,10 +283,12 @@ power cut leaves one or the other. A second lock, one per game (`<data>/ludusavi
 first), holds a game's backups still through a backup, a restore or an export. An export takes only
 that one: a long export stalls that game's backups and no other game's.
 A prefix is passed as `--wine-prefix` (its `pfx/` when it has one, and always under
-`steamapps/compatdata`, where Steam makes it, even when Steam deleted the folder) and redirected
+`steamapps/compatdata`, where Steam makes it, even when Steam deleted the folder), by its real path
+as ludusavi records files by theirs (umu links `pfx` back to the prefix), and redirected
 both ways to `/universe/prefix`: a backup records the prefix's files at that path and a restore puts
 them in the prefix the game has now, so a backup outlives a `move_prefix` or a reset: a restore
-after a reset makes the prefix's folder, and the next launch builds a Wine prefix around the saves. A
+after a reset makes the prefix's folder, and the next launch builds a Wine prefix around the saves.
+A backup that recorded a prefix's absolute paths restores to those paths. A
 restore backs up the saves it would replace first, or refuses when those saves are not all in that
 backup. It prunes nothing, so the backup being restored stays; the next backup prunes back down. The title is
 ludusavi's: found once with `ludusavi find` by the Steam id (`metadata.steam_appid`, a Steam game's

@@ -913,6 +913,83 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn a_backup_of_a_prefix_linked_to_itself_follows_the_prefix() {
+        use std::os::unix::fs::symlink;
+        let inside = "drive_c/users/steamuser/AppData/Roaming/Fixture/slot1.sav";
+        for layout in ["umu's link", "older umu's absolute link", "reached through a linked folder"] {
+            let env = paths::test_env();
+            assert!(saves::installed().is_some(), "ludusavi is not on PATH: the dev shell and the Nix check have it");
+            let prefixes = library(&env);
+            saves::tests::offline_manifest("Fixture Game:\n  files:\n    \"<winAppData>/Fixture\":\n      when:\n        - os: windows\n");
+            let real = env.path().join("elsewhere/fixture");
+            std::fs::create_dir_all(real.join(inside).parent().unwrap()).unwrap();
+            std::fs::write(real.join(inside), b"first").unwrap();
+            symlink(if layout == "older umu's absolute link" { real.as_path() } else { Path::new(".") }, real.join("pfx")).unwrap();
+            symlink(env.path().join("elsewhere"), env.path().join("linked")).unwrap();
+            let named = if layout == "reached through a linked folder" { env.path().join("linked/fixture") } else { real.clone() };
+            proton_game(&env, "Fixture Game", &named);
+            let (core, _) = open().await;
+
+            core.saves_backup("fixture-game").await.unwrap();
+            let data = core.game_data("fixture-game").await.unwrap();
+            let stored = Path::new(data["saves"]["backups"][0]["path"].as_str().unwrap()).join("drive-0/universe/prefix").join(inside);
+            assert_eq!(std::fs::read(&stored).ok().as_deref(), Some(&b"first"[..]), "{layout}: the backup holds the prefix's files whatever the prefix's path");
+
+            std::fs::write(real.join(inside), b"second").unwrap();
+            core.move_prefix("fixture-game").await.unwrap();
+            let moved = prefixes.join("fixture-game");
+            core.saves_restore("fixture-game", "").await.unwrap();
+            assert_eq!(std::fs::read(moved.join(inside)).unwrap(), b"first", "{layout}");
+            assert!(!real.exists(), "{layout}: nothing goes back to the old path");
+            assert_eq!(backup_ids(&core).await.len(), 2, "{layout}: the save replaced is backed up");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_backup_from_before_umu_linked_the_prefix_restores_over_the_saves_since() {
+        let env = paths::test_env();
+        let (core, save) = game_keeping(&env, 5).await;
+        std::fs::write(&save, b"before the link").unwrap();
+        core.saves_backup("fixture-game").await.unwrap();
+
+        std::os::unix::fs::symlink(".", env.path().join("prefixes/fixture-game/pfx")).unwrap();
+        std::fs::write(&save, b"unsaved progress").unwrap();
+        core.saves_restore("fixture-game", "").await.unwrap();
+        assert_eq!(std::fs::read(&save).unwrap(), b"before the link");
+
+        let safe = backup_ids(&core).await;
+        assert_eq!(safe.len(), 2, "the save replaced is backed up");
+        core.saves_restore("fixture-game", &safe[0]).await.unwrap();
+        assert_eq!(std::fs::read(&save).unwrap(), b"unsaved progress");
+    }
+
+    #[tokio::test]
+    async fn a_backup_holding_a_prefixs_absolute_paths_still_restores() {
+        let env = paths::test_env();
+        let (core, save) = game_keeping(&env, 5).await;
+        let prefix = env.path().join("prefixes/fixture-game");
+        std::os::unix::fs::symlink(".", prefix.join("pfx")).unwrap();
+        std::fs::write(&save, b"from before").unwrap();
+        let config = Config::load().unwrap();
+        let unmatched = saves::Ask { bin: saves::installed().unwrap(), name: "Fixture Game".into(), prefix: Some(prefix.join("pfx")), ..Default::default() };
+        saves::backup(&unmatched, &config, "fixture-game").await.unwrap();
+        let old = backup_ids(&core).await[0].clone();
+        let data = core.game_data("fixture-game").await.unwrap();
+        let folder = Path::new(data["saves"]["backups"][0]["path"].as_str().unwrap()).join("drive-0");
+        assert!(folder.join(save.strip_prefix("/").unwrap()).is_file(), "ludusavi kept the path: the redirect's source was no real path");
+
+        std::fs::write(&save, b"since").unwrap();
+        core.saves_restore("fixture-game", &old).await.unwrap();
+        assert_eq!(std::fs::read(&save).unwrap(), b"from before");
+        assert_eq!(backup_ids(&core).await.len(), 2, "the save replaced is backed up");
+
+        core.reset_prefix("fixture-game").await.unwrap();
+        assert!(!save.exists());
+        core.saves_restore("fixture-game", &old).await.unwrap();
+        assert_eq!(std::fs::read(&save).unwrap(), b"from before", "it lands in the prefix's path after a reset");
+    }
+
     /// Fixture Game on a profile keeping `keep` backups, and where its save sits in its prefix.
     async fn game_keeping(env: &paths::TestEnv, keep: u32) -> (Core, PathBuf) {
         assert!(saves::installed().is_some(), "ludusavi is not on PATH: the dev shell and the Nix check have it");

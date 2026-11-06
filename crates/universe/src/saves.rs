@@ -364,6 +364,8 @@ pub async fn ask(game: &Game, config: &Config, fetch: bool) -> Result<Ask> {
     };
     let prefix = matches!(spec.kind, Kind::Proton | Kind::Wine) || spec.via_proton;
     let prefix = prefix.then(|| wine_prefix(&crate::launcher::prefix_of(game, config)));
+    // ludusavi keys a file by its real path and matches the redirect's source as text: umu's `pfx -> .` would never match.
+    let prefix = prefix.map(|p| p.canonicalize().unwrap_or(p));
     let root = (!game.source.dir.is_empty()).then(|| paths::expand(&game.source.dir)).and_then(|d| d.parent().map(Path::to_path_buf));
     Ok(Ask { bin, name, prefix, files: vec![], root })
 }
