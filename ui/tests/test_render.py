@@ -542,6 +542,96 @@ def test_each_switch2_news_card_offers_what_its_state_allows(look, fake):
 
 
 @switch2
+def test_removing_an_unwritten_session_s_recording_keeps_the_session_to_write(look, fake):
+    game, session = "the-technomancer", "20260909-213045"
+    fake.core._data["journal"][game] = [e for e in fake.core._data["journal"][game] if e["session"] != session]
+    errors = []
+    fake.error.connect(lambda kind, message: errors.append(kind))
+    page = look.open("pages/NewsPage.qml")
+    grid = page.findChild(QObject, "newsGrid")
+    picker, dialog = look.menu(), look.dialog()
+
+    def entry():
+        return next((r for r in read(page, "articles") if r["session"] == session), None)
+
+    until(lambda: (r := entry()) and r["state"] == "none" and r["hasRecording"], "the session has a recording and no entry")
+    grid.setProperty("index", [r["session"] for r in read(page, "articles")].index(session))
+    until(lambda: read(page, "current")["session"] == session)
+    settle(look.window)
+    trace = FocusTrace(look.window)
+    look.press(Qt.Key.Key_F1)
+    until(lambda: picker.property("open") is True)
+    acts = [a["act"] for a in read(page, "actions")]
+    assert "remove-recording" in acts and "remove" not in acts, acts
+    look.press(Qt.Key.Key_Down, acts.index("remove-recording") - picker.property("index"))
+    look.press(Qt.Key.Key_Return)
+    until(lambda: dialog.property("open") is True, "the recording's removal asks first")
+    look.press(Qt.Key.Key_Right)
+    look.press(Qt.Key.Key_Return)
+    until(lambda: dialog.property("open") is False and page.property("activeFocus") is True)
+    until(lambda: (r := entry()) and not r["hasRecording"], "the recording goes")
+    settle(look.window)
+    assert trace.stop().foreign("newsPage", "picker", "dialog") == [], "the focus stays on the page, its menu or its question"
+    assert errors == [], "nothing else is asked to go"
+    assert entry()["state"] == "none", "the session stays, one write away"
+    assert [a["act"] for a in read(page, "actions")] == ["write"]
+    look.press(Qt.Key.Key_Return)
+    until(lambda: entry()["state"] == "pending", "A still asks for its entry")
+
+
+@stacked
+def test_trash_both_from_a_recording_keeps_both_and_the_cursor_when_the_trash_refuses(look, fake, monkeypatch):
+    from universe_ui.fake_core import UniverseError
+
+    def refused(ident, session_id):
+        raise UniverseError("Io", "the trash refused the file")
+
+    game, session = "the-technomancer", "20260907-224100"
+    source, name, grid = {"switch2": ("pages/AlbumPage.qml", "albumPage", "albumGrid"), "ps5": ("pages/MediaGalleryPage.qml", "mediaGalleryPage", "galleryGrid")}[look.name]
+    page = look.open(source, {"gameId": game})
+    grid = page.findChild(QObject, grid)
+    menu, dialog = look.menu(), look.dialog()
+
+    def recorded():
+        return any(line["session"] == session and line.get("recording") for line in fake.sessions(game))
+
+    def journaled():
+        return any(e["session"] == session for e in fake.journal(game))
+
+    def at():
+        return [(r["kind"], r["session"]) for r in read(page, "shown")].index(("recording", session))
+
+    def trash_both():
+        trace = FocusTrace(look.window)
+        look.press(Qt.Key.Key_F1)
+        until(lambda: menu.property("open") is True, "Start opens the recording's options")
+        # Switch 2's picker holds labels alone; Remove closes its list.
+        at = [i["act"] for i in read(menu, "items")].index("remove") if look.name == "ps5" else len(read(menu, "choices")) - 1
+        look.press(Qt.Key.Key_Down, at - menu.property("index"))
+        look.press(Qt.Key.Key_Return)
+        until(lambda: dialog.property("open") is True, "Remove asks first")
+        look.press(Qt.Key.Key_Right, 2)
+        look.press(Qt.Key.Key_Return)
+        until(lambda: dialog.property("open") is False and page.property("activeFocus") is True)
+        settle(look.window)
+        return trace.stop()
+
+    until(lambda: ("recording", session) in [(r["kind"], r["session"]) for r in read(page, "shown")])
+    grid.setProperty("index", at())
+    until(lambda: (read(page, "current") or {}).get("session") == session)
+    assert journaled() and recorded()
+    monkeypatch.setattr(fake.core, "remove_recording", refused)
+    trace = trash_both()
+    assert trace.foreign(name, MENU[look.name], "dialog") == [], "the focus stays on the page, its menu or its question"
+    assert journaled() and recorded(), "the recording stayed: so does its entry"
+    current = read(page, "current")
+    assert (current["kind"], current["session"]) == ("recording", session) and grid.property("index") == at(), "the cursor stays on the recording"
+    monkeypatch.undo()
+    trash_both()
+    until(lambda: not journaled() and not recorded(), "both go once the trash takes the file")
+
+
+@switch2
 def test_the_switch2_album_holds_the_shots_too(look):
     top = look.open("pages/AlbumPage.qml")
     shown = until(lambda: read(top, "shown"))

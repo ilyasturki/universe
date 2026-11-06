@@ -294,6 +294,7 @@ FocusScope {
     CellGrid {
         id: grid
 
+        objectName: "albumGrid"
         x: Theme.dp(253)
         y: Theme.dp(192)
         height: parent.height - y - Theme.dp(Theme.hintBarHeight)

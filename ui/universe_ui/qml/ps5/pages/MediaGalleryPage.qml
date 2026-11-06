@@ -451,6 +451,7 @@ FocusScope {
     GalleryGrid {
         id: grid
 
+        objectName: "galleryGrid"
         x: Theme.dp(Theme.edge)
         y: Theme.dp(336)
         width: page.columnsWidth
