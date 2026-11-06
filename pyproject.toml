@@ -1,5 +1,5 @@
 [tool.pytest.ini_options]
-testpaths = ["ui/tests", "modules", "extension", "sources", "crates/universe-py/tests"]
+testpaths = ["ui/tests", "modules", "extension", "sources", "crates/universe-py/tests", "tests"]
 pythonpath = ["ui"]
 markers = [
   "slow: allowed past the 2 s a test is held to (conftest.py)",

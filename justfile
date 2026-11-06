@@ -34,7 +34,7 @@ develop:
         python3 -m venv --system-site-packages "$VIRTUAL_ENV"
     fi
     stamp="$VIRTUAL_ENV/.develop-stamp"
-    if [ -e "$stamp" ] && [ -z "$(find crates Cargo.toml Cargo.lock ui/pyproject.toml flake.lock -name __pycache__ -prune -o -newer "$stamp" -print -quit)" ]; then
+    if [ -e "$stamp" ] && [ -z "$(find crates Cargo.toml Cargo.lock ui/pyproject.toml flake.lock -name __pycache__ -prune -o -type f -newer "$stamp" -print -quit)" ]; then
         exit 0
     fi
     env -u RUST_LOG maturin develop --quiet -m crates/universe-py/Cargo.toml

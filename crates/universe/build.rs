@@ -29,6 +29,7 @@ fn git_rev() -> Option<String> {
         println!("cargo:rerun-if-changed={head}");
     }
     let short = git(&["rev-parse", "--short", "HEAD"])?;
-    let dirty = git(&["status", "--porcelain", "--untracked-files=no"]).map(|s| !s.is_empty()).unwrap_or(false);
+    // Without --no-optional-locks, status refreshes the index watched above and reruns this script.
+    let dirty = git(&["--no-optional-locks", "status", "--porcelain", "--untracked-files=no"]).map(|s| !s.is_empty()).unwrap_or(false);
     Some(if dirty { format!("{short}-dirty") } else { short })
 }

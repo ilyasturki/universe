@@ -10,6 +10,14 @@ fn files(dir: &Path, ext: &str) -> Vec<PathBuf> {
     out
 }
 
+fn run(mut command: Command) {
+    let tool = command.get_program().to_string_lossy().into_owned();
+    let run = command.output().unwrap_or_else(|e| panic!("{tool}: {e} (it builds the templates and resources under data/)"));
+    if !run.status.success() {
+        panic!("{tool} failed:\n{}{}", String::from_utf8_lossy(&run.stdout), String::from_utf8_lossy(&run.stderr));
+    }
+}
+
 fn main() {
     println!("cargo:rerun-if-changed=data");
     let out = PathBuf::from(std::env::var("OUT_DIR").unwrap());
@@ -18,16 +26,9 @@ fn main() {
     let blueprints = files(&data.join("ui"), "blp");
     let compiled = out.join("ui");
     std::fs::create_dir_all(&compiled).unwrap();
-    let run = Command::new("blueprint-compiler")
-        .arg("batch-compile")
-        .arg(&compiled)
-        .arg(data.join("ui"))
-        .args(&blueprints)
-        .output()
-        .unwrap_or_else(|e| panic!("blueprint-compiler: {e} (it builds the .blp templates under data/ui)"));
-    if !run.status.success() {
-        panic!("blueprint-compiler failed:\n{}{}", String::from_utf8_lossy(&run.stdout), String::from_utf8_lossy(&run.stderr));
-    }
+    let mut blueprint = Command::new("blueprint-compiler");
+    blueprint.arg("batch-compile").arg(&compiled).arg(data.join("ui")).args(&blueprints);
+    run(blueprint);
 
     let mut entries = String::new();
     for blp in &blueprints {
@@ -49,5 +50,8 @@ fn main() {
     let xml = format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<gresources>\n  <gresource prefix=\"{PREFIX}\">\n{entries}  </gresource>\n</gresources>\n");
     let manifest = out.join("resources.gresource.xml");
     std::fs::write(&manifest, xml).unwrap();
-    glib_build_tools::compile_resources(&[out.as_path(), data], manifest.to_str().unwrap(), "universe-desktop.gresource");
+    // Not glib_build_tools::compile_resources: it has cargo watch the files written above, which reruns this script on every build.
+    let mut resources = Command::new("glib-compile-resources");
+    resources.arg("--sourcedir").arg(&out).arg("--sourcedir").arg(data).arg("--target").arg(out.join("universe-desktop.gresource")).arg(&manifest);
+    run(resources);
 }
