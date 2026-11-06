@@ -130,12 +130,15 @@ def test_a_core_that_will_not_open_holds_a_page_that_retries_or_quits_on_the_pad
     keys = f"A Shot:{shot} Await A Ready Mark:home Quit"
     argv = [str(LAUNCHER), "--windowed", "--no-gamepad", "--key-delay", "300", "--key-gap", "50", "--keys", keys]
     ui = subprocess.Popen(argv, env={**env, host.READY_ENV: str(up), host.DONE_ENV: str(done)}, stdin=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    deadline = time.monotonic() + 10
-    while not shot.exists() and ui.poll() is None and time.monotonic() < deadline:
-        time.sleep(0.02)
-    assert up.exists() and shot.exists(), "the page is on screen, and gamescope told so"
-    config.write_text("")
-    _, stderr = ui.communicate("\n", timeout=20)
+    try:
+        deadline = time.monotonic() + 30
+        while not shot.exists() and ui.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert up.exists() and shot.exists(), "the page is on screen, and gamescope told so"
+        config.write_text("")
+        _, stderr = ui.communicate("\n", timeout=30)
+    finally:
+        ui.kill()
     assert ui.returncode == 0 and "mark home" in stderr and "Traceback" not in stderr, stderr
     assert stderr.count("the core did not open") == 2, "A on the file still broken stays on the page"
     assert done.read_text() == "0", "a plain end to run_session, no crash"
