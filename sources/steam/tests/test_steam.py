@@ -401,11 +401,17 @@ def test_an_install_nobody_confirms_gives_up_and_an_installed_game_is_there_at_o
     assert len(calls(env, "systemd-run")) == 1
 
 
-def test_an_installed_game_whose_folder_vanished_is_no_install(env, run, client):
-    shutil.rmtree(env["lib"] / "steamapps" / "common" / "Spacewar")
+@pytest.mark.parametrize("emptied", [False, True], ids=["folder-gone", "folder-emptied"])
+def test_an_installed_game_whose_program_vanished_is_no_install(env, run, client, emptied):
+    folder = env["lib"] / "steamapps" / "common" / "Spacewar"
+    shutil.rmtree(folder)
+    if emptied:
+        folder.mkdir()
     code, events, _ = run("install", "480")
     assert code == 1 and not games(events), "Steam's manifest still reads installed: no game is reported"
     assert not calls(env, "systemd-run"), "and no install is started that Steam would not run"
+    code, events, _ = run("scan")
+    assert code == 0 and not games(events).get("480", {}).get("installed"), "nor by a scan"
 
 
 def test_uninstall_goes_through_steams_window_and_waits_for_the_manifest_to_go(env, run, settings, monkeypatch, client):

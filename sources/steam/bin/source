@@ -369,6 +369,16 @@ def folder_of(lib, manifest):
     return lib / "steamapps" / "common" / str(get(manifest, "installdir") or "")
 
 
+def files_gone(appinfo, appid, lib, manifest):
+    """The folder is gone, or the program its launch entry names is: an appid without one is judged by its folder."""
+    folder = folder_of(lib, manifest)
+    if not folder.is_dir():
+        return True
+    app = appinfo.get(appid)
+    entry = launch_entry(app, platform_of(lib, manifest, app), folder)
+    return entry is not None and resolve(folder, str(get(entry, "executable"))) is None
+
+
 def title_of(manifest, appid):
     return str(get(manifest, "name") or appid)
 
@@ -653,7 +663,7 @@ def listed_event(appid, title, owned, partial=None):
 
 
 def game_event(settings, root, appinfo, appid, title, owned, found):
-    if found and installed(found[1]) and folder_of(*found).is_dir():
+    if found and installed(found[1]) and not files_gone(appinfo, appid, *found):
         installed_event(settings, root, appinfo, appid, found[0], found[1], owned, title)
     else:
         listed_event(appid, title, owned, partial_fields(*found) if found else None)
@@ -843,8 +853,8 @@ def cmd_install(settings, args):
     index = library_index() or {}
     found = find_manifest(root, appid)
     title = title_of(found[1], appid) if found else str((index.get(appid) or {}).get("title") or appid)
-    if found and installed(found[1]) and not folder_of(*found).is_dir():
-        raise SourceError(f"Steam lists {title} as installed, but {folder_of(*found)} is gone: verify its files in Steam to download it again")
+    if found and installed(found[1]) and files_gone(appinfo_of(root), appid, *found):
+        raise SourceError(f"{title}'s files are gone from {folder_of(*found)}. Verify its files in Steam to download them again.")
     if found is None or not installed(found[1]):
         if found is None and index and appid not in index:
             log(f"{title} is not in the listed library: Steam may show its store page rather than an install")
@@ -934,10 +944,10 @@ def cmd_scan(settings, args):
         owned = owned_status(appid, manifest, user, index)
         if not installed(manifest):
             listed_event(appid, title, owned, partial_fields(lib, manifest))
-        elif folder_of(lib, manifest).is_dir():
+        elif not files_gone(appinfo, appid, lib, manifest):
             installed_event(settings, root, appinfo, appid, lib, manifest, owned, title)
         else:
-            log(f"{title}: {folder_of(lib, manifest)} is gone, skipped")
+            log(f"{title}: its files are gone from {folder_of(lib, manifest)}, skipped")
     emit("done")
 
 
