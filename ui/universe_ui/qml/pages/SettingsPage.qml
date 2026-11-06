@@ -634,7 +634,32 @@ FocusScope {
             };
         }
         if (sectionId === "storage") {
-            api.screens.storage.rows.forEach(function (r) {
+            var storage = api.screens.storage;
+            if (storage.error !== "")
+                rows.push({
+                    section: "Storage",
+                    key: "retry",
+                    label: "Measure again",
+                    type: "action",
+                    display: "",
+                    detail: storage.error,
+                    action: "Retry"
+                });
+            else if (storage.loading && storage.count === 0)
+                rows.push({
+                    section: "Storage",
+                    key: "measuring",
+                    label: "Measuring every folder…",
+                    type: "static",
+                    display: "",
+                    detail: ""
+                });
+            if (rows.length)
+                groups.push({
+                    title: "",
+                    rows: [0]
+                });
+            storage.rows.forEach(function (r) {
                 if (r.heading) {
                     groups.push({
                         title: r.label,
@@ -1223,6 +1248,9 @@ FocusScope {
             page.networkAction(row);
         } else if (sectionId === "bluetooth") {
             page.deviceAction(row);
+        } else if (sectionId === "storage" && row.key === "retry") {
+            Sound.enter();
+            api.screens.storage.load();
         } else if (sectionId === "storage" && row.gameId) {
             var game = api.allGames.byId(row.gameId);
             if (game)

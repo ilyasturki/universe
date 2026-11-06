@@ -1,7 +1,7 @@
 import threading
 
 import pytest
-from looks import focus_names, held_notices, notices
+from looks import content_rows, focus_names, held_notices, notices
 from PySide6.QtCore import SIGNAL, Qt
 from uitest import record, until
 
@@ -159,3 +159,26 @@ def test_a_data_page_that_cannot_load_holds_the_focus_on_its_retry(api, fake, lo
     look.press(Qt.Key.Key_Return)
     until(lambda: "backup" in keys(api.screens.gameData), "A reads the folders again")
     until(lambda: "retry" not in focus_names(look.window) and "dataPage" in focus_names(look.window), "the rows take the focus back")
+
+
+@pytest.mark.parametrize("look", ["reprise"], indirect=True)
+def test_settings_storage_says_it_is_measuring_and_offers_a_retry_when_the_measure_fails(api, fake, look, monkeypatch):
+    gate, real, failing = threading.Event(), fake.core.storage, [True]
+
+    def held():
+        gate.wait(10)
+        if failing:
+            raise UniverseError("Io", "the games folder could not be read")
+        return real()
+
+    monkeypatch.setattr(fake.core, "storage", held)
+    page = look.settings("storage")
+    until(lambda: [r["key"] for r in content_rows(page)] == ["measuring"], "a measure under way says so")
+    gate.set()
+    until(lambda: [r["key"] for r in content_rows(page)] == ["retry"], "a failed measure offers its retry")
+    until(lambda: "settingsCards" in focus_names(look.window))
+    failing.clear()
+    look.press(Qt.Key.Key_Return)
+    until(lambda: "root:games" in [r["key"] for r in content_rows(page)], "A measures again")
+    assert "retry" not in [r["key"] for r in content_rows(page)]
+    assert "settingsCards" in focus_names(look.window), "the focus stays in the cards"
