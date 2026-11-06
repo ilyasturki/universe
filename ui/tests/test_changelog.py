@@ -61,12 +61,12 @@ def test_the_game_defaults_switch_and_abouts_are_one(api, fake):
 
 
 def playing(page):
-    """The page's clip once its player has opened the file: B before that tears the player down mid-open, which Qt warns about."""
+    """The page's clip once its player has opened the file."""
     from PySide6.QtMultimedia import QMediaPlayer
 
     def ready():
         clip = next(iter(named(page, "releaseClip")), None)
-        player = clip.findChild(QMediaPlayer) if clip is not None else None
+        player = clip.property("player") if clip is not None else None
         return player is not None and player.mediaStatus() == QMediaPlayer.MediaStatus.BufferedMedia and clip
 
     return until(ready, "the clip plays")
@@ -99,7 +99,7 @@ def back_on_the_page(look, name):
 
 
 @pytest.fixture
-def look(request, upgraded, tmp_path):
+def look(request, upgraded, rendered_looks, tmp_path):
     """A look started on the upgraded core."""
     from universe_ui.api import Api
     from universe_ui.screens.power import FAKE
@@ -109,6 +109,54 @@ def look(request, upgraded, tmp_path):
     yield shown
     shown.close()
     api.shutdown()
+
+
+@pytest.fixture
+def held(monkeypatch):
+    """The clip's download waits for `release()`, so it lands under a What's new already shown."""
+    import threading
+
+    from universe_ui.fake_core import FakeCore
+
+    gate = threading.Event()
+    fetch = FakeCore.changelog_media
+
+    def changelog_media(self, url):
+        if url.endswith(".mp4"):
+            gate.wait(10)
+        return fetch(self, url)
+
+    monkeypatch.setattr(FakeCore, "changelog_media", changelog_media)
+    yield gate.set
+    gate.set()
+
+
+def test_b_while_the_clip_opens_closes_whats_new(held, look):
+    from PySide6.QtCore import QTimer
+    from PySide6.QtMultimedia import QMediaPlayer
+    from shiboken6 import isValid
+
+    changelog = look.api.screens.changelog
+    page = look.page("changelogPage")
+    if look.name == "reprise":
+        under(look, "homePage")
+    until(lambda: next(iter(named(page, "releaseStill")), None), "the still is shown")
+    settle(look.window)
+    pressed = []
+
+    def b():
+        if not pressed:
+            player = next(iter(named(page, "releaseClip"))).property("player")
+            pressed.append((player, player.mediaStatus()))
+            look.press(Qt.Key.Key_Escape)
+
+    changelog.filesChanged.connect(lambda: QTimer.singleShot(0, b))
+    held()
+    until(lambda: pressed, "the clip lands")
+    player, status = pressed[0]
+    assert status == QMediaPlayer.MediaStatus.LoadingMedia, "B came while the clip's player was opening it"
+    until(lambda: changelog.pending == [], "B closes it, seen")
+    until(lambda: not isValid(player), "the player goes once its open settled")
 
 
 @pytest.mark.slow

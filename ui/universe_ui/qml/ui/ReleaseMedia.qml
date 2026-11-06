@@ -1,5 +1,6 @@
 import QtQuick
 import QtMultimedia
+import "../core"
 
 // Takes no room until its file is downloaded: offline, the entry reads as text.
 Item {
@@ -43,16 +44,11 @@ Item {
             id: video
 
             objectName: "releaseClip"
-            readonly property alias source: player.source
+            property QtObject player: null
+            readonly property url source: player ? player.source : ""
 
-            MediaPlayer {
-                id: player
-
-                source: root.file
-                loops: MediaPlayer.Infinite
-                videoOutput: video
-                Component.onCompleted: play()
-            }
+            Component.onCompleted: player = Clips.open(root.file, video)
+            Component.onDestruction: Clips.release(player)
         }
     }
 }
