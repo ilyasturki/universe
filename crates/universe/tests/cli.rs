@@ -653,8 +653,8 @@ fn a_recording_filed_while_the_close_records_refuse_writes_keeps_its_link_or_its
     let aside = dir.path().join("state/closing-sessions");
     std::fs::create_dir_all(&aside).unwrap();
     let mut closes = vec![];
-    for (session, filed) in [("20261105-000000", true), ("20261106-000000", false)] {
-        let record = serde_json::json!({"row": {"session": session, "game": "quest"}, "filed": filed});
+    for session in ["20261105-000000", "20261106-000000"] {
+        let record = serde_json::json!({"row": {"session": session, "game": "quest"}});
         std::fs::write(aside.join(format!("{session}.quest.json")), record.to_string()).unwrap();
         let held = std::fs::File::create(aside.join(format!("{session}.quest.lock"))).unwrap();
         held.lock().unwrap();
@@ -678,6 +678,7 @@ fn a_recording_filed_while_the_close_records_refuse_writes_keeps_its_link_or_its
     assert!(linked.ends_with("quest/20261105-000000.mkv") && linked.is_file(), "{linked:?}");
     assert!(!waiting.status.success());
     assert!(clip.is_file(), "left for the retry");
+    assert!(!videos.join("universe/quest/20261106-000000.mkv").exists(), "and not also in place");
 
     let (retried, clip) = file("20261106-000000");
     assert!(retried.status.success(), "{}", text(&retried.stderr));
@@ -689,6 +690,102 @@ fn a_recording_filed_while_the_close_records_refuse_writes_keeps_its_link_or_its
     assert_eq!(filed.iter().map(|r| r["session"].as_str().unwrap()).collect::<Vec<_>>(), ["20261105-000000", "20261106-000000"]);
     let linked = filed[1]["recording"].as_str().map(std::path::PathBuf::from).unwrap();
     assert!(linked.ends_with("quest/20261106-000000.mkv") && linked.is_file(), "{linked:?}");
+}
+
+/// Quest's recordings under `<dir>/Videos/universe`, and a `session-end` hook that files `.pending/<session>.mkv` there as capture's does,
+/// under `ulimit -f` when `<dir>/limit` holds a block count; each run appends its status to the returned file.
+fn recording_hook(dir: &tempfile::TempDir) -> (std::path::PathBuf, std::path::PathBuf) {
+    add_game(dir, "Quest");
+    let (root, filed, limit) = (dir.path().join("Videos/universe"), dir.path().join("filed"), dir.path().join("limit"));
+    std::fs::create_dir_all(root.join(".pending")).unwrap();
+    let body = format!(
+        "trap '' XFSZ\n[ -e {limit} ] && ulimit -f \"$(cat {limit})\"\n\"$UNIVERSE_BIN\" recording-file \"$SESSION_ID\" {pending}/\"$SESSION_ID\".mkv\necho $? >> {filed}\n",
+        limit = limit.display(),
+        pending = root.join(".pending").display(),
+        filed = filed.display(),
+    );
+    shim(&dir.path().join("modules/rec/bin"), "end", &body);
+    std::fs::write(dir.path().join("modules/rec/module.toml"), "api = 2\nid = \"rec\"\n[hooks]\nsession-end = \"bin/end\"\n").unwrap();
+    let config = dir.path().join("config/config.toml");
+    let added = format!("[modules]\nenabled = [\"rec\"]\n[paths]\nrecordings_root = \"{}\"\n", root.display());
+    std::fs::write(&config, std::fs::read_to_string(&config).unwrap() + &added).unwrap();
+    (root, filed)
+}
+
+/// A close of Quest's `session` waiting aside, its row not yet filed, `undo` its one step.
+fn closing(dir: &tempfile::TempDir, session: &str, undo: &str) -> std::path::PathBuf {
+    let aside = dir.path().join("state/closing-sessions");
+    std::fs::create_dir_all(&aside).unwrap();
+    let row = serde_json::json!({"session": session, "game": "quest", "unit": format!("universe-game-quest-{session}.service")});
+    let step = serde_json::json!({"step": "post_command", "command": undo, "cwd": "/", "env": {}});
+    let record = aside.join(format!("{session}.quest.json"));
+    std::fs::write(&record, serde_json::json!({"row": row, "undo": [step]}).to_string()).unwrap();
+    record
+}
+
+#[test]
+fn a_recording_its_folder_refuses_or_cuts_short_stays_whole_in_pending_and_unlinked() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = no_desktop();
+    let (root, filed) = recording_hook(&dir);
+    let (pending, folder) = (root.join(".pending"), root.join("quest"));
+    std::fs::create_dir_all(&folder).unwrap();
+    let clip = vec![7u8; 300_000];
+    let close = |session: &str, refusing: &std::path::Path| {
+        std::fs::write(pending.join(format!("{session}.mkv")), &clip).unwrap();
+        closing(&dir, session, ":");
+        std::fs::set_permissions(refusing, std::fs::Permissions::from_mode(0o500)).unwrap();
+        let out = universe(&dir, &["storage"], &[NO_BUS]);
+        std::fs::set_permissions(refusing, std::fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(out.status.success(), "{}", text(&out.stderr));
+    };
+    close("20261105-000000", &folder);
+    std::fs::write(dir.path().join("limit"), "64").unwrap();
+    close("20261106-000000", &pending);
+    std::fs::remove_file(dir.path().join("limit")).unwrap();
+
+    let statuses = std::fs::read_to_string(&filed).unwrap();
+    assert!(statuses.lines().count() == 2 && statuses.lines().all(|s| s != "0"), "a refused move and a short copy both fail: {statuses}");
+    let rows = dir.path().join("data/games/quest/sessions.jsonl");
+    let listed = rows_of(&rows);
+    assert_eq!(listed.iter().map(|r| r["session"].as_str().unwrap()).collect::<Vec<_>>(), ["20261105-000000", "20261106-000000"]);
+    assert!(listed.iter().all(|r| r["recording"].is_null()), "no row names a clip that is not whole: {listed:?}");
+    assert_eq!(std::fs::read_dir(&folder).unwrap().count(), 0, "no partial file stays");
+
+    for session in ["20261105-000000", "20261106-000000"] {
+        let left = pending.join(format!("{session}.mkv"));
+        assert_eq!(std::fs::read(&left).unwrap(), clip, "whole where the retry finds it");
+        let out = universe(&dir, &["recording-file", session, left.to_str().unwrap()], &[NO_BUS]);
+        assert!(out.status.success(), "{}", text(&out.stderr));
+        assert!(!left.exists());
+    }
+    for row in rows_of(&rows) {
+        let linked = std::path::PathBuf::from(row["recording"].as_str().unwrap());
+        assert_eq!(std::fs::read(&linked).unwrap(), clip, "{linked:?}");
+    }
+}
+
+#[test]
+fn a_recording_filed_after_the_record_refused_its_filed_note_lands_on_the_row() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = no_desktop();
+    let (root, filed) = recording_hook(&dir);
+    let session = "20261106-000000";
+    std::fs::write(root.join(format!(".pending/{session}.mkv")), "x").unwrap();
+    let aside = dir.path().join("state/closing-sessions");
+    let record = closing(&dir, session, &format!("chmod 700 {}", aside.display()));
+    std::fs::write(record.with_extension("lock"), "").unwrap();
+    std::fs::set_permissions(&aside, std::fs::Permissions::from_mode(0o500)).unwrap();
+
+    let out = universe(&dir, &["storage"], &[NO_BUS]);
+    std::fs::set_permissions(&aside, std::fs::Permissions::from_mode(0o700)).unwrap();
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert_eq!(std::fs::read_to_string(&filed).unwrap(), "0\n");
+    assert!(!record.exists(), "the folder took writes again, so the close ended");
+    let rows = rows_of(&dir.path().join("data/games/quest/sessions.jsonl"));
+    assert_eq!(rows.len(), 1);
+    let linked = rows[0]["recording"].as_str().map(std::path::PathBuf::from);
+    assert!(linked.as_ref().is_some_and(|p| p.ends_with(format!("quest/{session}.mkv")) && p.is_file()), "{}", rows[0]);
 }
 
 fn set_commands(dir: &tempfile::TempDir, pre: &str, post: &str) {

@@ -111,7 +111,10 @@ pub fn file(game: &Game, session_id: &str, src: &Path, recordings_root: &Path, t
         s.recording_started_at = timeline.started_at.clone();
         s.recording_pauses = timeline.pauses.clone();
     };
-    if !crate::session::change_unfiled(&game.id, session_id, set)? {
+    let link = || -> crate::Result<()> {
+        if crate::session::change_unfiled(&game.id, session_id, set)? {
+            return Ok(());
+        }
         let (started_at, ended_at) = session_times(session_id, duration_s);
         let new = || Session {
             session: session_id.into(),
@@ -126,14 +129,51 @@ pub fn file(game: &Game, session_id: &str, src: &Path, recordings_root: &Path, t
             recording_pauses: timeline.pauses.clone(),
             ..Default::default()
         };
-        sessions::upsert(&game.sessions_path(), session_id, set, new)?;
+        sessions::upsert(&game.sessions_path(), session_id, set, new)
+    };
+    let moved = if dest == src { Moved::Kept } else { place(src, &dest)? };
+    if let Err(e) = link() {
+        moved.undo(src, &dest);
+        return Err(e);
     }
-    // Linked first: a link refused leaves the clip where the hook's retry looks for it.
-    if dest != src && std::fs::rename(src, &dest).is_err() {
-        std::fs::copy(src, &dest)?;
-        std::fs::remove_file(src)?;
+    if let Moved::Copied = moved {
+        if let Err(e) = std::fs::remove_file(src) {
+            tracing::warn!("{}: filed as {ds}, but stays: {e}", src.display());
+        }
     }
     Ok(dest)
+}
+
+enum Moved {
+    Kept,
+    Renamed,
+    Copied,
+}
+
+impl Moved {
+    fn undo(&self, src: &Path, dest: &Path) {
+        let undone = match self {
+            Moved::Kept => Ok(()),
+            Moved::Renamed => std::fs::rename(dest, src),
+            Moved::Copied => std::fs::remove_file(dest),
+        };
+        if let Err(e) = undone {
+            tracing::warn!("{}: unlinked, and cannot go back to {}: {e}", dest.display(), src.display());
+        }
+    }
+}
+
+/// Whole at `dest` or not there at all: a copy goes through a name no import takes.
+fn place(src: &Path, dest: &Path) -> std::io::Result<Moved> {
+    if std::fs::rename(src, dest).is_ok() {
+        return Ok(Moved::Renamed);
+    }
+    let tmp = dest.with_extension("part");
+    let copied = std::fs::copy(src, &tmp).and_then(|_| std::fs::File::open(&tmp)?.sync_all()).and_then(|()| std::fs::rename(&tmp, dest));
+    if copied.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    copied.map(|()| Moved::Copied)
 }
 
 #[cfg(test)]

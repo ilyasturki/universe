@@ -66,9 +66,10 @@ operation; a dash means the surface doesn't expose it.
   A history that cannot be read or written leaves only the record: the undo and the
   hooks run all the same, any game launches, and every reconcile, on open and before `launch`, files
   the rows their history takes, each once and in order; a row whose game has no folder is dropped.
-  `recording-file` lands on the waiting row, or on the history's once the row is filed, and moves
-  the clip only once it is linked: a link refused leaves the clip where it was, for the hook to
-  retry. Without a marker, a row goes only into a history that
+  `recording-file` lands on the waiting row, or on the history's once the row is in it, whether or
+  not the record noted it filed. The clip goes into place whole first, then is linked: a move or
+  copy refused leaves no link and no partial file, a link refused takes the clip back, and either
+  way it exits 1 with the clip where it was, for the hook to retry. Without a marker, a row goes only into a history that
   reads without it. A record that cannot be written keeps the marker and its undo: the open goes on,
   the next one tries again, and `launch` refuses, naming the folder, until it can.
 - Asynchronous hooks (`post-launch`, `post-process`) run as transient units. A `post-launch` hook
@@ -1311,7 +1312,7 @@ Two layers per slot: the **default** under `games/<id>/media/`, which `refresh` 
 
 | Rust | Python | CLI | Role |
 |---|---|---|---|
-| `file_recording(session_id, path, timeline)` | `file_recording(session_id, path)` | `universe recording-file <session> <path> [--timeline <json>]` | files the mkv as `<recordings_root>/<id>/<session>.mkv` (rename within a filesystem, copy across), writes `recording`, the probed `recording_duration_s` and the timeline's `recording_started_at` / `recording_pauses` into the session line, prints the final path. The timeline is `{"started_at": RFC3339, "pauses": [[from, to]]}`, a file path on the CLI, `None` for none |
+| `file_recording(session_id, path, timeline)` | `file_recording(session_id, path)` | `universe recording-file <session> <path> [--timeline <json>]` | files the mkv as `<recordings_root>/<id>/<session>.mkv` (rename within a filesystem, copy across, the source removed once linked), writes `recording`, the probed `recording_duration_s` and the timeline's `recording_started_at` / `recording_pauses` into the session line, prints the final path. The timeline is `{"started_at": RFC3339, "pauses": [[from, to]]}`, a file path on the CLI, `None` for none |
 | — | `recordings(id)` (a filter on the client) | `universe recordings <name>` | the `SessionRow`s of `sessions(id)` that have a `recording` |
 | `remove_recording(id, session_id)` | `remove_recording(id, session_id)` | `universe recordings <name> --remove <session> [-y]` | trashes the mkv (`trash`), clears `recording` on the session line; the hours stay |
 | `frames::Frames::start()` | — | — | a frame sampler on the caller's tokio runtime and the channel its frames land on (`Landed {recording, index, file}`, each once). `thumbnail(path, duration_s)` queues a recording's `THUMB` frame (3, about a fifth in), `select(path, duration_s)` puts all `COUNT` (16) of its frames first and drops the frames another recording was still waiting for, its thumbnail kept, `forget(path)` drops its jobs and its cached frames |

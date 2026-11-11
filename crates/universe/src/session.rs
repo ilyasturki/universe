@@ -253,11 +253,12 @@ fn change_closing(game: &str, session_id: &str, f: impl FnOnce(&mut Closing) -> 
     Ok(Some(c))
 }
 
-/// `false` when no row of the session waits: it is in its history, or was never kept.
+/// `false` when no row of the session waits: it is in its history, even with the record's note of it refused, or was never kept.
 pub(crate) fn change_unfiled(game: &str, session_id: &str, f: impl FnOnce(&mut Session)) -> Result<bool> {
+    let in_history = || sessions::read(&paths::game_dir(game).join("sessions.jsonl")).is_ok_and(|rows| rows.iter().any(|s| s.session == session_id));
     let mut changed = false;
     change_closing(game, session_id, |c| {
-        if !c.filed {
+        if !c.filed && !in_history() {
             f(&mut c.row);
             changed = true;
         }
