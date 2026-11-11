@@ -885,9 +885,17 @@ fn a_launch_killed_before_its_game_started_is_undone_on_the_next_open() {
         assert!(out.status.success(), "{}", text(&out.stderr));
     };
 
+    let prepared = dir.path().join("prepared");
+    shim(&dir.path().join("modules/pre/bin"), "pre", &format!("echo >> {}; {}\n", prepared.display(), crash_once("hook-crashed")));
+    std::fs::write(dir.path().join("modules/pre/module.toml"), "api = 2\nid = \"pre\"\n[hooks]\npre-launch = \"bin/pre\"\n").unwrap();
+    let config = dir.path().join("config/config.toml");
+    std::fs::write(&config, std::fs::read_to_string(&config).unwrap() + "[modules]\nenabled = [\"pre\"]\n").unwrap();
+
     set_commands(&dir, &crash_once("pre-crashed"), &format!("echo undone >> {}", undone.display()));
-    assert_eq!(play().status.signal(), Some(9), "killed in pre_command");
-    assert_eq!(lines(&undone), 0);
+    assert_eq!(play().status.signal(), Some(9), "killed in its pre-launch hook");
+    assert!(dir.path().join("state/current-session.json").exists(), "the game was held from its hook on");
+    assert_eq!(play().status.signal(), Some(9), "the retry ran its hook again, then was killed in pre_command");
+    assert_eq!((lines(&prepared), lines(&undone)), (2, 0));
     open();
     assert_eq!(lines(&undone), 1, "the next open undid what the launch began");
 

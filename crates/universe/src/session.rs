@@ -554,79 +554,7 @@ impl Core {
         for m in self.modules.read().await.iter().filter(|m| m.enabled && !m.available) {
             tracing::warn!("module {} is enabled but its hooks are skipped: {} (see `universe doctor`)", m.id(), m.unavailable());
         }
-        let env_file = paths::state_home().join(format!("env-{session_id}"));
-        std::fs::create_dir_all(paths::state_home())?;
-        std::fs::write(&env_file, "")?;
-        for m in self.hook_modules(&r, "pre-launch").await {
-            let mut env = self.module_env(&m, Some(&r.game), &cfg, &base);
-            env.set("UNIVERSE_ENV_FILE", env_file.to_string_lossy().to_string());
-            let out = modules::run_blocking(&m, "pre-launch", &env).await?;
-            if out.status != 0 {
-                let _ = std::fs::remove_file(&env_file);
-                return Err(Error::Io(format!("pre-launch {} refused the launch: {}", m.id(), out.stderr.trim())));
-            }
-            for line in out.stderr.lines() {
-                tracing::info!("pre-launch {}: {line}", m.id());
-            }
-        }
-        let extra_env: BTreeMap<String, String> = std::fs::read_to_string(&env_file)
-            .unwrap_or_default()
-            .lines()
-            .filter_map(|l| l.split_once('='))
-            .filter(|(k, _)| !k.trim().is_empty())
-            .map(|(k, v)| (k.trim().to_string(), v.to_string()))
-            .collect();
-        let _ = std::fs::remove_file(&env_file);
-
-        let mode = crate::desktop::screen_mode(&screen).await;
-        let splash = (!splash.is_empty()).then(|| std::path::PathBuf::from(splash));
         let gamescope_pid = self.nest().map_or(0, |n| n.pid);
-        let launcher_pid = if gamescope_pid != 0 { std::process::id() } else { 0 };
-        let (mut plan, runtime) = if self.under_steam() {
-            // Steam's mangoapp draws its HUD and Steam limits the frame rate: no MangoHud layer, no limit of Universe's.
-            let mut steam = r.clone();
-            steam.effective.mangohud = false;
-            steam.effective.fps_limit = "none".into();
-            (launcher::plan(&steam, &cfg, &extra_env, mode, splash.as_deref(), true, true)?, Runtime::of(&steam.effective))
-        } else {
-            (
-                launcher::plan(&r, &cfg, &extra_env, mode, splash.as_deref(), gamescope_pid != 0, launcher::mangoapp_installed())?,
-                Runtime::at_launch(&r.effective, gamescope_pid != 0, &cfg.launch),
-            )
-        };
-        // Over a gamescope of the game's own, the overlay connects to the display splash records. A launcher's watcher already
-        // holding the pads (Big Screen in a window) answers HOME itself, and the overlay's would wait on it for good.
-        let overlay =
-            (plan.gamescope && crate::runners::on_path(OVERLAY_PROGRAM).is_some() && !crate::controller::watch::lock_held()).then(|| display_file(&session_id));
-        if let Some(file) = &overlay {
-            plan.env.insert(crate::splash::DISPLAY_FILE_ENV.into(), file.to_string_lossy().into());
-        }
-        for (path, text) in plan.mangohud_conf.iter().chain(&plan.mangoapp_conf) {
-            std::fs::write(path, text)?;
-        }
-        if let Some(prefix) = plan.env.get("WINEPREFIX").map(std::path::PathBuf::from) {
-            match crate::core::blocking(move || Ok(crate::wine_fonts::prune_dead(&prefix)?)).await {
-                Ok(0) => {}
-                Ok(n) => tracing::info!("{id}: dropped {n} font registry entries its prefix made from /nix/store files now gone"),
-                Err(e) => tracing::warn!("{id}: prefix fonts: {e}"),
-            }
-        }
-        if let Some(spec) = crate::runners::spec(&r.effective.runner) {
-            let dir = paths::session_log_dir(id, &session_id);
-            let kind = if spec.via_proton { crate::runners::Kind::Proton } else { spec.kind };
-            let mut logs = launcher::crash_env(kind, &dir);
-            if r.effective.debug_log {
-                logs.extend(launcher::debug_env(kind, &dir));
-            }
-            // winedbg makes the dir on the game's current drive, not under Z:, where it then writes.
-            if r.effective.debug_log || !logs.is_empty() {
-                std::fs::create_dir_all(&dir)?;
-            }
-            for (k, v) in logs {
-                plan.env.entry(k).or_insert(v);
-            }
-        }
-
         let current = Current {
             session_id: session_id.clone(),
             id: id.into(),
@@ -635,10 +563,23 @@ impl Core {
             screen: screen.clone(),
             started_at: started.to_rfc3339(),
             gamescope_pid,
-            launcher_pid,
+            launcher_pid: if gamescope_pid != 0 { std::process::id() } else { 0 },
             app_pid: std::process::id(),
         };
-        self.begin(&r, &plan, &current, base.vars.clone(), runtime).await?;
+        let starting = hold_starting()?;
+        write_marker(&Marker { current: current.clone(), hook_env: base.vars.clone(), starting: true, ..Marker::default() })?;
+        let prepared = self.prepare(&r, &cfg, &base, &session_id, &screen, splash).await;
+        let (plan, runtime, overlay) = match prepared {
+            Ok(p) => p,
+            Err(e) => {
+                let _lock = marker_lock()?;
+                if read_marker().is_some_and(|m| m.current.session_id == session_id) {
+                    remove_marker();
+                }
+                return Err(e);
+            }
+        };
+        self.begin(&r, &plan, &current, runtime, starting).await?;
         for m in self.hook_modules(&r, "post-launch").await {
             let env = self.module_env(&m, Some(&r.game), &cfg, &base);
             if let Err(e) = modules::run_async(&self.host.units, &m, "post-launch", &env, &session_id, Some(&unit)).await {
@@ -663,14 +604,100 @@ impl Core {
         Ok(session_id)
     }
 
-    /// The marker first, still starting, then each effect noted on it as it begins, then the unit. A start that fails closes
-    /// the session through its record, with no row.
-    async fn begin(&self, r: &Resolved, plan: &Plan, current: &Current, hook_env: Vec<(String, String)>, runtime: Runtime) -> Result<()> {
-        let _starting = hold_starting()?;
-        let marker = Marker { current: current.clone(), hook_env, command: plan.command_line(), runtime: Some(runtime), starting: true, ..Marker::default() };
-        write_marker(&marker)?;
+    /// The pre-launch hooks, then the launch's plan, its runtime and the overlay's display file.
+    async fn prepare(
+        &self,
+        r: &Resolved,
+        cfg: &crate::config::Config,
+        base: &modules::HookEnv,
+        session_id: &str,
+        screen: &str,
+        splash: &str,
+    ) -> Result<(Plan, Runtime, Option<std::path::PathBuf>)> {
+        let id = r.game.id.as_str();
+        let env_file = paths::state_home().join(format!("env-{session_id}"));
+        std::fs::create_dir_all(paths::state_home())?;
+        std::fs::write(&env_file, "")?;
+        for m in self.hook_modules(r, "pre-launch").await {
+            let mut env = self.module_env(&m, Some(&r.game), cfg, base);
+            env.set("UNIVERSE_ENV_FILE", env_file.to_string_lossy().to_string());
+            let out = modules::run_blocking(&m, "pre-launch", &env).await?;
+            if out.status != 0 {
+                let _ = std::fs::remove_file(&env_file);
+                return Err(Error::Io(format!("pre-launch {} refused the launch: {}", m.id(), out.stderr.trim())));
+            }
+            for line in out.stderr.lines() {
+                tracing::info!("pre-launch {}: {line}", m.id());
+            }
+        }
+        let extra_env: BTreeMap<String, String> = std::fs::read_to_string(&env_file)
+            .unwrap_or_default()
+            .lines()
+            .filter_map(|l| l.split_once('='))
+            .filter(|(k, _)| !k.trim().is_empty())
+            .map(|(k, v)| (k.trim().to_string(), v.to_string()))
+            .collect();
+        let _ = std::fs::remove_file(&env_file);
+
+        let mode = crate::desktop::screen_mode(screen).await;
+        let splash = (!splash.is_empty()).then(|| std::path::PathBuf::from(splash));
+        let nested = self.nest().is_some_and(|n| n.pid != 0);
+        let (mut plan, runtime) = if self.under_steam() {
+            // Steam's mangoapp draws its HUD and Steam limits the frame rate: no MangoHud layer, no limit of Universe's.
+            let mut steam = r.clone();
+            steam.effective.mangohud = false;
+            steam.effective.fps_limit = "none".into();
+            (launcher::plan(&steam, cfg, &extra_env, mode, splash.as_deref(), true, true)?, Runtime::of(&steam.effective))
+        } else {
+            (
+                launcher::plan(r, cfg, &extra_env, mode, splash.as_deref(), nested, launcher::mangoapp_installed())?,
+                Runtime::at_launch(&r.effective, nested, &cfg.launch),
+            )
+        };
+        // Over a gamescope of the game's own, the overlay connects to the display splash records. A launcher's watcher already
+        // holding the pads (Big Screen in a window) answers HOME itself, and the overlay's would wait on it for good.
+        let overlay =
+            (plan.gamescope && crate::runners::on_path(OVERLAY_PROGRAM).is_some() && !crate::controller::watch::lock_held()).then(|| display_file(session_id));
+        if let Some(file) = &overlay {
+            plan.env.insert(crate::splash::DISPLAY_FILE_ENV.into(), file.to_string_lossy().into());
+        }
+        for (path, text) in plan.mangohud_conf.iter().chain(&plan.mangoapp_conf) {
+            std::fs::write(path, text)?;
+        }
+        if let Some(prefix) = plan.env.get("WINEPREFIX").map(std::path::PathBuf::from) {
+            match crate::core::blocking(move || Ok(crate::wine_fonts::prune_dead(&prefix)?)).await {
+                Ok(0) => {}
+                Ok(n) => tracing::info!("{id}: dropped {n} font registry entries its prefix made from /nix/store files now gone"),
+                Err(e) => tracing::warn!("{id}: prefix fonts: {e}"),
+            }
+        }
+        if let Some(spec) = crate::runners::spec(&r.effective.runner) {
+            let dir = paths::session_log_dir(id, session_id);
+            let kind = if spec.via_proton { crate::runners::Kind::Proton } else { spec.kind };
+            let mut logs = launcher::crash_env(kind, &dir);
+            if r.effective.debug_log {
+                logs.extend(launcher::debug_env(kind, &dir));
+            }
+            // winedbg makes the dir on the game's current drive, not under Z:, where it then writes.
+            if r.effective.debug_log || !logs.is_empty() {
+                std::fs::create_dir_all(&dir)?;
+            }
+            for (k, v) in logs {
+                plan.env.entry(k).or_insert(v);
+            }
+        }
+        Ok((plan, runtime, overlay))
+    }
+
+    /// On the marker still starting, its command and runtime, then each effect noted as it begins, then the unit. A start that
+    /// fails closes the session through its record, with no row.
+    async fn begin(&self, r: &Resolved, plan: &Plan, current: &Current, runtime: Runtime, _starting: std::fs::File) -> Result<()> {
         let (id, session_id) = (&current.id, &current.session_id);
-        match self.start(r, plan, current).await {
+        let noted = update_marker(session_id, |m| {
+            m.command = plan.command_line();
+            m.runtime = Some(runtime);
+        });
+        match async { noted?; self.start(r, plan, current).await }.await {
             Ok(()) => {
                 if let Err(e) = update_marker(session_id, |m| m.starting = false) {
                     tracing::warn!("session {session_id} of {id}: {e}");
@@ -1430,8 +1457,11 @@ pub(crate) mod tests {
         let asked = dir.join("asked");
         let src = dir.join("sources/fake");
         std::fs::create_dir_all(&src).unwrap();
-        std::fs::write(src.join("source.toml"), "api = 2\nid = \"fake\"\nname = \"Fake\"\nexe = \"run\"\ncapabilities = [\"uninstall\", \"update\"]\n")
-            .unwrap();
+        std::fs::write(
+            src.join("source.toml"),
+            "api = 2\nid = \"fake\"\nname = \"Fake\"\nexe = \"run\"\ncapabilities = [\"uninstall\", \"update\"]\n[hooks]\npre-launch = \"pre\"\n",
+        )
+        .unwrap();
         std::fs::write(
             src.join("run"),
             format!(
@@ -1442,11 +1472,19 @@ pub(crate) mod tests {
         )
         .unwrap();
         std::fs::set_permissions(src.join("run"), std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+        let gate = sb.post_ran.with_file_name("gate");
+        let hook_gate = gate.with_file_name("hook-gate");
+        std::fs::write(&hook_gate, "").unwrap();
+        std::fs::write(
+            src.join("pre"),
+            format!("#!/bin/sh\ntouch {0}.entered; while [ ! -e {0}.release ] && [ -e {0} ]; do sleep 0.02; done\n", hook_gate.display()),
+        )
+        .unwrap();
+        std::fs::set_permissions(src.join("pre"), std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
         let file = paths::config_file();
         let text = std::fs::read_to_string(&file).unwrap().replace("[modules]\nenabled = []\n", "");
         std::fs::write(&file, format!("{text}[modules]\nenabled = []\n[sources]\nenabled = [\"fake\"]\n")).unwrap();
 
-        let gate = sb.post_ran.with_file_name("gate");
         let install = |id: &str, store_id: &str| {
             let folder = dir.join("games").join(id);
             std::fs::create_dir_all(&folder).unwrap();
@@ -1488,17 +1526,21 @@ pub(crate) mod tests {
             assert!(matches!(update, Err(Error::Busy(_))), "{when}: a store update is {update:?}");
         };
 
-        let starting = async {
-            while !gate.with_extension("entered").exists() {
-                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        let held_at = |gate: std::path::PathBuf| {
+            let core = &core;
+            async move {
+                while !gate.with_extension("entered").exists() {
+                    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                }
+                let answers = destroy(core).await;
+                std::fs::write(gate.with_extension("release"), "").unwrap();
+                answers
             }
-            let answers = destroy(&core).await;
-            std::fs::write(gate.with_extension("release"), "").unwrap();
-            answers
         };
-        let (sid, answers) = tokio::join!(core.launch("sample", "", ""), starting);
+        let (sid, preparing, starting) = tokio::join!(core.launch("sample", "", ""), held_at(hook_gate.clone()), held_at(gate.clone()));
         let sid = sid.unwrap();
-        busy(answers, "starting");
+        busy(preparing, "in its pre-launch hook");
+        busy(starting, "starting");
         untouched("starting", &game_toml);
 
         busy(destroy(&core).await, "running");
@@ -1877,7 +1919,7 @@ pub(crate) mod tests {
             )
             .unwrap();
             let exe = dir.join("bin/pre");
-            std::fs::write(&exe, format!("#!/bin/sh\necho {id} >> {}\n", log.display())).unwrap();
+            std::fs::write(&exe, format!("#!/bin/sh\necho {id} >> {0}\n[ -e {0}.refused ] || {{ touch {0}.refused; exit 1; }}\n", log.display())).unwrap();
             std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755)).unwrap();
         }
         std::fs::write(
@@ -1889,8 +1931,10 @@ pub(crate) mod tests {
         let json = core.get("sample").await.unwrap().to_json();
         let listed: Vec<&str> = json["effective"]["modules"].as_object().unwrap().keys().map(String::as_str).collect();
         assert_eq!(listed, ["emu"], "a Dolphin game carries no Proton module's settings");
+        assert!(matches!(core.launch("sample", "", "").await, Err(Error::Io(_))), "a hook refusing refuses the launch");
+        assert!(read_marker().is_none(), "and holds the game no longer");
         core.launch("sample", "", "").await.unwrap();
-        assert_eq!(std::fs::read_to_string(&log).unwrap(), "emu\n", "the Proton module's hook stays out of an emulator's launch");
+        assert_eq!(std::fs::read_to_string(&log).unwrap(), "emu\nemu\n", "the Proton module's hook stays out of an emulator's launch");
     }
 
     #[tokio::test]
