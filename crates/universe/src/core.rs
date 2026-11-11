@@ -2433,7 +2433,7 @@ impl Core {
             .filter(|d| d.is_dir())
             .ok_or_else(|| Error::NotFound(format!("{source} finds no folder of {game_id}")))?;
         let roots = self.install_roots().await;
-        {
+        let archived = {
             let games = self.games.read().await;
             let twin = store_twin(&games, source, game_id, Some(&dir), &roots);
             if let Some(x) = twin.filter(|x| x.game.removed_at.is_empty()) {
@@ -2443,6 +2443,10 @@ impl Core {
             if let Some(why) = trash_refusal(&dir, &games, &roots, &except) {
                 return Err(Error::Invalid(why));
             }
+            twin.map(|x| x.game.clone())
+        };
+        if let Some(g) = archived {
+            self.refuse_busy(&g).await?;
         }
         // A store that uninstalls forgets the install too; its folder alone in the trash would leave it listed as installed.
         if m.can("uninstall") {
