@@ -965,12 +965,31 @@ def test_an_install_runs_one_at_a_time_and_x_cancels_it_keeping_its_files(look, 
     until(lambda: next(r for r in sources.rows if r["id"] == ident)["partial"], "the files stay for a later resume")
 
 
-def test_a_refused_install_shows_the_stores_words_whole(look, api, fake):
+def test_a_refused_install_shows_the_stores_words_whole(look, api, fake, tmp_path):
+    import json
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    title = "Warhammer 40,000: Space Marine 2 - Ultra Edition Bonus Pack!"
+    steam = tmp_path / "steam"
+    (steam / "steamapps").mkdir(parents=True)
+    (steam / "steamapps" / "appmanifest_480.acf").write_text(f'"AppState" {{ "appid" "480" "name" "{title}" "StateFlags" "4" "installdir" "Missing" }}')
+    source = Path(__file__).resolve().parents[2] / "sources" / "steam" / "bin" / "source"
+    result = subprocess.run(
+        [sys.executable, str(source), "install", "480"],
+        env={**os.environ, "SOURCE_DATA_DIR": str(tmp_path / "source-data"), "SOURCE_SETTINGS_JSON": json.dumps({"steam_root": str(steam)})},
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    assert result.returncode == 1 and title in result.stderr, "the store refuses the long-titled game's missing files"
+    refusal = result.stderr.splitlines()[-1].removeprefix("steam: ")
     sources = api.screens.sources
     install_page(look)
     until(lambda: sources.rows)
     witcher = next(i for i, r in enumerate(sources.rows) if r["title"] == "The Witcher 3: Wild Hunt")
-    refusal = "The Witcher 3: Wild Hunt's files are gone. Verify its files in Steam to download them again."
+    look.window.resize(1280, 800)
     fake.core._data.setdefault("refusals", {})[sources.rows[witcher]["id"]] = refusal
     sources.install(witcher)
     shown = lambda: next((n for n in look.root.findChildren(QObject, "notice") if n.property("text") == refusal and n.property("visible")), None)

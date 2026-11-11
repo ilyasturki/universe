@@ -159,7 +159,7 @@ cat >"$tmp/sources/desktop-smoke/run" <<'EOF'
 #!/bin/sh
 case "$1" in
     status) echo '{"event":"logged_in","user":"desktop-smoke"}' ;;
-    library) echo '{"event":"game","id":"123","title":"Uninstalled Game","owned":true,"installed":false,"download_size":700,"disk_size":1000}' ;;
+    library) echo '{"event":"game","id":"123","title":"Warhammer 40,000: Space Marine 2 - Ultra Edition Bonus Pack!","owned":true,"installed":false,"download_size":700,"disk_size":1000}' ;;
     info) echo '{"event":"info","data":{},"download_size":700,"disk_size":1000}' ;;
 esac
 echo '{"event":"done"}'
@@ -168,7 +168,7 @@ chmod +x "$tmp/sources/desktop-smoke/run"
 cat >"$tmp/data/games/store-smoke/game.toml" <<'EOF'
 schema = 1
 id = "store-smoke"
-title = "Uninstalled Game"
+title = "Warhammer 40,000: Space Marine 2 - Ultra Edition Bonus Pack!"
 platform = "PC (Linux)"
 [source]
 kind = "desktop-smoke"
@@ -423,7 +423,30 @@ fi
 # A store that refuses an install says why in its own words, whole in a toast at the window's scripted size.
 smoke_run="$tmp/sources/desktop-smoke/run"
 cp "$smoke_run" "$tmp/smoke-run"
-echo "Uninstalled Game's files are gone. Verify its files in Steam to download them again." >"$tmp/refusal.txt"
+python3 - "$repo" "$tmp" <<'PY'
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+repo, tmp = map(Path, sys.argv[1:])
+title = "Warhammer 40,000: Space Marine 2 - Ultra Edition Bonus Pack!"
+steam = tmp / "steam"
+(steam / "steamapps").mkdir(parents=True)
+(steam / "steamapps" / "appmanifest_480.acf").write_text(
+    f'"AppState" {{ "appid" "480" "name" "{title}" "StateFlags" "4" "installdir" "Missing" }}'
+)
+result = subprocess.run(
+    [sys.executable, str(repo / "sources/steam/bin/source"), "install", "480"],
+    env={**os.environ, "SOURCE_DATA_DIR": str(tmp / "steam-source"), "SOURCE_SETTINGS_JSON": json.dumps({"steam_root": str(steam)})},
+    capture_output=True,
+    text=True,
+    timeout=5,
+)
+assert result.returncode == 1 and title in result.stderr, result
+(tmp / "refusal.txt").write_text(result.stderr.splitlines()[-1].removeprefix("steam: ") + "\n")
+PY
 sed -i "s|^    info)|    install) echo \"desktop-smoke: \$(cat '$tmp/refusal.txt')\" >\&2; exit 1 ;;\n&|" "$smoke_run"
 grep -q '^    install)' "$smoke_run" || fail "the store stand-in has no refusal"
 run refused "action:win.open-game::store-smoke button:game.install view:store dialog:install answer:install said:$tmp/refusal.txt shot:$out/refused.png"
