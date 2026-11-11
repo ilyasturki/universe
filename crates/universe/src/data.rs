@@ -97,6 +97,10 @@ fn subdirs(dir: &Path) -> Vec<PathBuf> {
     out
 }
 
+fn nested(a: &Path, b: &Path) -> bool {
+    a.starts_with(b) || b.starts_with(a)
+}
+
 fn leftovers(games: &[Resolved], config: &Config, sized: bool) -> Vec<Leftover> {
     let live: Vec<&Game> = games.iter().map(|r| &r.game).filter(|g| g.removed_at.is_empty()).collect();
     let title = |id: &str| games.iter().find(|r| r.game.id == id).map(|r| r.game.title.clone()).unwrap_or_default();
@@ -107,7 +111,7 @@ fn leftovers(games: &[Resolved], config: &Config, sized: bool) -> Vec<Leftover> 
         out.push(Leftover { kind, title: title(&id), id, bytes: if sized { disk_usage(&path) } else { 0 }, path: path.to_string_lossy().into() });
     };
     for dir in subdirs(&config.prefixes_root()) {
-        if !held.iter().any(|h| h.starts_with(&dir) || dir.starts_with(h)) {
+        if !held.iter().any(|h| nested(h, &dir)) {
             push("prefix", dir);
         }
     }
@@ -331,9 +335,8 @@ impl Core {
         };
         let busy = self.busy_games().await?;
         let dir = Path::new(&item.path);
-        let owner = games.iter().map(|r| &r.game).filter(|g| busy.contains(&g.id)).find(|g| {
-            g.id == item.id || (item.kind == "prefix" && has_prefix(g) && { let p = prefix_of(g, &config); p.starts_with(dir) || dir.starts_with(&p) })
-        });
+        let on_it = |g: &Game| has_prefix(g) && nested(&prefix_of(g, &config), dir);
+        let owner = games.iter().map(|r| &r.game).filter(|g| busy.contains(&g.id)).find(|g| g.id == item.id || (item.kind == "prefix" && on_it(g)));
         if let Some(g) = owner {
             self.refuse_busy(g).await?;
         }

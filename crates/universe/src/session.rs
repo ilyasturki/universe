@@ -697,7 +697,11 @@ impl Core {
             m.command = plan.command_line();
             m.runtime = Some(runtime);
         });
-        match async { noted?; self.start(r, plan, current).await }.await {
+        let started = match noted {
+            Ok(()) => self.start(r, plan, current).await,
+            refused => refused,
+        };
+        match started {
             Ok(()) => {
                 if let Err(e) = update_marker(session_id, |m| m.starting = false) {
                     tracing::warn!("session {session_id} of {id}: {e}");
@@ -1597,7 +1601,12 @@ pub(crate) mod tests {
         let src = dir.join("sources/fake");
         std::fs::create_dir_all(&src).unwrap();
         std::fs::write(src.join("source.toml"), "api = 2\nid = \"fake\"\nname = \"Fake\"\nexe = \"run\"\ncapabilities = [\"update\"]\n").unwrap();
-        let game = |id: &str| format!("echo '{{\"event\":\"game\",\"id\":\"{id}\",\"title\":\"{id}\",\"owned\":true,\"installed\":true,\"dir\":\"{}\"}}'", dir.join("games").join(id).display());
+        let game = |id: &str| {
+            format!(
+                "echo '{{\"event\":\"game\",\"id\":\"{id}\",\"title\":\"{id}\",\"owned\":true,\"installed\":true,\"dir\":\"{}\"}}'",
+                dir.join("games").join(id).display()
+            )
+        };
         std::fs::write(
             src.join("run"),
             format!(
