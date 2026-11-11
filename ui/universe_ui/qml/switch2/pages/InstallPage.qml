@@ -243,8 +243,10 @@ FocusScope {
             items.push({ label: "Add to Library", act: "adopt" }, { label: "Delete Files…", act: "trash" });
         if (inLibrary)
             items.push({ label: "Start", act: "start" }, { label: "Software Information", act: "info" }, { label: "Game Settings", act: "settings" });
+        if (g.installed && g.game_id && !api.universe.isPlaying(g.game_id))
+            items.push({ label: "Uninstall…", act: "uninstall" });
         if (g.installed && g.game_id)
-            items.push({ label: "Uninstall…", act: "uninstall" }, { label: "Remove from library…", act: "remove" });
+            items.push({ label: "Remove from library…", act: "remove" });
         if (items.length === 0) {
             Sound.play("edge");
             return;

@@ -186,6 +186,10 @@ class CoreClient(QObject):
 
     currentSession = Property(QVARIANT, lambda self: self._current, notify=currentSessionChanged)
 
+    @Slot(str, result=bool)
+    def isPlaying(self, ident):
+        return bool(ident) and bool(self._current) and self._current.get("id") == ident
+
     @Slot(result="QVariant")
     def list(self):
         return self._guarded([], self._core.list)

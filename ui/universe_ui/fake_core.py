@@ -995,7 +995,9 @@ class FakeCore:
         return store["name"] if store and store.get("enabled") and store.get("available") and "uninstall" in store.get("capabilities", []) else None
 
     def uninstall(self, ident):
-        self._game(ident)
+        game = self._game(ident)
+        if (self.current() or {}).get("id") == ident:
+            raise UniverseError("Busy", f"{game['title']} is running: quit it, then try again")
         entries = [e for entries in self._data.get("source_library", {}).values() for e in entries if e.get("game_id") == ident]
         if not any(e.get("installed") for e in entries):
             raise UniverseError("Invalid", f"{ident} has no install folder")

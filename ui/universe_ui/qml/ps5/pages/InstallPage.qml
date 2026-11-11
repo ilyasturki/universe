@@ -407,7 +407,7 @@ FocusScope {
         var items = Home.options(game, !!session && session.id === game.id).filter(function (i) {
             return i.act !== "play" || (g.installed && (!main || main.act !== "play"));
         });
-        if (g.installed) {
+        if (g.installed && !api.universe.isPlaying(game.id)) {
             items[items.length - 1].gap = false;
             items.splice(items.length - 1, 0, {
                 label: "Uninstall…",

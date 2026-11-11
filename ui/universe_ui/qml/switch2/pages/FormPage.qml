@@ -134,7 +134,7 @@ FocusScope {
                 label: "Game Settings",
                 act: "settings"
             });
-        if (row.installed)
+        if (row.installed && !api.universe.isPlaying(gameId))
             items.push({
                 label: "Uninstall…",
                 act: "uninstall"

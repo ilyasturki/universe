@@ -43,7 +43,7 @@ def test_the_store_lays_the_catalogue_out_in_collections(look):
     assert "The Technomancer" in titles(store, "installed")
 
 
-def test_the_cursor_walks_the_collections_to_a_game_card_whose_more_is_the_game_s_shared_menu(look):
+def test_the_cursor_walks_the_collections_to_a_game_card_whose_more_is_the_game_s_shared_menu(look, fake):
     store = open_store(look)
     open_update_card(look, store)
     assert read(store, "cardEntry")["title"] == "Mini Metro"
@@ -52,6 +52,13 @@ def test_the_cursor_walks_the_collections_to_a_game_card_whose_more_is_the_game_
     look.press(Qt.Key.Key_Return)
     acts = opened_menu(look)
     assert {"play", "info", "settings", "data"} <= set(acts) and acts[-2:] == ["uninstall", "remove"], "the hero's and the Library's menu"
+    look.press(Qt.Key.Key_Escape)
+    until(lambda: look.menu().property("open") is False)
+    fake.launch("mini-metro", "")
+    until(lambda: (fake.currentSession or {}).get("id") == "mini-metro")
+    look.press(Qt.Key.Key_Return)
+    acts = opened_menu(look)
+    assert "uninstall" not in acts and acts[-1] == "remove", "no Uninstall for the game running"
     look.press(Qt.Key.Key_Escape)
     until(lambda: look.menu().property("open") is False)
     assert store.property("zone") == "card"

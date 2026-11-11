@@ -349,22 +349,45 @@ def test_a_store_game_installed_from_settings_joins_the_library_installed(journe
     until(lambda: journey.api.allGames.byId("mini-metro") is not None, "Home lists it")
 
 
-def test_uninstall_from_settings_trashes_the_folder_and_keeps_the_game(journey):
+def test_uninstall_from_settings_trashes_the_folder_and_keeps_the_game_once_it_is_not_running(journey):
     store(journey)
     folder = journey.root / "games" / "Mini Metro"
     gog_info(folder, MINI_METRO, "Mini Metro", "Mini Metro.exe")
+    (folder / "mini-metro").write_text("#!/bin/sh\nexec sleep 600\n")
+    (folder / "mini-metro").chmod(0o755)
     journey.write(
         "data/games/mini-metro/game.toml",
         f'schema = 1\nid = "mini-metro"\ntitle = "Mini Metro"\n[source]\nkind = "gog"\nid = "{MINI_METRO}"\ndir = "{folder}"\nbuild_id = "B1"\n'
-        f'[launch]\nrunner = "proton"\nexe = "{folder}/Mini Metro.exe"\n',
+        f'[launch]\nrunner = "linux"\nexe = "{folder}/mini-metro"\n',
     )
     look = journey.start()
     page, row = settings(look, "install")
+    menu = page.findChild(QObject, "settingsMenu")
     until(lambda: store_row(journey, MINI_METRO).get("game_id") == "mini-metro")
     down_to(look, row, storeId=MINI_METRO)
     look.press(Qt.Key.Key_Return)
-    pick(look, page.findChild(QObject, "settingsMenu"), "uninstall")
-    pick(look, page.findChild(QObject, "settingsMenu"), "yes")
+    pick(look, menu, "uninstall")
+    until(lambda: menu.property("open") is True and "yes" in menu_ids(menu), "the uninstall asks first")
+    subprocess.run([os.environ["UNIVERSE_BIN"], "play", "mini-metro", "--no-wait"], check=True, capture_output=True)
+    until(lambda: (journey.client.currentSession or {}).get("id") == "mini-metro", "the game started from the command line meanwhile")
+    posted, clear = held_notices(look.engine)
+    clear()
+    pick(look, menu, "yes")
+    assert until(posted, "the refusal reaches the player")[0]["error"] is True, "told as a failure"
+    assert (folder / "mini-metro").is_file() and store_row(journey, MINI_METRO).get("installed") is True, "the running game keeps its files"
+    assert journey.game("mini-metro")["source"]["dir"] == str(folder)
+    until(lambda: menu.property("open") is False)
+    look.press(Qt.Key.Key_Return)
+    until(lambda: menu.property("open") is True and "remove" in menu_ids(menu))
+    assert "uninstall" not in menu_ids(menu), "no Uninstall for the game running"
+    look.press(Qt.Key.Key_Escape)
+    until(lambda: menu.property("open") is False)
+    journey.client.stop("")
+    until(lambda: journey.client.currentSession is None, "the game quit")
+
+    look.press(Qt.Key.Key_Return)
+    pick(look, menu, "uninstall")
+    pick(look, menu, "yes")
     until(lambda: not folder.exists(), "the install folder goes")
     assert (journey.home / ".local" / "share" / "Trash" / "files" / "Mini Metro").is_dir(), "to the trash, not deleted"
     until(lambda: store_row(journey, MINI_METRO).get("installed") is False)

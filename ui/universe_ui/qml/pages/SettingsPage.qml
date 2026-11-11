@@ -1539,12 +1539,13 @@ FocusScope {
                 action: "settings"
             });
         if (row.gameId) {
-            out.push({
-                icon: "trash",
-                label: "Uninstall…",
-                action: "uninstall",
-                danger: true
-            });
+            if (!api.universe.isPlaying(row.gameId))
+                out.push({
+                    icon: "trash",
+                    label: "Uninstall…",
+                    action: "uninstall",
+                    danger: true
+                });
             out.push({
                 icon: "eye-off",
                 label: "Remove from library…",
