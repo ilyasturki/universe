@@ -86,6 +86,14 @@ elif verb in ("install", "update"):
     folder.mkdir(parents=True, exist_ok=True)
     print("[cli] INFO: Install size: 4.00 MiB", file=sys.stderr, flush=True)
     print("[cli] INFO: Download size: 2.00 MiB (Compression savings: 50.0%)", file=sys.stderr, flush=True)
+    if mode in ("cut-program", "cut-program-no-resume"):
+        (folder / "x64").mkdir(exist_ok=True)
+        (folder / "x64" / "Hades.exe").write_bytes(b"MZ")
+        if mode == "cut-program":
+            (config / "tmp").mkdir(exist_ok=True)
+            (config / "tmp" / f"{app}.resume").write_text("x")
+        print("[DLManager] INFO: = Progress: 25.00% (1/4), Running for 00:00:01, ETA: 00:00:03", file=sys.stderr, flush=True)
+        sys.exit(1)
     if mode == "partial":
         (config / "tmp").mkdir(exist_ok=True)
         (config / "tmp" / f"{app}.resume").write_text("x")

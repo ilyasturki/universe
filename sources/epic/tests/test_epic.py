@@ -207,6 +207,37 @@ def test_a_game_a_failed_reinstall_forgot_comes_back_with_its_drive(env, run, mo
     assert code == 0 and not old.exists(), "legendary knows it again, so it removes it"
 
 
+@pytest.mark.parametrize("after_uninstall", [False, True], ids=["reinstall-cut", "reinstalled-uninstalled-install-cut"])
+@pytest.mark.parametrize("resume", [False, True], ids=["no-resume-file", "paused"])
+def test_a_cut_download_is_never_restored_as_the_old_copy(env, run, monkeypatch, after_uninstall, resume):
+    logged_in(env)
+    seed_cache(env, [{"id": "Min", "title": "Hades", "folder": "Hades", "owned_dlcs": []}])
+    old = hades(env)
+    folder = env["games"] / "Hades"
+    (folder / "x64" / "Hades.exe").unlink()
+    install_state(env, {"Min": old})
+    monkeypatch.setenv("SHIM_FOLDER", "Hades")
+    if after_uninstall:
+        code, _, err = run("install", "Min")
+        assert code == 0, err
+        code, _, err = run("uninstall", "Min")
+        assert code == 0, err
+    monkeypatch.setenv("SHIM_MODE", "cut-program" if resume else "cut-program-no-resume")
+    code, _, _ = run("install", "Min")
+    assert code == 1 and (folder / "x64" / "Hades.exe").is_file()
+    for legacy_entry in (False, True):
+        if legacy_entry:
+            (env["data"] / "forgotten.json").write_text(json.dumps({"Min": old}))
+        code, events, err = run("scan")
+        assert code == 0, err
+        assert not any(c[:2] == ["-y", "import"] for c in calls(env)), "the new program is not the old whole copy"
+        games = [e for e in events if e["event"] == "game"]
+        if resume:
+            assert [(e["id"], e["installed"], e.get("partial_dir")) for e in games] == [("Min", False, str(folder))]
+        else:
+            assert games == []
+
+
 def test_an_install_legendary_gives_up_on_is_an_error(env, run, monkeypatch):
     monkeypatch.setenv("SHIM_MODE", "fail")
     code, events, err = run("install", "Min")
