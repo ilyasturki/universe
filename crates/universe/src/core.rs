@@ -2507,6 +2507,23 @@ impl Core {
         Ok(out)
     }
 
+    /// Each install the source's `scan` finds, by the store's id; `None` when the scan fails.
+    async fn installed_dirs(&self, m: &Source) -> Option<BTreeMap<String, PathBuf>> {
+        match self.run_verb(m, "scan", &[], None).await {
+            Ok(events) => Some(
+                Self::game_events(&events)
+                    .into_iter()
+                    .filter(|g| g.get("installed").and_then(|v| v.as_bool()) == Some(true))
+                    .filter_map(|g| Some((g.get("id")?.as_str()?.to_string(), paths::expand(g.get("dir")?.as_str()?))))
+                    .collect(),
+            ),
+            Err(e) => {
+                tracing::warn!("{}: scan failed, so no update reaches a busy game it may hold: {e}", m.id());
+                None
+            }
+        }
+    }
+
     /// Every pending title when `game_id` is empty.
     pub async fn source_update(&self, source: &str, game_id: &str, mut progress: Option<Progress<'_, '_>>) -> Result<usize> {
         let m = self.source(source).await?;
@@ -2524,33 +2541,22 @@ impl Core {
         } else {
             vec![game_id.to_string()]
         };
-        let busy = self.busy_games().await?;
-        // A scan that fails leaves every busy game no store claimed standing for any install.
-        let found: Option<BTreeMap<String, PathBuf>> = if busy.is_empty() || targets.is_empty() {
-            Some(BTreeMap::new())
-        } else {
-            match self.run_verb(&m, "scan", &[], None).await {
-                Ok(events) => Some(
-                    Self::game_events(&events)
-                        .into_iter()
-                        .filter(|g| g.get("installed").and_then(|v| v.as_bool()) == Some(true))
-                        .filter_map(|g| Some((g.get("id")?.as_str()?.to_string(), paths::expand(g.get("dir")?.as_str()?))))
-                        .collect(),
-                ),
-                Err(e) => {
-                    tracing::warn!("{source}: scan failed, so no update reaches a busy game it may hold: {e}");
-                    None
-                }
-            }
-        };
         let roots = self.install_roots().await;
+        // Scanned the first time a busy game no store claimed may stand for a title; `Some(None)`: that scan failed.
+        let mut found: Option<Option<BTreeMap<String, PathBuf>>> = None;
         let mut n = 0;
         for t in targets {
+            let busy = self.busy_games().await?;
+            let import_busy = self.games.read().await.iter().any(|x| busy.contains(&x.game.id) && unclaimed(&x.game));
+            if import_busy && found.is_none() {
+                found = Some(self.installed_dirs(&m).await);
+            }
             let standing: Vec<Game> = {
                 let games = self.games.read().await;
-                let dir = found.as_ref().and_then(|f| f.get(&t)).map(PathBuf::as_path);
+                let scanned = found.as_ref().filter(|_| import_busy);
+                let dir = scanned.and_then(Option::as_ref).and_then(|f| f.get(&t)).map(PathBuf::as_path);
                 let mut twins = store_twins(&games, source, &t, dir, &roots);
-                if found.is_none() {
+                if scanned.is_some_and(Option::is_none) {
                     twins.extend(games.iter().filter(|x| unclaimed(&x.game)));
                 }
                 twins.into_iter().filter(|x| busy.contains(&x.game.id)).map(|x| x.game.clone()).collect()

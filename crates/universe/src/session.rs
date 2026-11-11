@@ -1462,7 +1462,7 @@ pub(crate) mod tests {
         for l in storage["leftovers"].as_array().unwrap().iter().filter(|l| l["id"] == "sample") {
             out.push((l["kind"].as_str().unwrap().to_string(), core.trash_leftover(l["path"].as_str().unwrap()).await));
         }
-        let _ = core.restore("sample").await;
+        core.restore("sample").await.unwrap();
         out
     }
 
@@ -1610,10 +1610,11 @@ pub(crate) mod tests {
         std::fs::write(
             src.join("run"),
             format!(
-                "#!/bin/sh\ncase \"$1$2\" in\nupdate) echo '{{\"event\":\"update\",\"id\":\"s1\"}}'; echo '{{\"event\":\"update\",\"id\":\"s2\"}}' ;;\nscan) [ -e '{}' ] && exit 1; {}; {} ;;\nupdate*) echo \"$1 $2\" >> '{}' ;;\nesac\necho '{{\"event\":\"done\"}}'\n",
+                "#!/bin/sh\ncase \"$1$2\" in\nupdate) for id in s1 s2 s3; do echo \"{{\\\"event\\\":\\\"update\\\",\\\"id\\\":\\\"$id\\\"}}\"; done ;;\nscan) [ -e '{}' ] && exit 1; {}; {}; {} ;;\nupdate*) echo \"$1 $2\" >> '{}' ;;\nesac\necho '{{\"event\":\"done\"}}'\n",
                 scan_fails.display(),
                 game("s1"),
                 game("s2"),
+                game("s3"),
                 asked.display()
             ),
         )
@@ -1622,26 +1623,31 @@ pub(crate) mod tests {
         let file = paths::config_file();
         let text = std::fs::read_to_string(&file).unwrap().replace("[modules]\nenabled = []\n", "");
         std::fs::write(&file, format!("{text}[modules]\nenabled = []\n[sources]\nenabled = [\"fake\"]\n")).unwrap();
-        for (id, kind, store_id, folder) in [("sample", "", "", "s1"), ("other", "fake", "s2", "s2")] {
-            let folder = dir.join("games").join(folder);
-            std::fs::create_dir_all(&folder).unwrap();
+        std::fs::create_dir_all(dir.join("games/s3")).unwrap();
+        for (id, kind, store_id, folder) in [("sample", "", "", Some("s1")), ("other", "fake", "s2", Some("s2")), ("named", "", "s3", None)] {
             let mut g = Game::load(&paths::game_dir(id).join("game.toml")).unwrap_or_else(|_| Game::new(id));
+            if let Some(folder) = folder.map(|f| dir.join("games").join(f)) {
+                std::fs::create_dir_all(&folder).unwrap();
+                g.source.dir = folder.to_string_lossy().into();
+            }
             g.source.kind = kind.into();
             g.source.id = store_id.into();
-            g.source.dir = folder.to_string_lossy().into();
             g.save().unwrap();
         }
         let (core, _memory) = open().await;
         core.launch("sample", "", "").await.unwrap();
+        let _held = crate::saves::hold_game("named").await.unwrap();
 
         for scan in ["answers", "fails"] {
-            let refused = core.source_update("fake", "s1", None).await;
-            assert!(matches!(refused, Err(Error::Busy(_))), "the store's s1 is the running import's folder, its scan {scan}: {refused:?}");
+            for (sid, why) in [("s1", "the running import's folder"), ("s3", "the id of an import backing up its saves")] {
+                let refused = core.source_update("fake", sid, None).await;
+                assert!(matches!(refused, Err(Error::Busy(_))), "the store's {sid} is {why}, its scan {scan}: {refused:?}");
+            }
             assert!(!asked.exists(), "its scan {scan}: the store is not asked");
             std::fs::write(&scan_fails, "").unwrap();
         }
         std::fs::remove_file(&scan_fails).unwrap();
-        assert_eq!(core.source_update("fake", "", None).await.unwrap(), 1, "updating all skips the running import");
+        assert_eq!(core.source_update("fake", "", None).await.unwrap(), 1, "updating all skips the busy imports");
         assert_eq!(std::fs::read_to_string(&asked).unwrap(), "update s2\n", "and still updates another game");
     }
 
