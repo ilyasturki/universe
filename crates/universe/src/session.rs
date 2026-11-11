@@ -1403,6 +1403,104 @@ pub(crate) mod tests {
         assert_eq!(sessions::read(&core.get("sample").await.unwrap().game.sessions_path()).unwrap().len(), 1);
     }
 
+    async fn destroy(core: &Core) -> (Result<()>, Result<()>, Result<usize>) {
+        (core.uninstall("sample").await, core.remove("sample", true).await, core.source_update("fake", "s1", None).await)
+    }
+
+    #[tokio::test]
+    async fn a_game_starting_running_or_backing_up_its_saves_keeps_its_files() {
+        let sb = sandbox();
+        let dir = sb._env.path().to_path_buf();
+        let asked = dir.join("asked");
+        let src = dir.join("sources/fake");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::write(src.join("source.toml"), "api = 2\nid = \"fake\"\nname = \"Fake\"\nexe = \"run\"\ncapabilities = [\"uninstall\", \"update\"]\n")
+            .unwrap();
+        std::fs::write(
+            src.join("run"),
+            format!(
+                "#!/bin/sh\ncase \"$1\" in\nuninstall|update) [ -n \"$2\" ] && echo \"$1 $2\" >> '{}' ;;\nesac\necho '{{\"event\":\"done\"}}'\n",
+                asked.display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(src.join("run"), std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+        let file = paths::config_file();
+        let text = std::fs::read_to_string(&file).unwrap().replace("[modules]\nenabled = []\n", "");
+        std::fs::write(&file, format!("{text}[modules]\nenabled = []\n[sources]\nenabled = [\"fake\"]\n")).unwrap();
+
+        let gate = sb.post_ran.with_file_name("gate");
+        let install = |id: &str, store_id: &str| {
+            let folder = dir.join("games").join(id);
+            std::fs::create_dir_all(&folder).unwrap();
+            std::fs::write(folder.join("launch.exe"), id).unwrap();
+            let mut g = Game::load(&paths::game_dir(id).join("game.toml")).unwrap_or_else(|_| Game::new(id));
+            g.source.kind = "fake".into();
+            g.source.id = store_id.into();
+            g.source.dir = folder.to_string_lossy().into();
+            g.save().unwrap();
+            folder
+        };
+        let sample = install("sample", "s1");
+        let other = install("other", "s2");
+        let mut g = Game::load(&paths::game_dir("sample").join("game.toml")).unwrap();
+        g.launch.pre_command = format!("touch {0}.entered; while [ ! -e {0}.release ] && [ -e {0} ]; do sleep 0.02; done", gate.display());
+        g.save().unwrap();
+        std::fs::write(&gate, "").unwrap();
+        let (core, memory) = open().await;
+        let config = crate::config::Config::load().unwrap();
+        let prefix = config.prefixes_root().join("sample");
+        let clip = config.recordings_root().join("sample/clip.mkv");
+        for f in [prefix.join("user.reg"), clip.clone(), paths::game_logs_dir("sample").join("last.log")] {
+            std::fs::create_dir_all(f.parent().unwrap()).unwrap();
+            std::fs::write(&f, "kept").unwrap();
+        }
+        let game_toml = std::fs::read_to_string(paths::game_dir("sample").join("game.toml")).unwrap();
+        let untouched = |when: &str| {
+            assert_eq!(std::fs::read_to_string(sample.join("launch.exe")).unwrap(), "sample", "{when}: its install");
+            for f in [prefix.join("user.reg"), clip.clone(), paths::game_logs_dir("sample").join("last.log")] {
+                assert!(f.is_file(), "{when}: {} stays", f.display());
+            }
+            assert_eq!(std::fs::read_to_string(paths::game_dir("sample").join("game.toml")).unwrap(), game_toml, "{when}: its game.toml");
+            assert!(!asked.exists(), "{when}: the store is not asked");
+        };
+        let busy = |(uninstall, purge, update): (Result<()>, Result<()>, Result<usize>), when: &str| {
+            assert!(matches!(uninstall, Err(Error::Busy(_))), "{when}: uninstall is {uninstall:?}");
+            assert!(matches!(purge, Err(Error::Busy(_))), "{when}: rm --purge is {purge:?}");
+            assert!(matches!(update, Err(Error::Busy(_))), "{when}: a store update is {update:?}");
+        };
+
+        let starting = async {
+            while !gate.with_extension("entered").exists() {
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+            let answers = destroy(&core).await;
+            std::fs::write(gate.with_extension("release"), "").unwrap();
+            answers
+        };
+        let (sid, answers) = tokio::join!(core.launch("sample", "", ""), starting);
+        let sid = sid.unwrap();
+        busy(answers, "starting");
+        untouched("starting");
+
+        busy(destroy(&core).await, "running");
+        untouched("running");
+        core.source_update("fake", "s2", None).await.unwrap();
+        core.uninstall("other").await.unwrap();
+        assert_eq!(std::fs::read_to_string(&asked).unwrap(), "update s2\nuninstall s2\n", "another game is not refused");
+        assert!(other.join("launch.exe").is_file(), "its files are the store's to remove");
+        std::fs::remove_file(&asked).unwrap();
+
+        memory.finish(&format!("universe-game-sample-{sid}.service"), 0);
+        core.session_end("sample", &sid, None, None).await.unwrap();
+        let held = crate::saves::hold_game("sample").await.unwrap();
+        busy(destroy(&core).await, "its saves backing up");
+        untouched("its saves backing up");
+        drop(held);
+        core.uninstall("sample").await.unwrap();
+        assert_eq!(std::fs::read_to_string(&asked).unwrap(), "uninstall s1\n", "once the game and its backup ended");
+    }
+
     #[tokio::test]
     async fn a_history_that_cannot_be_written_holds_back_neither_the_undo_nor_the_next_game() {
         use std::os::unix::fs::PermissionsExt;
