@@ -1,6 +1,8 @@
 import io
 import json
+import os
 import shlex
+import shutil
 import tarfile
 import time
 
@@ -266,6 +268,50 @@ def test_a_cut_download_is_never_restored_as_the_old_copy(env, run, monkeypatch,
             assert [(e["id"], e["installed"], e.get("partial_dir")) for e in games] == [("Min", False, str(folder))]
         else:
             assert games == []
+
+
+@pytest.mark.parametrize("shift", ["setting", "device", "copied-back"])
+@pytest.mark.parametrize("resume", [False, True], ids=["no-resume-file", "paused"])
+def test_a_cut_reinstall_stays_cut_when_its_surroundings_change(env, run, monkeypatch, shift, resume):
+    logged_in(env)
+    seed_cache(env, [{"id": "Min", "title": "Hades", "folder": "Hades", "owned_dlcs": []}])
+    install_state(env, {"Min": hades(env)})
+    folder = env["games"] / "Hades"
+    program = folder / "x64" / "Hades.exe"
+    program.unlink()
+    save = folder / "z-save.dat"
+    save.write_bytes(b"player progress")
+    monkeypatch.setenv("SHIM_FOLDER", "Hades")
+    monkeypatch.setenv("SHIM_MODE", "cut-program" if resume else "cut-program-no-resume")
+    code, _, _ = run("install", "Min")
+    assert code == 1 and program.read_bytes() == b"MZ"
+    if shift == "setting":
+        settings = json.loads(os.environ["SOURCE_SETTINGS_JSON"])
+        other = env["tmp"] / "other-games"
+        other.mkdir()
+        settings["games_dir"] = str(other)
+        monkeypatch.setenv("SOURCE_SETTINGS_JSON", json.dumps(settings))
+    elif shift == "device":
+        partials_path = env["data"] / "partials.json"
+        partials = json.loads(partials_path.read_text())
+        stat = env["games"].stat()
+        identity = partials["Min"].setdefault("games_dir_identity", [stat.st_dev, stat.st_ino])
+        identity[0] += 1
+        partials_path.write_text(json.dumps(partials))
+    else:
+        copied = env["tmp"] / "copied-games"
+        shutil.copytree(env["games"], copied)
+        env["games"].rename(env["tmp"] / "games-away")
+        copied.rename(env["games"])
+    code, events, err = run("scan")
+    assert code == 0, err
+    assert not any(c[:2] == ["-y", "import"] for c in calls(env)), "a cut download stays cut after the shift"
+    games = [e for e in events if e["event"] == "game"]
+    if resume:
+        assert [(e["id"], e["installed"], e.get("partial_dir")) for e in games] == [("Min", False, str(folder))]
+    else:
+        assert games == []
+    assert program.read_bytes() == b"MZ" and save.read_bytes() == b"player progress"
 
 
 def test_an_install_legendary_gives_up_on_is_an_error(env, run, monkeypatch):
