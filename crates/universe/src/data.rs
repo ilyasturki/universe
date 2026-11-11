@@ -98,7 +98,9 @@ fn subdirs(dir: &Path) -> Vec<PathBuf> {
 }
 
 fn nested(a: &Path, b: &Path) -> bool {
-    a.starts_with(b) || b.starts_with(a)
+    let resolved = |p: &Path| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    let (a, b) = (resolved(a), resolved(b));
+    a.starts_with(&b) || b.starts_with(&a)
 }
 
 fn leftovers(games: &[Resolved], config: &Config, sized: bool) -> Vec<Leftover> {
