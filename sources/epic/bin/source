@@ -556,7 +556,7 @@ def cmd_install(settings, args):
     except SourceError as exc:
         log(f"no sizes: {exc}")
         sizes = {}
-    download_dir = os.path.join(games_dir, known.get("folder") or app)
+    download_dir = os.path.normpath(os.path.join(games_dir, (known.get("folder") or app).strip()))
     folder = Path(download_dir)
     folder.mkdir(parents=True, exist_ok=True)
     with contextlib.suppress(FileExistsError), (folder / DOWNLOAD_MARKER).open("x"):
