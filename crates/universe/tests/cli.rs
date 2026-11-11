@@ -767,6 +767,27 @@ fn a_recording_its_folder_refuses_or_cuts_short_stays_whole_in_pending_and_unlin
         let linked = std::path::PathBuf::from(row["recording"].as_str().unwrap());
         assert_eq!(std::fs::read(&linked).unwrap(), clip, "{linked:?}");
     }
+
+    let (left, history) = (pending.join("20261106-000000.mkv"), rows.parent().unwrap());
+    let (before, linked) = (std::fs::read(&rows).unwrap(), folder.join("20261106-000000.mkv"));
+    for (mode, refused) in [(0o500, true), (0o700, true), (0o700, false)] {
+        std::fs::set_permissions(&pending, std::fs::Permissions::from_mode(mode)).unwrap();
+        std::fs::set_permissions(history, std::fs::Permissions::from_mode(if refused { 0o500 } else { 0o700 })).unwrap();
+        let out = universe(&dir, &["recording-file", "20261106-000000", left.to_str().unwrap()], &[NO_BUS]);
+        std::fs::set_permissions(history, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::fs::set_permissions(&pending, std::fs::Permissions::from_mode(0o700)).unwrap();
+        assert_eq!(out.status.success(), !refused, "{}", text(&out.stderr));
+        assert_eq!(std::fs::read(&linked).unwrap(), clip, "the linked clip stays whole");
+        assert_eq!(left.exists(), refused, "the source stays only for a retry");
+        assert_eq!(std::fs::read_dir(&folder).unwrap().count(), 2, "nothing staged stays beside them");
+        if refused {
+            assert_eq!(std::fs::read(&rows).unwrap(), before, "a refused history is left as it was");
+        }
+    }
+    let listed = rows_of(&rows);
+    assert_eq!(listed.len(), 2);
+    assert_eq!(listed[1]["unit"], "universe-game-quest-20261106-000000.service");
+    assert_eq!(std::path::Path::new(listed[1]["recording"].as_str().unwrap()), linked);
 }
 
 #[test]

@@ -68,7 +68,8 @@ operation; a dash means the surface doesn't expose it.
   the rows their history takes, each once and in order; a row whose game has no folder is dropped.
   `recording-file` lands on the waiting row, or on the history's once the row is in it, whether or
   not the record noted it filed. The clip goes into place whole first, then is linked: a move or
-  copy refused leaves no link and no partial file, a link refused takes the clip back, and either
+  copy refused leaves no link and no partial file, a link refused takes the clip back (a clip
+  already filed under its name stays until the new one is linked), and either
   way it exits 1 with the clip where it was, for the hook to retry. Without a marker, a row goes only into a history that
   reads without it. A record that cannot be written keeps the marker and its undo: the open goes on,
   the next one tries again, and `launch` refuses, naming the folder, until it can.
