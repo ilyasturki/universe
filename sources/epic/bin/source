@@ -43,6 +43,7 @@ NOT_LOGGED_IN = "<not logged in>"
 NO_CREDENTIALS = "ValueError: No saved credentials"  # legendary's traceback when a verb that logs in runs signed out
 LOGIN_FAILED = "Login failed!"  # list-installed --check-updates goes on from it: prints its cached list and exits 0
 ADOPT_RETRY_S = 3600
+DOWNLOAD_MARKER = ".universe-download"
 ANTICHEAT_DEPTH = 3
 ANTICHEATS = (("easyanticheat", "eac_runtime", "PROTON_EAC_RUNTIME"), ("battleye", "battleye_runtime", "PROTON_BATTLEYE_RUNTIME"))
 IMAGE_TYPES = ("DieselGameBoxTall", "DieselGameBox", "OfferImageTall", "Thumbnail")
@@ -336,14 +337,6 @@ def load_partials():
     return partials if isinstance(partials, dict) else {}
 
 
-def folder_identity(folder):
-    try:
-        stat = os.stat(folder)
-    except OSError:
-        return None
-    return [stat.st_dev, stat.st_ino]
-
-
 def set_partial(app, entry):
     partials = load_partials()
     if entry is None:
@@ -433,13 +426,15 @@ def restore_forgotten(settings, installs):
     for app, game in (forgotten if isinstance(forgotten, dict) else {}).items():
         if app in installs or not isinstance(game, dict) or not playable(game):
             continue
-        partial = partials.get(app) or {}
-        download = partial.get("dir")
-        if download and Path(game["install_path"]).resolve() == Path(download).resolve():
-            started_on = partial.get("games_dir_identity")
-            current = folder_identity(settings["games_dir"])
-            if not started_on or not current or started_on == current:
+        partial = partials.get(app)
+        # Older downloads have no folder marker, so absence cannot prove a whole copy.
+        if not isinstance(partial, dict) or partial.get("download_marker") != DOWNLOAD_MARKER:
+            continue
+        try:
+            if any(entry.name == DOWNLOAD_MARKER for entry in Path(game["install_path"]).iterdir()):
                 continue
+        except OSError:
+            continue
         back[app] = game
     if not back:
         return installs
@@ -562,7 +557,11 @@ def cmd_install(settings, args):
         log(f"no sizes: {exc}")
         sizes = {}
     download_dir = os.path.join(games_dir, known.get("folder") or app)
-    set_partial(app, {"dir": download_dir, "title": title, "games_dir_identity": folder_identity(games_dir), **sizes})
+    folder = Path(download_dir)
+    folder.mkdir(parents=True, exist_ok=True)
+    with contextlib.suppress(FileExistsError), (folder / DOWNLOAD_MARKER).open("x"):
+        pass
+    set_partial(app, {"dir": download_dir, "title": title, "download_marker": DOWNLOAD_MARKER, **sizes})
     gone = installed_games(settings).get(app)
     if gone and not playable(gone):
         # legendary diffs manifests, not the disk: a game it lists downloads nothing until it forgets the folder.
@@ -577,6 +576,8 @@ def cmd_install(settings, args):
         app,
         "--base-path",
         games_dir,
+        "--game-folder",
+        known.get("folder") or app,
         "--platform",
         "Windows",
         "--skip-sdl",
@@ -588,6 +589,7 @@ def cmd_install(settings, args):
     install = installs.get(app)
     if install is None:
         raise SourceError(f"legendary finished but {title} is not installed" + (f": {error}" if error else ""))
+    (folder / DOWNLOAD_MARKER).unlink()
     set_partial(app, None)
     set_forgotten(app, None)
     game_event(settings, app, install.get("title") or title, True, install, known, installs)

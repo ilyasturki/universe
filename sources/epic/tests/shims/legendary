@@ -80,7 +80,8 @@ elif verb in ("install", "update"):
         print("[cli] INFO: Download size is 0, the game is either already up to date or has not changed. Exiting...", file=sys.stderr, flush=True)
         sys.exit(0)
     if verb == "install":
-        folder = Path(rest[rest.index("--base-path") + 1]) / os.environ.get("SHIM_FOLDER", app)
+        game_folder = rest[rest.index("--game-folder") + 1] if "--game-folder" in rest else os.environ.get("SHIM_FOLDER", app)
+        folder = Path(rest[rest.index("--base-path") + 1]) / game_folder
     else:
         folder = Path(installed[app]["install_path"])
     folder.mkdir(parents=True, exist_ok=True)

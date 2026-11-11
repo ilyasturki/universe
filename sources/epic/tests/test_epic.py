@@ -158,16 +158,17 @@ def test_info_reports_the_manifest_sizes(env, run):
     assert calls(env) == [["info", "Min", "--json", "--platform", "Windows"]]
 
 
-def test_install_streams_bytes_and_lands_the_game(env, run, monkeypatch):
-    seed_cache(env, [{"id": "Min", "title": "Hades", "folder": "Hades", "owned_dlcs": []}])
+@pytest.mark.parametrize("cached", [False, True], ids=["uncached-folder", "cached-folder"])
+def test_install_streams_bytes_and_lands_the_game(env, run, monkeypatch, cached):
+    if cached:
+        seed_cache(env, [{"id": "Min", "title": "Hades", "folder": "Hades", "owned_dlcs": []}])
     monkeypatch.setenv("SHIM_FOLDER", "Hades")
     code, events, _ = run("install", "Min")
     assert code == 0
     assert [(e["done"], e["total"]) for e in events[:2]] == [(1048576, 2097152), (2097152, 2097152)], "chunks become bytes of the announced download"
     game = events[2]
-    assert (game["id"], game["dir"], game["exe"], game["build"], game["umu_id"]) == ("Min", str(env["games"] / "Hades"), "x64/Hades.exe", "1.0", "umu-1145360")
-    install = next(c for c in calls(env) if "install" in c)
-    assert install == ["-y", "install", "Min", "--base-path", str(env["games"]), "--platform", "Windows", "--skip-sdl", "--with-dlcs"]
+    folder = env["games"] / ("Hades" if cached else "Min")
+    assert (game["id"], game["dir"], game["exe"], game["build"], game["umu_id"]) == ("Min", str(folder), "x64/Hades.exe", "1.0", "umu-1145360")
     assert json.loads((env["data"] / "partials.json").read_text()) == {}, "a finished install leaves no partial"
 
 
@@ -209,10 +210,13 @@ def test_a_game_a_failed_reinstall_forgot_comes_back_with_its_drive(env, run, mo
     assert code == 0 and not old.exists(), "legendary knows it again, so it removes it"
 
 
-def test_a_returning_games_drive_restores_the_whole_copy_after_a_cut_install(env, run, monkeypatch):
+@pytest.mark.parametrize("resume", [False, True], ids=["no-resume-file", "paused"])
+def test_a_returning_games_drive_restores_the_whole_copy_after_a_cut_install(env, run, monkeypatch, resume):
     logged_in(env)
     seed_cache(env, [{"id": "Min", "title": "Hades", "folder": "Hades", "owned_dlcs": []}])
-    install_state(env, {"Min": hades(env)})
+    monkeypatch.setenv("SHIM_FOLDER", "Hades")
+    code, _, err = run("install", "Min")
+    assert code == 0, err
     folder = env["games"] / "Hades"
     program = folder / "x64" / "Hades.exe"
     program.write_bytes(b"MZ whole game")
@@ -222,12 +226,16 @@ def test_a_returning_games_drive_restores_the_whole_copy_after_a_cut_install(env
     env["games"].rename(away)
     env["games"].mkdir()
     monkeypatch.setenv("SHIM_FOLDER", "Hades")
-    monkeypatch.setenv("SHIM_MODE", "cut-program")
+    monkeypatch.setenv("SHIM_MODE", "cut-program" if resume else "cut-program-no-resume")
     code, _, _ = run("install", "Min")
     assert code == 1 and program.read_bytes() == b"MZ"
     code, events, err = run("scan")
     assert code == 0, err
-    assert [(e["id"], e["installed"], e.get("partial_dir")) for e in events if e["event"] == "game"] == [("Min", False, str(folder))]
+    games = [e for e in events if e["event"] == "game"]
+    if resume:
+        assert [(e["id"], e["installed"], e.get("partial_dir")) for e in games] == [("Min", False, str(folder))]
+    else:
+        assert games == []
     assert not any(c[:2] == ["-y", "import"] for c in calls(env))
     env["games"].rename(env["tmp"] / "cut-download")
     away.rename(env["games"])
@@ -257,9 +265,16 @@ def test_a_cut_download_is_never_restored_as_the_old_copy(env, run, monkeypatch,
     monkeypatch.setenv("SHIM_MODE", "cut-program" if resume else "cut-program-no-resume")
     code, _, _ = run("install", "Min")
     assert code == 1 and (folder / "x64" / "Hades.exe").is_file()
-    for legacy_entry in (False, True):
-        if legacy_entry:
+    for restore_record in ("current", "old-forgotten", "unmarked-download"):
+        if restore_record == "old-forgotten":
             (env["data"] / "forgotten.json").write_text(json.dumps({"Min": old}))
+        elif restore_record == "unmarked-download":
+            partials_path = env["data"] / "partials.json"
+            partials = json.loads(partials_path.read_text())
+            partials["Min"].pop("download_marker")
+            partials["Min"]["games_dir_identity"] = [0, 0]
+            partials_path.write_text(json.dumps(partials))
+            (folder / ".universe-download").unlink()
         code, events, err = run("scan")
         assert code == 0, err
         assert not any(c[:2] == ["-y", "import"] for c in calls(env)), "the new program is not the old whole copy"
