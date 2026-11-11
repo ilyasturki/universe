@@ -336,6 +336,14 @@ def load_partials():
     return partials if isinstance(partials, dict) else {}
 
 
+def folder_identity(folder):
+    try:
+        stat = os.stat(folder)
+    except OSError:
+        return None
+    return [stat.st_dev, stat.st_ino]
+
+
 def set_partial(app, entry):
     partials = load_partials()
     if entry is None:
@@ -425,10 +433,13 @@ def restore_forgotten(settings, installs):
     for app, game in (forgotten if isinstance(forgotten, dict) else {}).items():
         if app in installs or not isinstance(game, dict) or not playable(game):
             continue
-        download = (partials.get(app) or {}).get("dir")
+        partial = partials.get(app) or {}
+        download = partial.get("dir")
         if download and Path(game["install_path"]).resolve() == Path(download).resolve():
-            set_forgotten(app, None)
-            continue
+            started_on = partial.get("games_dir_identity")
+            current = folder_identity(settings["games_dir"])
+            if not started_on or not current or started_on == current:
+                continue
         back[app] = game
     if not back:
         return installs
@@ -551,7 +562,7 @@ def cmd_install(settings, args):
         log(f"no sizes: {exc}")
         sizes = {}
     download_dir = os.path.join(games_dir, known.get("folder") or app)
-    set_partial(app, {"dir": download_dir, "title": title, **sizes})
+    set_partial(app, {"dir": download_dir, "title": title, "games_dir_identity": folder_identity(games_dir), **sizes})
     gone = installed_games(settings).get(app)
     if gone and not playable(gone):
         # legendary diffs manifests, not the disk: a game it lists downloads nothing until it forgets the folder.
@@ -560,9 +571,6 @@ def cmd_install(settings, args):
         proc = legendary(settings, "uninstall", app, "--keep-files", yes=True)
         if proc.returncode != 0:
             raise failure("uninstall", proc)
-    forgotten = (load_json(forgotten_path()) or {}).get(app)
-    if forgotten and Path(forgotten["install_path"]).resolve() == Path(download_dir).resolve():
-        set_forgotten(app, None)
     error = legendary_stream(
         settings,
         "install",

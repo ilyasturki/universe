@@ -207,6 +207,36 @@ def test_a_game_a_failed_reinstall_forgot_comes_back_with_its_drive(env, run, mo
     assert code == 0 and not old.exists(), "legendary knows it again, so it removes it"
 
 
+def test_a_returning_games_drive_restores_the_whole_copy_after_a_cut_install(env, run, monkeypatch):
+    logged_in(env)
+    seed_cache(env, [{"id": "Min", "title": "Hades", "folder": "Hades", "owned_dlcs": []}])
+    install_state(env, {"Min": hades(env)})
+    folder = env["games"] / "Hades"
+    program = folder / "x64" / "Hades.exe"
+    program.write_bytes(b"MZ whole game")
+    save = folder / "z-save.dat"
+    save.write_bytes(b"player progress")
+    away = env["tmp"] / "drive-away"
+    env["games"].rename(away)
+    env["games"].mkdir()
+    monkeypatch.setenv("SHIM_FOLDER", "Hades")
+    monkeypatch.setenv("SHIM_MODE", "cut-program")
+    code, _, _ = run("install", "Min")
+    assert code == 1 and program.read_bytes() == b"MZ"
+    code, events, err = run("scan")
+    assert code == 0, err
+    assert [(e["id"], e["installed"], e.get("partial_dir")) for e in events if e["event"] == "game"] == [("Min", False, str(folder))]
+    assert not any(c[:2] == ["-y", "import"] for c in calls(env))
+    env["games"].rename(env["tmp"] / "cut-download")
+    away.rename(env["games"])
+    code, events, err = run("scan")
+    assert code == 0, err
+    games = [e for e in events if e["event"] == "game"]
+    assert [(e["id"], e["installed"], e["dir"], e.get("partial_dir")) for e in games] == [("Min", True, str(folder), None)]
+    assert ["-y", "import", "Min", str(folder), "--with-dlcs", "--platform", "Windows"] in calls(env)
+    assert program.read_bytes() == b"MZ whole game" and save.read_bytes() == b"player progress"
+
+
 @pytest.mark.parametrize("after_uninstall", [False, True], ids=["reinstall-cut", "reinstalled-uninstalled-install-cut"])
 @pytest.mark.parametrize("resume", [False, True], ids=["no-resume-file", "paused"])
 def test_a_cut_download_is_never_restored_as_the_old_copy(env, run, monkeypatch, after_uninstall, resume):

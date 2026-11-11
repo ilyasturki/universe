@@ -21,7 +21,7 @@ The first listing can take up to 15 minutes. It leaves out the games that instal
 
 Installing, updating and uninstalling work as for [every store](/docs/library/gog/#installing-from-the-store). **Install owned DLCs**, on by default, installs the DLCs you own with each game.
 
-A game whose files are gone, with the drive they were on or by hand, reads as not installed, and **Install** downloads it again. If the drive comes back before the new copy is installed, the game plays from the drive again. A download stopped partway is never treated as that old copy, even if its program has already arrived.
+A game whose files are gone, with the drive they were on or by hand, reads as not installed, and **Install** downloads it again. If the drive comes back before the new copy is installed, the game plays from the drive again. A paused download needs to finish before you can play that copy.
 
 ## Heroic's Epic games
 
