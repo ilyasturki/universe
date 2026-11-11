@@ -825,6 +825,8 @@ mod tests {
         std::fs::write(stale.join("user.reg"), vec![0u8; 100]).unwrap();
         std::fs::create_dir_all(env.path().join("recordings/.archive/gone")).unwrap();
         let mut gone = Game::new("Gone");
+        gone.launch.runner = "wine".into();
+        gone.launch.prefix = stale.to_string_lossy().into();
         gone.removed_at = "2026-01-01T00:00:00+01:00".into();
         gone.save().unwrap();
         let (core, memory) = open().await;
@@ -851,6 +853,10 @@ mod tests {
 
         assert!(matches!(core.trash_leftover(&held.to_string_lossy()).await, Err(Error::Invalid(_))), "a held prefix is no leftover");
         assert!(matches!(core.trash_leftover("/etc").await, Err(Error::Invalid(_))));
+        let backing_up = saves::hold_game("gone").await.unwrap();
+        let refused = core.trash_leftover(&stale.to_string_lossy()).await;
+        assert!(matches!(refused, Err(Error::Busy(_))) && stale.is_dir(), "the prefix of a removed game backing up its saves: {refused:?}");
+        drop(backing_up);
         core.trash_leftover(&stale.to_string_lossy()).await.unwrap();
         assert!(!stale.exists() && held.is_dir());
 
