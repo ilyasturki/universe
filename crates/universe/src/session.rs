@@ -1450,6 +1450,26 @@ pub(crate) mod tests {
         (core.uninstall("sample").await, core.remove("sample", true).await, core.source_update("fake", "s1", None).await)
     }
 
+    /// Storage's leftovers of Sample once removed, each kind with what trashing it answers; Sample is back in the library after.
+    async fn trash_leftovers(core: &Core) -> Vec<(String, Result<()>)> {
+        core.remove("sample", false).await.unwrap();
+        let storage = core.storage().await.unwrap();
+        let mut out = Vec::new();
+        for l in storage["leftovers"].as_array().unwrap().iter().filter(|l| l["id"] == "sample") {
+            out.push((l["kind"].as_str().unwrap().to_string(), core.trash_leftover(l["path"].as_str().unwrap()).await));
+        }
+        let _ = core.restore("sample").await;
+        out
+    }
+
+    fn leftovers_busy(answers: Vec<(String, Result<()>)>, when: &str) {
+        let kinds: Vec<&str> = answers.iter().map(|(k, _)| k.as_str()).collect();
+        assert_eq!(kinds, ["prefix", "recordings", "game", "logs"], "{when}");
+        for (kind, answer) in answers {
+            assert!(matches!(answer, Err(Error::Busy(_))), "{when}: trashing its leftover {kind} is {answer:?}");
+        }
+    }
+
     #[tokio::test]
     async fn a_game_starting_running_or_backing_up_its_saves_keeps_its_files() {
         let sb = sandbox();
@@ -1532,18 +1552,21 @@ pub(crate) mod tests {
                 while !gate.with_extension("entered").exists() {
                     tokio::time::sleep(std::time::Duration::from_millis(20)).await;
                 }
-                let answers = destroy(core).await;
+                let answers = (destroy(core).await, trash_leftovers(core).await);
                 std::fs::write(gate.with_extension("release"), "").unwrap();
                 answers
             }
         };
         let (sid, preparing, starting) = tokio::join!(core.launch("sample", "", ""), held_at(hook_gate.clone()), held_at(gate.clone()));
         let sid = sid.unwrap();
-        busy(preparing, "in its pre-launch hook");
-        busy(starting, "starting");
+        busy(preparing.0, "in its pre-launch hook");
+        leftovers_busy(preparing.1, "in its pre-launch hook");
+        busy(starting.0, "starting");
+        leftovers_busy(starting.1, "starting");
         untouched("starting", &game_toml);
 
         busy(destroy(&core).await, "running");
+        leftovers_busy(trash_leftovers(&core).await, "running");
         assert_eq!(core.source_update("fake", "", None).await.unwrap(), 0, "updating all leaves the running game's pending");
         untouched("running", &game_toml);
         core.source_update("fake", "s2", None).await.unwrap();
@@ -1554,12 +1577,12 @@ pub(crate) mod tests {
         core.remove("sample", false).await.unwrap();
         assert!(matches!(core.source_trash("fake", "s1").await, Err(Error::Busy(_))), "removed from the library, its files still are the running game's");
         core.restore("sample").await.unwrap();
-        let game_toml = toml_of();
 
         memory.finish(&format!("universe-game-sample-{sid}.service"), 0);
         core.session_end("sample", &sid, None, None).await.unwrap();
         let held = crate::saves::hold_game("sample").await.unwrap();
         busy(destroy(&core).await, "its saves backing up");
+        leftovers_busy(trash_leftovers(&core).await, "its saves backing up");
         untouched("its saves backing up", &game_toml);
         drop(held);
         core.uninstall("sample").await.unwrap();

@@ -329,6 +329,14 @@ impl Core {
         let Some(item) = listed.iter().find(|l| l.path == path) else {
             return Err(Error::Invalid(format!("{path} is no leftover: only what the Storage view lists goes to the trash")));
         };
+        let busy = self.busy_games().await?;
+        let dir = Path::new(&item.path);
+        let owner = games.iter().map(|r| &r.game).filter(|g| busy.contains(&g.id)).find(|g| {
+            g.id == item.id || (item.kind == "prefix" && has_prefix(g) && { let p = prefix_of(g, &config); p.starts_with(dir) || dir.starts_with(&p) })
+        });
+        if let Some(g) = owner {
+            self.refuse_busy(g).await?;
+        }
         trash::delete(&item.path).map_err(|e| Error::Io(format!("trash {}: {e}", item.path)))?;
         if item.kind == "game" {
             self.reload_all().await;
