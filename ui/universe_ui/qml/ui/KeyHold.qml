@@ -5,6 +5,7 @@ FocusScope {
     id: hold
 
     property bool holding: false
+    property bool passTabKeys: false
     property var held: []
 
     function release() {
@@ -15,8 +16,10 @@ FocusScope {
     }
 
     function take(event, pressed) {
-        if (!holding)
+        if (!holding || passTabKeys && (api.keys.isPrevPage(event) || api.keys.isNextPage(event))) {
+            event.accepted = false;
             return;
+        }
         if (!event.isAutoRepeat)
             held.push({
                 key: event.key,

@@ -964,6 +964,7 @@ FocusScope {
                         anchors.fill: parent
                         focus: true
                         holding: !pageLoader.item
+                        passTabKeys: true
                     }
 
                     function publish() {
