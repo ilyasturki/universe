@@ -752,13 +752,17 @@ fn a_recording_its_folder_refuses_or_cuts_short_stays_whole_in_pending_and_unlin
     assert!(listed.iter().all(|r| r["recording"].is_null()), "no row names a clip that is not whole: {listed:?}");
     assert_eq!(std::fs::read_dir(&folder).unwrap().count(), 0, "no partial file stays");
 
-    for session in ["20261105-000000", "20261106-000000"] {
+    for (session, moved) in [("20261105-000000", true), ("20261106-000000", false)] {
         let left = pending.join(format!("{session}.mkv"));
         assert_eq!(std::fs::read(&left).unwrap(), clip, "whole where the retry finds it");
+        let mode = if moved { 0o700 } else { 0o500 };
+        std::fs::set_permissions(&pending, std::fs::Permissions::from_mode(mode)).unwrap();
         let out = universe(&dir, &["recording-file", session, left.to_str().unwrap()], &[NO_BUS]);
+        std::fs::set_permissions(&pending, std::fs::Permissions::from_mode(0o700)).unwrap();
         assert!(out.status.success(), "{}", text(&out.stderr));
-        assert!(!left.exists());
+        assert_eq!(left.exists(), !moved, "a copy linked leaves a source it cannot remove");
     }
+    assert_eq!(std::fs::read_dir(&folder).unwrap().count(), 2, "no .part left beside them");
     for row in rows_of(&rows) {
         let linked = std::path::PathBuf::from(row["recording"].as_str().unwrap());
         assert_eq!(std::fs::read(&linked).unwrap(), clip, "{linked:?}");
