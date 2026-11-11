@@ -81,7 +81,8 @@ elif verb in ("install", "update"):
         sys.exit(0)
     if verb == "install":
         game_folder = rest[rest.index("--game-folder") + 1] if "--game-folder" in rest else os.environ.get("SHIM_FOLDER", app)
-        folder = Path(rest[rest.index("--base-path") + 1]) / game_folder
+        # legendary 0.21.1 core.py:1593 strips the folder name before joining and normalizing.
+        folder = Path(os.path.normpath(os.path.join(rest[rest.index("--base-path") + 1], game_folder.strip())))
     else:
         folder = Path(installed[app]["install_path"])
     folder.mkdir(parents=True, exist_ok=True)

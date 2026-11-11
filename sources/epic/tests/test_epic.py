@@ -247,11 +247,15 @@ def test_a_returning_games_drive_restores_the_whole_copy_after_a_cut_install(env
     assert program.read_bytes() == b"MZ whole game" and save.read_bytes() == b"player progress"
 
 
-@pytest.mark.parametrize("after_uninstall", [False, True], ids=["reinstall-cut", "reinstalled-uninstalled-install-cut"])
+@pytest.mark.parametrize(
+    ("after_uninstall", "folder_name"),
+    [(False, "Hades"), (True, "Hades"), (False, "Hades ")],
+    ids=["reinstall-cut", "reinstalled-uninstalled-install-cut", "trailing-space"],
+)
 @pytest.mark.parametrize("resume", [False, True], ids=["no-resume-file", "paused"])
-def test_a_cut_download_is_never_restored_as_the_old_copy(env, run, monkeypatch, after_uninstall, resume):
+def test_a_cut_download_is_never_restored_as_the_old_copy(env, run, monkeypatch, after_uninstall, folder_name, resume):
     logged_in(env)
-    seed_cache(env, [{"id": "Min", "title": "Hades", "folder": "Hades", "owned_dlcs": []}])
+    seed_cache(env, [{"id": "Min", "title": "Hades", "folder": folder_name, "owned_dlcs": []}])
     old = hades(env)
     folder = env["games"] / "Hades"
     (folder / "x64" / "Hades.exe").unlink()
