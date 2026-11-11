@@ -152,7 +152,9 @@ fn starting_lock_file() -> std::path::PathBuf {
 
 /// Held by a launch from its marker's write until its unit started; another launch meanwhile is `Busy` at once.
 fn hold_starting() -> Result<std::fs::File> {
-    let f = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(starting_lock_file())?;
+    let p = starting_lock_file();
+    std::fs::create_dir_all(p.parent().unwrap())?;
+    let f = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(p)?;
     match f.try_lock() {
         Ok(()) => Ok(f),
         Err(std::fs::TryLockError::WouldBlock) => {
