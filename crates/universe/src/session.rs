@@ -461,6 +461,22 @@ impl Core {
         self.host.units.is_active(&m.current.unit).await.then_some(m.current)
     }
 
+    /// The game running, or still starting (`true`): what nothing may take its files from.
+    pub(crate) async fn occupant(&self) -> Result<Option<(Current, bool)>> {
+        let Some(m) = read_marker() else { return Ok(None) };
+        if self.host.units.is_active(&m.current.unit).await {
+            return Ok(Some((m.current, false)));
+        }
+        let starting = {
+            let _lock = marker_lock()?;
+            read_marker().filter(|m| m.starting && still_starting())
+        };
+        if let Some(m) = starting {
+            return Ok(Some((m.current, true)));
+        }
+        Ok(self.current().await.map(|c| (c, false)))
+    }
+
     /// A marker without an active unit (crash, reboot) is closed now; one that cannot be read goes, or every launch would be `Busy`.
     /// Then every close left unfinished resumes. An `Err` leaves a marker its close could not be kept for: a launch waits for it.
     pub async fn reconcile(&self) -> Result<()> {

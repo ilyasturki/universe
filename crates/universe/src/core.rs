@@ -504,6 +504,7 @@ impl Core {
     /// The game stays in the library with its hours, journal and recordings, not installed.
     pub async fn uninstall(&self, id: &str) -> Result<()> {
         let r = self.get(id).await?;
+        self.refuse_busy(&r.game).await?;
         match self.uninstaller(&r.game).await {
             Some(m) => {
                 self.run_verb(&m, "uninstall", std::slice::from_ref(&r.game.source.id), None).await?;
@@ -536,6 +537,9 @@ impl Core {
 
     pub async fn remove(&self, id: &str, purge: bool) -> Result<()> {
         let r = self.get(id).await?;
+        if purge {
+            self.refuse_busy(&r.game).await?;
+        }
         let config = self.config.read().await.clone();
         let prefix = crate::launcher::prefix_of(&r.game, &config);
         if purge && prefix.starts_with(config.prefixes_root()) {
@@ -2492,6 +2496,19 @@ impl Core {
         };
         let mut n = 0;
         for t in targets {
+            let standing: Vec<Game> =
+                self.games.read().await.iter().filter(|g| g.game.source.kind == source && g.game.source.id == t).map(|g| g.game.clone()).collect();
+            let mut busy = Ok(());
+            for g in &standing {
+                busy = busy.and(self.refuse_busy(g).await);
+            }
+            match busy {
+                Err(e) if game_id.is_empty() => {
+                    tracing::warn!("{t}: {e}");
+                    continue;
+                }
+                busy => busy?,
+            }
             let events = self.run_verb(&m, "update", std::slice::from_ref(&t), progress.as_deref_mut()).await.map_err(|e| Error::Io(format!("{t}: {e}")))?;
             let mut up = crate::upstream::Upstream::load();
             if up.applied(source, &t) {

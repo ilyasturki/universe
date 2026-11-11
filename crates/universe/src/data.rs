@@ -219,10 +219,21 @@ impl Core {
     }
 
     async fn running(&self, ids: &[String]) -> Result<()> {
-        match self.current().await {
-            Some(c) if ids.contains(&c.id) => Err(Error::Busy(format!("{} is running", c.id))),
+        match self.occupant().await? {
+            Some((c, starting)) if ids.contains(&c.id) => {
+                Err(Error::Busy(format!("{} is {}: quit it, then try again", c.title, if starting { "starting" } else { "running" })))
+            }
             _ => Ok(()),
         }
+    }
+
+    /// Running, starting, or its saves being backed up or restored: its install, prefix and store record stay as they are.
+    pub(crate) async fn refuse_busy(&self, game: &Game) -> Result<()> {
+        self.running(std::slice::from_ref(&game.id)).await?;
+        if saves::game_held(&game.id) {
+            return Err(Error::Busy(format!("{}'s saves are being backed up or restored: try again when that ends", game.title)));
+        }
+        Ok(())
     }
 
     /// Where a game's data lives, each part with its size: install, prefix, saves, Universe's own files, recordings, logs.

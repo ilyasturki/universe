@@ -269,6 +269,12 @@ pub(crate) async fn hold_game(id: &str) -> Result<std::fs::File> {
     lock(config_dir().join("locks").join(id)).await
 }
 
+/// Whether a backup, restore or export of the game holds its lock now, in any process.
+pub(crate) fn game_held(id: &str) -> bool {
+    let Ok(f) = std::fs::File::open(config_dir().join("locks").join(id)) else { return false };
+    matches!(f.try_lock(), Err(std::fs::TryLockError::WouldBlock))
+}
+
 async fn lock(file: PathBuf) -> Result<std::fs::File> {
     std::fs::create_dir_all(file.parent().unwrap_or(&file))?;
     let lock = std::fs::File::create(file)?;
