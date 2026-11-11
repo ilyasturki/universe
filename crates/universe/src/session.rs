@@ -1579,6 +1579,7 @@ pub(crate) mod tests {
 
         busy(destroy(&core).await, "running");
         leftovers_busy(trash_leftovers(&core).await, "running");
+        assert!(core.trash_leftover(&prefix.to_string_lossy()).await.is_err(), "running and in the library, its prefix is no leftover");
         assert_eq!(core.source_update("fake", "", None).await.unwrap(), 0, "updating all leaves the running game's pending");
         untouched("running", &game_toml);
         core.source_update("fake", "s2", None).await.unwrap();
