@@ -1,3 +1,5 @@
+import os
+
 import pytest
 from looks import FocusTrace, Look, invoke, read, settle
 from PySide6.QtCore import Qt
@@ -112,27 +114,35 @@ def look(request, upgraded, rendered_looks, tmp_path):
 
 
 @pytest.fixture
-def held(monkeypatch):
-    """The clip's download waits for `release()`, so it lands under a What's new already shown."""
-    import threading
+def held_open(rendered_looks, monkeypatch, tmp_path):
+    """The clip's player reads its file through a pipe a separate process fills past its first bytes only once the test calls the fixture, so its open lasts until then."""
+    import subprocess
 
     from universe_ui.fake_core import FakeCore
 
-    gate = threading.Event()
     fetch = FakeCore.changelog_media
+    pipe, gate, feeders = tmp_path / "clip.mp4", tmp_path / "gate", []
+    feed = 'exec > "$3"; head -c 4096 "$1"; i=0; while [ ! -e "$2" ] && [ $i -lt 1000 ]; do sleep 0.01; i=$((i + 1)); done; tail -c +4097 "$1"'
 
     def changelog_media(self, url):
-        if url.endswith(".mp4"):
-            gate.wait(10)
-        return fetch(self, url)
+        out = fetch(self, url)
+        if not url.endswith(".mp4"):
+            return out
+        os.mkfifo(pipe)
+        feeders.append(subprocess.Popen(["sh", "-c", feed, "sh", out, gate, pipe], start_new_session=True))
+        return str(pipe)
 
     monkeypatch.setattr(FakeCore, "changelog_media", changelog_media)
-    yield gate.set
-    gate.set()
+    yield gate.touch
+    gate.touch()
+    for feeder in feeders:
+        try:
+            feeder.wait(2)
+        except subprocess.TimeoutExpired:
+            feeder.kill()
 
 
-def test_b_while_the_clip_opens_closes_whats_new(held, look):
-    from PySide6.QtCore import QTimer
+def test_b_while_the_clip_opens_closes_whats_new(held_open, look):
     from PySide6.QtMultimedia import QMediaPlayer
     from shiboken6 import isValid
 
@@ -140,22 +150,14 @@ def test_b_while_the_clip_opens_closes_whats_new(held, look):
     page = look.page("changelogPage")
     if look.name == "reprise":
         under(look, "homePage")
-    until(lambda: next(iter(named(page, "releaseStill")), None), "the still is shown")
-    settle(look.window)
-    pressed = []
-
-    def b():
-        if not pressed:
-            player = next(iter(named(page, "releaseClip"))).property("player")
-            pressed.append((player, player.mediaStatus()))
-            look.press(Qt.Key.Key_Escape)
-
-    changelog.filesChanged.connect(lambda: QTimer.singleShot(0, b))
-    held()
-    until(lambda: pressed, "the clip lands")
-    player, status = pressed[0]
-    assert status == QMediaPlayer.MediaStatus.LoadingMedia, "B came while the clip's player was opening it"
+    clip = until(lambda: next((c for c in named(page, "releaseClip") if c.property("player") is not None), None), "the clip lands")
+    player = clip.property("player")
+    assert player.mediaStatus() == QMediaPlayer.MediaStatus.LoadingMedia
+    look.press(Qt.Key.Key_Escape)
     until(lambda: changelog.pending == [], "B closes it, seen")
+    until(lambda: not isValid(clip), "B tears the clip down")
+    assert isValid(player) and player.mediaStatus() == QMediaPlayer.MediaStatus.LoadingMedia, "the GUI went on while the player still opens its file"
+    held_open()
     until(lambda: not isValid(player), "the player goes once its open settled")
 
 
