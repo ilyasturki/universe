@@ -443,6 +443,7 @@ result = subprocess.run(
     capture_output=True,
     text=True,
     timeout=5,
+    check=False,
 )
 assert result.returncode == 1 and title in result.stderr, result
 (tmp / "refusal.txt").write_text(result.stderr.splitlines()[-1].removeprefix("steam: ") + "\n")

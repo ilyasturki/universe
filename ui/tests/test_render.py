@@ -982,6 +982,7 @@ def test_a_refused_install_shows_the_stores_words_whole(look, api, fake, tmp_pat
         capture_output=True,
         text=True,
         timeout=5,
+        check=False,
     )
     assert result.returncode == 1 and title in result.stderr, "the store refuses the long-titled game's missing files"
     refusal = result.stderr.splitlines()[-1].removeprefix("steam: ")
