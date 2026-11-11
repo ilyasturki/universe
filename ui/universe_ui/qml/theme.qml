@@ -957,6 +957,15 @@ FocusScope {
                         }
                     }
 
+                    KeyHold {
+                        id: tabHold
+                        objectName: "tabKeyHold"
+
+                        anchors.fill: parent
+                        focus: true
+                        holding: !pageLoader.item
+                    }
+
                     function publish() {
                         if (isActive && item)
                             root.activePage = item;
@@ -967,6 +976,7 @@ FocusScope {
                             item.leave();
                     }
                     onLoaded: {
+                        tabHold.release();
                         activated = true;
                         publish();
                         if ("menuOpen" in item)

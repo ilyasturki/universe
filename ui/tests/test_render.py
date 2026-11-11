@@ -90,25 +90,44 @@ stacked = pytest.mark.parametrize("look", ["switch2", "ps5"], indirect=True)
 @reprise
 def test_a_look_picked_on_switch2_then_left_at_once_runs_nothing_its_settings_queued(look, api):
     look.settings("themes")
+    settle(look.window)
+    trace = FocusTrace(look.window)
     look.switch("switch2")
     until(lambda: look.page("settingsPage").property("shownId") == "themes")
+    settle(look.window)
+    assert trace.stop().foreign("settingsPage") == []
+    trace = FocusTrace(look.window)
     look.press(Qt.Key.Key_Escape)
     look.home()
+    settle(look.window)
+    assert trace.stop().foreign("settingsPage", "homePage") == []
+    trace = FocusTrace(look.window)
     look.press(Qt.Key.Key_Down)
     look.press(Qt.Key.Key_Right, 4)
     look.press(Qt.Key.Key_Return)
     look.page("controllersPage")
+    settle(look.window)
+    assert trace.stop().foreign("homePage", "bottomBar", "controllersPage") == []
+    trace = FocusTrace(look.window)
     look.press(Qt.Key.Key_Return)
     page = look.page("settingsPage")
     look.press(Qt.Key.Key_Up, 2)
     look.press(Qt.Key.Key_Return)
     until(lambda: page.property("shownId") == "themes" and page.property("zone") == "rows", "the crawl's path ends on the Themes rows")
+    assert trace.stop().foreign("controllersPage", "settingsPage") == []
+    trace = FocusTrace(look.window)
     look.press(Qt.Key.Key_Return)
     assert api.theme.current == "reprise", "A on the first row picks Universe, whose Settings lands on Themes"
     look.switch("ps5")
     page = look.page("settingsPage")
     until(lambda: page.property("sectionId") == "themes", "the next look lands on its own Themes")
     assert api.theme.landing == ""
+    until(lambda: page.property("activeFocus") is True and page.property("zone") == "parts")
+    before = look.window.activeFocusItem()
+    look.press(Qt.Key.Key_Right)
+    until(lambda: page.property("zone") == "rows" and look.window.activeFocusItem() != before, "Right after landing moves focus from the parts to their rows")
+    settle(look.window)
+    assert trace.stop().foreign("settingsPage", "tabKeyHold") == []
 
 
 @pytest.mark.parametrize("skip", [pytest.param(True, id="skipped"), pytest.param(False, id="played", marks=pytest.mark.slow)])
@@ -1018,6 +1037,15 @@ def test_a_key_pressed_while_a_reprise_page_loads_reaches_it_once_loaded(look, a
     invoke(root, "openSub", "pages/GameSettingsPage.qml", {"game": game})
     look.press(Qt.Key.Key_Escape)
     until(lambda: root.property("subOpen") is False, "B pressed as a sub page loads closes it")
+    settle(look.window)
+    trace = FocusTrace(look.window)
+    root.goToTab(root.property("settingsTab"))
+    assert "tabKeyHold" in focus_names(look.window)
+    look.press(Qt.Key.Key_Right)
+    page = look.page("settingsPage")
+    until(lambda: page.findChild(QObject, "settingsCards").property("activeFocus") is True, "Right while the tab loads enters its cards once loaded")
+    settle(look.window)
+    assert trace.stop().foreign("homePage", "tabKeyHold", "settingsPage") == []
 
 
 @reprise
