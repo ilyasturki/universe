@@ -108,32 +108,58 @@ fn is_root(dir: &Path, roots: &[PathBuf]) -> bool {
 /// claimed with that id or the one a Lutris import parked, then one whose exe or folder lies in `dir`. A live game before
 /// an archived one, whichever way each is found.
 fn store_twin<'a>(games: &'a [Resolved], source: &str, sid: &str, dir: Option<&Path>, roots: &[PathBuf]) -> Option<&'a Resolved> {
-    if sid.is_empty() {
-        return None;
+    let install = StoreInstall::new(source, sid, dir, roots);
+    [true, false].into_iter().find_map(|live| {
+        let pool = || games.iter().filter(move |x| x.game.removed_at.is_empty() == live);
+        [Twin::Own, Twin::Named, Twin::Within].into_iter().find_map(|how| pool().find(|x| install.is(&x.game, how)))
+    })
+}
+
+/// Every library game, live or archived, that `store_twin` could take for the store's `sid`.
+fn store_twins<'a>(games: &'a [Resolved], source: &str, sid: &str, dir: Option<&Path>, roots: &[PathBuf]) -> Vec<&'a Resolved> {
+    let install = StoreInstall::new(source, sid, dir, roots);
+    games.iter().filter(|x| [Twin::Own, Twin::Named, Twin::Within].into_iter().any(|how| install.is(&x.game, how))).collect()
+}
+
+#[derive(Clone, Copy)]
+enum Twin {
+    Own,
+    Named,
+    Within,
+}
+
+struct StoreInstall<'a> {
+    source: &'a str,
+    sid: &'a str,
+    found: bool,
+    holder: Option<PathBuf>,
+}
+
+impl<'a> StoreInstall<'a> {
+    fn new(source: &'a str, sid: &'a str, dir: Option<&Path>, roots: &[PathBuf]) -> Self {
+        let dir = dir.filter(|d| !d.as_os_str().is_empty());
+        StoreInstall { source, sid, found: dir.is_some(), holder: dir.filter(|d| !is_root(d, roots)).map(real) }
     }
-    let dir = dir.filter(|d| !d.as_os_str().is_empty());
-    let holder = dir.filter(|d| !is_root(d, roots)).map(real);
-    let parked = |g: &Game| g.extra.get("lutris").and_then(|l| l.get(format!("{source}_manifest"))).and_then(|v| v.as_str()) == Some(sid);
-    let twin = |live: bool| {
-        let pool = || games.iter().filter(move |x| !live || x.game.removed_at.is_empty());
-        if let Some(own) = pool().find(|x| x.game.source.kind == source && x.game.source.id == sid) {
-            return Some(own);
+
+    fn is(&self, g: &Game, how: Twin) -> bool {
+        if self.sid.is_empty() {
+            return false;
         }
-        dir?;
-        let free = || pool().filter(|x| unclaimed(&x.game));
-        if let Some(found) = free().find(|x| x.game.source.id == sid || parked(&x.game)) {
-            return Some(found);
+        match how {
+            Twin::Own => g.source.kind == self.source && g.source.id == self.sid,
+            Twin::Named => {
+                let parked = || g.extra.get("lutris").and_then(|l| l.get(format!("{}_manifest", self.source))).and_then(|v| v.as_str()) == Some(self.sid);
+                self.found && unclaimed(g) && (g.source.id == self.sid || parked())
+            }
+            Twin::Within => {
+                let Some(holder) = self.holder.as_deref().filter(|_| unclaimed(g)) else { return false };
+                [(!g.launch.exe.is_empty()).then(|| g.exe_path()), (!g.source.dir.is_empty()).then(|| paths::expand(&g.source.dir))]
+                    .into_iter()
+                    .flatten()
+                    .any(|p| real(&p).starts_with(holder))
+            }
         }
-        let holder = holder.as_deref()?;
-        free().find(|x| {
-            let g = &x.game;
-            [(!g.launch.exe.is_empty()).then(|| g.exe_path()), (!g.source.dir.is_empty()).then(|| paths::expand(&g.source.dir))]
-                .into_iter()
-                .flatten()
-                .any(|p| real(&p).starts_with(holder))
-        })
-    };
-    twin(true).or_else(|| twin(false))
+    }
 }
 
 /// Why `dir` must not go to the trash: games are installed into it, or another game's exe, folder or prefix is in it, or it is
@@ -2498,10 +2524,37 @@ impl Core {
         } else {
             vec![game_id.to_string()]
         };
+        let busy = self.busy_games().await?;
+        // A scan that fails leaves every busy game no store claimed standing for any install.
+        let found: Option<BTreeMap<String, PathBuf>> = if busy.is_empty() || targets.is_empty() {
+            Some(BTreeMap::new())
+        } else {
+            match self.run_verb(&m, "scan", &[], None).await {
+                Ok(events) => Some(
+                    Self::game_events(&events)
+                        .into_iter()
+                        .filter(|g| g.get("installed").and_then(|v| v.as_bool()) == Some(true))
+                        .filter_map(|g| Some((g.get("id")?.as_str()?.to_string(), paths::expand(g.get("dir")?.as_str()?))))
+                        .collect(),
+                ),
+                Err(e) => {
+                    tracing::warn!("{source}: scan failed, so no update reaches a busy game it may hold: {e}");
+                    None
+                }
+            }
+        };
+        let roots = self.install_roots().await;
         let mut n = 0;
         for t in targets {
-            let standing: Vec<Game> =
-                self.games.read().await.iter().filter(|g| g.game.source.kind == source && g.game.source.id == t).map(|g| g.game.clone()).collect();
+            let standing: Vec<Game> = {
+                let games = self.games.read().await;
+                let dir = found.as_ref().and_then(|f| f.get(&t)).map(PathBuf::as_path);
+                let mut twins = store_twins(&games, source, &t, dir, &roots);
+                if found.is_none() {
+                    twins.extend(games.iter().filter(|x| unclaimed(&x.game)));
+                }
+                twins.into_iter().filter(|x| busy.contains(&x.game.id)).map(|x| x.game.clone()).collect()
+            };
             let mut busy = Ok(());
             for g in &standing {
                 busy = busy.and(self.refuse_busy(g).await);

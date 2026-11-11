@@ -236,6 +236,13 @@ impl Core {
         Ok(())
     }
 
+    /// The ids of the game running or starting and of every game whose saves are being backed up or restored.
+    pub(crate) async fn busy_games(&self) -> Result<Vec<String>> {
+        let mut ids: Vec<String> = self.occupant().await?.map(|(c, _)| c.id).into_iter().collect();
+        ids.extend(self.games.read().await.iter().map(|x| &x.game.id).filter(|id| saves::game_held(id)).cloned());
+        Ok(ids)
+    }
+
     /// Where a game's data lives, each part with its size: install, prefix, saves, Universe's own files, recordings, logs.
     pub async fn game_data(&self, id: &str) -> Result<Value> {
         let r = self.get(id).await?;

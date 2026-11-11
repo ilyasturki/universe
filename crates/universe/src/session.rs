@@ -1567,6 +1567,53 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
+    async fn a_store_update_spares_a_busy_import_it_finds_installed() {
+        let sb = sandbox();
+        let dir = sb._env.path().to_path_buf();
+        let (asked, scan_fails) = (dir.join("asked"), dir.join("scan-fails"));
+        let src = dir.join("sources/fake");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::write(src.join("source.toml"), "api = 2\nid = \"fake\"\nname = \"Fake\"\nexe = \"run\"\ncapabilities = [\"update\"]\n").unwrap();
+        let game = |id: &str| format!("echo '{{\"event\":\"game\",\"id\":\"{id}\",\"title\":\"{id}\",\"owned\":true,\"installed\":true,\"dir\":\"{}\"}}'", dir.join("games").join(id).display());
+        std::fs::write(
+            src.join("run"),
+            format!(
+                "#!/bin/sh\ncase \"$1$2\" in\nupdate) echo '{{\"event\":\"update\",\"id\":\"s1\"}}'; echo '{{\"event\":\"update\",\"id\":\"s2\"}}' ;;\nscan) [ -e '{}' ] && exit 1; {}; {} ;;\nupdate*) echo \"$1 $2\" >> '{}' ;;\nesac\necho '{{\"event\":\"done\"}}'\n",
+                scan_fails.display(),
+                game("s1"),
+                game("s2"),
+                asked.display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(src.join("run"), std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+        let file = paths::config_file();
+        let text = std::fs::read_to_string(&file).unwrap().replace("[modules]\nenabled = []\n", "");
+        std::fs::write(&file, format!("{text}[modules]\nenabled = []\n[sources]\nenabled = [\"fake\"]\n")).unwrap();
+        for (id, kind, store_id, folder) in [("sample", "", "", "s1"), ("other", "fake", "s2", "s2")] {
+            let folder = dir.join("games").join(folder);
+            std::fs::create_dir_all(&folder).unwrap();
+            let mut g = Game::load(&paths::game_dir(id).join("game.toml")).unwrap_or_else(|_| Game::new(id));
+            g.source.kind = kind.into();
+            g.source.id = store_id.into();
+            g.source.dir = folder.to_string_lossy().into();
+            g.save().unwrap();
+        }
+        let (core, _memory) = open().await;
+        core.launch("sample", "", "").await.unwrap();
+
+        for scan in ["answers", "fails"] {
+            let refused = core.source_update("fake", "s1", None).await;
+            assert!(matches!(refused, Err(Error::Busy(_))), "the store's s1 is the running import's folder, its scan {scan}: {refused:?}");
+            assert!(!asked.exists(), "its scan {scan}: the store is not asked");
+            std::fs::write(&scan_fails, "").unwrap();
+        }
+        std::fs::remove_file(&scan_fails).unwrap();
+        assert_eq!(core.source_update("fake", "", None).await.unwrap(), 1, "updating all skips the running import");
+        assert_eq!(std::fs::read_to_string(&asked).unwrap(), "update s2\n", "and still updates another game");
+    }
+
+    #[tokio::test]
     async fn a_history_that_cannot_be_written_holds_back_neither_the_undo_nor_the_next_game() {
         use std::os::unix::fs::PermissionsExt;
         let sb = sandbox();
