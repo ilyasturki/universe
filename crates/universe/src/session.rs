@@ -1461,7 +1461,7 @@ pub(crate) mod tests {
         core.remove("sample", false).await.unwrap();
         let storage = core.storage().await.unwrap();
         let mut out = Vec::new();
-        for l in storage["leftovers"].as_array().unwrap().iter().filter(|l| l["id"] == "sample") {
+        for l in storage["leftovers"].as_array().unwrap().iter().filter(|l| l["id"] == "sample" || l["kind"] == "prefix") {
             out.push((l["kind"].as_str().unwrap().to_string(), core.trash_leftover(l["path"].as_str().unwrap()).await));
         }
         core.restore("sample").await.unwrap();
@@ -1524,13 +1524,19 @@ pub(crate) mod tests {
         };
         let sample = install("sample", "s1");
         let other = install("other", "s2");
+        let config = crate::config::Config::load().unwrap();
+        let prefix = config.prefixes_root().join("shared");
+        let linked = dir.join("linked-prefix");
+        std::fs::create_dir_all(&prefix).unwrap();
+        std::os::unix::fs::symlink(&prefix, &linked).unwrap();
         let mut g = Game::load(&paths::game_dir("sample").join("game.toml")).unwrap();
         g.launch.pre_command = format!("touch {0}.entered; while [ ! -e {0}.release ] && [ -e {0} ]; do sleep 0.02; done", gate.display());
+        g.launch.runner = "wine".into();
+        g.launch.runner_exe = "/bin/true".into();
+        g.launch.prefix = linked.to_string_lossy().into();
         g.save().unwrap();
         std::fs::write(&gate, "").unwrap();
         let (core, memory) = open().await;
-        let config = crate::config::Config::load().unwrap();
-        let prefix = config.prefixes_root().join("sample");
         let clip = config.recordings_root().join("sample/clip.mkv");
         for f in [prefix.join("user.reg"), clip.clone(), paths::game_logs_dir("sample").join("last.log")] {
             std::fs::create_dir_all(f.parent().unwrap()).unwrap();
@@ -1591,6 +1597,10 @@ pub(crate) mod tests {
         leftovers_busy(trash_leftovers(&core).await, "its saves backing up");
         untouched("its saves backing up", &game_toml);
         drop(held);
+        core.remove("sample", false).await.unwrap();
+        core.trash_leftover(&prefix.to_string_lossy()).await.unwrap();
+        assert!(!prefix.exists(), "once its game is idle, its prefix goes to the trash");
+        core.restore("sample").await.unwrap();
         core.uninstall("sample").await.unwrap();
         assert_eq!(std::fs::read_to_string(&asked).unwrap(), "uninstall s1\n", "once the game and its backup ended");
     }
