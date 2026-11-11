@@ -1435,7 +1435,8 @@ pub(crate) mod tests {
         std::fs::write(
             src.join("run"),
             format!(
-                "#!/bin/sh\ncase \"$1\" in\nuninstall|update) [ -n \"$2\" ] && echo \"$1 $2\" >> '{}' ;;\nesac\necho '{{\"event\":\"done\"}}'\n",
+                "#!/bin/sh\ncase \"$1$2\" in\nupdate) echo '{{\"event\":\"update\",\"id\":\"s1\"}}' ;;\nscan) echo '{{\"event\":\"game\",\"id\":\"s1\",\"title\":\"Sample\",\"owned\":true,\"installed\":true,\"dir\":\"{}\"}}' ;;\nuninstall*|update*) echo \"$1 $2\" >> '{}' ;;\nesac\necho '{{\"event\":\"done\"}}'\n",
+                dir.join("games/sample").display(),
                 asked.display()
             ),
         )
@@ -1471,13 +1472,14 @@ pub(crate) mod tests {
             std::fs::create_dir_all(f.parent().unwrap()).unwrap();
             std::fs::write(&f, "kept").unwrap();
         }
-        let game_toml = std::fs::read_to_string(paths::game_dir("sample").join("game.toml")).unwrap();
-        let untouched = |when: &str| {
+        let toml_of = || std::fs::read_to_string(paths::game_dir("sample").join("game.toml")).unwrap();
+        let game_toml = toml_of();
+        let untouched = |when: &str, game_toml: &str| {
             assert_eq!(std::fs::read_to_string(sample.join("launch.exe")).unwrap(), "sample", "{when}: its install");
             for f in [prefix.join("user.reg"), clip.clone(), paths::game_logs_dir("sample").join("last.log")] {
                 assert!(f.is_file(), "{when}: {} stays", f.display());
             }
-            assert_eq!(std::fs::read_to_string(paths::game_dir("sample").join("game.toml")).unwrap(), game_toml, "{when}: its game.toml");
+            assert_eq!(toml_of(), game_toml, "{when}: its game.toml");
             assert!(!asked.exists(), "{when}: the store is not asked");
         };
         let busy = |(uninstall, purge, update): (Result<()>, Result<()>, Result<usize>), when: &str| {
@@ -1497,21 +1499,26 @@ pub(crate) mod tests {
         let (sid, answers) = tokio::join!(core.launch("sample", "", ""), starting);
         let sid = sid.unwrap();
         busy(answers, "starting");
-        untouched("starting");
+        untouched("starting", &game_toml);
 
         busy(destroy(&core).await, "running");
-        untouched("running");
+        assert_eq!(core.source_update("fake", "", None).await.unwrap(), 0, "updating all leaves the running game's pending");
+        untouched("running", &game_toml);
         core.source_update("fake", "s2", None).await.unwrap();
         core.uninstall("other").await.unwrap();
         assert_eq!(std::fs::read_to_string(&asked).unwrap(), "update s2\nuninstall s2\n", "another game is not refused");
         assert!(other.join("launch.exe").is_file(), "its files are the store's to remove");
         std::fs::remove_file(&asked).unwrap();
+        core.remove("sample", false).await.unwrap();
+        assert!(matches!(core.source_trash("fake", "s1").await, Err(Error::Busy(_))), "removed from the library, its files still are the running game's");
+        core.restore("sample").await.unwrap();
+        let game_toml = toml_of();
 
         memory.finish(&format!("universe-game-sample-{sid}.service"), 0);
         core.session_end("sample", &sid, None, None).await.unwrap();
         let held = crate::saves::hold_game("sample").await.unwrap();
         busy(destroy(&core).await, "its saves backing up");
-        untouched("its saves backing up");
+        untouched("its saves backing up", &game_toml);
         drop(held);
         core.uninstall("sample").await.unwrap();
         assert_eq!(std::fs::read_to_string(&asked).unwrap(), "uninstall s1\n", "once the game and its backup ended");
