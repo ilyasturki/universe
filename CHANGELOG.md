@@ -1,5 +1,49 @@
 # Changelog
 
+## [0.0.15] - 2026-11-12
+
+### Added
+
+- When Big Screen can't start, it says why and names a settings file it cannot read, in every look: fix the problem, then **A** on **Try again** carries on; **B** quits or logs out of the Universe session.
+- Universe Desktop offers **Try Again** after a failed or stalled start, and **Show Settings File** opens the folder of a broken settings file. Actions that need the library wait until it is ready.
+- **Bring back**, at the end of **Add a game** in every look, restores a hidden or removed game without a keyboard; a removed game brings its recordings back, except those you trashed, and the cursor stays on a remaining row.
+- An uninstalled store game in Universe Desktop has **Install** on its page and **Install…** in its right-click menu; both open its store and ask before downloading.
+
+### Changed
+
+- Video capture records beside a game's finished recordings, avoiding a long copy after you quit.
+
+### Fixed
+
+- In the Universe look, button presses made while a page loads reach that page instead of being lost, and **LB** and **RB** can still switch tabs while a tab loads.
+- Switching looks opens Appearance with the cursor ready in the new look, without a reset left over from the old page.
+- The PS5 look's Add Game page lays out its status message without a sizing loop.
+- First-run setup waits until Universe has looked at the machine before offering launchers or letting you continue; new steps no longer steal the skip question's focus, and **HOME** or **Start** no longer dismisses setup in the Switch 2 and PS5 looks.
+- The question to set up a controller's buttons waits until first-run setup and any open menu or question have closed, instead of interrupting setup or being lost.
+- Invalid settings changes are refused before `config.toml` is changed, and a failed write no longer leaves a partial settings file.
+- A session that can't be added to its history is kept for the next start or launch without stopping Universe from opening; interrupted session cleanup resumes, and finishing a session from two windows no longer counts it twice.
+- A session history cut off inside a character no longer hides its other sessions.
+- A second launch is refused at once while a game is still starting, including its pre-launch steps.
+- Uninstalling, purging and store updates refuse a game that is starting, running or having its saves backed up; Storage leaves its leftovers alone too, including a prefix reached through a link.
+- Moving or resetting a prefix, restoring saves and changing cloud saves are refused while the game is still starting, not just while it runs.
+- Restoring saves works after **Reset the Prefix…** and after Steam removes a game's prefix, before the next launch; saves it would replace are backed up first, and a failed backup stops the restore.
+- An interrupted save backup no longer replaces a good backup with a partial one, and a new backup reaches disk before older ones are removed. Backups, restores and exports no longer change the same backups at the same time.
+- A damaged list of save backups is reported without deleting the backups, and **Export the Backups** can still zip them; a failed export leaves no finished zip.
+- In Big Screen, results and failures from **Data and saves**, a Lutris import or trashing Storage leftovers still show after you leave the page.
+- The Universe look's Settings › Storage says when it is measuring; a failed measure puts the cursor on **Measure again**, which says why and tries again on **A**.
+- A GOG game uninstalled and installed again downloads the whole game instead of trusting the old download's record.
+- GOG stays signed in offline, and login and achievement requests that cannot reach GOG say so instead of claiming you signed out or entered a rejected code.
+- An update check a store cannot answer no longer marks its games **Up to date**; an earlier answer stays, and the store is asked again at the next check. A GOG game with no build for the chosen system is no longer mistaken for a failed check.
+- An Epic game whose folder or program is gone reads as not installed and can be downloaded again; a complete copy on a returning drive can be used again, but an unfinished replacement is not mistaken for a playable game.
+- A Steam game whose folder or program is gone reads as not installed, and **Install** asks you to verify its files in Steam rather than pretending to download it again.
+- Store failures show their own instructions in full, including Steam's missing-file advice, instead of an unhelpful error wrapper or a cut-off message.
+- A reinstalled store game follows its new program location when the old copy is gone; scans keep a program you picked yourself, even when its drive is disconnected.
+- The Switch 2 look's News names unwritten entries and offers the write, retry, cancel or removal each state allows; **Start** can show why an entry failed or waits, and an open article follows its entry as it changes.
+- **Trash both** keeps the journal entry when its recording cannot be trashed, including in the Switch 2 and PS5 looks.
+- Asking for a journal entry from a session with no recording or screenshots says there is nothing to write from.
+- Filing a recording no longer exposes a partial copy or loses the original clip when its session cannot be updated, and retrying a filed recording keeps it in place.
+- **B** can leave a recording or close What's new while its clip is still opening, without freezing Big Screen. In the Universe look, stepping to another recording gives it its own player and clears the last frame of the one you left.
+
 ## [0.0.14] - 2026-10-26
 
 ### Added
@@ -418,6 +462,7 @@
 
 - The search row on the Reprise look's store page.
 
+[0.0.15]: https://github.com/ilyasturki/universe/compare/v0.0.14...v0.0.15
 [0.0.14]: https://github.com/ilyasturki/universe/compare/v0.0.13...v0.0.14
 [0.0.13]: https://github.com/ilyasturki/universe/compare/v0.0.12...v0.0.13
 [0.0.12]: https://github.com/ilyasturki/universe/compare/v0.0.11...v0.0.12

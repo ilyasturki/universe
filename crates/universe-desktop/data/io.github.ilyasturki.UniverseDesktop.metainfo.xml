@@ -44,6 +44,52 @@
     <color type="primary" scheme_preference="dark">#c64600</color>
   </branding>
   <releases>
+    <release version="0.0.15" date="2026-11-12">
+      <description>
+        <p>Added</p>
+        <ul>
+          <li>When Big Screen can't start, it says why and names a settings file it cannot read, in every look: fix the problem, then <em>A</em> on <em>Try again</em> carries on; <em>B</em> quits or logs out of the Universe session.</li>
+          <li>Universe Desktop offers <em>Try Again</em> after a failed or stalled start, and <em>Show Settings File</em> opens the folder of a broken settings file. Actions that need the library wait until it is ready.</li>
+          <li><em>Bring back</em>, at the end of <em>Add a game</em> in every look, restores a hidden or removed game without a keyboard; a removed game brings its recordings back, except those you trashed, and the cursor stays on a remaining row.</li>
+          <li>An uninstalled store game in Universe Desktop has <em>Install</em> on its page and <em>Install…</em> in its right-click menu; both open its store and ask before downloading.</li>
+        </ul>
+        <p>Changed</p>
+        <ul>
+          <li>Video capture records beside a game's finished recordings, avoiding a long copy after you quit.</li>
+        </ul>
+        <p>Fixed</p>
+        <ul>
+          <li>In the Universe look, button presses made while a page loads reach that page instead of being lost, and <em>LB</em> and <em>RB</em> can still switch tabs while a tab loads.</li>
+          <li>Switching looks opens Appearance with the cursor ready in the new look, without a reset left over from the old page.</li>
+          <li>The PS5 look's Add Game page lays out its status message without a sizing loop.</li>
+          <li>First-run setup waits until Universe has looked at the machine before offering launchers or letting you continue; new steps no longer steal the skip question's focus, and <em>HOME</em> or <em>Start</em> no longer dismisses setup in the Switch 2 and PS5 looks.</li>
+          <li>The question to set up a controller's buttons waits until first-run setup and any open menu or question have closed, instead of interrupting setup or being lost.</li>
+          <li>Invalid settings changes are refused before <code>config.toml</code> is changed, and a failed write no longer leaves a partial settings file.</li>
+          <li>A session that can't be added to its history is kept for the next start or launch without stopping Universe from opening; interrupted session cleanup resumes, and finishing a session from two windows no longer counts it twice.</li>
+          <li>A session history cut off inside a character no longer hides its other sessions.</li>
+          <li>A second launch is refused at once while a game is still starting, including its pre-launch steps.</li>
+          <li>Uninstalling, purging and store updates refuse a game that is starting, running or having its saves backed up; Storage leaves its leftovers alone too, including a prefix reached through a link.</li>
+          <li>Moving or resetting a prefix, restoring saves and changing cloud saves are refused while the game is still starting, not just while it runs.</li>
+          <li>Restoring saves works after <em>Reset the Prefix…</em> and after Steam removes a game's prefix, before the next launch; saves it would replace are backed up first, and a failed backup stops the restore.</li>
+          <li>An interrupted save backup no longer replaces a good backup with a partial one, and a new backup reaches disk before older ones are removed. Backups, restores and exports no longer change the same backups at the same time.</li>
+          <li>A damaged list of save backups is reported without deleting the backups, and <em>Export the Backups</em> can still zip them; a failed export leaves no finished zip.</li>
+          <li>In Big Screen, results and failures from <em>Data and saves</em>, a Lutris import or trashing Storage leftovers still show after you leave the page.</li>
+          <li>The Universe look's Settings › Storage says when it is measuring; a failed measure puts the cursor on <em>Measure again</em>, which says why and tries again on <em>A</em>.</li>
+          <li>A GOG game uninstalled and installed again downloads the whole game instead of trusting the old download's record.</li>
+          <li>GOG stays signed in offline, and login and achievement requests that cannot reach GOG say so instead of claiming you signed out or entered a rejected code.</li>
+          <li>An update check a store cannot answer no longer marks its games <em>Up to date</em>; an earlier answer stays, and the store is asked again at the next check. A GOG game with no build for the chosen system is no longer mistaken for a failed check.</li>
+          <li>An Epic game whose folder or program is gone reads as not installed and can be downloaded again; a complete copy on a returning drive can be used again, but an unfinished replacement is not mistaken for a playable game.</li>
+          <li>A Steam game whose folder or program is gone reads as not installed, and <em>Install</em> asks you to verify its files in Steam rather than pretending to download it again.</li>
+          <li>Store failures show their own instructions in full, including Steam's missing-file advice, instead of an unhelpful error wrapper or a cut-off message.</li>
+          <li>A reinstalled store game follows its new program location when the old copy is gone; scans keep a program you picked yourself, even when its drive is disconnected.</li>
+          <li>The Switch 2 look's News names unwritten entries and offers the write, retry, cancel or removal each state allows; <em>Start</em> can show why an entry failed or waits, and an open article follows its entry as it changes.</li>
+          <li><em>Trash both</em> keeps the journal entry when its recording cannot be trashed, including in the Switch 2 and PS5 looks.</li>
+          <li>Asking for a journal entry from a session with no recording or screenshots says there is nothing to write from.</li>
+          <li>Filing a recording no longer exposes a partial copy or loses the original clip when its session cannot be updated, and retrying a filed recording keeps it in place.</li>
+          <li><em>B</em> can leave a recording or close What's new while its clip is still opening, without freezing Big Screen. In the Universe look, stepping to another recording gives it its own player and clears the last frame of the one you left.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.0.14" date="2026-10-26">
       <description>
         <p>Added</p>
