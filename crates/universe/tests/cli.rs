@@ -18,7 +18,8 @@ fn command(dir: &tempfile::TempDir, args: &[&str], env: &[(&str, &str)]) -> Comm
         std::fs::create_dir_all(dir.path().join(sub)).unwrap();
         cmd.env(var, dir.path().join(sub));
     }
-    cmd.env_remove("NO_COLOR").env_remove("CLICOLOR_FORCE").env("HOME", dir.path());
+    // buildRustPackage exports RUST_LOG="", which hides the warnings these tests read.
+    cmd.env_remove("NO_COLOR").env_remove("CLICOLOR_FORCE").env_remove("RUST_LOG").env("HOME", dir.path());
     // The emulators' own configs (discover's folder scan) live under these, not the Universe homes.
     cmd.env("XDG_CONFIG_HOME", dir.path().join(".config")).env("XDG_DATA_HOME", dir.path().join(".local/share"));
     cmd.envs(env.iter().copied()).args(args);
