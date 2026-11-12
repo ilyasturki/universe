@@ -2327,6 +2327,17 @@ impl Core {
             }
             game.mark_added();
         }
+        if !exe.is_empty() && !dir.is_empty() {
+            let relative = Path::new(&exe).strip_prefix(&dir).unwrap_or_else(|_| Path::new(&exe));
+            if game.launch.exe.is_empty()
+                || (!game.is_installed()
+                    && !game.source.dir.is_empty()
+                    && relative.is_relative()
+                    && game.exe_path() == paths::expand(&game.source.dir).join(relative))
+            {
+                game.launch.exe = Path::new(&dir).join(&exe).to_string_lossy().into();
+            }
+        }
         if !dir.is_empty() {
             game.source.dir = dir.clone();
         }
@@ -2357,10 +2368,6 @@ impl Core {
         }
         if let Some(d) = g.get("dlcs").and_then(|v| v.as_array()) {
             game.source.dlcs = d.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect();
-        }
-        if !exe.is_empty() && !dir.is_empty() && !game.is_installed() {
-            let p = if exe.starts_with('/') { PathBuf::from(&exe) } else { Path::new(&dir).join(&exe) };
-            game.launch.exe = p.to_string_lossy().into();
         }
         game.save()?;
         let art: BTreeMap<String, String> =
@@ -3168,6 +3175,28 @@ scan) echo '{"event":"game","id":"1","title":"One","owned":true,"installed":fals
         let saved: Vec<serde_json::Value> =
             serde_json::from_str(&std::fs::read_to_string(paths::sources_data_dir("fake").join("library.json")).unwrap()).unwrap();
         assert_eq!(saved[0]["disk_size"], 1000, "the file carries them too");
+    }
+
+    #[tokio::test]
+    async fn a_store_scan_preserves_a_hand_set_program_on_a_missing_drive() {
+        let dir = fake_source(
+            r#"scan) printf '{"event":"game","id":"7","title":"Quest","owned":true,"installed":true,"dir":"%s/installed/Quest","exe":"bin/quest.sh"}\n' "$UNIVERSE_DATA_HOME" ;;"#,
+        );
+        let installed = dir.path().join("data/installed/Quest");
+        std::fs::create_dir_all(installed.join("bin")).unwrap();
+        std::fs::write(installed.join("bin/quest.sh"), "#!/bin/sh\n").unwrap();
+        let core = open().await;
+        core.source_scan("fake", None).await.unwrap();
+        for custom in [dir.path().join("unmounted/Quest/bin/quest.sh"), installed.join("custom.sh")] {
+            let custom = custom.to_str().unwrap();
+            core.set("quest", "launch.exe", custom).await.unwrap();
+            let reopened = open().await;
+            assert!(!reopened.get("quest").await.unwrap().game.is_installed());
+            reopened.source_scan("fake", None).await.unwrap();
+            let game = reopened.get("quest").await.unwrap().game;
+            assert_eq!(game.launch.exe, custom, "a scan must keep the player's program even when its drive is missing");
+            assert!(!game.is_installed(), "the store's installed program is not the player's program");
+        }
     }
 
     #[tokio::test]
