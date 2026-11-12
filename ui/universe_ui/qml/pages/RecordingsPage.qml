@@ -49,6 +49,7 @@ FocusScope {
     function renewPlayer() {
         if (String(player.source) === "")
             return;
+        player.stop();
         Clips.release(player);
         player = Clips.recording(video);
     }

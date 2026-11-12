@@ -67,3 +67,8 @@ def test_stepping_off_a_recording_while_its_file_opens(held_open, api, look):
     player = page.property("player")
     assert player.source().toString().endswith(f"{GAME}-{stepped}.mkv")
     until(lambda: player.playbackState() == QMediaPlayer.PlaybackState.PlayingState and player.position() > 0, "the next recording plays")
+    sink = player.videoSink()
+    assert sink.videoFrame().isValid()
+    look.press(Qt.Key.Key_Escape)
+    look.press(Qt.Key.Key_Up)
+    assert not sink.videoFrame().isValid(), "the recording stepped off leaves its last frame on screen"
