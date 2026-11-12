@@ -25,6 +25,6 @@ A game you add by hand gets its art, description and screenshots the next time U
 
 ## Bringing a game back
 
-A game you hid or removed has a row at the end of **Add a game**. Press **A** on it and the game is back in every list. A removed game brings its recordings back with it.
+A game you hid or removed has a row at the end of **Add a game**. Press **A** on it and the game is back in every list. A removed game brings its recordings back, except those you trashed.
 
 The rows are there only while a game is hidden or removed.
