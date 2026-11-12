@@ -147,15 +147,15 @@ pocket="$(add "$tmp/games/pocket.gba" --runner mgba --title "Pocket Smoke")" || 
 IFS=$'\t' read -r game _ <<<"$quest"
 IFS=$'\t' read -r _ platform <<<"$pocket"
 
-mkdir -p "$tmp/sources/desktop-smoke" "$tmp/data/games/store-smoke"
-export UNIVERSE_SOURCES_PATH="$tmp/sources"
-cat >"$tmp/sources/desktop-smoke/source.toml" <<'EOF'
+# Stand-in stores go in the user's own folder: a packaged build's wrapper pins UNIVERSE_SOURCES_PATH to the shipped ones.
+mkdir -p "$tmp/config/sources/desktop-smoke" "$tmp/data/games/store-smoke"
+cat >"$tmp/config/sources/desktop-smoke/source.toml" <<'EOF'
 api = 2
 id = "desktop-smoke"
 name = "Desktop Smoke"
 exe = "run"
 EOF
-cat >"$tmp/sources/desktop-smoke/run" <<'EOF'
+cat >"$tmp/config/sources/desktop-smoke/run" <<'EOF'
 #!/bin/sh
 case "$1" in
     status) echo '{"event":"logged_in","user":"desktop-smoke"}' ;;
@@ -164,7 +164,7 @@ case "$1" in
 esac
 echo '{"event":"done"}'
 EOF
-chmod +x "$tmp/sources/desktop-smoke/run"
+chmod +x "$tmp/config/sources/desktop-smoke/run"
 cat >"$tmp/data/games/store-smoke/game.toml" <<'EOF'
 schema = 1
 id = "store-smoke"
@@ -274,13 +274,13 @@ done
 
 # Two more stores for the recovery: one signed out, one whose listing lacks the game.
 for store in out gone; do
-    mkdir -p "$tmp/sources/desktop-$store" "$tmp/data/games/store-$store"
-    sed "s/desktop-smoke/desktop-$store/" "$tmp/sources/desktop-smoke/source.toml" >"$tmp/sources/desktop-$store/source.toml"
+    mkdir -p "$tmp/config/sources/desktop-$store" "$tmp/data/games/store-$store"
+    sed "s/desktop-smoke/desktop-$store/" "$tmp/config/sources/desktop-smoke/source.toml" >"$tmp/config/sources/desktop-$store/source.toml"
     sed "s/desktop-smoke/desktop-$store/; s/store-smoke/store-$store/" "$tmp/data/games/store-smoke/game.toml" >"$tmp/data/games/store-$store/game.toml"
 done
-sed 's/logged_in/logged_out/' "$tmp/sources/desktop-smoke/run" >"$tmp/sources/desktop-out/run"
-sed 's/"id":"123"/"id":"456"/' "$tmp/sources/desktop-smoke/run" >"$tmp/sources/desktop-gone/run"
-chmod +x "$tmp/sources/desktop-out/run" "$tmp/sources/desktop-gone/run"
+sed 's/logged_in/logged_out/' "$tmp/config/sources/desktop-smoke/run" >"$tmp/config/sources/desktop-out/run"
+sed 's/"id":"123"/"id":"456"/' "$tmp/config/sources/desktop-smoke/run" >"$tmp/config/sources/desktop-gone/run"
+chmod +x "$tmp/config/sources/desktop-out/run" "$tmp/config/sources/desktop-gone/run"
 sed 's/^enabled = \["desktop-smoke"\]$/enabled = ["desktop-smoke", "desktop-out", "desktop-gone"]/' "$UNIVERSE_CONFIG_HOME/config.toml" >"$tmp/repaired.toml"
 grep -q desktop-gone "$tmp/repaired.toml" || fail "the repaired config enables no extra store"
 # Store Smoke loses its store until the page is open, so the page has to follow the store coming back.
@@ -421,7 +421,7 @@ else
 fi
 
 # A store that refuses an install says why in its own words, whole in a toast at the window's scripted size.
-smoke_run="$tmp/sources/desktop-smoke/run"
+smoke_run="$tmp/config/sources/desktop-smoke/run"
 cp "$smoke_run" "$tmp/smoke-run"
 python3 - "$repo" "$tmp" <<'PY'
 import json
@@ -456,7 +456,7 @@ cp "$tmp/smoke-run" "$smoke_run"
 # A store game whose folder went with an unmounted drive, installed again elsewhere through the CLI, plays from there.
 sed -i "s|^id = \"123\"$|&\ndir = \"$tmp/unmounted\"\n[launch]\nrunner = \"linux\"\nexe = \"$tmp/unmounted/game.sh\"|" "$store_game"
 moved="$tmp/games/moved"
-sed -i "s|^    info)|    install) mkdir -p '$moved' \&\& printf '#!/bin/sh\\n' >'$moved/game.sh' \&\& chmod +x '$moved/game.sh' \&\& echo '{\"event\":\"game\",\"id\":\"123\",\"title\":\"Uninstalled Game\",\"owned\":true,\"installed\":true,\"dir\":\"$moved\",\"exe\":\"game.sh\"}' ;;\n&|" "$tmp/sources/desktop-smoke/run"
+sed -i "s|^    info)|    install) mkdir -p '$moved' \&\& printf '#!/bin/sh\\n' >'$moved/game.sh' \&\& chmod +x '$moved/game.sh' \&\& echo '{\"event\":\"game\",\"id\":\"123\",\"title\":\"Uninstalled Game\",\"owned\":true,\"installed\":true,\"dir\":\"$moved\",\"exe\":\"game.sh\"}' ;;\n&|" "$tmp/config/sources/desktop-smoke/run"
 "$cli" install 123 --source desktop-smoke >"$out/reinstall.log" 2>&1 || fail "the CLI did not install the moved game ($out/reinstall.log)"
 run moved "action:win.open-game::store-smoke has:game.play"
 

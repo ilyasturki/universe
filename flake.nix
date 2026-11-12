@@ -457,7 +457,12 @@
           ''
             export HOME=$TMPDIR XDG_RUNTIME_DIR=$TMPDIR/runtime
             mkdir -m 700 $XDG_RUNTIME_DIR
-            DESKTOP_TEST_OUT=$out bash ${./tools/desktop-test}
+            DESKTOP_TEST_OUT=$out bash ${
+              pySrc [
+                "tools/desktop-test"
+                "sources/steam"
+              ]
+            }/tools/desktop-test
           '';
 
       pytestOf =
