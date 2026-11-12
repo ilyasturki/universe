@@ -44,3 +44,26 @@ def test_leaving_the_player_while_its_file_opens(held_open, api, look):
     assert isValid(player) and player.mediaStatus() == QMediaPlayer.MediaStatus.LoadingMedia, "the GUI went on while the player still opens its file"
     held_open()
     until(lambda: not isValid(player), "the player goes once its open settled")
+
+
+@pytest.mark.parametrize("look", ["reprise"], indirect=True)
+def test_stepping_off_a_recording_while_its_file_opens(held_open, api, look):
+    from PySide6.QtMultimedia import QMediaPlayer
+    from shiboken6 import isValid
+
+    page = look.open("pages/RecordingsPage.qml", {"game": api.allGames.byId(GAME), "session": SESSION})
+    until(lambda: page.property("currentSession") == SESSION, "the list lands on the session")
+    look.press(Qt.Key.Key_Return)
+    opening = until(lambda: (p := page.property("player")) is not None and p.property("source").toString() and p, "the player opens the file")
+    look.press(Qt.Key.Key_Escape)
+    look.press(Qt.Key.Key_Down)
+    stepped = page.property("currentSession")
+    assert stepped not in ("", SESSION)
+    assert isValid(opening) and opening.mediaStatus() == QMediaPlayer.MediaStatus.LoadingMedia, "the GUI went on while the player still opens its file"
+    assert page.property("player") is not opening
+    held_open()
+    until(lambda: not isValid(opening), "the abandoned player goes once its open settled")
+    look.press(Qt.Key.Key_Return)
+    player = page.property("player")
+    assert player.source().toString().endswith(f"{GAME}-{stepped}.mkv")
+    until(lambda: player.playbackState() == QMediaPlayer.PlaybackState.PlayingState and player.position() > 0, "the next recording plays")

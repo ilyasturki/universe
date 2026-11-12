@@ -43,8 +43,15 @@ FocusScope {
         interval: 200
         onTriggered: page.posterSource = page.frames && page.frames.thumbnail ? page.frames.thumbnail : ""
     }
-    readonly property QtObject player: Clips.recording(video)
+    property QtObject player: Clips.recording(video)
     Component.onDestruction: Clips.release(player)
+
+    function renewPlayer() {
+        if (String(player.source) === "")
+            return;
+        Clips.release(player);
+        player = Clips.recording(video);
+    }
     readonly property bool playing: player.playbackState === MediaPlayer.PlayingState
     readonly property bool stopped: player.playbackState === MediaPlayer.StoppedState
     readonly property real duration: player.duration > 0 ? player.duration : frames && frames.duration > 0 ? frames.duration * 1000 : current ? current.duration_s * 1000 : 0
@@ -96,8 +103,7 @@ FocusScope {
     readonly property real listWidth: Theme.dp(620)
 
     onGameChanged: {
-        player.stop();
-        player.source = "";
+        renewPlayer();
         index = 0;
         videoFocused = false;
         journalFocused = false;
@@ -126,8 +132,7 @@ FocusScope {
     }
 
     onCurrentChanged: {
-        player.stop();
-        player.source = "";
+        renewPlayer();
         scrub.scrubbing = false;
         journalFocused = false;
         posterSource = "";
