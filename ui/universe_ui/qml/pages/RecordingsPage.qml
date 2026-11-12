@@ -43,6 +43,8 @@ FocusScope {
         interval: 200
         onTriggered: page.posterSource = page.frames && page.frames.thumbnail ? page.frames.thumbnail : ""
     }
+    readonly property QtObject player: Clips.recording(video)
+    Component.onDestruction: Clips.release(player)
     readonly property bool playing: player.playbackState === MediaPlayer.PlayingState
     readonly property bool stopped: player.playbackState === MediaPlayer.StoppedState
     readonly property real duration: player.duration > 0 ? player.duration : frames && frames.duration > 0 ? frames.duration * 1000 : current ? current.duration_s * 1000 : 0
@@ -311,7 +313,7 @@ FocusScope {
 
     Scrubber {
         id: scrub
-        player: player
+        player: page.player
         duration: page.duration
         active: page.videoFocused
         onWoke: page.wake()
@@ -594,10 +596,9 @@ FocusScope {
             visible: !page.stopped
         }
 
-        RecordingPlayer {
-            id: player
-            videoOutput: video
-            onErrorOccurred: function (error, message) {
+        Connections {
+            target: page.player
+            function onErrorOccurred(error, message) {
                 page.wake();
             }
         }
@@ -643,8 +644,8 @@ FocusScope {
         Text {
             anchors.centerIn: parent
             anchors.verticalCenterOffset: Theme.dp(84)
-            visible: player.error !== MediaPlayer.NoError
-            text: player.errorString
+            visible: page.player.error !== MediaPlayer.NoError
+            text: page.player.errorString
             color: Theme.textSecondary
             font.family: Theme.sans
             font.pixelSize: Theme.dp(20)

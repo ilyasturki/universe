@@ -5,6 +5,7 @@ import "../../core/Format.js" as Format
 import "../sound"
 import "../ui"
 import "../../ui" as Base
+import "../../core" as Base
 import "../ui/Removal.js" as Removal
 
 FocusScope {
@@ -26,6 +27,8 @@ FocusScope {
     readonly property var game: row ? api.allGames.byId(row.gameId) : null
 
     property bool footerShown: true
+    readonly property QtObject player: Base.Clips.recording(video)
+    Component.onDestruction: Base.Clips.release(player)
     readonly property bool playing: player.playbackState === MediaPlayer.PlayingState
     readonly property bool stopped: player.playbackState === MediaPlayer.StoppedState
     readonly property bool failed: player.error !== MediaPlayer.NoError
@@ -161,7 +164,7 @@ FocusScope {
 
     Base.Scrubber {
         id: scrub
-        player: player
+        player: page.player
         duration: page.duration
         active: page.activeFocus
         onWoke: page.wake()
@@ -246,10 +249,9 @@ FocusScope {
         visible: !page.stopped && !page.failed
     }
 
-    Base.RecordingPlayer {
-        id: player
-        videoOutput: video
-        onErrorOccurred: function (error, message) {
+    Connections {
+        target: page.player
+        function onErrorOccurred(error, message) {
             page.wake();
         }
     }

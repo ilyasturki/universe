@@ -5,6 +5,7 @@ import "../../core/Format.js" as Format
 import "../sound"
 import "../ui"
 import "../../ui" as Base
+import "../../core" as Base
 import "../ui/Removal.js" as Removal
 
 // A recorded session full screen: the controls come up over its foot on any key and go once it plays on,
@@ -32,6 +33,8 @@ FocusScope {
     property var entry: null
 
     property bool controlsShown: true
+    readonly property QtObject player: Base.Clips.recording(video)
+    Component.onDestruction: Base.Clips.release(player)
     readonly property bool playing: player.playbackState === MediaPlayer.PlayingState
     readonly property bool stopped: player.playbackState === MediaPlayer.StoppedState
     readonly property bool failed: player.error !== MediaPlayer.NoError
@@ -211,7 +214,7 @@ FocusScope {
 
     Base.Scrubber {
         id: scrub
-        player: player
+        player: page.player
         duration: page.duration
         active: page.activeFocus
         onWoke: page.wake()
@@ -293,10 +296,9 @@ FocusScope {
         visible: !page.stopped && !page.failed
     }
 
-    Base.RecordingPlayer {
-        id: player
-        videoOutput: video
-        onErrorOccurred: function (error, message) {
+    Connections {
+        target: page.player
+        function onErrorOccurred(error, message) {
             page.wake();
         }
     }
