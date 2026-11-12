@@ -101,7 +101,7 @@ Window {
 
         Text {
             width: parent.width
-            text: "Fix it from a terminal or another computer, then try again. universe doctor shows what's wrong."
+            text: "Fix it from a terminal or another computer, then try again."
             color: Theme.textHint
             font.family: Theme.sans
             font.pixelSize: Theme.dp(28)
