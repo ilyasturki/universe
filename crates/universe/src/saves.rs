@@ -726,6 +726,16 @@ fn zip_folder(dir: &Path, id: &str, file: &Path) -> Result<()> {
 pub(crate) mod tests {
     use super::*;
 
+    /// Whether the real ludusavi is here to test against; absent, it fails only where UNIVERSE_TEST_LUDUSAVI asks for it (the dev shell, the Nix check).
+    pub(crate) fn ludusavi() -> bool {
+        let here = installed().is_some();
+        assert!(here || std::env::var_os("UNIVERSE_TEST_LUDUSAVI").is_none(), "ludusavi is not on PATH, and UNIVERSE_TEST_LUDUSAVI requires it");
+        if !here {
+            eprintln!("skipped: ludusavi is not on PATH");
+        }
+        here
+    }
+
     /// ludusavi's manifest as `yaml`, checked a moment ago: no call reaches the network.
     pub(crate) fn offline_manifest(yaml: &str) {
         let dir = config_dir();

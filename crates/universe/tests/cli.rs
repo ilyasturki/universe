@@ -1063,11 +1063,13 @@ struct SavedGame {
 
 impl SavedGame {
     /// `before` is shell, run ahead of every backup that writes; `$path` is where ludusavi will write it. A `crash` file kills the CLI once such a backup is written.
-    fn new(keep: u32, before: impl Fn(&std::path::Path) -> String) -> SavedGame {
-        let real = std::env::split_paths(&std::env::var_os("PATH").unwrap())
-            .map(|d| d.join("ludusavi"))
-            .find(|p| p.is_file())
-            .expect("ludusavi is not on PATH: the dev shell and the Nix check have it");
+    /// None where ludusavi is not on PATH, which fails only where UNIVERSE_TEST_LUDUSAVI asks for it (the dev shell, the Nix check).
+    fn new(keep: u32, before: impl Fn(&std::path::Path) -> String) -> Option<SavedGame> {
+        let Some(real) = std::env::split_paths(&std::env::var_os("PATH").unwrap()).map(|d| d.join("ludusavi")).find(|p| p.is_file()) else {
+            assert!(std::env::var_os("UNIVERSE_TEST_LUDUSAVI").is_none(), "ludusavi is not on PATH, and UNIVERSE_TEST_LUDUSAVI requires it");
+            eprintln!("skipped: ludusavi is not on PATH");
+            return None;
+        };
         let dir = no_desktop();
         std::fs::write(dir.path().join("config/config.toml"), format!("schema = 1\n[desktop]\nprofile = \"none\"\n[saves]\nkeep = {keep}\n")).unwrap();
         let bin = dir.path().join("bin");
@@ -1093,7 +1095,7 @@ impl SavedGame {
         let live = dir.path().join("data/prefixes/fixture-game").join(FIXTURE_SAVES);
         std::fs::create_dir_all(&live).unwrap();
         let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap_or_default());
-        SavedGame { dir, path, live }
+        Some(SavedGame { dir, path, live })
     }
 
     fn saves(&self, args: &[&str]) -> std::process::Output {
@@ -1196,7 +1198,7 @@ fn clear_obstruction(game: &SavedGame) {
 
 #[test]
 fn a_restore_whose_backup_failed_part_way_refuses_and_its_retry_keeps_every_save() {
-    let game = SavedGame::new(2, slot2_obstructed);
+    let Some(game) = SavedGame::new(2, slot2_obstructed) else { return };
     game.put("slot1.sav", "one");
     game.put("slot2.sav", "two");
     assert!(game.saves(&["backup", "fixture-game"]).status.success());
@@ -1221,7 +1223,7 @@ fn a_restore_whose_backup_failed_part_way_refuses_and_its_retry_keeps_every_save
 
 #[test]
 fn a_backup_that_failed_part_way_at_a_limit_of_one_loses_nothing_and_its_retry_is_whole() {
-    let game = SavedGame::new(1, slot2_obstructed);
+    let Some(game) = SavedGame::new(1, slot2_obstructed) else { return };
     game.put("slot1.sav", "one");
     game.put("slot2.sav", "two");
     assert!(game.saves(&["backup", "fixture-game"]).status.success());
@@ -1242,10 +1244,12 @@ fn a_backup_that_failed_part_way_at_a_limit_of_one_loses_nothing_and_its_retry_i
 fn a_backup_in_another_process_survives_the_repair_of_a_stale_mapping() {
     use std::io::Write;
     // Each backup sees saves of its own: a game still writing them.
-    let game = SavedGame::new(5, |dir| {
+    let Some(game) = SavedGame::new(5, |dir| {
         let (count, save) = (dir.join("runs"), dir.join("data/prefixes/fixture-game").join(FIXTURE_SAVES).join("slot1.sav"));
         format!("n=$(($(cat {0} 2>/dev/null || echo 0) + 1))\necho $n > {0}\nprintf save-%s $n > {1}", count.display(), save.display())
-    });
+    }) else {
+        return;
+    };
     game.put("slot1.sav", "");
     assert!(game.saves(&["backup", "fixture-game"]).status.success());
 
@@ -1279,9 +1283,11 @@ fn a_backup_in_another_process_survives_the_repair_of_a_stale_mapping() {
 #[test]
 fn a_restore_and_an_export_in_another_process_wait_out_a_running_backup() {
     // Only the first backup to get here stops: one that overtakes it runs through.
-    let game = SavedGame::new(5, |dir| {
+    let Some(game) = SavedGame::new(5, |dir| {
         format!("if mkdir {0} 2>/dev/null; then while [ -e {1} ]; do sleep 0.02; done; fi", dir.join("started").display(), dir.join("hold").display())
-    });
+    }) else {
+        return;
+    };
     game.put("slot1.sav", "selected");
     assert!(game.saves(&["backup", "fixture-game"]).status.success());
     let list: serde_json::Value = serde_json::from_slice(&game.saves(&["list", "fixture-game", "--json"]).stdout).unwrap();
@@ -1317,7 +1323,7 @@ fn a_restore_and_an_export_in_another_process_wait_out_a_running_backup() {
 
 #[test]
 fn a_crash_between_staging_and_commit_costs_nothing_and_its_leftovers_go_with_the_retry() {
-    let game = SavedGame::new(2, |_| String::new());
+    let Some(game) = SavedGame::new(2, |_| String::new()) else { return };
     let (crash, staging) = (game.dir.path().join("crash"), game.dir.path().join("data/saves/.staging"));
 
     game.put("slot1.sav", "first");
@@ -1395,7 +1401,7 @@ fn read_zipped(zip: &mut zip::ZipArchive<std::fs::File>, name: &str) -> String {
 #[test]
 fn another_games_saves_answer_beside_a_long_export_within_its_budget() {
     use std::io::Write;
-    let game = SavedGame::new(5, |_| String::new());
+    let Some(game) = SavedGame::new(5, |_| String::new()) else { return };
     game.put("slot1.sav", "saved");
     assert!(game.saves(&["backup", "fixture-game"]).status.success());
     game.add_other_game();
@@ -1429,7 +1435,7 @@ fn another_games_saves_answer_beside_a_long_export_within_its_budget() {
 #[test]
 fn an_export_beside_a_pruning_backup_zips_every_backup_whole() {
     use std::io::Write;
-    let game = SavedGame::new(1, |_| String::new());
+    let Some(game) = SavedGame::new(1, |_| String::new()) else { return };
     game.put("slot1.sav", "kept");
     assert!(game.saves(&["backup", "fixture-game"]).status.success());
     let exported = game.backup_folder();
@@ -1472,7 +1478,7 @@ fn an_export_beside_a_pruning_backup_zips_every_backup_whole() {
 #[test]
 fn a_failed_export_leaves_no_zip_and_names_the_file_it_could_not_read() {
     use std::os::unix::fs::PermissionsExt;
-    let game = SavedGame::new(5, |_| String::new());
+    let Some(game) = SavedGame::new(5, |_| String::new()) else { return };
     game.put("slot1.sav", "saved");
     assert!(game.saves(&["backup", "fixture-game"]).status.success());
     let stored = game.backup_folder().join("drive-0/universe/prefix").join(FIXTURE_SAVES).join("slot1.sav");
@@ -1493,7 +1499,7 @@ fn a_failed_export_leaves_no_zip_and_names_the_file_it_could_not_read() {
 
 #[test]
 fn a_mapping_that_cant_be_read_is_reported_and_costs_no_backup() {
-    let game = SavedGame::new(1, |_| String::new());
+    let Some(game) = SavedGame::new(1, |_| String::new()) else { return };
     game.put("slot1.sav", "kept");
     assert!(game.saves(&["backup", "fixture-game"]).status.success());
     let mapping = game.mapping();
@@ -1555,7 +1561,7 @@ fn a_mapping_that_cant_be_read_is_reported_and_costs_no_backup() {
 
 #[test]
 fn a_backup_reaches_the_disk_before_the_one_it_prunes_goes() {
-    let game = SavedGame::new(1, |_| String::new());
+    let Some(game) = SavedGame::new(1, |_| String::new()) else { return };
     game.put("slot1.sav", "kept");
     assert!(game.saves(&["backup", "fixture-game"]).status.success());
     let old = game.backup_folder().file_name().unwrap().to_string_lossy().into_owned();

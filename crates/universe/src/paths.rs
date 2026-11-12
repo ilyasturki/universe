@@ -14,13 +14,13 @@ pub(crate) struct TestEnv {
     _lock: std::sync::MutexGuard<'static, ()>,
 }
 
-/// Every `UNIVERSE_*` and `XDG_*` variable cleared, then the homes, HOME and the XDG dirs set under one tempdir; the whole environment put back on drop.
+/// Every `UNIVERSE_*` but the run's `UNIVERSE_TEST_*` switches and every `XDG_*` variable cleared, then the homes, HOME and the XDG dirs set under one tempdir; the whole environment put back on drop.
 #[cfg(test)]
 pub(crate) fn test_env() -> TestEnv {
     let lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let saved: Vec<_> = std::env::vars_os().collect();
     for (var, _) in &saved {
-        if var.to_str().is_some_and(|v| v.starts_with("UNIVERSE_") || v.starts_with("XDG_")) {
+        if var.to_str().is_some_and(|v| (v.starts_with("UNIVERSE_") && !v.starts_with("UNIVERSE_TEST_")) || v.starts_with("XDG_")) {
             std::env::remove_var(var);
         }
     }
