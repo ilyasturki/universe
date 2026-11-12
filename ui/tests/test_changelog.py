@@ -1,5 +1,3 @@
-import os
-
 import pytest
 from looks import FocusTrace, Look, invoke, read, settle
 from PySide6.QtCore import Qt
@@ -114,32 +112,18 @@ def look(request, upgraded, rendered_looks, tmp_path):
 
 
 @pytest.fixture
-def held_open(rendered_looks, monkeypatch, tmp_path):
-    """The clip's player reads its file through a pipe a separate process fills past its first bytes only once the test calls the fixture, so its open lasts until then."""
-    import subprocess
-
+def held_open(rendered_looks, held, monkeypatch):
+    """The clip's player reads its file through a held pipe, so its open lasts until the test calls the fixture."""
     from universe_ui.fake_core import FakeCore
 
     fetch = FakeCore.changelog_media
-    pipe, gate, feeders = tmp_path / "clip.mp4", tmp_path / "gate", []
-    feed = 'exec > "$3"; head -c 4096 "$1"; i=0; while [ ! -e "$2" ] && [ $i -lt 1000 ]; do sleep 0.01; i=$((i + 1)); done; tail -c +4097 "$1"'
 
     def changelog_media(self, url):
         out = fetch(self, url)
-        if not url.endswith(".mp4"):
-            return out
-        os.mkfifo(pipe)
-        feeders.append(subprocess.Popen(["sh", "-c", feed, "sh", out, gate, pipe], start_new_session=True))
-        return str(pipe)
+        return held.pipe(out) if url.endswith(".mp4") else out
 
     monkeypatch.setattr(FakeCore, "changelog_media", changelog_media)
-    yield gate.touch
-    gate.touch()
-    for feeder in feeders:
-        try:
-            feeder.wait(2)
-        except subprocess.TimeoutExpired:
-            feeder.kill()
+    return held.release
 
 
 def test_b_while_the_clip_opens_closes_whats_new(held_open, look):

@@ -142,6 +142,34 @@ def fake(app, xdg, fixture_art, tmp_path):
     client.shutdown()
 
 
+@pytest.fixture
+def held(tmp_path):
+    """`pipe(path)` is a pipe, one per path, a separate process fills with `path`'s first bytes, and with the rest only once the test calls `release()`: a player's open of it lasts until then."""
+    import subprocess
+    import threading
+    from types import SimpleNamespace
+
+    gate, feeders, pipes, lock = tmp_path / "gate", [], {}, threading.Lock()
+    feed = 'exec > "$3"; head -c 4096 "$1"; i=0; while [ ! -e "$2" ] && [ $i -lt 1000 ]; do sleep 0.01; i=$((i + 1)); done; tail -c +4097 "$1"'
+
+    def pipe(path):
+        with lock:
+            if path not in pipes:
+                out = tmp_path / f"held-{len(pipes)}{Path(path).suffix}"
+                os.mkfifo(out)
+                feeders.append(subprocess.Popen(["sh", "-c", feed, "sh", str(path), gate, out], start_new_session=True))
+                pipes[path] = str(out)
+            return pipes[path]
+
+    yield SimpleNamespace(pipe=pipe, pipes=pipes, release=gate.touch)
+    gate.touch()
+    for feeder in feeders:
+        try:
+            feeder.wait(2)
+        except subprocess.TimeoutExpired:
+            feeder.kill()
+
+
 @pytest.fixture(params=[False, True], ids=["desktop", "session"])
 def universe_session(request, monkeypatch):
     """Outside, then inside the Universe session a display manager started; asked for before `api`, which reads it once."""
