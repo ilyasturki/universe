@@ -269,6 +269,21 @@
        "arch": "x86_64",
        "format": "tar.xz",
        "program": "dosbox",
+       "sha256": "3c7c925e28a5c88ae9f9f1a315ad07d91176b135fbe5f6f240eeee148ed176b0",
+       "size": 29267356,
+       "url": "https://github.com/dosbox-staging/dosbox-staging/releases/download/v0.83.1/dosbox-staging-linux-x86_64-v0.83.1.tar.xz"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-11-14T13:39:26Z",
+     "version": "0.83.1"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "tar.xz",
+       "program": "dosbox",
        "sha256": "d3a94f7f1c3e68a47ec88d61145506c7904452adb0c9c5928cb8cfe2331d6c5c",
        "size": 29377664,
        "url": "https://github.com/dosbox-staging/dosbox-staging/releases/download/v0.83.0/dosbox-staging-linux-x86_64-v0.83.0.tar.xz"
@@ -744,6 +759,21 @@
        "arch": "x86_64",
        "format": "tar.gz",
        "program": "kyty_emulator",
+       "sha256": "91fdaaf5e2fea8903b7140a85415b96d44a613f43c0e1c943a40e43714980c0e",
+       "size": 42227892,
+       "url": "https://github.com/KytyPS5/KytyPS5/releases/download/KytyPS5-2026-11-15-f9dd415/KytyPS5-2026-11-15-f9dd415-Linux-x86_64.tar.gz"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-11-15T12:27:37Z",
+     "version": "2026-11-15-f9dd415"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "tar.gz",
+       "program": "kyty_emulator",
        "sha256": "0fde5400a2edaee4299b5742f287de4ba57787a0397206014297294ebc17c9fb",
        "size": 42227210,
        "url": "https://github.com/KytyPS5/KytyPS5/releases/download/KytyPS5-2026-11-14-3e226bf/KytyPS5-2026-11-14-3e226bf-Linux-x86_64.tar.gz"
@@ -812,21 +842,6 @@
      "channel": "stable",
      "date": "2026-11-12T16:05:33Z",
      "version": "2026-11-12-0a016e9"
-    },
-    {
-     "assets": [
-      {
-       "arch": "x86_64",
-       "format": "tar.gz",
-       "program": "kyty_emulator",
-       "sha256": "453f2ad6b98946a778f53ab867a2453d3c6436a84326d49ba7cb150609408904",
-       "size": 42172627,
-       "url": "https://github.com/KytyPS5/KytyPS5/releases/download/KytyPS5-2026-11-12-e35360f/KytyPS5-2026-11-12-e35360f-Linux-x86_64.tar.gz"
-      }
-     ],
-     "channel": "stable",
-     "date": "2026-11-12T13:11:12Z",
-     "version": "2026-11-12-e35360f"
     }
    ],
    "homepage": "https://github.com/KytyPS5/KytyPS5",
@@ -1383,6 +1398,20 @@
       {
        "arch": "x86_64",
        "format": "appimage",
+       "sha256": "905e36b61eb4d4e1d9680e2cec8d149a7ef345123e36c4549a4d97624adc99c8",
+       "size": 83107523,
+       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-05a9d96058229ebb82b3e1d2be762dc6ab6e4a50/rpcs3-v0.0.43-20604-05a9d960_linux64.AppImage"
+      }
+     ],
+     "channel": "rolling",
+     "date": "2026-11-14T12:32:45Z",
+     "version": "0.0.43-20604-05a9d960"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "appimage",
        "sha256": "2d0b634b26b6760095ab6f17799e4ff7c0939968a106704070db1d5036870fbe",
        "size": 83114473,
        "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-9b8974d32e73c897a5fcd6bdf69413ca7e436b01/rpcs3-v0.0.43-20583-9b8974d3_linux64.AppImage"
@@ -1447,20 +1476,6 @@
      "channel": "rolling",
      "date": "2026-11-03T06:35:04Z",
      "version": "0.0.43-20560-63996a47"
-    },
-    {
-     "assets": [
-      {
-       "arch": "x86_64",
-       "format": "appimage",
-       "sha256": "47c7c2fcf01d24eddf1bd43180443ddd099329e3238fdcd6da957e5330cc9806",
-       "size": 83247344,
-       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-ba96ac9184852397b2995fd0202be09598b7507d/rpcs3-v0.0.43-20555-ba96ac91_linux64.AppImage"
-      }
-     ],
-     "channel": "rolling",
-     "date": "2026-11-02T11:54:59Z",
-     "version": "0.0.43-20555-ba96ac91"
     }
    ],
    "homepage": "https://github.com/RPCS3/rpcs3-binaries-linux",
@@ -1790,21 +1805,21 @@
       {
        "arch": "x86_64",
        "format": "appimage",
-       "sha256": "bc21c8f21c9e6efa778c48bf4196e292ebb0abe7e3ada337813deb12232dff96",
-       "size": 90009184,
+       "sha256": "1a6236cfe4802c95cb1349d8c52464c8e5d4c8061656acd0f1d0a6e6a73e4f78",
+       "size": 89785414,
        "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-x86_64.AppImage"
       },
       {
        "arch": "aarch64",
        "format": "appimage",
-       "sha256": "d439881248d3362c601dee96c1e7576ce099ca79d2f4b76de98408dcd51cb322",
-       "size": 89779193,
+       "sha256": "a48a04688d8114e1a113a502dc6a06e7545ff4092e599e2de40dda128b090d2b",
+       "size": 89699224,
        "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-aarch64.AppImage"
       }
      ],
      "channel": "rolling",
-     "date": "2026-11-14T10:53:14Z",
-     "version": "2026.11.14"
+     "date": "2026-11-15T10:55:00Z",
+     "version": "2026.11.15"
     }
    ],
    "homepage": "https://github.com/Vita3K/Vita3K",
@@ -1813,6 +1828,20 @@
   },
   "wine": {
    "builds": [
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "tar.xz",
+       "sha256": "eafe530ccdc188ffb00ee8dae962f16b29ff0602953b73b23c9ad3394286381a",
+       "size": 100119012,
+       "url": "https://github.com/Kron4ek/Wine-Builds/releases/download/11.22/wine-11.22-staging-amd64-wow64.tar.xz"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-11-14T15:25:52Z",
+     "version": "11.22"
+    },
     {
      "assets": [
       {
@@ -1882,20 +1911,6 @@
      "channel": "stable",
      "date": "2026-09-05T14:39:53Z",
      "version": "11.17"
-    },
-    {
-     "assets": [
-      {
-       "arch": "x86_64",
-       "format": "tar.xz",
-       "sha256": "746d3d571e474a7a603e084a0d35649699c3d5c98e5ea3e9994e1e5fa693af92",
-       "size": 102738516,
-       "url": "https://github.com/Kron4ek/Wine-Builds/releases/download/11.16/wine-11.16-staging-amd64-wow64.tar.xz"
-      }
-     ],
-     "channel": "stable",
-     "date": "2026-08-23T20:25:18Z",
-     "version": "11.16"
     }
    ],
    "homepage": "https://github.com/Kron4ek/Wine-Builds",
@@ -2036,6 +2051,6 @@
    "name": "xemu"
   }
  },
- "generated_at": "2026-11-14T12:19:53Z",
+ "generated_at": "2026-11-15T12:51:25Z",
  "schema": 1
 }
