@@ -1,8 +1,9 @@
 ---
+
 title: Epic Games
 description: Sign in to Epic Games, install its games, and take over Heroic's Epic installs.
 sidebar:
-  order: 3
+order: 3
 ---
 
 Universe installs and updates your Epic Games library itself. It takes Epic's Windows builds, so every Epic game runs through Proton or Wine. The store is off until you press **Y** on **Epic Games** in Settings › **Stores**.

@@ -1,8 +1,9 @@
 ---
+
 title: Network
 description: "Settings › Network shows the connection, tests the internet, and joins the Wi-Fi networks in range."
 sidebar:
-  order: 9
+order: 9
 ---
 
 Settings › **Network** shows how the machine is connected and joins Wi-Fi networks. It shows only on a machine with Wi-Fi, and never under [Steam's Game Mode](/docs/getting-started/steam-deck/#steams-game-mode). A cable needs nothing set up.

@@ -1,8 +1,9 @@
 ---
+
 title: Gamescope, HDR and frame rate
 description: The display settings a game runs with, HDR, MangoHud and the frame rate limit.
 sidebar:
-  order: 3
+order: 3
 ---
 
 Games run inside gamescope by default. It gives a game the resolution and refresh rate you pick, scales the picture to your screen and draws MangoHud over it. Without gamescope installed, a game opens on the desktop.
