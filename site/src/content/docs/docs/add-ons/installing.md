@@ -1,9 +1,8 @@
 ---
-
 title: Installing add-ons
 description: Install, update and remove the modules, stores and themes others made.
 sidebar:
-order: 2
+  order: 2
 ---
 
 An add-on is a module, a store or a theme someone else made. Settings installs them from Universe's index.

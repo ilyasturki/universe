@@ -1,9 +1,8 @@
 ---
-
 title: Performance
 description: "Settings › Performance sets the brightness, a Steam Deck's refresh rate, the power limit, the GPU clock and SteamOS's fan curve."
 sidebar:
-order: 12
+  order: 12
 ---
 
 Settings › **Performance** sets the machine's own controls, such as the brightness and the power limit. It shows only when the machine has a control Universe can set, and never under [Steam's Game Mode](/docs/getting-started/steam-deck/#steams-game-mode). Each row shows only where its control exists:

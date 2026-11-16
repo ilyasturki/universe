@@ -1,9 +1,8 @@
 ---
-
 title: Themes
 description: Install a theme others made, pick it, and get back to the Universe look.
 sidebar:
-order: 7
+  order: 7
 ---
 
 A theme is a look for Universe Big Screen that someone else made. It's listed after the three built-in [looks](/docs/using/looks/) and picked the same way.

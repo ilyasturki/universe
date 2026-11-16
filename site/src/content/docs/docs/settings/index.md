@@ -1,5 +1,4 @@
 ---
-
 title: Settings
 description: How Settings is laid out, how to move through it, and what each section holds.
 ---

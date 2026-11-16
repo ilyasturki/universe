@@ -1,9 +1,8 @@
 ---
-
 title: Environment variables and wrappers
 description: Environment variables, a wrapper command, arguments and commands around a game's launch.
 sidebar:
-order: 4
+  order: 4
 ---
 
 These rows change how a game launches. They're advanced: press **Y** on Settings › **Game defaults** or on a game's **Game settings** to show them. Only environment variables also have a default for every game; the other rows belong to one game.

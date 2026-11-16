@@ -1,9 +1,8 @@
 ---
-
 title: Add a game by hand
 description: Add a program or a ROM from its file, and fetch its art.
 sidebar:
-order: 7
+  order: 7
 ---
 
 A Windows `.exe`, a Linux program, a ROM or a disc image goes into the library by hand. You pick the file, and Universe proposes the runner and the title.

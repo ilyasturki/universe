@@ -1,7 +1,7 @@
 {
     "$schema": "https://biomejs.dev/schemas/latest/schema.json",
     "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
-    "files": { "includes": ["extension/**", "site/**", "!!.claude"] },
+    "files": { "includes": ["extension/**", "site/**", "!!.claude", "!**/*.md"] },
     "formatter": { "indentStyle": "space", "indentWidth": 4, "lineWidth": 160 },
     "html": { "experimentalFullSupportEnabled": true, "formatter": { "enabled": true } },
     "javascript": {

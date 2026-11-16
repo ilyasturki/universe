@@ -1,9 +1,8 @@
 ---
-
 title: Update and uninstall
 description: Update Universe, or remove it with or without your data.
 sidebar:
-order: 5
+  order: 5
 ---
 
 Universe doesn't update itself: update it the way you installed it. An update keeps your library and settings.

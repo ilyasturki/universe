@@ -1,9 +1,8 @@
 ---
-
 title: itch.io
 description: Sign in to itch.io with an API key, install your games, and take over the itch app's.
 sidebar:
-order: 4
+  order: 4
 ---
 
 Universe installs and updates what you own on itch.io, and takes over the games the itch app installed. The store is off until you press **Y** on **itch.io** in Settings › **Stores**.
