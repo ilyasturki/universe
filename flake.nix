@@ -117,6 +117,9 @@
           ]);
       };
 
+      # rustls' aws-lc-sys, which nixpkgs' cargo hook now makes link the system AWS-LC instead of building its own
+      rustLibs = [ pkgs.aws-lc ];
+
       core = pkgs.rustPlatform.buildRustPackage {
         pname = "universe-core";
         inherit version;
@@ -146,6 +149,7 @@
           pkgs.pkg-config
           pkgs.installShellFiles
         ];
+        buildInputs = rustLibs;
         # The helper installs from the distribution's packages, which NixOS gives no system tool.
         postInstall = ''
           rm $out/bin/universe-system-install
@@ -167,6 +171,7 @@
           maturinBuildHook
           pkgs.pkg-config
         ];
+        buildInputs = rustLibs;
         buildAndTestSubdir = "crates/universe-py";
         pythonImportsCheck = [ "universe_core" ];
       };
@@ -377,7 +382,7 @@
         ];
         env.UNIVERSE_DESKTOP_LOCALEDIR = "${placeholder "out"}/share/locale";
         nativeBuildInputs = desktopTools ++ [ pkgs.scdoc ];
-        buildInputs = desktopLibs ++ gstPlugins;
+        buildInputs = rustLibs ++ desktopLibs ++ gstPlugins;
         postInstall = ''
           data=crates/universe-desktop/data
           id=io.github.ilyasturki.UniverseDesktop
@@ -570,7 +575,7 @@
             pkgs.rustfmt
             pkgs.python3
           ];
-        buildInputs = desktopLibs ++ gstPlugins;
+        buildInputs = rustLibs ++ desktopLibs ++ gstPlugins;
         # The two lines are `tools/lint rust`
         buildPhase = ''
           cargo fmt --check
