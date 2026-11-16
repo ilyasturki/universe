@@ -117,8 +117,11 @@
           ]);
       };
 
-      # rustls' aws-lc-sys, which nixpkgs' cargo hook now makes link the system AWS-LC instead of building its own
-      rustLibs = [ pkgs.aws-lc ];
+      # nixpkgs' cargo hook now makes rustls' aws-lc-sys and rusqlite's libsqlite3-sys link the system libraries instead of building their own
+      rustLibs = [
+        pkgs.aws-lc
+        pkgs.sqlite
+      ];
 
       core = pkgs.rustPlatform.buildRustPackage {
         pname = "universe-core";
