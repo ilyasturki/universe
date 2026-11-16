@@ -1,24 +1,25 @@
 ---
+
 title: Supported controllers
 description: The controllers Universe knows, the buttons it draws for each, and what your system needs.
 sidebar:
-  order: 1
+order: 1
 ---
 
 Universe works with any controller Linux reads as a gamepad. Nine models get their own button names, glyphs and extra buttons; any other pad is a plain **Controller** with Xbox letters.
 
 ## Controller families
 
-| Controller | Extra buttons |
-|---|---|
-| Steam Deck | L4, L5, R4, R5, Quick access, the two trackpads |
-| DualSense Edge | Left and Right Fn, the two back buttons |
-| DualSense, DualShock 4 | none |
-| Xbox Elite Series 2 | the paddles P1 to P4 |
-| Xbox | Share |
-| Switch 2 Pro | GL, GR, C, Capture |
-| Switch Pro | Capture |
-| 8BitDo Pro 3 | L4, R4, PL, PR, Star |
+| Controller             | Extra buttons                                   |
+| ---------------------- | ----------------------------------------------- |
+| Steam Deck             | L4, L5, R4, R5, Quick access, the two trackpads |
+| DualSense Edge         | Left and Right Fn, the two back buttons         |
+| DualSense, DualShock 4 | none                                            |
+| Xbox Elite Series 2    | the paddles P1 to P4                            |
+| Xbox                   | Share                                           |
+| Switch 2 Pro           | GL, GR, C, Capture                              |
+| Switch Pro             | Capture                                         |
+| 8BitDo Pro 3           | L4, R4, PL, PR, Star                            |
 
 Extra buttons take [macros](/docs/controllers/macros/). A button that reads **Unbound** in Settings › **Controller** sends nothing on this connection: [learn it](/docs/controllers/button-setup/#learn-one-button) if the pad has it. The DualSense Edge's extra buttons need Linux 7.2 or newer, and no mode of the 8BitDo Pro 3 seen so far sends its Star to Linux.
 
@@ -26,14 +27,14 @@ Extra buttons take [macros](/docs/controllers/macros/). A button that reads **Un
 
 The hints draw each button as your pad prints it:
 
-| Controller | Face buttons | Shoulders | Select, Start, HOME |
-|---|---|---|---|
-| DualSense, DualSense Edge | ✕ ○ △ □ | L1 R1 L2 R2 | Create, Options, PS |
-| DualShock 4 | ✕ ○ △ □ | L1 R1 L2 R2 | Share, Options, PS |
-| Xbox, Xbox Elite Series 2, Controller | A B X Y | LB RB LT RT | View, Menu, Xbox |
-| Switch Pro, Switch 2 Pro | B A X Y | L R ZL ZR | Minus, Plus, Home |
-| 8BitDo Pro 3 | B A X Y | L1 R1 L2 R2 | Minus, Plus, Home |
-| Steam Deck | A B X Y | L1 R1 L2 R2 | View, Menu, Steam |
+| Controller                            | Face buttons | Shoulders   | Select, Start, HOME |
+| ------------------------------------- | ------------ | ----------- | ------------------- |
+| DualSense, DualSense Edge             | ✕ ○ △ □      | L1 R1 L2 R2 | Create, Options, PS |
+| DualShock 4                           | ✕ ○ △ □      | L1 R1 L2 R2 | Share, Options, PS  |
+| Xbox, Xbox Elite Series 2, Controller | A B X Y      | LB RB LT RT | View, Menu, Xbox    |
+| Switch Pro, Switch 2 Pro              | B A X Y      | L R ZL ZR   | Minus, Plus, Home   |
+| 8BitDo Pro 3                          | B A X Y      | L1 R1 L2 R2 | Minus, Plus, Home   |
+| Steam Deck                            | A B X Y      | L1 R1 L2 R2 | View, Menu, Steam   |
 
 On a Nintendo-style pad, the A on the right confirms and the B at the bottom goes back, as printed. Until Universe sees a pad, the hints follow the last one it saw or the one picked in the first run, else Xbox letters (the Deck's buttons on a Deck). Pick up the keyboard or the mouse and they show key caps.
 

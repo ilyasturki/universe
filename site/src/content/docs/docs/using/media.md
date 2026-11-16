@@ -1,8 +1,9 @@
 ---
+
 title: Media
 description: The Media tab and a game's screenshots, recordings and journal.
 sidebar:
-  order: 5
+order: 5
 ---
 
 Media, the third tab, holds the screenshots, recordings and journal entries of all your games, newest first. Each comes from a feature you turn on in Settings › **Features**: [Screenshots](/docs/add-ons/screenshots/), [Video capture](/docs/add-ons/video-capture/) and [Play journal](/docs/add-ons/play-journal/).

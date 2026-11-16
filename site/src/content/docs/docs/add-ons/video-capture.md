@@ -1,8 +1,9 @@
 ---
+
 title: Video capture
 description: The Video capture feature records each session with gpu-screen-recorder.
 sidebar:
-  order: 3
+order: 3
 ---
 
 Video capture records each session with gpu-screen-recorder, from the moment the game starts until it ends. Turn it on in Settings › **Features** › **Video capture**.

@@ -1,8 +1,9 @@
 ---
+
 title: Steam
 description: Play your Steam games from Universe, with the Steam client in the background.
 sidebar:
-  order: 2
+order: 2
 ---
 
 Universe runs your Steam games itself, with the Steam client in the background, and leaves the downloads to Steam. Steam has to be installed. The store is off until you press **Y** on **Steam** in Settings › **Stores**.

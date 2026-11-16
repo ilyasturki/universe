@@ -1,8 +1,9 @@
 ---
+
 title: Game fixes
 description: What to change when a Windows game misbehaves, in the order to try it.
 sidebar:
-  order: 6
+order: 6
 ---
 
 When a Windows game misbehaves, read its log first ([Troubleshooting](/docs/running/troubleshooting/)). Then work down this list, in the **Proton** card of the game's **Game settings**, most rows behind **Y**:

@@ -1,8 +1,9 @@
 ---
+
 title: Install
 description: Install Universe on Arch, Fedora, SteamOS, NixOS or any other distribution.
 sidebar:
-  order: 1
+order: 1
 ---
 
 Universe runs on x86_64 Linux with systemd 250 or newer, on cgroups v2. You get two apps on the same library: **Universe Big Screen**, which you drive with a controller, and **Universe Desktop**, for the mouse and the keyboard.

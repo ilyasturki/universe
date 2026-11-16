@@ -1,8 +1,9 @@
 ---
+
 title: Bluetooth pairing
 description: Pair a controller in Settings › Bluetooth, answer pairing questions, and pair a Sony pad over its cable.
 sidebar:
-  order: 5
+order: 5
 ---
 
 Settings › [Bluetooth](/docs/settings/bluetooth/) pairs pads, headphones and keyboards. It shows when the machine has a Bluetooth adapter, and never in Steam's Game Mode.
