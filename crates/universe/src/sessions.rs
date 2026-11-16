@@ -269,8 +269,9 @@ mod tests {
 
     #[test]
     fn roundtrip_and_stats() {
-        let dir = tempfile::tempdir().unwrap();
-        let p = dir.path().join("sessions.jsonl");
+        // The writes take the lock under the state home: another test's home would vanish under it
+        let env = crate::paths::test_env();
+        let p = env.path().join("sessions.jsonl");
         let a = Session {
             session: "20260910-213045".into(),
             game: "x".into(),
