@@ -1,9 +1,8 @@
 ---
-
 title: Lutris and Heroic
 description: Bring in the games Lutris and Heroic installed, Lutris's play time included.
 sidebar:
-order: 5
+  order: 5
 ---
 
 Universe takes over the games other launchers installed, without moving a file. Lutris games come with their play time. Heroic's GOG and Epic games, Steam's and the itch app's go to Universe's store of the same name, which updates them from then on.

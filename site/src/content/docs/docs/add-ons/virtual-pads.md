@@ -1,9 +1,8 @@
 ---
-
 title: Virtual pads
 description: The Virtual pads feature gives an emulator one virtual pad per player, whatever pads you hold.
 sidebar:
-order: 6
+  order: 6
 ---
 
 Virtual pads gives an emulator one virtual pad per player, **Universe Pad 1**, **Universe Pad 2** and so on, whatever pads you hold. The emulator sees a PlayStation-class pad with gyro, touchpad and rumble, never your real pads, so you can swap one pad for another without it noticing. It serves emulated games only. Turn it on in Settings › **Features** › **Virtual pads**; [Emulator controls](/docs/controllers/emulator-controls/#which-one-to-pick) compares the two.

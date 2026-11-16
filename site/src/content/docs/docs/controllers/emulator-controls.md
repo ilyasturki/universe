@@ -1,9 +1,8 @@
 ---
-
 title: Emulator controls
 description: The two features that set emulators up for your pads, which to pick, and Nintendo button layouts.
 sidebar:
-order: 4
+  order: 4
 ---
 
 Two optional features set emulators up for the pads you hold. **Emulator controls** writes each emulator's own controller settings at every launch. [Virtual pads](/docs/add-ons/virtual-pads/) hands the emulator one virtual pad per player instead. Both start off, and neither touches a Windows or Linux game.
@@ -14,12 +13,12 @@ In Settings › **Features**, press **Y** on **Emulator controls** or **Virtual 
 
 ## Which one to pick
 
-|                                                              | Emulator controls                       | Virtual pads                                                  |
-| ------------------------------------------------------------ | --------------------------------------- | ------------------------------------------------------------- |
-| What the emulator sees                                       | Your pads, bound in its own settings    | One "Universe Pad" per player, with gyro, touchpad and rumble |
-| A pad changed mid-game                                       | Bound at launch, for the pads held then | The emulator notices nothing                                  |
-| Player 1                                                     | The pad you last pressed a button on    | Each pad takes the lowest free player                         |
-| Nintendo button layout, Wii controller, triggers and bumpers | Yes                                     | No                                                            |
+| | Emulator controls | Virtual pads |
+|---|---|---|
+| What the emulator sees | Your pads, bound in its own settings | One "Universe Pad" per player, with gyro, touchpad and rumble |
+| A pad changed mid-game | Bound at launch, for the pads held then | The emulator notices nothing |
+| Player 1 | The pad you last pressed a button on | Each pad takes the lowest free player |
+| Nintendo button layout, Wii controller, triggers and bumpers | Yes | No |
 
 With both on, Virtual pads serves a game whenever it can, and Emulator controls takes over when it can't.
 

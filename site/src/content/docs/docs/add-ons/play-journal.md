@@ -1,9 +1,8 @@
 ---
-
 title: Play journal
 description: After each session, a model writes a journal entry from its recording and your screenshots.
 sidebar:
-order: 4
+  order: 4
 ---
 
 After each session, the Play journal has a model write an entry about it, from the session's recording when [Video capture](/docs/add-ons/video-capture/) is on, and from the screenshots you took. A session with neither gets no entry, and asking for one says so. Entries show in the [Media](/docs/using/media/#the-journal) tab and on the game's Journal page.

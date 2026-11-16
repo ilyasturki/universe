@@ -1,9 +1,8 @@
 ---
-
 title: Screenshots
 description: The Screenshots feature takes the screenshots you ask for, from the dock or a pad button.
 sidebar:
-order: 5
+  order: 5
 ---
 
 The Screenshots feature takes the screenshots you ask for. It starts off: turn it on in Settings › **Features** › **Screenshots**.

@@ -1,9 +1,8 @@
 ---
-
 title: Emulated games
 description: How Universe finds your ROMs through your emulators, and adds new ones later.
 sidebar:
-order: 6
+  order: 6
 ---
 
 Universe doesn't ask where your ROMs are. It reads the game folders each emulator lists in its own settings, and adds what it finds there, each game with the emulator whose folder held it. The first run's **Emulator folders** row does it.
