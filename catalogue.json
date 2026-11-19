@@ -335,6 +335,20 @@
       {
        "arch": "x86_64",
        "format": "appimage",
+       "sha256": "6a1be1dba27ad54f5278c4268dca53ee0cc99c94394be2bafc99138c54263314",
+       "size": 95629600,
+       "url": "https://github.com/stenzek/duckstation/releases/download/v0.1-12640/DuckStation-x64.AppImage"
+      }
+     ],
+     "channel": "rolling",
+     "date": "2026-11-19T02:54:55Z",
+     "version": "0.1-12640"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "appimage",
        "sha256": "4d5c3dcfd9937dc9e77b8fcd5f879b8ec0c69551d5ed13462592073608542fca",
        "size": 94519584,
        "url": "https://github.com/stenzek/duckstation/releases/download/v0.1-12442/DuckStation-x64.AppImage"
@@ -399,20 +413,6 @@
      "channel": "rolling",
      "date": "2026-08-12T02:17:17Z",
      "version": "0.1-11752"
-    },
-    {
-     "assets": [
-      {
-       "arch": "x86_64",
-       "format": "appimage",
-       "sha256": "09a03eb4e5b1d03098c3616da86cea729bb60b533291b20d863b758fdbd756bd",
-       "size": 93471008,
-       "url": "https://github.com/stenzek/duckstation/releases/download/v0.1-11609/DuckStation-x64.AppImage"
-      }
-     ],
-     "channel": "rolling",
-     "date": "2026-07-25T03:32:03Z",
-     "version": "0.1-11609"
     }
    ],
    "homepage": "https://github.com/stenzek/duckstation",
@@ -759,6 +759,36 @@
        "arch": "x86_64",
        "format": "tar.gz",
        "program": "kyty_emulator",
+       "sha256": "6f11ceb801521d99706d50586cd6f2c671c407a91d7930eb313aa0cd4d2a8c7f",
+       "size": 42257209,
+       "url": "https://github.com/KytyPS5/KytyPS5/releases/download/KytyPS5-2026-11-18-a90be8d/KytyPS5-2026-11-18-a90be8d-Linux-x86_64.tar.gz"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-11-18T22:47:51Z",
+     "version": "2026-11-18-a90be8d"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "tar.gz",
+       "program": "kyty_emulator",
+       "sha256": "1492ece88282b14e995928e159a9b307267828be6a7f86fc060e3480ff7dcebf",
+       "size": 42256909,
+       "url": "https://github.com/KytyPS5/KytyPS5/releases/download/KytyPS5-2026-11-18-f6c16fd/KytyPS5-2026-11-18-f6c16fd-Linux-x86_64.tar.gz"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-11-18T22:10:39Z",
+     "version": "2026-11-18-f6c16fd"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "tar.gz",
+       "program": "kyty_emulator",
        "sha256": "0b63bbab188035c8cd8fef0c02c7456d2841b1626d47832ea2a619fb9abe2101",
        "size": 42256019,
        "url": "https://github.com/KytyPS5/KytyPS5/releases/download/KytyPS5-2026-11-18-b3295be/KytyPS5-2026-11-18-b3295be-Linux-x86_64.tar.gz"
@@ -812,36 +842,6 @@
      "channel": "stable",
      "date": "2026-11-17T11:26:02Z",
      "version": "2026-11-17-faec1f4"
-    },
-    {
-     "assets": [
-      {
-       "arch": "x86_64",
-       "format": "tar.gz",
-       "program": "kyty_emulator",
-       "sha256": "59d44429fd52cc64c861b829c6de164aa33904106a85fa258317f3bfaee22e96",
-       "size": 42251794,
-       "url": "https://github.com/KytyPS5/KytyPS5/releases/download/KytyPS5-2026-11-17-174ec91/KytyPS5-2026-11-17-174ec91-Linux-x86_64.tar.gz"
-      }
-     ],
-     "channel": "stable",
-     "date": "2026-11-17T11:06:47Z",
-     "version": "2026-11-17-174ec91"
-    },
-    {
-     "assets": [
-      {
-       "arch": "x86_64",
-       "format": "tar.gz",
-       "program": "kyty_emulator",
-       "sha256": "84eb1c0cb33a8350ca94aa64d0be7d713507c3ac88959ef3b625313ad7e1324f",
-       "size": 42252201,
-       "url": "https://github.com/KytyPS5/KytyPS5/releases/download/KytyPS5-2026-11-17-c282eca/KytyPS5-2026-11-17-c282eca-Linux-x86_64.tar.gz"
-      }
-     ],
-     "channel": "stable",
-     "date": "2026-11-17T10:45:19Z",
-     "version": "2026-11-17-c282eca"
     }
    ],
    "homepage": "https://github.com/KytyPS5/KytyPS5",
@@ -1398,6 +1398,20 @@
       {
        "arch": "x86_64",
        "format": "appimage",
+       "sha256": "8dba392a13a816a2383def9e47f3f95b67f9fd6ceacc37805b9bc00933772a80",
+       "size": 83306630,
+       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-1808e241d7b1bfb1c521e392b4c51a7d5494e9ca/rpcs3-v0.0.43-20640-1808e241_linux64.AppImage"
+      }
+     ],
+     "channel": "rolling",
+     "date": "2026-11-19T11:31:50Z",
+     "version": "0.0.43-20640-1808e241"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "appimage",
        "sha256": "e4fea3f46bfae56fdc17064d44c913d28d91d844088a02b8ef2725d404bd6717",
        "size": 83286465,
        "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-0ebb63697666a54b44a4de69ef222c4ecee0001a/rpcs3-v0.0.43-20623-0ebb6369_linux64.AppImage"
@@ -1462,20 +1476,6 @@
      "channel": "rolling",
      "date": "2026-11-12T06:01:11Z",
      "version": "0.0.43-20583-9b8974d3"
-    },
-    {
-     "assets": [
-      {
-       "arch": "x86_64",
-       "format": "appimage",
-       "sha256": "82433a3bf4a0ac2236a0884989db3901cb6e7981d7cfdf071b195047ac1ec157",
-       "size": 83116763,
-       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-fd027c99b8824e9a9b6f5b2d5ae33f9202e29da3/rpcs3-v0.0.43-20581-fd027c99_linux64.AppImage"
-      }
-     ],
-     "channel": "rolling",
-     "date": "2026-11-10T11:51:28Z",
-     "version": "0.0.43-20581-fd027c99"
     }
    ],
    "homepage": "https://github.com/RPCS3/rpcs3-binaries-linux",
@@ -1697,6 +1697,20 @@
   },
   "umu-proton": {
    "builds": [
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "tar.gz",
+       "sha256": "ba50374a2c0a6898074e1481f51802e2cfb3b617d1a9c40fe8a56dfc88da690e",
+       "size": 592003589,
+       "url": "https://github.com/Open-Wine-Components/umu-proton/releases/download/UMU-Proton-11.0-2e/UMU-Proton-11.0-2e-aarch64.tar.gz"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-11-18T20:07:04Z",
+     "version": "UMU-Proton-11.0-2e"
+    },
     {
      "assets": [
       {
@@ -2051,6 +2065,6 @@
    "name": "xemu"
   }
  },
- "generated_at": "2026-11-18T14:20:51Z",
+ "generated_at": "2026-11-19T14:32:59Z",
  "schema": 1
 }
