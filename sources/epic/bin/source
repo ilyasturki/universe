@@ -382,7 +382,7 @@ def game_event(settings, app, title, owned, install=None, known=None, installs=N
         owned=owned,
         installed=install is not None,
         dir=install["install_path"] if install else None,
-        exe=exe_of(install) if install else None,
+        exe=(exe_found(install) or exe_of(install)) if install else None,
         build=install.get("version") if install else None,
         dlcs=dlcs,
         release_year=None,
@@ -394,10 +394,32 @@ def game_event(settings, app, title, owned, install=None, known=None, installs=N
     )
 
 
+# legendary records the manifest's spelling of the program, which may differ in case from the file on disk.
+def on_disk(folder, relative):
+    path = Path(folder)
+    for part in relative.split("/"):
+        if part in ("", "."):
+            continue
+        if not (path / part).exists():
+            try:
+                with os.scandir(path) as entries:
+                    part = next((e.name for e in entries if e.name.lower() == part.lower()), None)
+            except OSError:
+                return None
+            if part is None:
+                return None
+        path = path / part
+    return str(path.relative_to(folder)) if path.is_file() else None
+
+
+def exe_found(install):
+    exe = exe_of(install)
+    return exe and on_disk(install.get("install_path") or "", exe)
+
+
 def playable(install):
     folder = install.get("install_path") or ""
-    exe = exe_of(install)
-    return os.path.isdir(folder) and (exe is None or os.path.isfile(os.path.join(folder, exe)))
+    return os.path.isdir(folder) and (exe_of(install) is None or exe_found(install) is not None)
 
 
 def present(installs):

@@ -191,6 +191,16 @@ def test_a_game_whose_program_vanished_installs_again(env, run, monkeypatch, emp
     assert ["-y", "uninstall", "Min", "--keep-files"] in calls(env), "legendary forgets the old folder first"
 
 
+def test_a_program_named_in_another_case_is_installed(env, run, monkeypatch):
+    seed_cache(env, [{"id": "Min", "title": "Hades", "folder": "Hades", "owned_dlcs": []}])
+    install_state(env, {"Min": hades(env, executable="X64\\HADES.EXE")})
+    code, events, _ = run("scan")
+    assert code == 0 and (events[0]["installed"], events[0]["exe"]) == (True, "x64/Hades.exe"), "the file's own spelling"
+    monkeypatch.setenv("SHIM_FOLDER", "Hades")
+    run("install", "Min")
+    assert ["-y", "uninstall", "Min", "--keep-files"] not in calls(env), "nothing to download again"
+
+
 @pytest.mark.parametrize("scanned", [True, False], ids=["scan-then-uninstall", "uninstall"])
 def test_a_game_a_failed_reinstall_forgot_comes_back_with_its_drive(env, run, monkeypatch, scanned):
     logged_in(env)
