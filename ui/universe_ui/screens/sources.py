@@ -46,6 +46,7 @@ def _source_row(game, updates, art, banner, job):
         "installed": installed,
         "pending": pending,
         "partial": partial,
+        "partial_dir": str(game.get("partial_dir") or "") if partial else "",
         "busy": busy,
         "status": status,
         "disk_size": disk,
@@ -349,14 +350,17 @@ class SourcesBrowser(AsyncScreen):
 
     @Slot(str)
     def trash(self, game_id):
-        """By the store's id, not the row's index: the confirm before it outlives reloads that reorder the rows."""
+        """By the store's id, not the row's index: the confirm before it outlives reloads that reorder the rows. A stopped
+        download is thrown away the same way."""
         row = next((r for r in self._rows if r["id"] == game_id), None)
-        if not row or not row["installed"] or row["game_id"] or (self._adding and self._adding["game"] == game_id):
+        found = row and row["installed"] and not row["game_id"]
+        if not row or not (found or row["partial"]) or row["busy"] or (self._adding and self._adding["game"] == game_id):
             return
         source, title, uninstalls = self._source, row["title"], self._uninstalls()
+        said = f"Uninstalled {title}" if uninstalls else f"{title}'s files are in the trash"
 
         def done(_, error):
-            self.finished.emit(f"trash:{game_id}", not error, error or (f"Uninstalled {title}" if uninstalls else f"{title}'s files are in the trash"))
+            self.finished.emit(f"trash:{game_id}", not error, error or (said if found else f"Deleted {title}'s download"))
             self._reload(False)
 
         self._run(lambda: self._client.trash(source, game_id), done)
@@ -457,6 +461,11 @@ class SourcesBrowser(AsyncScreen):
     def _uninstalls(self):
         return "uninstall" in ((self._current_source() or {}).get("capabilities") or [])
 
+    def _discard_via(self):
+        """The store's name when it removes a stopped download itself (Steam's client); empty when the folder goes to the trash."""
+        caps = (self._current_source() or {}).get("capabilities") or []
+        return ((self._current_source() or {}).get("name") or self._source) if "uninstall" in caps and "discard" not in caps else ""
+
     sources = Property(list, lambda self: list(self._sources), notify=sourcesChanged)
     stores = Property(list, lambda self: [{"id": s["id"], "name": s.get("name") or s["id"]} for s in _stores(self._sources)], notify=sourcesChanged)
     source = Property(str, lambda self: self._source, notify=sourceChanged)
@@ -466,6 +475,7 @@ class SourcesBrowser(AsyncScreen):
     folders = Property(list, _folders, notify=sourceChanged)
     # Delete files… goes through the store, which then removes the install itself, when it has an uninstall verb.
     uninstalls = Property(bool, _uninstalls, notify=sourceChanged)
+    discardVia = Property(str, _discard_via, notify=sourceChanged)
     error = Property(str, lambda self: self._error, notify=sourceChanged)
     freeSpace = Property(float, lambda self: float(self._free), notify=sourcesChanged)
     rows = Property(list, lambda self: list(self._rows), notify=rowsChanged)

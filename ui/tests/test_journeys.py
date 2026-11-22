@@ -13,7 +13,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
-from looks import LOOKS, FocusTrace, Look, current_row, held_notices, read, settle
+from looks import DIALOG, LOOKS, MENU, FocusTrace, Look, current_row, held_notices, read, settle
 from PySide6.QtCore import QObject, Qt
 from PySide6.QtTest import QTest
 from uitest import descendant, record, until
@@ -394,6 +394,56 @@ def test_uninstall_from_settings_trashes_the_folder_and_keeps_the_game_once_it_i
     until(lambda: store_row(journey, MINI_METRO).get("installed") is False)
     game = journey.game("mini-metro")
     assert "dir" not in game["source"] and "exe" not in game["launch"] and not game.get("removed_at"), "still in the library, not installed"
+
+
+@pytest.mark.parametrize("name", LOOKS)
+def test_a_paused_download_is_deleted_from_its_menu_after_asking_and_its_row_goes_back_to_install(journey, name):
+    store(journey)
+    folder = journey.root / "games" / "Mini Metro"
+    journey.write("games/Mini Metro/part.bin", b"x" * 300)
+    journey.write("games/Mini Metro/.gogdl-resume", "h:game:part.bin\n")
+    journey.write("data/sources/gog/partials.json", json.dumps({MINI_METRO: {"dir": str(folder), "title": "Mini Metro"}}))
+    look = journey.start(look=name)
+    paused = "gogdl's stopped download reads as Paused"
+    if name == "reprise":
+        page, row = settings(look, "install")
+        menu = page.findChild(QObject, "settingsMenu")
+        until(lambda: store_row(journey, MINI_METRO).get("partial"), paused)
+        down_to(look, row, storeId=MINI_METRO)
+        look.press(Qt.Key.Key_Return)
+        trace = FocusTrace(look.window, menu=menu)
+        pick(look, menu, "trash")
+        until(lambda: menu.property("open") is True and "yes" in menu_ids(menu), "it asks first")
+        assert folder.is_dir()
+        pick(look, menu, "yes")
+    else:
+        page = look.open("pages/InstallPage.qml")
+        menu, dialog = look.menu(), look.dialog()
+        until(lambda: store_row(journey, MINI_METRO).get("partial"), paused)
+        until(lambda: ((c := read(page, "current") or {}).get("game") or c).get("id") == MINI_METRO, "the paused game under the cursor")
+        trace = FocusTrace(look.window, menu=menu)
+        look.press(Qt.Key.Key_Return if name == "switch2" else Qt.Key.Key_F1)
+        until(lambda: menu.property("open") is True)
+        if name == "switch2":
+            # Its picker holds labels alone: Resume, then the delete.
+            assert len(read(menu, "choices")) == 2, "the paused game's menu resumes or deletes it"
+            at = 1
+        else:
+            acts = [i["act"] for i in read(menu, "items")]
+            assert "trash" in acts, f"the paused game's menu deletes it: {acts}"
+            at = acts.index("trash")
+        look.press(Qt.Key.Key_Down, at - menu.property("index"))
+        look.press(Qt.Key.Key_Return)
+        until(lambda: dialog.property("open") is True and dialog.property("index") == 0, "it asks first, Cancel under the cursor")
+        assert folder.is_dir()
+        look.press(Qt.Key.Key_Right)
+        look.press(Qt.Key.Key_Return)
+    until(lambda: not folder.exists(), "the download goes")
+    assert (journey.home / ".local" / "share" / "Trash" / "files" / "Mini Metro" / "part.bin").is_file(), "to the trash, not deleted"
+    until(lambda: (r := store_row(journey, MINI_METRO)) and not r["partial"] and not r["installed"], "the next scan finds no Paused row: Install again")
+    settle(look.window)
+    trace.stop()
+    assert trace.foreign(page.objectName(), MENU[name], DIALOG[name], "settingsMenu") == [], "the focus stays on the page, its menu or its question"
 
 
 @needs_tree

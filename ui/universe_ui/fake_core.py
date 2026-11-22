@@ -1916,6 +1916,12 @@ class FakeCore:
 
     def trash(self, source, game_id):
         entry = self._source_game(source, game_id)
+        if self._installing == game_id:
+            raise UniverseError("Busy", f"{game_id} is downloading: cancel it first")
+        if entry is not None and not entry.get("installed") and entry.get("partial_dir"):
+            path = entry.pop("partial_dir")
+            entry.pop("partial_bytes", None)
+            return path
         if entry is None or not entry.get("installed") or not entry.get("dir"):
             raise UniverseError("NotFound", f"{source} finds no install of {game_id}")
         if entry.get("game_id"):

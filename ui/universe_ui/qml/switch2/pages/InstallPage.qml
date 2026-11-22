@@ -236,7 +236,7 @@ FocusScope {
         var items = [];
         var inLibrary = g.installed && g.game_id && !!api.allGames.byId(g.game_id);
         if (g.partial)
-            items.push({ label: "Resume", act: "resume" });
+            items.push({ label: "Resume", act: "resume" }, { label: "Delete Download…", act: "trash" });
         else if (g.pending)
             items.push({ label: "Update", act: "update" });
         if (g.installed && !g.game_id)
@@ -269,6 +269,9 @@ FocusScope {
                 var via = api.universe.uninstallVia(gameId);
                 shell.dialogAsk({ message: "Uninstall " + title + "?", detail: (via ? via + " removes the files" : "The install folder goes to the trash") + "; the hours and the journal stay.",
                                   buttons: ["Cancel", "Uninstall"], danger: 1 }, function(k) { if (k === 1) sources.uninstall(gameId); });
+            } else if (a === "trash" && g.partial) {
+                shell.dialogAsk({ message: "Delete " + title + "'s download?", detail: (sources.discardVia ? sources.discardVia + " removes it" : g.partial_dir + " goes to the trash") + ".",
+                                  buttons: ["Cancel", "Delete"], danger: 1, index: 0 }, function(k) { if (k === 1) sources.trash(g.id); });
             } else if (a === "trash") {
                 shell.dialogAsk({ message: "Delete " + title + "'s files?", detail: (sources.uninstalls ? sourceName + " uninstalls it" : g.dir + " goes to the trash") + ". No game in your library uses it.",
                                   buttons: ["Cancel", "Delete"], danger: 1, index: 0 }, function(k) { if (k === 1) sources.trash(g.id); });

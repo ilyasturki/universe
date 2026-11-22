@@ -400,6 +400,13 @@ FocusScope {
 
     function moreOf(g) {
         var game = libraryGameOf(g);
+        var discard = g.partial && !g.busy ? [
+            {
+                label: "Delete Download…",
+                glyph: "trash",
+                act: "trash"
+            }
+        ] : [];
         if (!game)
             return g.installed && !g.linked ? [
                 {
@@ -407,7 +414,7 @@ FocusScope {
                     glyph: "trash",
                     act: "trash"
                 }
-            ] : [];
+            ] : discard;
         var session = api.universe.currentSession;
         var main = mainOf(g);
         // Play once: the card's own button when that is Play, nowhere before the files are there.
@@ -423,7 +430,7 @@ FocusScope {
                 gap: true
             });
         }
-        return items;
+        return items.concat(discard);
     }
 
     function actionsFor(g) {
@@ -498,6 +505,17 @@ FocusScope {
             }, function (k) {
                 if (k === 1)
                     sources.uninstall(gameId);
+            });
+        } else if (id === "trash" && g.partial) {
+            shell.dialogAsk({
+                message: "Delete " + title + "'s Download?",
+                detail: (sources.discardVia ? sources.discardVia + " removes it" : g.partial_dir + " goes to the trash") + ".",
+                buttons: ["Cancel", "Delete"],
+                danger: 1,
+                index: 0
+            }, function (k) {
+                if (k === 1)
+                    sources.trash(g.id);
             });
         } else if (id === "trash") {
             shell.dialogAsk({

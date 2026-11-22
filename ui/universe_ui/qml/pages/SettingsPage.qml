@@ -332,6 +332,7 @@ FocusScope {
                     installed: g.installed,
                     busy: g.busy,
                     partial: g.partial,
+                    partialDir: g.partial_dir,
                     pending: g.pending,
                     gameId: g.game_id,
                     image: g.image,
@@ -1541,6 +1542,13 @@ FocusScope {
                 label: row.partial ? "Resume" : "Install",
                 action: row.partial ? "resume" : "install"
             });
+            if (row.partial)
+                out.push({
+                    icon: "trash",
+                    label: "Delete download…",
+                    action: "trash",
+                    danger: true
+                });
             return out;
         }
         if (row.pending)
@@ -1640,7 +1648,8 @@ FocusScope {
             return;
         } else if (action === "trash") {
             Sound.panel();
-            menu.confirm("Keep them", "trash", sources.uninstalls ? "Uninstall through " + sourceName : "Move the folder to the trash", "Delete " + row.label + "'s files?", cards, cards.focusRect, function () {
+            var trashed = row.partial ? (sources.discardVia ? "Delete through " + sources.discardVia : "Move the download to the trash") : sources.uninstalls ? "Uninstall through " + sourceName : "Move the folder to the trash";
+            menu.confirm("Keep them", "trash", trashed, "Delete " + row.label + (row.partial ? "'s download?" : "'s files?"), cards, cards.focusRect, function () {
                 Sound.enter();
                 sources.trash(row.storeId);
             });
