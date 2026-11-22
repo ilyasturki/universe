@@ -139,7 +139,7 @@ enabled = ["desktop-smoke"]
 EOF
 
 add() {
-    "$cli" add "$@" --json | python3 -c 'import json, sys; g = json.load(sys.stdin); print(g["id"] + "\t" + g["platform"])'
+    "$cli" add "$@" --json | python3 -c 'import json, sys; g = json.load(sys.stdin)["result"]; print(g["id"] + "\t" + g["platform"])'
 }
 touch "$tmp/games/quest.sh" "$tmp/games/pocket.gba"
 quest="$(add "$tmp/games/quest.sh" --runner linux --title "Smoke Quest")" || fail "the CLI added no game"
