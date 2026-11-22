@@ -369,12 +369,17 @@ def _filled(value, defaults):
 
 def _place(src, dest):
     os.makedirs(os.path.dirname(dest), exist_ok=True)
-    if os.path.exists(dest):
-        os.remove(dest)
+    tmp = f"{os.path.dirname(dest)}/.{os.path.basename(dest)}.{os.getpid()}.{threading.get_ident()}.tmp"
+    with contextlib.suppress(FileNotFoundError):
+        os.remove(tmp)
     try:
-        os.link(src, dest)
+        os.link(src, tmp)
     except OSError:
-        shutil.copy2(src, dest)
+        shutil.copy2(src, tmp)
+    os.replace(tmp, dest)
+    # A rename between two links to one file leaves both.
+    with contextlib.suppress(FileNotFoundError):
+        os.remove(tmp)
     return dest
 
 
@@ -448,7 +453,6 @@ class FakeCore:
         self._cache = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "universe", "fake-art")
         self._fake_launch = fake_launch
         self._lock = threading.Lock()
-        self._thumb_lock = threading.Lock()
         self._timers = []
         self._process = None
         self._session = None
@@ -701,8 +705,7 @@ class FakeCore:
     # The core's thumbnail is a file of its own in the cache, which trashing the shot leaves; the fixture's shots are small enough to stand as theirs.
     def _thumb(self, ident, shot):
         thumb = os.path.join(os.path.dirname(self._cache), "thumbs", f"{ident}--{shot.stem}-{shot.stat().st_mtime_ns}.png")
-        with self._thumb_lock:
-            return thumb if os.path.exists(thumb) else _place(str(shot), thumb)
+        return thumb if os.path.exists(thumb) else _place(str(shot), thumb)
 
     def media(self, ident):
         lines = self.sessions(ident)

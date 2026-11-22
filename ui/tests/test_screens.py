@@ -908,6 +908,36 @@ def test_media_timeline_merges_the_three_kinds(api):
     assert rec["durationText"] == rec["title"] and shot["durationText"] == "" and shot["excerpt"] == ""
 
 
+def test_fake_cores_sharing_the_thumbnail_cache_list_their_shots_at_once(app, xdg, fixture_art, tmp_path):
+    import shutil
+
+    from universe_ui.fake_core import FIXTURE, FakeCore
+
+    cores = [FakeCore(FIXTURE, tmp_path / f"core-{n}") for n in range(4)]
+    thumbs = os.path.join(os.path.dirname(cores[0]._cache), "thumbs")
+    failed = []
+
+    def listing(core, start):
+        start.wait()
+        try:
+            core.screenshots("")
+        except OSError as e:
+            failed.append(e)
+
+    for _ in range(10):
+        shutil.rmtree(thumbs, ignore_errors=True)
+        start = threading.Barrier(len(cores))
+        workers = [threading.Thread(target=listing, args=(core, start)) for core in cores]
+        for w in workers:
+            w.start()
+        for w in workers:
+            w.join()
+    for core in cores:
+        core.shutdown()
+    assert failed == [], "a test's core and the one a test before left running place one thumbnail at once"
+    assert not [n for n in os.listdir(thumbs) if n.endswith(".tmp")]
+
+
 def test_thumbnails_are_announced_as_they_land(api, tmp_path):
     thumbs = api.screens.thumbs
     missing = tmp_path / "shot-1.jpg"
