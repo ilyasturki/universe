@@ -24,10 +24,11 @@ runs does not, and one that wins keeps the library when the Try Again then
 fails. Where FUSE is at hand, a drive that never answers holds the library's
 read: Try Again goes on from there, not opening the core again, and once the
 drive is unmounted opens the library. A store refusing an install says why in
-its own words, whole in a toast. A store game installed again elsewhere through
-the CLI plays from there. Each run is a script of steps (button:, has:, lacks:,
-view:, dialog:, answer:, toast:, said:, copy:, feed:, move:, action:, shot:;
-docs/frontends.md has them).
+its own words, whole in a toast. A paused download's row deletes it after
+asking, its folder to the trash and the store's record with it. A store game
+installed again elsewhere through the CLI plays from there. Each run is a script
+of steps (button:, has:, lacks:, view:, dialog:, answer:, toast:, said:, copy:,
+feed:, move:, action:, shot:; docs/frontends.md has them).
 
 Fails when weston or the app does not start, a script step fails (an action
 missing, a button missing or disabled, a view, dialog or toast not shown, a
@@ -429,9 +430,34 @@ else
     echo "desktop-test: no FUSE here, so no drive that stops answering: the drive run is skipped" >&2
 fi
 
-# A store that refuses an install says why in its own words, whole in a toast at the window's scripted size.
 smoke_run="$tmp/config/sources/desktop-smoke/run"
 cp "$smoke_run" "$tmp/smoke-run"
+smoke_toml="$tmp/config/sources/desktop-smoke/source.toml"
+cp "$smoke_toml" "$tmp/smoke-source.toml"
+
+# A paused download's row deletes it after asking: its folder to this run's own trash, the store's record gone, Install offered again.
+paused="$tmp/games/Paused Smoke"
+mkdir -p "$paused"
+printf 'x' >"$paused/part.bin"
+: >"$tmp/smoke-partial"
+echo 'capabilities = ["discard"]' >>"$smoke_toml"
+sed -i "s|^    info)|    scan) [ -e '$tmp/smoke-partial' ] \&\& [ -d '$paused' ] \&\& echo '{\"event\":\"game\",\"id\":\"123\",\"title\":\"Paused Smoke\",\"owned\":true,\"installed\":false,\"partial_dir\":\"$paused\",\"partial_bytes\":1}' ;;\n    discard) rm '$tmp/smoke-partial' ;;\n&|" "$smoke_run"
+grep -q '^    discard)' "$smoke_run" || fail "the store stand-in keeps no paused download"
+# The recovery's two other stores keep Desktop Smoke's name, and the Store page may open on either.
+cp "$UNIVERSE_CONFIG_HOME/config.toml" "$tmp/config-was.toml"
+sed -i 's/^enabled = \["desktop-smoke", "desktop-out", "desktop-gone"\]$/enabled = ["desktop-smoke"]/' "$UNIVERSE_CONFIG_HOME/config.toml"
+grep -q '^enabled = \["desktop-smoke"\]$' "$UNIVERSE_CONFIG_HOME/config.toml" || fail "the config keeps other stores beside Desktop Smoke"
+(
+    export HOME="$tmp/home" XDG_DATA_HOME="$tmp/home/.local/share"
+    run paused "action:win.view::store button:store.trash dialog:cancel answer:trash has:store.install::123"
+)
+[ ! -e "$paused" ] && [ -f "$tmp/home/.local/share/Trash/files/Paused Smoke/part.bin" ] || fail "the paused download is not in the trash ($out/paused.log)"
+[ ! -e "$tmp/smoke-partial" ] || fail "the store was not asked to forget the paused download ($out/paused.log)"
+cp "$tmp/smoke-run" "$smoke_run"
+cp "$tmp/smoke-source.toml" "$smoke_toml"
+cp "$tmp/config-was.toml" "$UNIVERSE_CONFIG_HOME/config.toml"
+
+# A store that refuses an install says why in its own words, whole in a toast at the window's scripted size.
 python3 - "$repo" "$tmp" <<'PY'
 import json
 import os
@@ -470,7 +496,7 @@ sed -i "s|^    info)|    install) mkdir -p '$moved' \&\& printf '#!/bin/sh\\n' >
 run moved "action:win.open-game::store-smoke has:game.play"
 
 # Nothing on the private bus shows notifications, and GIO warns when a job's end sends one.
-if grep -E 'panicked at|CRITICAL|WARNING \*\*' "$out"/{app,service,recovery,service-recovery,stuck,late-error,late-stale,late-won,refused,moved}.log "${drive_runs[@]}" |
+if grep -E 'panicked at|CRITICAL|WARNING \*\*' "$out"/{app,service,recovery,service-recovery,stuck,late-error,late-stale,late-won,paused,refused,moved}.log "${drive_runs[@]}" |
     grep -v 'unable to send notifications through org.freedesktop.Notifications'; then
     fail "the app emitted a panic or GTK warning"
 fi

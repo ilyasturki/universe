@@ -75,6 +75,7 @@ struct Entry {
     dir: String,
     /// A stopped download waits on the disk.
     partial: bool,
+    partial_dir: String,
     download: u64,
     disk: u64,
     kept: u64,
@@ -92,6 +93,7 @@ impl Entry {
             installed,
             dir: text(v, "dir"),
             partial: !installed && !text(v, "partial_dir").is_empty(),
+            partial_dir: text(v, "partial_dir"),
             download: bytes(v, "download_size"),
             disk: bytes(v, "disk_size"),
             kept: bytes(v, "partial_bytes"),
@@ -588,6 +590,15 @@ impl StorePage {
         for entry in &paused {
             let row = self.row(entry, &entry.paused());
             row.add_suffix(&button(&gettext("_Resume"), "store.resume", &entry.id));
+            let delete = gtk::Button::builder()
+                .icon_name("user-trash-symbolic")
+                .tooltip_text(gettext("Delete Download"))
+                .valign(gtk::Align::Center)
+                .action_name("store.trash")
+                .action_target(&entry.id.to_variant())
+                .css_classes(["flat"])
+                .build();
+            row.add_suffix(&delete);
             self.add(&imp.job_group, &row);
         }
         imp.job_row.set_visible(job.is_some());
@@ -967,8 +978,12 @@ impl StorePage {
     }
 
     fn confirm_trash(&self, id: &str) {
-        let Some(entry) = self.entry(id).filter(|e| e.installed && e.game_id.is_empty()) else { return };
+        let Some(entry) = self.entry(id).filter(|e| (e.installed && e.game_id.is_empty()) || e.partial) else { return };
         if self.app().and_then(|app| app.job()).is_some_and(|job| job.target() == id) {
+            return;
+        }
+        if entry.partial {
+            self.ask_discard(entry);
             return;
         }
         let body = if self.uninstalls() {
@@ -988,6 +1003,25 @@ impl StorePage {
         dialog.present(Some(self));
     }
 
+    fn ask_discard(&self, entry: Entry) {
+        let caps = self.store()["capabilities"].as_array().cloned().unwrap_or_default();
+        let body = if caps.iter().any(|c| c == "uninstall") && !caps.iter().any(|c| c == "discard") {
+            gettext("{} removes what came down.").replace("{}", &text(&self.store(), "name"))
+        } else {
+            gettext("{} goes to the trash.").replace("{}", &tilde(&entry.partial_dir))
+        };
+        let dialog = adw::AlertDialog::new(Some(&gettext("Delete {}'s Download?").replace("{}", &entry.title)), Some(&body));
+        dialog.add_responses(&[("cancel", &gettext("_Cancel")), ("trash", &gettext("_Delete Download"))]);
+        dialog.set_response_appearance("trash", adw::ResponseAppearance::Destructive);
+        dialog.set_default_response(Some("cancel"));
+        dialog.set_close_response("cancel");
+        let page = self.downgrade();
+        dialog.connect_response(Some("trash"), move |_, _| {
+            page.upgrade().inspect(|page| page.trash(&entry));
+        });
+        dialog.present(Some(self));
+    }
+
     /// Delete Files… goes through the store, which removes the install itself, when it has an uninstall verb.
     fn uninstalls(&self) -> bool {
         self.store()["capabilities"].as_array().is_some_and(|caps| caps.iter().any(|c| c == "uninstall"))
@@ -995,7 +1029,13 @@ impl StorePage {
 
     fn trash(&self, entry: &Entry) {
         let (page, source, id, title) = (self.downgrade(), self.imp().source.borrow().clone(), entry.id.clone(), entry.title.clone());
-        let done = if self.uninstalls() { gettext("{} is uninstalled") } else { gettext("{}'s files are in the trash") };
+        let done = if entry.partial {
+            gettext("Deleted {}'s download")
+        } else if self.uninstalls() {
+            gettext("{} is uninstalled")
+        } else {
+            gettext("{}'s files are in the trash")
+        };
         glib::spawn_future_local(async move {
             let result = backend::pinned(move |core| async move { core.source_trash(&source, &id).await }).await;
             let Some(page) = page.upgrade() else { return };
