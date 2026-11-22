@@ -471,6 +471,13 @@ FocusScope {
         subSwap.restart();
     }
 
+    function leaveFailedSub() {
+        if (!subLoader.failed)
+            return;
+        Notices.fail("This page could not open");
+        closeSub();
+    }
+
     function closeSub() {
         Sound.cancel();
         if (subReturn) {
@@ -1254,11 +1261,10 @@ FocusScope {
                 item.forceActiveFocus();
                 subHold.release();
             }
-            onStatusChanged: {
-                if (status === Loader.Error && root.subOpen) {
-                    Notices.fail("This page could not open");
-                    root.closeSub();
-                }
+            readonly property bool failed: root.subOpen && status === Loader.Error
+            onFailedChanged: {
+                if (failed)
+                    Qt.callLater(root.leaveFailedSub);
             }
 
             Connections {

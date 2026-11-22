@@ -1162,12 +1162,14 @@ def test_a_sub_page_that_fails_to_load_says_so_and_gives_the_keys_back(look, api
     root = look.root
     home = look.home()
     shown = game_id(home)
-    posted, _clear = held_notices(look.engine)
-    invoke(root, "openSub", QUrl.fromLocalFile(str(broken)).toString(), {"game": api.allGames.byId("the-technomancer")})
-    look.press(Qt.Key.Key_Escape)
-    until(lambda: root.property("subOpen") is False, "the page that never loaded is left")
-    until(lambda: [n["error"] for n in posted()] == [True], "and says so")
-    until(lambda: "homePage" in focus_names(look.window))
+    posted, clear = held_notices(look.engine)
+    for opened in ("cold", "again, its loader gone"):
+        clear()
+        invoke(root, "openSub", QUrl.fromLocalFile(str(broken)).toString(), {"game": api.allGames.byId("the-technomancer")})
+        look.press(Qt.Key.Key_Escape)
+        until(lambda: root.property("subOpen") is False, f"{opened}: the page that never loaded is left")
+        until(lambda: [n["error"] for n in posted()] == [True], f"{opened}: and says so")
+        until(lambda: "homePage" in focus_names(look.window) and not look.find("subLoader").property("active"))
     look.press(Qt.Key.Key_Right)
     until(lambda: game_id(home) != shown, "the keys reach Home again")
 
