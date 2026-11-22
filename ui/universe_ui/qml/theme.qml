@@ -1181,8 +1181,7 @@ FocusScope {
                 item.overlayHints = Qt.binding(function () {
                     return root.overlayHints;
                 });
-                if (!detailHold.owes())
-                    item.forceActiveFocus();
+                item.forceActiveFocus();
                 detailHold.release();
             }
 
@@ -1222,7 +1221,6 @@ FocusScope {
 
     KeyHold {
         id: subHold
-        objectName: "subKeyHold"
 
         anchors.fill: parent
         focus: root.subOpen
@@ -1253,8 +1251,7 @@ FocusScope {
                 item.args = Qt.binding(function () {
                     return root.subArgs;
                 });
-                if (!subHold.owes())
-                    item.forceActiveFocus();
+                item.forceActiveFocus();
                 subHold.release();
             }
 

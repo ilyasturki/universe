@@ -212,17 +212,13 @@ class Mapper:
 POSTED = {}
 
 
-def post_key(key, pressed, autorepeat=False, window=None, source="pad", text="", modifiers=Qt.KeyboardModifier.NoModifier, now=False):
+def post_key(key, pressed, autorepeat=False, window=None, source="pad", text="", modifiers=Qt.KeyboardModifier.NoModifier):
     window = window or QGuiApplication.focusWindow()
     if window is None:
         return False
     kind = QEvent.Type.KeyPress if pressed else QEvent.Type.KeyRelease
     POSTED.setdefault((int(key), pressed), []).append(source)
-    event = QKeyEvent(kind, key, modifiers, text, autorepeat)
-    if now:
-        QCoreApplication.sendEvent(window, event)
-    else:
-        QCoreApplication.postEvent(window, event)
+    QCoreApplication.postEvent(window, QKeyEvent(kind, key, modifiers, text, autorepeat))
     return True
 
 

@@ -206,7 +206,7 @@ class Keys(QObject):
     def replay(self, key, pressed, text, modifiers):
         from .gamepad import post_key
 
-        post_key(Qt.Key(key), pressed, window=self._focus_window(), source="replay", text=text, modifiers=Qt.KeyboardModifier(modifiers), now=True)
+        post_key(Qt.Key(key), pressed, window=self._focus_window(), source="replay", text=text, modifiers=Qt.KeyboardModifier(modifiers))
 
     def _focus_window(self):
         from PySide6.QtGui import QGuiApplication
