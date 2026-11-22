@@ -2127,7 +2127,8 @@ fn a_paused_gog_download_is_refused_while_it_runs_then_goes_to_the_trash_and_off
     let path = format!("{}:{}", repo.join("sources/gog/tests/shims").display(), std::env::var("PATH").unwrap());
     let sources = repo.join("sources");
     let log = dir.path().join("gogdl.log");
-    let env = [NO_BUS, ("PATH", path.as_str()), ("UNIVERSE_SOURCES_PATH", sources.to_str().unwrap()), ("SHIM_MODE", "partial"), ("SHIM_LOG", log.to_str().unwrap())];
+    let env =
+        [NO_BUS, ("PATH", path.as_str()), ("UNIVERSE_SOURCES_PATH", sources.to_str().unwrap()), ("SHIM_MODE", "partial"), ("SHIM_LOG", log.to_str().unwrap())];
     let folder = games.join("Mini Metro");
     let mut install = command(&dir, &["install", "1434554947", "--source", "gog"], &env).process_group(0).spawn().unwrap();
     let started = std::time::Instant::now();
