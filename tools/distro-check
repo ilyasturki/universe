@@ -6,8 +6,9 @@ usage() {
 usage: tools/distro-check
 
 What a user of a distro other than NixOS goes through, on this one: the core's
-tests, then tools/dist's tree, built here and packed as a release tarball,
-through tools/release-smoke: install.sh, the CLI, doctor, Universe Desktop
+tests, again where the bus, sound and X servers they start will not (each of
+those skips, as on a packager's builder), then tools/dist's tree, built here
+and packed as a release tarball, through tools/release-smoke: install.sh, the CLI, doctor, Universe Desktop
 where the distro's GTK is new enough for it, the UI offscreen (shots in
 DISTRO_OUT, default target/distro-check) and the uninstall.
 
@@ -25,8 +26,22 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
 echo "── test"
-# the journal tests expect Paris local time, as the flake's check does; an unknown machine's load holds the speed budgets to their loose limits
-TZ=Europe/Paris UNIVERSE_TEST_BUDGET_S=0 cargo test --quiet --locked -p universe --manifest-path "$repo/Cargo.toml"
+# the journal tests expect Paris local time, as the flake's check does; an unknown machine's load holds the speed budgets to their loose limits; tools/ci-deps installed every server the tests start
+TZ=Europe/Paris UNIVERSE_TEST_BUDGET_S=0 UNIVERSE_TEST_DISPLAY=1 cargo test --quiet --locked -p universe --manifest-path "$repo/Cargo.toml"
+
+echo "── headless test"
+# A packager's builder (Chaotic-AUR, COPR) whose bus, sound and X servers will not start: their tests skip, saying why, and the rest pass
+mkdir "$work/servers"
+for bin in dbus-daemon Xvfb pipewire wpctl; do
+    printf '#!/bin/sh\nexit 1\n' > "$work/servers/$bin"
+    chmod +x "$work/servers/$bin"
+done
+env -u UNIVERSE_TEST_DISPLAY -u DISPLAY -u WAYLAND_DISPLAY -u DBUS_SESSION_BUS_ADDRESS PATH="$work/servers:$PATH" TZ=Europe/Paris UNIVERSE_TEST_BUDGET_S=0 \
+    cargo test --quiet --locked -p universe --manifest-path "$repo/Cargo.toml" -- --nocapture > "$work/headless.log" 2>&1 || { cat "$work/headless.log"; exit 1; }
+for server in dbus-daemon Xvfb pipewire; do
+    grep -qi "skipped: .*$server" "$work/headless.log" || { cat "$work/headless.log"; echo "distro-check: no test skipped for want of $server" >&2; exit 1; }
+done
+echo "headless: $(grep -c 'skipped: ' "$work/headless.log") skipped"
 
 echo "── dist"
 python=

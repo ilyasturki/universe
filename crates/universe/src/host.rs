@@ -926,7 +926,7 @@ while True:
     #[tokio::test]
     async fn a_game_ignoring_sigterm_is_killed_after_its_grace_with_no_core_to_dump() {
         let Some(cgroup) = Cgroup::new().map(Arc::new) else { return };
-        let bus = Bus::start();
+        let Some(bus) = Bus::start() else { return };
         let _manager = Manager::serve(&bus, UNIT, cgroup.clone()).await;
         let (exit, mut lines) = game(&cgroup, IGNORES_TERM).await;
         let units = Units::Systemd(Systemd::on(bus.connect().await));
@@ -952,7 +952,7 @@ while True:
         rustix::process::kill_process(pid, rustix::process::Signal::TERM).unwrap();
         assert_eq!(exit.await.unwrap().code(), Some(70), "a SIGTERM right behind the thaw meets the catch-up");
 
-        let bus = Bus::start();
+        let Some(bus) = Bus::start() else { return };
         let _manager = Manager::serve(&bus, UNIT, cgroup.clone()).await;
         let (exit, _) = game(&cgroup, CATCHES_UP).await;
         let units = Units::Systemd(Systemd::on(bus.connect().await));

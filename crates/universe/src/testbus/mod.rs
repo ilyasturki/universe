@@ -5,6 +5,13 @@ pub mod systemd;
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};
 
+/// A server the test starts for itself would not start: the test skips, saying why, unless UNIVERSE_TEST_DISPLAY requires every such server (the dev shell, the Nix check, CI's distros).
+pub fn server_missing<T>(why: &str) -> Option<T> {
+    assert!(std::env::var_os("UNIVERSE_TEST_DISPLAY").is_none(), "{why}, and UNIVERSE_TEST_DISPLAY requires it");
+    eprintln!("skipped: {why}");
+    None
+}
+
 pub struct Bus {
     daemon: Child,
     pub address: String,
@@ -25,21 +32,28 @@ const CONFIG: &str = r#"<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bu
 "#;
 
 impl Bus {
-    pub fn start() -> Bus {
+    pub fn start() -> Option<Bus> {
         let dir = tempfile::tempdir().unwrap();
         let config = dir.path().join("bus.conf");
         let mut f = std::fs::File::create(&config).unwrap();
         f.write_all(CONFIG.replace("@SOCKET@", &dir.path().join("bus").display().to_string()).as_bytes()).unwrap();
-        let mut daemon = Command::new("dbus-daemon")
+        let spawned = Command::new("dbus-daemon")
             .arg(format!("--config-file={}", config.display()))
             .args(["--nofork", "--print-address=1"])
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
-            .spawn()
-            .expect("dbus-daemon runs the tests' private bus: put it on PATH (the dbus package)");
+            .spawn();
+        let mut daemon = match spawned {
+            Ok(daemon) => daemon,
+            Err(e) => return server_missing(&format!("dbus-daemon runs the tests' private bus and is not on PATH (the dbus package): {e}")),
+        };
         let mut address = String::new();
         BufReader::new(daemon.stdout.take().unwrap()).read_line(&mut address).unwrap();
-        Bus { daemon, address: address.trim().to_string(), _dir: dir }
+        if address.trim().is_empty() {
+            let _ = daemon.wait();
+            return server_missing("dbus-daemon exited before naming the tests' private bus");
+        }
+        Some(Bus { daemon, address: address.trim().to_string(), _dir: dir })
     }
 
     pub async fn connect(&self) -> zbus::Connection {

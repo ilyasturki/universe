@@ -211,29 +211,35 @@ struct Gamescope {
 }
 
 impl Gamescope {
-    fn start() -> Gamescope {
+    fn start() -> Option<Gamescope> {
         let mut fds = [0; 2];
         // SAFETY: `fds` has room for the two ends.
         assert_eq!(unsafe { libc::pipe(fds.as_mut_ptr()) }, 0);
-        let server = std::process::Command::new("Xvfb")
+        let spawned = std::process::Command::new("Xvfb")
             .args(["-displayfd", &fds[1].to_string(), "-nolisten", "tcp", "-screen", "0", "64x64x24"])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
-            .spawn()
-            .expect("Xvfb stands in for the launcher's gamescope: put it on PATH (the xvfb package)");
-        // SAFETY: the write end is the server's now; the read end is ours alone.
+            .spawn();
+        // SAFETY: the write end is the server's now, or no one's; the read end is ours alone.
         let mut number = String::new();
         unsafe {
             libc::close(fds[1]);
             std::io::Read::read_to_string(&mut <std::fs::File as std::os::fd::FromRawFd>::from_raw_fd(fds[0]), &mut number).unwrap();
         }
-        assert!(!number.trim().is_empty(), "Xvfb exited before naming its display");
+        let mut server = match spawned {
+            Ok(server) => server,
+            Err(e) => return testbus::server_missing(&format!("Xvfb stands in for the launcher's gamescope and is not on PATH (the xvfb package): {e}")),
+        };
+        if number.trim().is_empty() {
+            let _ = server.wait();
+            return testbus::server_missing("Xvfb exited before naming its display");
+        }
         let display = format!(":{}", number.trim());
         let (conn, screen) = x11rb::connect(Some(&display)).unwrap();
         let root = conn.setup().roots[screen].root;
         let gamescope = Gamescope { server, conn, root, display };
         gamescope.set("GAMESCOPE_PID", std::process::id());
-        gamescope
+        Some(gamescope)
     }
 
     fn atom(&self, name: &str) -> u32 {
@@ -388,8 +394,8 @@ fn hud_limit_and_filter_changed_in_game_last_the_session_and_leave_the_settings_
     let mangohud = stub(&stubs, "mangohud", "exec \"$@\"");
     stub(&stubs, "journalctl", "exit 0");
     let game = stub(root, "game.sh", &format!("exec {} 600", which("sleep").display()));
-    let gamescope = Gamescope::start();
-    let bus = testbus::Bus::start();
+    let Some(gamescope) = Gamescope::start() else { return };
+    let Some(bus) = testbus::Bus::start() else { return };
     for (var, sub) in [("UNIVERSE_DATA_HOME", "data"), ("UNIVERSE_CONFIG_HOME", "config"), ("UNIVERSE_STATE_HOME", "state"), ("UNIVERSE_CACHE_HOME", "cache")] {
         std::env::set_var(var, root.join(sub));
     }

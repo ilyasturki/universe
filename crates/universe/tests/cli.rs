@@ -1886,7 +1886,7 @@ fn network_and_bluetooth_lists_read_as_unavailable_without_a_system_bus() {
 
 #[tokio::test]
 async fn network_lists_what_networkmanager_on_the_system_bus_sees() {
-    let bus = testbus::Bus::start();
+    let Some(bus) = testbus::Bus::start() else { return };
     let nm = testbus::nm::Nm::serve(&bus, testbus::nm::Router::default()).await;
     nm.access_point("Home", 70, "psk").await;
     let dir = tempfile::tempdir().unwrap();
@@ -1909,7 +1909,7 @@ fn echoes(fd: i32) -> bool {
 #[tokio::test]
 async fn a_password_prompt_cut_short_puts_the_terminals_echo_back() {
     use std::os::fd::FromRawFd;
-    let bus = testbus::Bus::start();
+    let Some(bus) = testbus::Bus::start() else { return };
     let nm = testbus::nm::Nm::serve(&bus, testbus::nm::Router::default()).await;
     nm.access_point("Home", 70, "psk").await;
     let (mut primary, mut terminal) = (0, 0);
@@ -1949,7 +1949,7 @@ async fn a_password_prompt_cut_short_puts_the_terminals_echo_back() {
 #[tokio::test]
 async fn bluetooth_watch_pairs_through_its_own_agent_over_stdin() {
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
-    let bus = testbus::Bus::start();
+    let Some(bus) = testbus::Bus::start() else { return };
     let bluez = testbus::bluez::Bluez::serve(&bus).await;
     bluez.add("AA:BB:CC:00:00:02", Some("K380"), "input-keyboard", false, testbus::bluez::Pairing::Confirm(4242)).await;
     let dir = tempfile::tempdir().unwrap();

@@ -688,7 +688,7 @@ mod tests {
 
     #[tokio::test]
     async fn the_networks_in_range_and_the_link() {
-        let bus = Bus::start();
+        let Some(bus) = Bus::start() else { return };
         let nm = Nm::serve(&bus, Router::default()).await;
         nm.access_point("Home", 70, "psk").await;
         nm.access_point("Home", 40, "psk").await;
@@ -706,7 +706,7 @@ mod tests {
 
     #[tokio::test]
     async fn no_networkmanager_reads_as_unavailable() {
-        let bus = Bus::start();
+        let Some(bus) = Bus::start() else { return };
         let conn = bus.connect().await;
         assert_eq!(read(&conn).await, Network::default());
         assert!(connect(&conn, "Home", None).await.is_err());
@@ -715,7 +715,7 @@ mod tests {
     // A new network joins with its password and is saved for this user alone where NM wants an admin for everyone's.
     #[tokio::test]
     async fn a_new_network_joins_and_is_saved_for_the_user() {
-        let bus = Bus::start();
+        let Some(bus) = Bus::start() else { return };
         let nm = Nm::serve(&bus, Router { password: "hunter22".into(), system: false }).await;
         nm.access_point("Home", 70, "psk").await;
         let mut s = Session::start(&bus).await;
@@ -735,7 +735,7 @@ mod tests {
 
     #[tokio::test]
     async fn where_nm_allows_it_a_network_is_saved_for_everyone() {
-        let bus = Bus::start();
+        let Some(bus) = Bus::start() else { return };
         let nm = Nm::serve(&bus, Router { password: "hunter22".into(), system: true }).await;
         nm.access_point("Home", 70, "psk").await;
         connect(&bus.connect().await, "Home", Some("hunter22")).await.unwrap();
@@ -745,7 +745,7 @@ mod tests {
     // A wrong password is its own failure, and leaves no half-made connection behind.
     #[tokio::test]
     async fn a_wrong_password_fails_as_such_and_saves_nothing() {
-        let bus = Bus::start();
+        let Some(bus) = Bus::start() else { return };
         let nm = Nm::serve(&bus, Router { password: "hunter22".into(), system: false }).await;
         nm.access_point("Home", 70, "psk").await;
         let mut s = Session::start(&bus).await;
@@ -760,7 +760,7 @@ mod tests {
     // A network saved with its secret in a desktop's keyring asks again; the password typed here is saved into it.
     #[tokio::test]
     async fn a_saved_network_joins_as_saved_or_takes_a_new_password() {
-        let bus = Bus::start();
+        let Some(bus) = Bus::start() else { return };
         let nm = Nm::serve(&bus, Router { password: "hunter22".into(), system: false }).await;
         nm.access_point("Home", 70, "psk").await;
         nm.saved("Home", "").await;
@@ -774,7 +774,7 @@ mod tests {
 
     #[tokio::test]
     async fn wifi_switches_scans_and_forgets() {
-        let bus = Bus::start();
+        let Some(bus) = Bus::start() else { return };
         let nm = Nm::serve(&bus, Router::default()).await;
         nm.access_point("Home", 70, "psk").await;
         nm.saved("Home", "hunter22").await;

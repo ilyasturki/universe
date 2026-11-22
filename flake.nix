@@ -136,8 +136,8 @@
           "-p"
           "universe"
         ];
-        # chrono ignores TZDIR, so the zone is given as a file; a shared builder's load holds the speed budgets to their loose limits; the saves tests skip where ludusavi is missing, but not here
-        preCheck = "export TZ=${pkgs.tzdata}/share/zoneinfo/Europe/Paris UNIVERSE_TEST_BUDGET_S=0 UNIVERSE_TEST_LUDUSAVI=1";
+        # chrono ignores TZDIR, so the zone is given as a file; a shared builder's load holds the speed budgets to their loose limits; the saves tests skip where ludusavi is missing, and the bus, sound and X tests where their server will not start, but not here
+        preCheck = "export TZ=${pkgs.tzdata}/share/zoneinfo/Europe/Paris UNIVERSE_TEST_BUDGET_S=0 UNIVERSE_TEST_LUDUSAVI=1 UNIVERSE_TEST_DISPLAY=1";
         # reqwest's platform verifier refuses to build a client on an empty CA store; the NetworkManager and BlueZ tests run their own dbus-daemon, the volume keys' test its own PipeWire, the game session's an Xvfb for gamescope
         nativeCheckInputs = [
           pkgs.cacert
@@ -702,9 +702,10 @@
           # a headless compositor for `just desktop-shot`
           ++ [ weston ];
         buildInputs = desktopLibs ++ gstPlugins;
-        # The saves tests skip where ludusavi is missing, but not in the dev shell
+        # The saves tests skip where ludusavi is missing, and the bus, sound and X tests where their server will not start, but not in the dev shell
         env = checkEnv // {
           UNIVERSE_TEST_LUDUSAVI = "1";
+          UNIVERSE_TEST_DISPLAY = "1";
         };
         shellHook = ''
           export UNIVERSE_MODULES_PATH="$PWD/modules"

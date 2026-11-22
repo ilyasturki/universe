@@ -7,6 +7,10 @@ use std::time::Duration;
 
 use serde_json::{json, Value};
 
+#[path = "../src/testbus/mod.rs"]
+#[allow(dead_code)]
+mod testbus;
+
 const STEP: u8 = 2;
 // Past the watcher's 1 s burst, within which a press reuses the output name it last read.
 const PAUSE: Duration = Duration::from_millis(1200);
@@ -18,7 +22,12 @@ struct PipeWire {
 }
 
 impl PipeWire {
-    fn start(dir: &Path) -> PipeWire {
+    fn start(dir: &Path) -> Option<PipeWire> {
+        for (bin, package) in [("wpctl", "wireplumber"), ("pw-metadata", "pipewire")] {
+            if !std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()).any(|d| d.join(bin).is_file()) {
+                return testbus::server_missing(&format!("{bin} drives the test's private PipeWire and is not on PATH (the {package} package)"));
+            }
+        }
         let runtime = dir.join("pipewire");
         std::fs::create_dir_all(&runtime).unwrap();
         let sink = |name: &str, label: &str| {
@@ -48,22 +57,28 @@ context.objects = [
         let path = dir.join("pipewire.conf");
         std::fs::write(&path, conf).unwrap();
         // A dev shell's LD_LIBRARY_PATH carries its own libpipewire, whose modules another build of the daemon cannot load.
-        let daemon = Command::new("pipewire")
+        let spawned = Command::new("pipewire")
             .arg("-c")
             .arg(&path)
             .env_remove("LD_LIBRARY_PATH")
             .env("PIPEWIRE_RUNTIME_DIR", &runtime)
             .stdout(Stdio::null())
             .stderr(Stdio::null())
-            .spawn()
-            .expect("pipewire runs the test's private sound server: put it on PATH (the pipewire package)");
-        let pw = PipeWire { daemon, runtime };
+            .spawn();
+        let daemon = match spawned {
+            Ok(daemon) => daemon,
+            Err(e) => return testbus::server_missing(&format!("pipewire runs the test's private sound server and is not on PATH (the pipewire package): {e}")),
+        };
+        let mut pw = PipeWire { daemon, runtime };
         let up = std::time::Instant::now();
         while pw.try_wpctl(&["get-volume", "@DEFAULT_AUDIO_SINK@"]).is_err() {
+            if let Ok(Some(status)) = pw.daemon.try_wait() {
+                return testbus::server_missing(&format!("the test's private PipeWire exited before it came up ({status})"));
+            }
             assert!(up.elapsed() < WAIT, "the private PipeWire never came up");
             std::thread::sleep(Duration::from_millis(10));
         }
-        pw
+        Some(pw)
     }
 
     fn env<'a>(&'a self, cmd: &'a mut Command) -> &'a mut Command {
@@ -205,7 +220,7 @@ fn percents(levels: &[Value]) -> Vec<u64> {
 #[test]
 fn volume_keys_step_under_the_mute_unmute_going_up_and_name_the_output_picked() {
     let dir = tempfile::tempdir().unwrap();
-    let pw = PipeWire::start(dir.path());
+    let Some(pw) = PipeWire::start(dir.path()) else { return };
     pw.wpctl(&["set-volume", "@DEFAULT_AUDIO_SINK@", "0.4"]);
     let mut w = Watcher::start(dir.path(), &pw);
 

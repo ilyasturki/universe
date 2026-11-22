@@ -654,7 +654,7 @@ mod tests {
     // The adapter and the devices worth a row: paired ones, and found ones with a name; a nameless one is a beacon.
     #[tokio::test]
     async fn bluez_lists_the_adapter_and_its_named_devices() {
-        let bus = Bus::start();
+        let Some(bus) = Bus::start() else { return };
         let bluez = Bluez::serve(&bus).await;
         bluez.add(PAD, Some("Xbox Wireless Controller"), "input-gaming", true, Pairing::JustWorks).await;
         bluez.add(HEADSET, Some("WH-1000XM4"), "audio-headset", false, Pairing::JustWorks).await;
@@ -669,7 +669,7 @@ mod tests {
 
     #[tokio::test]
     async fn no_bluez_reads_as_unavailable() {
-        let bus = Bus::start();
+        let Some(bus) = Bus::start() else { return };
         let conn = bus.connect().await;
         assert_eq!(read(&conn).await, Bluetooth::default());
         assert!(matches!(set_powered(&conn, true).await, Err(Error::Io(_) | Error::Unavailable(_))));
@@ -678,7 +678,7 @@ mod tests {
     // A just-works pad pairs from the list: Pair, Trusted so it comes back on its own, then Connect.
     #[tokio::test]
     async fn a_pad_pairs_trusts_and_connects() {
-        let bus = Bus::start();
+        let Some(bus) = Bus::start() else { return };
         let bluez = Bluez::serve(&bus).await;
         bluez.add(PAD, Some("Pro Controller"), "input-gaming", false, Pairing::JustWorks).await;
         let mut s = Session::start(&bus, false).await;
@@ -696,7 +696,7 @@ mod tests {
     // A keyboard's passkey comes to the watch's own agent, not the default one: BlueZ asks the caller's agent first.
     #[tokio::test]
     async fn a_pairing_asks_the_watchs_own_agent_and_takes_its_answer() {
-        let bus = Bus::start();
+        let Some(bus) = Bus::start() else { return };
         let bluez = Bluez::serve(&bus).await;
         bluez.add(KEYBOARD, Some("K380"), "input-keyboard", false, Pairing::Confirm(4242)).await;
         let mut s = Session::start(&bus, false).await;
@@ -713,7 +713,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_refused_passkey_leaves_the_device_unpaired() {
-        let bus = Bus::start();
+        let Some(bus) = Bus::start() else { return };
         let bluez = Bluez::serve(&bus).await;
         bluez.add(KEYBOARD, Some("K380"), "input-keyboard", false, Pairing::Confirm(4242)).await;
         let mut s = Session::start(&bus, false).await;
@@ -728,7 +728,7 @@ mod tests {
     // BlueZ gives up on a question it sent: the watch says so, and an answer coming after reaches no one.
     #[tokio::test]
     async fn a_question_bluez_cancels_closes() {
-        let bus = Bus::start();
+        let Some(bus) = Bus::start() else { return };
         let bluez = Bluez::serve(&bus).await;
         bluez.add(KEYBOARD, Some("K380"), "input-keyboard", false, Pairing::Confirm(1)).await;
         let mut s = Session::start(&bus, false).await;
@@ -744,7 +744,7 @@ mod tests {
     // The user backs out of a pairing that shows a code: the pairing stops, and BlueZ withdraws its question.
     #[tokio::test]
     async fn a_pairing_the_user_cancels_stops() {
-        let bus = Bus::start();
+        let Some(bus) = Bus::start() else { return };
         let bluez = Bluez::serve(&bus).await;
         bluez.add(KEYBOARD, Some("K380"), "input-keyboard", false, Pairing::Confirm(1)).await;
         let mut s = Session::start(&bus, false).await;
@@ -759,7 +759,7 @@ mod tests {
     // In the Universe session the watch is the default agent: BlueZ's cable pairing of a plugged-in DualSense asks it.
     #[tokio::test]
     async fn the_session_agent_answers_a_cable_pairing() {
-        let bus = Bus::start();
+        let Some(bus) = Bus::start() else { return };
         let bluez = Bluez::serve(&bus).await;
         let pad = bluez.add(PAD, Some("DualSense Wireless Controller"), "input-gaming", false, Pairing::JustWorks).await;
         let mut s = Session::start(&bus, true).await;
@@ -778,7 +778,7 @@ mod tests {
     // A pad still on comes back on its own; one that switched itself off on the drop waits for its PS or HOME button.
     #[tokio::test]
     async fn a_reconnect_drops_the_link_then_brings_the_pad_back_or_says_it_sleeps() {
-        let bus = Bus::start();
+        let Some(bus) = Bus::start() else { return };
         let bluez = Bluez::serve(&bus).await;
         bluez.add(PAD, Some("DualSense Edge Wireless Controller"), "input-gaming", true, Pairing::JustWorks).await;
         let conn = bus.connect().await;
@@ -793,7 +793,7 @@ mod tests {
 
     #[tokio::test]
     async fn power_connect_disconnect_and_forget() {
-        let bus = Bus::start();
+        let Some(bus) = Bus::start() else { return };
         let bluez = Bluez::serve(&bus).await;
         bluez.add(HEADSET, Some("WH-1000XM4"), "audio-headset", true, Pairing::JustWorks).await;
         let mut s = Session::start(&bus, false).await;
@@ -813,7 +813,7 @@ mod tests {
     // A page's search outlives the adapter going off and on, and each command says how it went.
     #[tokio::test]
     async fn a_search_outlives_a_power_cycle_and_every_command_answers() {
-        let bus = Bus::start();
+        let Some(bus) = Bus::start() else { return };
         let _bluez = Bluez::serve(&bus).await;
         let mut s = Session::start(&bus, false).await;
         s.send(json!({"cmd": "power", "on": false}));
@@ -830,7 +830,7 @@ mod tests {
     // BlueZ shows a keyboard's code again for each key typed on it: the same question, its count moved on.
     #[tokio::test]
     async fn a_codes_keystrokes_keep_its_question() {
-        let bus = Bus::start();
+        let Some(bus) = Bus::start() else { return };
         let (tx, mut lines) = mpsc::unbounded_channel();
         let (done, _outcomes) = mpsc::unbounded_channel();
         let emit = move |v| tx.send(v).is_ok();
