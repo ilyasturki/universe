@@ -1359,6 +1359,77 @@ fn a_restore_and_an_export_in_another_process_wait_out_a_running_backup() {
 }
 
 #[test]
+fn a_backup_under_way_keeps_its_saves_from_a_prefix_move_and_a_cloud_download_and_waits_for_neither() {
+    let Some(game) = SavedGame::new(5, |dir| {
+        format!("if mkdir {0} 2>/dev/null; then while [ -e {1} ]; do sleep 0.02; done; fi", dir.join("started").display(), dir.join("hold").display())
+    }) else {
+        return;
+    };
+    let dir = game.dir.path();
+    let (started, hold, synced, gate_dir) = (dir.join("started"), dir.join("hold"), dir.join("synced"), dir.join("gate"));
+    let prefix = dir.join("wine/fixture");
+    std::fs::create_dir_all(prefix.parent().unwrap()).unwrap();
+    std::fs::rename(dir.join("data/prefixes/fixture-game"), &prefix).unwrap();
+    let toml = dir.join("data/games/fixture-game/game.toml");
+    let claimed = std::fs::read_to_string(&toml).unwrap().replace("kind = \"manual\"\nid = \"\"", "kind = \"cloud\"\nid = \"c1\"");
+    std::fs::write(&toml, claimed.replace(&dir.join("data/prefixes/fixture-game").display().to_string(), &prefix.display().to_string())).unwrap();
+    let config = dir.join("config/config.toml");
+    std::fs::write(&config, std::fs::read_to_string(&config).unwrap() + "[sources]\nenabled = [\"cloud\"]\n").unwrap();
+    let live = prefix.join(FIXTURE_SAVES).join("slot1.sav");
+    std::fs::write(&live, "local").unwrap();
+    // A download as GOG's: the saves backed up first, through Universe, then replaced.
+    let download = format!(
+        "\"$UNIVERSE_BIN\" saves backup \"$GAME_ID\" >/dev/null || exit 1; [ -d {gate} ] && {wait}; echo cloud > '{live}'; echo $3 >> {synced}",
+        gate = gate_dir.display(),
+        wait = gate(&gate_dir),
+        live = live.display(),
+        synced = synced.display()
+    );
+    let source = dir.join("sources/cloud");
+    shim(&source, "run", &format!("case \"$1 $3\" in \"cloud-saves download\") {download} ;; esac\necho '{{\"event\":\"cloud\",\"state\":\"synced\"}}'\necho '{{\"event\":\"done\"}}'\n"));
+    std::fs::write(source.join("source.toml"), "api = 2\nid = \"cloud\"\nname = \"Cloud\"\nexe = \"run\"\ncapabilities = [\"cloud-saves\"]\n").unwrap();
+    let cli = |args: &[&str]| universe(&game.dir, args, &[("PATH", &game.path)]);
+
+    std::fs::write(&hold, "").unwrap();
+    let backup = game.spawn_backup();
+    let waiting = std::time::Instant::now();
+    while !started.exists() {
+        assert!(waiting.elapsed().as_secs() < 10, "the backup never reached ludusavi");
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    for args in [&["data", "fixture-game", "move-prefix", "--yes"][..], &["saves", "cloud", "fixture-game", "--download", "--yes"]] {
+        let refused = cli(args);
+        assert!(!refused.status.success() && text(&refused.stderr).contains("busy:"), "{args:?}: {}", text(&refused.stderr));
+    }
+    assert!(live.is_file() && !synced.exists(), "neither moved nor replaced the saves being backed up");
+    std::fs::remove_file(&hold).unwrap();
+    let done = backup.wait_with_output().unwrap();
+    assert!(done.status.success(), "{}", text(&done.stderr));
+    let kept = || -> Vec<String> {
+        let backups = files_under(&dir.join("data/saves/fixture-game"));
+        backups.iter().filter(|f| f.file_name().is_some_and(|n| n == "slot1.sav")).map(|f| std::fs::read_to_string(f).unwrap()).collect()
+    };
+    assert_eq!(kept(), ["local"], "the backup holds the saves it began on");
+
+    std::fs::create_dir_all(&gate_dir).unwrap();
+    let mut syncing = command(&game.dir, &["saves", "cloud", "fixture-game", "--download", "--yes"], &[("PATH", &game.path)])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    wait_for(&gate_dir.join("entered"), &mut syncing);
+    let refused = cli(&["saves", "backup", "fixture-game"]);
+    assert!(!refused.status.success() && text(&refused.stderr).contains("busy:"), "a backup beside a download: {}", text(&refused.stderr));
+    std::fs::write(gate_dir.join("release"), "").unwrap();
+    let synced_out = syncing.wait_with_output().unwrap();
+    assert!(synced_out.status.success(), "the download's own backup shares its hold: {}", text(&synced_out.stderr));
+    assert_eq!(std::fs::read_to_string(&live).unwrap(), "cloud\n");
+    assert_eq!(kept(), ["local"], "what it replaced stays in a backup");
+    let moved = cli(&["data", "fixture-game", "move-prefix", "--yes"]);
+    assert!(moved.status.success(), "{}", text(&moved.stderr));
+}
+
+#[test]
 fn a_crash_between_staging_and_commit_costs_nothing_and_its_leftovers_go_with_the_retry() {
     let Some(game) = SavedGame::new(2, |_| String::new()) else { return };
     let (crash, staging) = (game.dir.path().join("crash"), game.dir.path().join("data/saves/.staging"));

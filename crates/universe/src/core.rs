@@ -2024,9 +2024,10 @@ impl Core {
 
     /// The game's settings and hook environment, as its hooks get them. Like the hooks, no tool is fetched first: that future holds a
     /// progress callback no thread can take, and this one is sent to another by a frontend.
-    pub(crate) async fn run_verb_for(&self, m: &Source, verb: &str, args: &[String], game: &Resolved) -> Result<Vec<SourceEvent>> {
+    pub(crate) async fn run_verb_for(&self, m: &Source, verb: &str, args: &[String], game: &Resolved, extra: &[(String, String)]) -> Result<Vec<SourceEvent>> {
         let settings = m.merged_settings(&*self.config.read().await, Some(&game.game));
-        let env = self.hook_env_base(game).vars;
+        let mut env = self.hook_env_base(game).vars;
+        env.extend_from_slice(extra);
         self.verb_events(m, verb, args, &settings, &env, |_, _, _| {}).await
     }
 

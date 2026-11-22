@@ -219,6 +219,9 @@ pub(crate) struct Held {
     _files: Vec<std::fs::File>,
 }
 
+/// Set on a sync the core holds the game's files for: its store's backup before a download shares that hold.
+const FILES_HELD_FOR: &str = "UNIVERSE_FILES_HELD_FOR";
+
 fn files_lock(id: &str) -> Result<std::fs::File> {
     let p = paths::state_home().join("locks").join(id);
     std::fs::create_dir_all(p.parent().unwrap())?;
@@ -274,6 +277,16 @@ impl Core {
             self.refuse_busy(g).await?;
         }
         Ok(Held { _files: held })
+    }
+
+    /// The game's files held for a change once what holds them lets go; the caller checks the game is idle.
+    async fn wait_files(&self, game: &Game) -> Result<Held> {
+        let f = files_lock(&game.id)?;
+        blocking(move || {
+            f.lock()?;
+            Ok(Held { _files: vec![f] })
+        })
+        .await
     }
 
     /// The game's files held still by a launch or a backup, beside any other: `Busy` at once while a change holds them.
@@ -410,7 +423,8 @@ impl Core {
         }
         let mut moved: Vec<String> = vec![id.to_string()];
         moved.extend(sharers(&r.game, &self.games.read().await, &config));
-        self.running(&moved).await?;
+        let users: Vec<Game> = self.games.read().await.iter().map(|x| x.game.clone()).filter(|g| moved.contains(&g.id)).collect();
+        let _held = self.hold_files(&users.iter().collect::<Vec<_>>()).await?;
         let to = config.prefixes_root().join(id);
         if to.exists() {
             return Err(Error::Invalid(format!("{} already exists", to.display())));
@@ -461,7 +475,7 @@ impl Core {
         if !prefix.is_dir() {
             return Err(Error::NotFound(format!("{} does not exist", prefix.display())));
         }
-        self.running(&[id.to_string()]).await?;
+        let _held = self.hold_files(&[&r.game]).await?;
         let backup = self.backup_before(&r.game).await?;
         trash::delete(&prefix).map_err(|e| Error::Io(format!("trash {}: {e}", prefix.display())))?;
         Ok(json!({"trashed": prefix, "backup": backup}))
@@ -469,6 +483,7 @@ impl Core {
 
     pub async fn saves_backup(&self, id: &str) -> Result<saves::Outcome> {
         let r = self.get(id).await?;
+        let _files = if std::env::var(FILES_HELD_FOR).is_ok_and(|held| held == id) { None } else { Some(self.share_files(&r.game)?) };
         let config = self.config.read().await.clone();
         let ask = self.saves_ask(&r.game, &config, true).await?;
         saves::backup(&ask, &config, id).await
@@ -477,6 +492,7 @@ impl Core {
     /// An empty `backup` is the latest.
     pub async fn saves_restore(&self, id: &str, backup: &str) -> Result<saves::Outcome> {
         let r = self.get(id).await?;
+        let _held = self.wait_files(&r.game).await?;
         self.running(&[id.to_string()]).await?;
         let config = self.config.read().await.clone();
         let ask = self.saves_ask(&r.game, &config, true).await?;
@@ -489,9 +505,7 @@ impl Core {
         if !CLOUD_ACTIONS.contains(&action) {
             return Err(Error::Invalid(format!("{action}: not one of {}", CLOUD_ACTIONS.join(", "))));
         }
-        if action != "status" {
-            self.running(&[id.to_string()]).await?;
-        }
+        let _held = if action == "status" { None } else { Some(self.hold_files(&[&r.game]).await?) };
         self.saves_cloud_of(&r, action).await
     }
 
@@ -503,7 +517,8 @@ impl Core {
             return Err(Error::Unavailable(format!("{}: {} does not know its id", r.game.title, m.name())));
         }
         let args = [r.game.source.id.clone(), action.to_string()];
-        let events = self.run_verb_for(&m, "cloud-saves", &args, r).await?;
+        let held = (action != "status").then(|| (FILES_HELD_FOR.to_string(), r.game.id.clone()));
+        let events = self.run_verb_for(&m, "cloud-saves", &args, r, held.as_slice()).await?;
         events
             .into_iter()
             .find_map(|e| if let crate::sources::SourceEvent::Cloud(c) = e { Some(Value::Object(c)) } else { None })

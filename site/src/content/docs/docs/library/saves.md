@@ -24,7 +24,7 @@ The game menu (**Start** on a game) › **Manage** › **Data and saves** has:
 - **Export the Backups**, which writes every backup into one zip in your home folder;
 - the list of backups, where **A** restores one, after asking.
 
-Restoring is refused while the game runs, and when the saves on disk can't be backed up first. After **Reset the Prefix…**, restoring puts the saves back in the game's fresh prefix, so you can do it before the next launch. The same goes for a Steam game whose prefix Steam deleted: the saves land where Steam makes the new one. You can leave the page while an action runs: its result, or why it failed, shows when it ends.
+Restoring is refused while the game runs, and when the saves on disk can't be backed up first. It waits for a backup under way to end. While the saves are being backed up, moving the game's prefix and syncing its cloud saves are refused, so try again once the backup ends. After **Reset the Prefix…**, restoring puts the saves back in the game's fresh prefix, so you can do it before the next launch. The same goes for a Steam game whose prefix Steam deleted: the saves land where Steam makes the new one. You can leave the page while an action runs: its result, or why it failed, shows when it ends.
 
 ### When the list of backups is damaged
 
