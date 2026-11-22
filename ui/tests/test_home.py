@@ -470,12 +470,17 @@ def test_quit_from_the_dock_over_a_loading_game_stops_it_through_the_launcher(ap
     assert fake.core.frames == 0, "no frame was asked for"
 
 
-def test_b_on_the_poster_before_the_session_exists_cancels_the_launch(look, api, fake, held):
+@pytest.mark.parametrize("made", [False, True], ids=["pending", "session"])
+def test_b_on_the_poster_calls_off_a_launch_not_made_and_lets_a_made_one_load(look, api, fake, held, made):
     making = held(fake.core, "launch")
+    mapped = held(fake.core, "wait_session_window")
     ended = record(fake.sessionEnded)
     look.home()
     look.press(Qt.Key.Key_Return)
     until(lambda: look.root.property("launching") is True and api.home.pending is not None, "A launches: the poster holds, no session yet")
+    if made:
+        making.set()
+        until(lambda: api.universe.currentSession and api.home.pending is None, "the core makes the session, its window not up yet")
     trace = FocusTrace(look.window)
     look.press(Qt.Key.Key_Escape)
     until(lambda: look.root.property("launching") is False, "B leaves the poster")
@@ -483,6 +488,13 @@ def test_b_on_the_poster_before_the_session_exists_cancels_the_launch(look, api,
     settle(look.window)
     frames = [focus for focus, _ in trace.stop().frames]
     assert all(frames) and "homePage" in frames[-1], "the focus is never lost on the way home"
+    if made:
+        mapped.set()
+        until(lambda: ended or api.home.shown == "game", "the game's window comes up")
+        assert api.universe.currentSession and not ended, "a made game went on loading behind the launcher"
+        api.universe.stop(api.universe.currentSession["session_id"])
+        until(lambda: ended)
+        return
     look.press(Qt.Key.Key_Right)
     look.press(Qt.Key.Key_Return)
     settle(look.window)
