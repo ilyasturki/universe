@@ -1311,8 +1311,8 @@ whatever the flag says. `load()` asks the core everything in one call off the UI
 `discover()`, `sources()` (whose first call in a process asks every store over the network whether
 its sign-in holds), `settings()`, `gpu()`, the global launch keys and the gog source's settings —
 `loading` true meanwhile, and builds `steps` (`{id, title, subtitle}`): `found`, `stores` (when an
-enabled, available source is signed out, or — where `config_writable` — one that is off has its
-launcher on this machine), `install`, `data` and `preferences` (all three only where
+enabled, available source is signed out, or — where `config_writable` — an available one is off,
+whatever launchers are here: Epic and itch.io fetch their tools, Steam needs its client), `install`, `data` and `preferences` (all three only where
 `config_writable`), and `done`; `step`, `stepId`, `title`, `subtitle` (the step's, the `done` step's following what came
 in: "Still adding games" while an import runs, "Nothing added yet", or the read-only config's owner,
 `config_owner`), `next()`, `back()`, `finish()` (sets the flag, emits `finished`; `next()` on the
@@ -1335,8 +1335,10 @@ client does the same for every `scan` and `install` job that ends with games, an
 without a key script for the games no refresh has reached (`fetchUnfetched`, over `media_unfetched`). Under a read-only config, a
 launcher whose adoption needs a write (its source off, Heroic's folders missing from `scan_dirs`) is
 a `static` row whose `detail` says what to add where (home-manager when `config.toml` is a link into
-the Nix store, else `config.toml`). Other launchers are `static` rows ("No games", `quiet`; "N games ·
-not importable yet", "· needs <program>", "· no <via> source"). When two or more can still be added,
+the Nix store, else `config.toml`). Other launchers are `static` rows: "No games" (`quiet`), or "N
+games" with the reason as `detail` ("not importable yet", "needs <program>", "no <via> source") and
+its id as `reason` (`not_yet`, `missing`, `incompatible`, `no_source`; `read_only` for the
+read-only config's). When two or more can still be added,
 "Add everything" (`everything`) leads and runs them all. Then, under "Runners your games need", one
 row per missing runner the library needs that Universe can install (`via: "component"`; `runImport`
 installs it through `api.screens.components`, the row reading "Installing…" meanwhile; an import or
@@ -1373,7 +1375,7 @@ page's Continue, in a bar of its own under the content and the one suggested but
 waits for the look to end; each launcher has an Add button and Add Everything presses them all, the
 two importers taking turns; closing the dialog before any game came in and before the last page asks
 "Skip Setup?" (Keep Going, Skip), and Add Games › First-Run Setup opens it again; the stores page
-offers a source that is off but has its launcher here behind a "Use" switch; under a read-only
+offers every available source that is off behind a "Use" switch, where config.toml is writable; under a read-only
 config a launcher says what to write instead of failing; the done page follows the imports still
 running; its Game Data page sets the prefixes and save backups folders and the backup after each
 session. Under the launchers, "Runners Your Games Need" lists the components the big screen's
