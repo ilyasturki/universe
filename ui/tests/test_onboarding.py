@@ -522,7 +522,10 @@ def test_a_step_with_nothing_to_do_lands_on_its_button(look, empty_api, empty):
 
 
 @pytest.mark.parametrize(
-    ("empty_api", "connected"), [(True, "intro"), (False, "load"), (False, "loaded")], ids=["intro", "load", "loaded"], indirect=["empty_api"]
+    ("empty_api", "connected"),
+    [(True, "intro"), (False, "load"), (False, "loaded"), (False, "imported")],
+    ids=["intro", "load", "loaded", "imported"],
+    indirect=["empty_api"],
 )
 def test_a_new_controller_waits_until_the_setup_closes(held_sources, look, empty_api, empty, connected):
     from universe_ui.screens.controller import FakeWatcher
@@ -539,9 +542,13 @@ def test_a_new_controller_waits_until_the_setup_closes(held_sources, look, empty
         look.press(Qt.Key.Key_Return)
         until(lambda: not empty_api.boot.running, "a press skips the intro")
     until(lambda: opened(look) and entered.is_set() and form.loading)
-    if connected == "loaded":
+    if connected in ("loaded", "imported"):
         gate.set()
         until(lambda: not form.loading)
+    if connected == "imported":
+        empty.core.add_game({"runner": "native", "exe": "/bin/true", "title": "Imported"})
+        empty.libraryChanged.emit([])
+        until(lambda: empty_api.allGames.count > 0, "a game comes in on the open setup: it is no longer due")
     if connected != "intro":
         controller.start(watcher)
     settle(look.window)
@@ -551,7 +558,8 @@ def test_a_new_controller_waits_until_the_setup_closes(held_sources, look, empty
     empty_api.home.guide(False)
     look.press(Qt.Key.Key_F1)
     settle(look.window)
-    assert opened(look) and not empty.onboarded() and offers == [], "HOME and Start leave the setup up"
+    assert opened(look) and offers == [], "HOME and Start leave the setup up"
+    assert connected == "imported" or not empty.onboarded()
     watcher.emit(watcher.device())
     look.press(Qt.Key.Key_Escape)
     look.press(SECOND[look.name])
