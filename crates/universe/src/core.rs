@@ -2923,10 +2923,20 @@ mod tests {
         let core = Core::open_with(Config::load().unwrap(), Host::memory().0).await.unwrap();
         assert!(!core.config.read().await.launch.hdr, "on the defaults");
 
-        std::fs::write(&config, "not toml [").unwrap();
+        let learned = "[controller.buttons.xbox]\nsouth = [\"BTN_EAST\"] # swapped\n";
+        std::fs::write(&config, format!("not toml [\n{learned}")).unwrap();
         let again = crate::config::start_on_defaults(&config).unwrap().unwrap();
         assert_ne!(again, kept, "an earlier one is never written over");
-        assert_eq!((std::fs::read(&kept).unwrap(), std::fs::read(&again).unwrap()), (first, b"not toml [".to_vec()));
+        assert_eq!(std::fs::read(&kept).unwrap(), first);
+        assert!(!std::fs::read_to_string(&config).unwrap().contains("controller"), "a file that is no TOML carries nothing over");
+
+        std::fs::write(&config, format!("[launch]\nhdr = \"maybe\"\n{learned}")).unwrap();
+        crate::config::start_on_defaults(&config).unwrap().unwrap();
+        let carried = Config::load().unwrap();
+        assert!(!carried.launch.hdr && carried.controller.buttons["xbox"]["south"] == ["BTN_EAST"], "the pad setup carried over");
+        std::fs::write(&config, "[controller]\nhold_ms = \"long\"\n").unwrap();
+        crate::config::start_on_defaults(&config).unwrap().unwrap();
+        assert!(!std::fs::read_to_string(&config).unwrap().contains("controller"), "a [controller] that is itself broken stays behind");
 
         std::fs::write(&config, "schema = 2\n# fixed meanwhile\n").unwrap();
         assert_eq!(crate::config::start_on_defaults(&config).unwrap(), None, "a file that loads again stays");
@@ -2936,7 +2946,7 @@ mod tests {
         std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o444)).unwrap();
         assert!(!crate::config::broken(&config), "a read-only file is not offered");
         assert!(crate::config::start_on_defaults(&config).is_err(), "a read-only file is fixed where it is written");
-        assert_eq!((std::fs::read_to_string(&config).unwrap(), kept_files()), ("not toml [".to_string(), vec![kept, again]));
+        assert_eq!((std::fs::read_to_string(&config).unwrap(), kept_files().len()), ("not toml [".to_string(), 4), "nothing kept or written");
     }
 
     /// A library of one game with two played sessions, and a `journal` module whose post-process hook is a stub.

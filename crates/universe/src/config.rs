@@ -662,12 +662,25 @@ pub fn start_on_defaults(path: &Path) -> crate::Result<Option<PathBuf>> {
         let _ = std::fs::remove_file(&kept);
         return Err(crate::Error::Io(format!("{}: {e}", kept.display())));
     }
-    if let Err(e) = replace(path, document("")?.to_string().as_bytes(), Some(&read)) {
+    if let Err(e) = replace(path, defaults_keeping_controller(&held)?.as_bytes(), Some(&read)) {
         let _ = std::fs::remove_file(&kept);
         return Err(crate::Error::Io(format!("{}: {e}", path.display())));
     }
     tracing::info!("{} was broken: kept as {}, started on the defaults", path.display(), kept.display());
     Ok(Some(kept))
+}
+
+/// The defaults, with the broken file's `[controller]` as written when that table alone loads: a pad mapped only by it keeps working.
+fn defaults_keeping_controller(held: &[u8]) -> crate::Result<String> {
+    let mut fresh = document("")?;
+    if let Some(controller) = String::from_utf8_lossy(held).parse::<toml_edit::DocumentMut>().ok().and_then(|old| old.get("controller").cloned()) {
+        let mut kept = fresh.clone();
+        kept["controller"] = controller;
+        if toml::from_str::<Config>(&kept.to_string()).is_ok() {
+            fresh = kept;
+        }
+    }
+    Ok(fresh.to_string())
 }
 
 /// A config.toml the core starts is current: a later start reads it as `SCHEMA`, not as one to migrate.
