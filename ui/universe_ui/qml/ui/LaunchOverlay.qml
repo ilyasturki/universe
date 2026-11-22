@@ -124,7 +124,8 @@ FocusScope {
                     var dpr = overlay.Screen.devicePixelRatio;
                     var size = Qt.size(Math.round(frame.width * dpr), Math.round(frame.height * dpr));
                     if (!frame.grabToImage(function (result) {
-                        game.launchWith(result);
+                        if (overlay.waiting && overlay.game === game)
+                            game.launchWith(result);
                     }, size))
                         game.launch();
                 }
@@ -150,10 +151,14 @@ FocusScope {
         }
     }
 
+    // B: a game still loading goes on behind the launcher; one the core has not made yet is called off.
     Keys.onPressed: function (event) {
         event.accepted = true;
-        if (waiting && launchedSession !== "" && !event.isAutoRepeat && api.keys.isCancel(event))
-            handOver();
+        if (!waiting || event.isAutoRepeat || !api.keys.isCancel(event))
+            return;
+        if (launchedSession === "")
+            api.home.stop();
+        handOver();
     }
     Keys.onReleased: function (event) {
         event.accepted = true;

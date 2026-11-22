@@ -2,7 +2,7 @@ import os
 import threading
 
 import pytest
-from looks import Look, invoke, lit_fraction, read, settle
+from looks import FocusTrace, Look, focus_names, invoke, lit_fraction, read, settle
 from PySide6.QtCore import QObject, Qt, QTimer
 from PySide6.QtTest import QTest
 from uitest import descendant, record, until
@@ -468,6 +468,50 @@ def test_quit_from_the_dock_over_a_loading_game_stops_it_through_the_launcher(ap
     until(lambda: ended, "stopped, as soon as the session existed")
     assert home.pending is None and not home.loading and not home.flipped and home.shown == "launcher"
     assert fake.core.frames == 0, "no frame was asked for"
+
+
+def test_b_on_the_poster_before_the_session_exists_cancels_the_launch(look, api, fake, held):
+    making = held(fake.core, "launch")
+    ended = record(fake.sessionEnded)
+    look.home()
+    look.press(Qt.Key.Key_Return)
+    until(lambda: look.root.property("launching") is True and api.home.pending is not None, "A launches: the poster holds, no session yet")
+    trace = FocusTrace(look.window)
+    look.press(Qt.Key.Key_Escape)
+    until(lambda: look.root.property("launching") is False, "B leaves the poster")
+    until(lambda: "homePage" in focus_names(look.window), "back on Home")
+    settle(look.window)
+    frames = [focus for focus, _ in trace.stop().frames]
+    assert all(frames) and "homePage" in frames[-1], "the focus is never lost on the way home"
+    look.press(Qt.Key.Key_Right)
+    look.press(Qt.Key.Key_Return)
+    settle(look.window)
+    assert look.root.property("launching") is False, "nothing else starts while the called-off launch is still on its way"
+    making.set()
+    until(lambda: ended, "the launch is stopped as soon as the core makes it")
+    assert api.universe.currentSession is None and api.home.pending is None and api.home.shown == "launcher"
+    assert "homePage" in focus_names(look.window)
+
+
+def test_b_before_the_universe_poster_has_asked_for_the_launch_asks_for_none(api, fake):
+    look = Look(api, "reprise")
+    poster = look.find("launchOverlay")
+    requested, pressed = record(fake.launchRequested), []
+
+    # The poster asks once its grab is back, a frame or more later: a B pressed meanwhile lands here.
+    def waiting():
+        if poster.property("waiting") and not pressed:
+            pressed.append(True)
+            QTest.keyClick(look.window, Qt.Key.Key_Escape)
+
+    poster.waitingChanged.connect(waiting)
+    look.home()
+    look.press(Qt.Key.Key_Return)
+    until(lambda: pressed and look.root.property("launching") is False, "B leaves the poster")
+    settle(look.window)
+    settle(look.window)
+    assert requested == [] and api.home.pending is None and api.universe.currentSession is None, "the grab coming back starts nothing"
+    look.close()
 
 
 def test_a_launch_that_fails_before_its_session_takes_the_dock_down(api, fake, monkeypatch, held):

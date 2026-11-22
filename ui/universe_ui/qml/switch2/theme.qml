@@ -508,7 +508,7 @@ FocusScope {
     }
 
     function launch(game, from) {
-        if (!game || launchScreen.running)
+        if (!game || launchScreen.running || api.home.pending)
             return;
         if (sessionRunning) {
             if (game.id === session.id) {
@@ -1033,8 +1033,13 @@ FocusScope {
     Keys.onPressed: function (event) {
         if (root.modal) {
             event.accepted = true;
-            if (root.launching && launchScreen.waiting && launchScreen.launchedSession !== "" && !event.isAutoRepeat && api.keys.isCancel(event))
+            if (root.launching && launchScreen.waiting && !event.isAutoRepeat && api.keys.isCancel(event)) {
+                if (launchScreen.launchedSession === "") {
+                    Base.Notices.show("Closing " + launchScreen.game.title + "…", "stop");
+                    api.home.stop();
+                }
                 launchScreen.done();
+            }
             return;
         }
         if (event.isAutoRepeat)

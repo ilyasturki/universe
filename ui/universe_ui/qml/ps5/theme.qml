@@ -392,7 +392,7 @@ FocusScope {
     }
 
     function launch(game) {
-        if (!game || splash.running)
+        if (!game || splash.running || api.home.pending)
             return;
         if (sessionRunning) {
             if (game.id === session.id) {
@@ -996,8 +996,11 @@ FocusScope {
     Keys.onPressed: function (event) {
         if (root.modal) {
             event.accepted = true;
-            if (root.launching && splash.waiting && splash.launchedSession !== "" && !event.isAutoRepeat && api.keys.isCancel(event))
+            if (root.launching && splash.waiting && !event.isAutoRepeat && api.keys.isCancel(event)) {
+                if (splash.launchedSession === "")
+                    api.home.stop();
                 splash.done();
+            }
             return;
         }
         if (event.isAutoRepeat)
