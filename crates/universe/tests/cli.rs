@@ -2097,6 +2097,21 @@ fn a_question_without_a_terminal_or_yes_is_refused_and_every_change_answers_one_
         assert_eq!((&object(&out)["ok"], &object(&out)["error"]), (&serde_json::json!(false), &serde_json::json!("usage")), "{args:?}");
     }
     assert!(dir.path().join("data/games/quest/game.toml").is_file(), "nothing was removed");
+    let on_a_terminal = |args: &[&str], answer: &str| {
+        use std::os::fd::FromRawFd;
+        let (mut primary, mut terminal) = (0, 0);
+        // SAFETY: openpty fills both descriptors; no name, settings or size is asked for.
+        assert_eq!(unsafe { libc::openpty(&mut primary, &mut terminal, std::ptr::null_mut(), std::ptr::null(), std::ptr::null()) }, 0);
+        // SAFETY: the descriptors are this closure's: the terminal goes to the child as its stdin, the primary types the answer.
+        let (stdin, mut keys) = unsafe { (std::fs::File::from_raw_fd(terminal), std::fs::File::from_raw_fd(primary)) };
+        std::io::Write::write_all(&mut keys, answer.as_bytes()).unwrap();
+        command(&dir, args, &[NO_BUS]).stdin(stdin).output().unwrap()
+    };
+    let kept = on_a_terminal(&["rm", "quest"], "n\n");
+    assert_eq!(kept.status.code(), Some(0), "a no on a terminal is no failure: {}", text(&kept.stderr));
+    assert!(dir.path().join("data/games/quest/game.toml").is_file() && !text(&kept.stdout).contains("removed"), "{}", text(&kept.stdout));
+    let refused = on_a_terminal(&["--json", "rm", "quest"], "y\n");
+    assert_eq!((refused.status.code(), &object(&refused)["error"]), (Some(2), &serde_json::json!("usage")), "--json asks nothing, terminal or not");
     let missing = universe(&dir, &["--json", "info", "nope"], &[NO_BUS]);
     assert_eq!((missing.status.code(), &object(&missing)["error"]), (Some(1), &serde_json::json!("not_found")));
     assert!(text(&missing.stderr).contains("no game matches"), "stderr keeps the line a script reads");
