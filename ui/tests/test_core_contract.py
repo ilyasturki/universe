@@ -32,10 +32,18 @@ SEED = {
     "data/games/the-technomancer/sessions.jsonl": f'{{"session": "{SESSION}", "game": "the-technomancer", "started_at": "2026-09-13T12:00:00+02:00",'
     ' "ended_at": "2026-09-13T13:00:00+02:00", "duration_s": 3600, "exit": 0, "stopped": false, "recording": "/nowhere/20260913-120000.mkv"}\n',
     f"data/games/the-technomancer/journal/{SESSION}.json": json.dumps(
-        {"session": SESSION, "game": "the-technomancer", "written_at": "2026-09-13T13:10:00+02:00", "title": "First", "paragraphs": ["p"]}
+        {
+            "session": SESSION,
+            "game": "the-technomancer",
+            "written_at": "2026-09-13T13:10:00+02:00",
+            "title": "First",
+            "paragraphs": ["p"],
+            "images": ["20260913-121000.png", "20260913-123000.png"],
+        }
     ),
     "data/games/the-technomancer/journal/20260912-120000.deferred.json": json.dumps({"game": "the-technomancer", "until": "2099-01-01T00:00:00+00:00"}),
     "data/games/the-technomancer/screenshots/20260913-121000.png": PNG,
+    "data/games/the-technomancer/screenshots/20260913-123000.png": PNG,
     "data/games/the-technomancer/media/box_front.png": PNG,
     **{
         f"{home}/extensions/theme/dusk/{name}": content
@@ -248,6 +256,7 @@ ERRORS = [
     ("Invalid", "restore", "the-technomancer"),
     ("NotFound", "session_log", "the-technomancer", "20990101-000000"),
     ("NotFound", "media_set_slot", "the-technomancer", "box_front", "/nowhere/cover.png"),
+    ("Invalid", "remove_screenshot", "the-technomancer", "../game.toml"),
     ("Unavailable", "achievements", "the-technomancer"),
     ("Invalid", "extension_install", "now-playing"),
     ("NotFound", "extension_remove", "nope"),
@@ -445,6 +454,25 @@ def test_a_stopped_session_ends_alike_on_both_cores(profile, user_systemd, tmp_p
 
 
 STARDEW = "1207666883"
+
+
+@needs_manifests
+def test_a_trashed_shot_leaves_its_thumbnail_and_its_journal_entry_the_rest(profile):
+    from uitest import until
+
+    for core in profile():
+        entry = next(e for e in core.journal(T) if len(e.get("images") or []) >= 2)
+        name, rest = os.path.basename(entry["images"][0]), entry["images"][1:]
+        thumb = until(
+            lambda core=core, name=name: next(
+                (s["thumb"] for s in core.screenshots(T) if os.path.basename(s["path"]) == name and os.path.exists(s["thumb"])), None
+            ),
+            "the shot's thumbnail is made",
+        )
+        core.remove_screenshot(T, name)
+        assert name not in [os.path.basename(s["path"]) for s in core.screenshots(T)]
+        assert next(e for e in core.journal(T) if e["session"] == entry["session"])["images"] == rest, "the entry keeps the rest"
+        assert os.path.exists(thumb), "nothing prunes the thumbnail"
 
 
 @needs_manifests

@@ -350,6 +350,8 @@ def _epoch(value):
         return 0
 
 
+_SHOT_NAME = re.compile(r"^\d{8}-\d{6}\.(?i:png|jpe?g|webp)$")
+
 # The core's: the first prose paragraph, emphasis dropped.
 _BLOCK = re.compile(r"^(?:[-*+]\s|\d+[.)]\s|!\[|#)")
 
@@ -776,6 +778,9 @@ class FakeCore:
         return rows
 
     def remove_screenshot(self, ident, name):
+        self._game(ident)
+        if not _SHOT_NAME.match(name):
+            raise UniverseError("Invalid", f"not a screenshot name: {name}")
         p = self._game_dir(ident) / "screenshots" / name
         if not p.is_file():
             raise UniverseError("NotFound", str(p))
@@ -2135,11 +2140,11 @@ class FakeCore:
 
     def journal(self, ident):
         entries = self._data.get("journal", {}).get(ident, [])
-        shots = self._game(ident).get("media", {}).get("screenshots") or []
         sessions = {s.get("session"): s for s in self._data.get("sessions", {}).get(ident, [])}
         out = []
         for e in entries:
             line = sessions.get(e.get("session")) or {}
+            written = e.get("state", "written") == "written"
             out.append(
                 {
                     "state": "written",
@@ -2147,7 +2152,7 @@ class FakeCore:
                     "ended_at": line.get("ended_at") or "",
                     "duration_s": line.get("duration_s") or 0,
                     **e,
-                    "images": e.get("images") or (shots if e.get("state", "written") == "written" else []),
+                    "images": e.get("images") or ([str(p) for p in self._shots_during(ident, line)] if written else []),
                 }
             )
         return out
@@ -2212,15 +2217,18 @@ class FakeCore:
 
     # The journal module's window: 90 s before the start to 120 s after the end.
     def _shot_during(self, ident, line):
+        return bool(self._shots_during(ident, line))
+
+    def _shots_during(self, ident, line):
         from datetime import timedelta
 
         try:
             start, end = datetime.fromisoformat(line["started_at"]), datetime.fromisoformat(line["ended_at"])
         except (KeyError, ValueError):
-            return False
+            return []
         directory = self._game_dir(ident) / "screenshots"
-        taken = [datetime.strptime(p.stem, "%Y%m%d-%H%M%S").astimezone() for p in directory.glob("*.png")] if directory.is_dir() else []
-        return any(start - timedelta(seconds=90) <= t <= end + timedelta(seconds=120) for t in taken)
+        shots = sorted(directory.glob("*.png")) if directory.is_dir() else []
+        return [p for p in shots if start - timedelta(seconds=90) <= datetime.strptime(p.stem, "%Y%m%d-%H%M%S").astimezone() <= end + timedelta(seconds=120)]
 
     def sweep_journals(self, ident=""):
         waiting = [
