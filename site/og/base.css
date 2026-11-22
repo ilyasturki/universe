@@ -1,6 +1,40 @@
-@font-face { font-family: "Archivo Variable"; src: url(assets/archivo-latin-wght-normal.woff2) format("woff2"); font-weight: 100 900; }
-:root { --bg: #0e0f13; --bg-raised: #15171d; --text: #f2f3f5; --muted: rgb(242 243 245 / 0.68); --faint: rgb(242 243 245 / 0.46); --line: rgb(255 255 255 / 0.1); --accent: #5aa0ff; --warm: #ffa348; }
-* { box-sizing: border-box; margin: 0; }
-html, body { width: 1200px; height: 630px; overflow: hidden; background: var(--bg); color: var(--text); font-family: "Archivo Variable", system-ui, sans-serif; }
-.card { position: relative; width: 1200px; height: 630px; overflow: hidden; }
-.url { color: var(--faint); font-size: 24px; font-weight: 500; letter-spacing: 0.01em; }
+@font-face {
+    font-family: "Archivo Variable";
+    src: url(assets/archivo-latin-wght-normal.woff2) format("woff2");
+    font-weight: 100 900;
+}
+:root {
+    --bg: #0e0f13;
+    --bg-raised: #15171d;
+    --text: #f2f3f5;
+    --muted: rgb(242 243 245 / 0.68);
+    --faint: rgb(242 243 245 / 0.46);
+    --line: rgb(255 255 255 / 0.1);
+    --accent: #5aa0ff;
+    --warm: #ffa348;
+}
+* {
+    box-sizing: border-box;
+    margin: 0;
+}
+html,
+body {
+    width: 1200px;
+    height: 630px;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Archivo Variable", system-ui, sans-serif;
+}
+.card {
+    position: relative;
+    width: 1200px;
+    height: 630px;
+    overflow: hidden;
+}
+.url {
+    color: var(--faint);
+    font-size: 24px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+}
