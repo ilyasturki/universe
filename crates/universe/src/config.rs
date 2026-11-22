@@ -384,7 +384,8 @@ impl Config {
         match std::fs::read_to_string(path) {
             Ok(s) => toml::from_str(&s).map_err(|e| crate::Error::Invalid(format!("{}: {e}", path.display()))),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Config::default()),
-            Err(e) => Err(e.into()),
+            Err(e) if e.kind() == std::io::ErrorKind::InvalidData => Err(crate::Error::Invalid(format!("{}: {e}", path.display()))),
+            Err(e) => Err(crate::Error::Io(format!("{}: {e}", path.display()))),
         }
     }
 
@@ -621,6 +622,49 @@ fn in_place(target: &Path, text: &[u8]) -> std::io::Result<()> {
         }
     }
     wrote
+}
+
+/// A file the core read but cannot take: not text, not TOML, or a value its keys refuse. A missing or unreadable one is not broken.
+pub fn broken(path: &Path) -> bool {
+    std::fs::read(path).is_ok_and(|bytes| !takes(&bytes))
+}
+
+fn takes(bytes: &[u8]) -> bool {
+    std::str::from_utf8(bytes).is_ok_and(|text| toml::from_str::<Config>(text).is_ok())
+}
+
+/// A broken file kept byte for byte beside itself as `<name>.broken-<date>`, never over an earlier one, then started again on
+/// the defaults: the kept file's path, or `None` when the file loads again and is left as it is.
+pub fn start_on_defaults(path: &Path) -> crate::Result<Option<PathBuf>> {
+    use std::io::Write;
+    let held = std::fs::read(path).map_err(|e| crate::Error::Io(format!("{}: {e}", path.display())))?;
+    let read = std::fs::metadata(path)?;
+    if takes(&held) {
+        return Ok(None);
+    }
+    if !Config::writable(path) || Config::owner(path) == HOME_MANAGER {
+        return Err(crate::Error::Invalid(format!("{} is read-only: it can only be fixed where it is written", path.display())));
+    }
+    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let stem = format!("{name}.broken-{}", chrono::Local::now().format("%Y-%m-%d"));
+    let (kept, mut file) = (1..)
+        .map(|n| path.with_file_name(if n == 1 { stem.clone() } else { format!("{stem}-{n}") }))
+        .find_map(|kept| match std::fs::OpenOptions::new().write(true).create_new(true).open(&kept) {
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => None,
+            opened => Some(opened.map(|f| (kept, f))),
+        })
+        .expect("an unbounded range")
+        .map_err(|e| crate::Error::Io(format!("{}: {e}", path.display())))?;
+    if let Err(e) = file.write_all(&held).and_then(|()| file.sync_all()) {
+        let _ = std::fs::remove_file(&kept);
+        return Err(crate::Error::Io(format!("{}: {e}", kept.display())));
+    }
+    if let Err(e) = replace(path, document("")?.to_string().as_bytes(), Some(&read)) {
+        let _ = std::fs::remove_file(&kept);
+        return Err(crate::Error::Io(format!("{}: {e}", path.display())));
+    }
+    tracing::info!("{} was broken: kept as {}, started on the defaults", path.display(), kept.display());
+    Ok(Some(kept))
 }
 
 /// A config.toml the core starts is current: a later start reads it as `SCHEMA`, not as one to migrate.

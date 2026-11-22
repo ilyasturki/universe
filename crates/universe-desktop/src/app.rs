@@ -59,6 +59,8 @@ mod imp {
         pub attempt: Cell<u32>,
         /// The settings file the core could not read, when that is why it failed.
         pub failed_file: RefCell<Option<std::path::PathBuf>>,
+        /// That file is one the core refuses: Start With Default Settings sets it aside.
+        pub config_broken: Cell<bool>,
         pub scripted: Cell<bool>,
         pub stage: RefCell<String>,
         pub failure: RefCell<Option<String>>,
@@ -674,10 +676,15 @@ impl Application {
         self.imp().failed_file.borrow().clone()
     }
 
-    fn fail(&self, failure: String, file: Option<std::path::PathBuf>) {
+    pub fn config_broken(&self) -> bool {
+        self.imp().config_broken.get()
+    }
+
+    fn fail(&self, failure: String, file: Option<std::path::PathBuf>, broken: bool) {
         let imp = self.imp();
         imp.failure.replace(Some(failure.clone()));
         imp.failed_file.replace(file);
+        imp.config_broken.set(broken);
         imp.opening.set(false);
         self.emit_by_name::<()>("core-failed", &[&failure]);
     }
@@ -691,7 +698,7 @@ impl Application {
             .replace("{stage}", &self.stage())
             .replace("{limit}", &loading_limit_s().to_string());
         tracing::error!("{stuck}");
-        self.fail(stuck, None);
+        self.fail(stuck, None, false);
     }
 
     fn window(&self) -> Window {
@@ -706,6 +713,7 @@ impl Application {
         let imp = self.imp();
         imp.failure.take();
         imp.failed_file.take();
+        imp.config_broken.set(false);
         let attempt = imp.attempt.get() + 1;
         imp.attempt.set(attempt);
         let app = self.downgrade();
@@ -726,8 +734,12 @@ impl Application {
             }
             if let Err(e) = opened {
                 if self.imp().attempt.get() == attempt {
-                    let file = backend::blocking(async { universe::config::Config::load().is_err().then(universe::paths::config_file) }).await;
-                    self.fail(e.to_string(), file);
+                    let (file, broken) = backend::blocking(async {
+                        let path = universe::paths::config_file();
+                        (universe::config::Config::load().is_err().then(|| path.clone()), universe::config::broken(&path))
+                    })
+                    .await;
+                    self.fail(e.to_string(), file, broken);
                 }
                 return;
             }
@@ -762,6 +774,7 @@ impl Application {
         };
         self.imp().failure.take();
         self.imp().failed_file.take();
+        self.imp().config_broken.set(false);
         self.imp().opening.set(false);
         self.set_core_actions(true);
         self.emit_by_name::<()>("core-ready", &[]);

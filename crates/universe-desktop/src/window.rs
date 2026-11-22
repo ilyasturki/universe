@@ -47,6 +47,8 @@ mod imp {
         #[template_child]
         pub failed_file_button: TemplateChild<gtk::Button>,
         #[template_child]
+        pub defaults_button: TemplateChild<gtk::Button>,
+        #[template_child]
         pub library_page: TemplateChild<LibraryPage>,
         #[template_child]
         pub media_page: TemplateChild<MediaPage>,
@@ -225,6 +227,23 @@ impl Window {
                 });
             })
             .build();
+        let defaults = gio::ActionEntry::builder("start-on-defaults")
+            .activate(|win: &Self, _, _| {
+                let win = win.clone();
+                glib::spawn_future_local(async move {
+                    match backend::blocking(async { universe::config::start_on_defaults(&universe::paths::config_file()) }).await {
+                        Ok(kept) => {
+                            if let Some(name) = kept.as_ref().and_then(|k| k.file_name()) {
+                                let said = gettext("Started with default settings. Your old ones are in {file}, beside the new file.");
+                                win.toast(adw::Toast::new(&said.replace("{file}", &name.to_string_lossy())));
+                            }
+                            gio::prelude::ActionGroupExt::activate_action(&win, "retry", None);
+                        }
+                        Err(e) => win.toast(adw::Toast::new(e.message())),
+                    }
+                });
+            })
+            .build();
         let onboarding = gio::ActionEntry::builder("onboarding").activate(|win: &Self, _, _| crate::dialogs::onboarding::present(win)).build();
         let rescan = gio::ActionEntry::builder("rescan").activate(|win: &Self, _, _| win.rescan()).build();
         let entry = gio::ActionEntry::builder("open-journal-entry")
@@ -246,7 +265,7 @@ impl Window {
             })
             .build();
         let undo = gio::ActionEntry::builder("undo").activate(|win: &Self, _, _| win.undo()).build();
-        self.add_action_entries([show_sidebar, search, sort, show_hidden, view, add_game, retry, failed_file, onboarding, rescan, entry, game, undo]);
+        self.add_action_entries([show_sidebar, search, sort, show_hidden, view, add_game, retry, failed_file, defaults, onboarding, rescan, entry, game, undo]);
         self.imp().library_page.set_show_hidden(state.show_hidden);
     }
 
@@ -260,6 +279,7 @@ impl Window {
             action.set_enabled(self.app().failure().is_some());
         }
         self.imp().failed_file_button.set_visible(self.app().failed_file().is_some());
+        self.imp().defaults_button.set_visible(self.app().config_broken());
     }
 
     /// The first-run flow is behind the player, in every frontend.

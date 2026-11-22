@@ -12,7 +12,9 @@ shoots each, and quits by itself. Then it starts the app again as the shell
 does, a D-Bus service on a private bus asked for a search before its window
 opens, and shoots the library. Then the failed starts: on a broken config the
 failed page offers Show Settings File, keeps the library's actions off, and
-after Try Again on a repaired config opens the library; a signed-out store and
+after Try Again on a repaired config opens the library; Start With Default
+Settings keeps the broken file byte for byte beside a new one and opens the
+library; a signed-out store and
 a listing without the game each answer Install with a message; a game page
 follows its store coming back; the service recovers the same way; a config
 that never reads (a FIFO) fails after UNIVERSE_DESKTOP_LOADING_LIMIT_S and
@@ -319,7 +321,7 @@ gapplication_service() {
 
 repaired="copy:$tmp/repaired.toml:$UNIVERSE_CONFIG_HOME/config.toml button:win.retry view:library"
 printf 'broken = [\n' >"$UNIVERSE_CONFIG_HOME/config.toml"
-script="view:failed has:win.show-failed-file"
+script="view:failed has:win.show-failed-file has:win.start-on-defaults"
 script+=" action:win.add-game action:win.rescan action:win.onboarding action:win.open-journal-entry::$game/1 view:failed"
 script+=" button:win.retry view:failed shot:$out/failed.png $repaired shot:$out/recovered.png"
 script+=" action:win.open-game::store-out button:game.install toast:close"
@@ -333,6 +335,13 @@ done
 printf 'broken = [\n' >"$UNIVERSE_CONFIG_HOME/config.toml"
 run service-recovery "view:failed $repaired" --gapplication-service
 
+printf 'broken = [\n' >"$UNIVERSE_CONFIG_HOME/config.toml"
+run defaults "view:failed button:win.start-on-defaults view:library"
+kept=("$UNIVERSE_CONFIG_HOME"/config.toml.broken-*)
+[ "${#kept[@]}" = 1 ] && printf 'broken = [\n' | cmp -s - "${kept[0]}" || fail "defaults: the broken file is not kept byte for byte beside the new one"
+rm "${kept[@]}"
+cp "$tmp/repaired.toml" "$UNIVERSE_CONFIG_HOME/config.toml"
+
 # A config nobody writes: reading it never ends, so each open is given up on after the limit, counted from its Try Again.
 config="$UNIVERSE_CONFIG_HOME/config.toml"
 rm "$config"
@@ -340,7 +349,7 @@ mkfifo "$config"
 stuck_limit=2
 script="view:failed"
 for _ in $(seq 5); do script+=" button:win.retry view:failed"; done
-UNIVERSE_DESKTOP_LOADING_LIMIT_S=$stuck_limit run stuck "$script shot:$out/stuck.png $repaired"
+UNIVERSE_DESKTOP_LOADING_LIMIT_S=$stuck_limit run stuck "$script lacks:win.start-on-defaults shot:$out/stuck.png $repaired"
 [ -s "$out/stuck.png" ] || fail "no stuck.png ($out/stuck.log)"
 python3 - "$out/stuck.log" "$stuck_limit" <<'GAPS' || fail "stuck: a Try Again was not given up on within twice the limit of the one before ($out/stuck.log)"
 import datetime, re, sys

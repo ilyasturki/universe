@@ -2900,6 +2900,42 @@ mod tests {
         assert!(open().await.onboarded(), "another process sees it");
     }
 
+    #[tokio::test]
+    async fn a_broken_config_is_kept_byte_for_byte_and_the_core_opens_on_the_defaults() {
+        use std::os::unix::fs::PermissionsExt;
+        let env = crate::paths::test_env();
+        let config = paths::config_file();
+        let folder = env.path().join("config");
+        let kept_files = || {
+            let mut kept: Vec<_> = std::fs::read_dir(&folder).unwrap().flatten().map(|e| e.path()).filter(|p| p != &config).collect();
+            kept.sort();
+            kept
+        };
+        let first = b"[launch]\nhdr = \"maybe\" # mine\n\xff".to_vec();
+        std::fs::write(&config, &first).unwrap();
+        assert!(Config::load().is_err() && crate::config::broken(&config));
+        let kept = crate::config::start_on_defaults(&config).unwrap().expect("a broken file is set aside");
+        assert_eq!(std::fs::read(&kept).unwrap(), first, "the broken file, byte for byte");
+        assert!(kept.file_name().unwrap().to_string_lossy().starts_with("config.toml.broken-"));
+        assert!(!crate::config::broken(&config));
+        let core = Core::open_with(Config::load().unwrap(), Host::memory().0).await.unwrap();
+        assert!(!core.config.read().await.launch.hdr, "on the defaults");
+
+        std::fs::write(&config, "not toml [").unwrap();
+        let again = crate::config::start_on_defaults(&config).unwrap().unwrap();
+        assert_ne!(again, kept, "an earlier one is never written over");
+        assert_eq!((std::fs::read(&kept).unwrap(), std::fs::read(&again).unwrap()), (first, b"not toml [".to_vec()));
+
+        std::fs::write(&config, "schema = 2\n# fixed meanwhile\n").unwrap();
+        assert_eq!(crate::config::start_on_defaults(&config).unwrap(), None, "a file that loads again stays");
+        assert_eq!(std::fs::read_to_string(&config).unwrap(), "schema = 2\n# fixed meanwhile\n");
+
+        std::fs::write(&config, "not toml [").unwrap();
+        std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o444)).unwrap();
+        assert!(crate::config::start_on_defaults(&config).is_err(), "a read-only file is fixed where it is written");
+        assert_eq!((std::fs::read_to_string(&config).unwrap(), kept_files()), ("not toml [".to_string(), vec![kept, again]));
+    }
+
     /// A library of one game with two played sessions, and a `journal` module whose post-process hook is a stub.
     fn journal_sandbox(provider: &str) -> crate::paths::TestEnv {
         let dir = crate::paths::test_env();

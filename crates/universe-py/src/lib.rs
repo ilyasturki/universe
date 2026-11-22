@@ -664,6 +664,20 @@ fn host_gamescope(py: Python<'_>, screen: String) -> PyResult<Option<Vec<String>
     Ok(py.detach(|| rt.block_on(universe::launcher::host_gamescope_for(&config, &screen))).map(|(p, a)| std::iter::once(p).chain(a).collect()))
 }
 
+/// config.toml's path when the core refuses its contents (`config::broken`), for the page shown when the core will not open.
+#[pyfunction]
+fn config_broken() -> Option<String> {
+    let path = universe::paths::config_file();
+    universe::config::broken(&path).then(|| path.to_string_lossy().into_owned())
+}
+
+/// The broken config.toml kept beside itself and the file started again on the defaults: the kept file's path, `None` when it loads again.
+#[pyfunction]
+fn start_on_defaults(py: Python<'_>) -> PyResult<Option<String>> {
+    let kept = py.detach(|| universe::config::start_on_defaults(&universe::paths::config_file())).map_err(err)?;
+    Ok(kept.map(|p| p.to_string_lossy().into_owned()))
+}
+
 /// The fake core's forms: the core's own, built from the views it hands over (`forms::Inputs`).
 #[pyfunction]
 #[pyo3(name = "_form_fields", signature = (kind, id, inputs, screen=None))]
@@ -696,6 +710,8 @@ fn universe_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     universe::init_tracing();
     m.add_class::<Core>()?;
     m.add_function(wrap_pyfunction!(host_gamescope, m)?)?;
+    m.add_function(wrap_pyfunction!(config_broken, m)?)?;
+    m.add_function(wrap_pyfunction!(start_on_defaults, m)?)?;
     m.add_function(wrap_pyfunction!(form_fields, m)?)?;
     m.add_function(wrap_pyfunction!(set_writes, m)?)?;
     m.add_function(wrap_pyfunction!(all_games_writes, m)?)?;

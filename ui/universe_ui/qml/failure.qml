@@ -101,7 +101,8 @@ Window {
 
         Text {
             width: parent.width
-            text: "Fix it from a terminal or another computer, then try again."
+            text: failure.keptAt ? "Your old settings are in " + failure.keptAt + "." : failure.offersDefaults ? "Fix it from a terminal or another computer, then try again. Or start with default settings: your settings file is kept beside the new one." : "Fix it from a terminal or another computer, then try again."
+            textFormat: Text.PlainText
             color: Theme.textHint
             font.family: Theme.sans
             font.pixelSize: Theme.dp(28)
@@ -117,17 +118,31 @@ Window {
                 objectName: "retry"
                 label: "Try again"
                 focus: true
+                KeyNavigation.right: defaults.visible ? defaults : leave
+                KeyNavigation.down: defaults.visible ? defaults : leave
+                onPicked: failure.retry()
+            }
+
+            Action {
+                id: defaults
+                objectName: "defaults"
+                label: "Start with default settings"
+                visible: failure.offersDefaults
+                KeyNavigation.left: retry
+                KeyNavigation.up: retry
                 KeyNavigation.right: leave
                 KeyNavigation.down: leave
-                onPicked: failure.retry()
+                onPicked: failure.startOnDefaults()
+                onVisibleChanged: if (!visible && activeFocus)
+                    retry.forceActiveFocus()
             }
 
             Action {
                 id: leave
                 objectName: "leave"
                 label: failure.session ? "Log out" : "Quit Universe"
-                KeyNavigation.left: retry
-                KeyNavigation.up: retry
+                KeyNavigation.left: defaults.visible ? defaults : retry
+                KeyNavigation.up: defaults.visible ? defaults : retry
                 onPicked: failure.leave()
             }
         }

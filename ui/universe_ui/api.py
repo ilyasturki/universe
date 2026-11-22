@@ -533,10 +533,13 @@ class System(QObject):
 
 
 class Api(QObject):
-    # boot: whether this start may open on the startup animation; Settings › Themes can still turn it off.
-    def __init__(self, client, memory_path=None, fullscreen=False, theme="", power_root=None, net_root=None, boot=False, overlay_only=False, parent=None):
+    # boot: whether this start may open on the startup animation; Settings › Themes can still turn it off. notice: what the first look shows once.
+    def __init__(
+        self, client, memory_path=None, fullscreen=False, theme="", power_root=None, net_root=None, boot=False, overlay_only=False, notice="", parent=None
+    ):
         super().__init__(parent)
         self._client = client
+        self._notice = notice
         self._memory = Memory(memory_path, self)
         self._theme = ThemeSelector(self._memory, theme, self, installed=client.themes)
         self._boot = Boot(boot and self._theme.bootIntro, self)
@@ -660,6 +663,12 @@ class Api(QObject):
     collections = Property(QObject, lambda self: self._library.collections, constant=True)
     # A game's `source` → its name; `manual` is also every game imported from another launcher.
     sourceNames = Property("QVariantMap", lambda self: SOURCE_NAMES, constant=True)
+
+    @Slot(result=str)
+    def takeNotice(self):
+        notice, self._notice = self._notice, ""
+        return notice
+
     universe = Property(QObject, lambda self: self._client, constant=True)
     screens = Property(QObject, lambda self: self._screens, constant=True)
     theme = Property(QObject, lambda self: self._theme, constant=True)

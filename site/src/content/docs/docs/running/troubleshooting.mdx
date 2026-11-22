@@ -17,7 +17,7 @@ Settings › [System check](/docs/settings/system-check/) runs every check Unive
 
 ## When Universe won't start
 
-Big Screen says what stopped it and names the settings file when it cannot read it. Fix the problem, then **A** (**Try again**) carries on to Home. **B** quits, or logs out of the Universe session.
+Big Screen says what stopped it. Fix the problem, then **A** (**Try again**) carries on to Home. If the settings file is broken, **Start with default settings** keeps it as `config.toml.broken-` and the date, then starts afresh. **B** quits, or logs out of the Universe session.
 
 `universe doctor` in a terminal runs System check even then. When the settings file doesn't read, it names the file and runs the other checks on the default settings.
 
@@ -54,7 +54,7 @@ Universe reads a game's installed version from its files. When they say nothing 
 
 ## Prefix tools
 
-A Windows game's prefix tools are on its **Data and saves** page (**Start** › **Manage** › **Data and saves**), under **Wine Prefix**:
+A Windows game's **Data and saves** page (**Start** › **Manage**) has its prefix tools, under **Wine Prefix**:
 
 - **Wine Configuration** opens winecfg.
 - **Winetricks** installs runtimes and fonts.

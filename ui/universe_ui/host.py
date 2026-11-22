@@ -63,6 +63,7 @@ def parse_args(argv):
     if args.overlay and (args.session or args.windowed or args.size):
         parser.error("--overlay covers the game's own screen: no --session, --windowed or --size")
     args.fake = args.fake or args.fake_launch
+    args.notice = ""
     args.fullscreen = not (args.windowed or args.size or args.overlay)
     args.size = args.size or "1920x1080"
     return args
@@ -97,7 +98,12 @@ def failure_screen(app, args, error):
     from .failure import Failure
     from .gamepad import GamepadThread, KeyScript
 
-    failure = Failure(error, lambda: build_client(args), session=args.session, fullscreen=args.fullscreen)
+    core = None
+    if not args.fake:
+        with contextlib.suppress(ImportError):
+            import universe_core as core
+    offers = {"broken": core.config_broken, "defaults": core.start_on_defaults} if core else {}
+    failure = Failure(error, lambda: build_client(args), session=args.session, fullscreen=args.fullscreen, **offers)
     engine = QQmlApplicationEngine()
     engine.rootContext().setContextProperty("failure", failure)
     engine.load(QUrl.fromLocalFile(str(QML_DIR / "failure.qml")))
@@ -125,6 +131,8 @@ def failure_screen(app, args, error):
         gamepad.stop()
     if script is not None:
         args.keys = script.stop()
+    if failure.client is not None and failure.kept:
+        args.notice = f"Started with default settings. Your old ones are in {Path(failure.kept).name}, beside the new file."
     return failure.client
 
 
@@ -493,7 +501,8 @@ def run(argv=None):
         theme=args.theme,
         power_root=FAKE_POWER if args.fake else None,
         net_root=FAKE_NET if args.fake else None,
-        boot=not args.overlay and boot_wanted(args, client, int(os.environ.get(RESTARTS_ENV) or 0)),
+        boot=not args.overlay and not args.notice and boot_wanted(args, client, int(os.environ.get(RESTARTS_ENV) or 0)),
+        notice=args.notice,
         overlay_only=bool(args.overlay),
         parent=app,
     )

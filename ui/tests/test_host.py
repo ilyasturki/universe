@@ -6,6 +6,7 @@ import subprocess
 import sys
 import threading
 import time
+import tomllib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -107,7 +108,7 @@ def test_a_session_takes_the_screen_restarts_a_dead_launcher_without_the_intro_a
 
 
 @pytest.mark.slow
-def test_a_core_that_will_not_open_holds_a_page_that_retries_or_quits_on_the_pad(gamescope, tmp_path):
+def test_a_core_that_will_not_open_holds_a_page_that_retries_starts_on_the_defaults_or_quits_on_the_pad(gamescope, tmp_path):
     env = gamescope.env
     game = tmp_path / "game.sh"
     game.write_text("#!/bin/sh\n")
@@ -122,7 +123,7 @@ def test_a_core_that_will_not_open_holds_a_page_that_retries_or_quits_on_the_pad
     run = gamescope("quits", "--session")
     assert (run.code, len(run.launchers)) == (3, 1), "gamescope comes up to show the page, on the defaults: " + run.stderr
 
-    for look, keys in zip(LOOKS, ("Pad:B", "Pad:Down Pad:A", "Pad:Right Pad:A"), strict=True):
+    for look, keys in zip(LOOKS, ("Pad:B", "Pad:Down Pad:Down Pad:A", "Pad:Right Pad:Right Pad:A"), strict=True):
         left = tmp_path / f"left-{look}"
         run = gamescope("up", "--windowed", "--theme", look, "--key-delay", "300", "--keys", keys, **{host.DONE_ENV: str(left)})
         assert run.code == 0 and "Traceback" not in run.stderr, run.stderr
@@ -146,6 +147,17 @@ def test_a_core_that_will_not_open_holds_a_page_that_retries_or_quits_on_the_pad
     assert len(reasons) == 2, "A on the file still broken stays on the page"
     assert all("config.toml" in line for line in reasons), "the reason names the file: " + stderr
     assert done.read_text() == "0", "the script carried over to the home page ended it"
+
+    broken = b'[launch]\nhdr = "maybe" # mine\n\xff'
+    config.write_bytes(broken)
+    keys = "Right A Ready Mark:home Quit"
+    run = gamescope("up", "--windowed", "--no-gamepad", "--key-delay", "300", "--key-gap", "50", "--keys", keys, **{host.DONE_ENV: str(done)})
+    assert run.code == 0 and "mark home" in run.stderr and "Traceback" not in run.stderr, run.stderr
+    kept = list(config.parent.glob("config.toml.broken-*"))
+    assert [k.read_bytes() for k in kept] == [broken], "the broken file kept byte for byte beside the new one"
+    assert f"kept as {kept[0]}" in run.stderr, "the page says where it is: " + run.stderr
+    assert "config.toml" in next(line for line in run.stderr.splitlines() if "the core did not open" in line), "a file that is no text is named too"
+    assert tomllib.loads(config.read_text()) == {"schema": 2}, "the new file holds the defaults"
 
 
 def test_a_gamescope_that_shows_nothing_is_stopped(gamescope, monkeypatch):

@@ -105,6 +105,13 @@ template $UniverseWindow: Adw.ApplicationWindow {
                           visible: false;
                           styles ["pill"]
                         }
+
+                        Button defaults_button {
+                          label: _("Start With Default Settings");
+                          action-name: "win.start-on-defaults";
+                          visible: false;
+                          styles ["pill"]
+                        }
                       };
                     };
                   };

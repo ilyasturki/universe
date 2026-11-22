@@ -22,6 +22,7 @@ Window {
             var notice = api.theme.takeNotice();
             if (notice)
                 Notices.fail(notice);
+            Notices.show(api.takeNotice());
         }
         // Out of the status change: the fall back changes this very source.
         onStatusChanged: {

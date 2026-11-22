@@ -16,14 +16,26 @@ def reason_of(error):
 class Failure(QObject):
     changed = Signal()
 
-    def __init__(self, error, attempt, session=False, fullscreen=False, parent=None):
+    # `broken()` names config.toml when the core refuses it, `defaults()` sets it aside and returns where it went.
+    def __init__(self, error, attempt, session=False, fullscreen=False, broken=None, defaults=None, parent=None):
         super().__init__(parent)
         self._reason = reason_of(error)
         self._attempt = attempt
         self._tries = 0
         self._session = session
         self._fullscreen = fullscreen
+        self._broken = broken or (lambda: None)
+        self._defaults = defaults
+        self._offered = self._offers()
+        self.kept = ""
         self.client = None
+
+    def _offers(self):
+        try:
+            return bool(self._defaults and self._broken())
+        except Exception:  # an offer that cannot be checked is not made
+            log.exception("checking config.toml")
+            return False
 
     @Slot()
     def retry(self):
@@ -32,9 +44,25 @@ class Failure(QObject):
             self.client = self._attempt()
         except Exception as error:  # noqa: BLE001  as host.run: any of them stays on the page
             self._reason = reason_of(error)
+            self._offered = self._offers()
             self.changed.emit()
         else:
             QCoreApplication.quit()
+
+    @Slot()
+    def startOnDefaults(self):
+        if self._defaults is None:
+            return
+        try:
+            kept = self._defaults()
+        except Exception as error:  # noqa: BLE001  the file stays as it was, and the page says why
+            self._reason = reason_of(error)
+            self.changed.emit()
+            return
+        if kept:
+            self.kept = kept
+            log.info("config.toml would not load: kept as %s, started on the defaults", kept)
+        self.retry()
 
     @Slot()
     def leave(self):
@@ -42,5 +70,7 @@ class Failure(QObject):
 
     reason = Property(str, lambda self: self._reason, notify=changed)
     retried = Property(bool, lambda self: self._tries > 0, notify=changed)
+    offersDefaults = Property(bool, lambda self: self._offered, notify=changed)
+    keptAt = Property(str, lambda self: self.kept, notify=changed)
     session = Property(bool, lambda self: self._session, constant=True)
     fullscreen = Property(bool, lambda self: self._fullscreen, constant=True)
