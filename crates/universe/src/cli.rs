@@ -729,7 +729,7 @@ pub enum ConfigCmd {
         /// Dotted key, e.g. launch.proton
         key: Option<String>,
     },
-    /// Write a dotted key (an empty value deletes it)
+    /// Write a dotted key (an empty value deletes it); a key config.toml does not take is refused, naming the closest one
     Set {
         /// Dotted key, e.g. launch.proton
         key: String,

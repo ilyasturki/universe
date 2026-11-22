@@ -1811,6 +1811,12 @@ impl Core {
     }
 
     pub async fn set_setting(&self, key: &str, value: &str) -> Result<()> {
+        if let Some(unknown) = crate::config::unknown_key(key) {
+            let held = Config::file_set().pointer(&format!("/{}", key.replace('.', "/"))).is_some();
+            if !(value.is_empty() && held) {
+                return Err(Error::Invalid(unknown));
+            }
+        }
         if key == "controller.volume_step" {
             crate::controller::volume_step_value(value)?;
         }
@@ -3117,6 +3123,20 @@ mod tests {
         assert_eq!(s["set"], serde_json::json!({"modules": {"enabled": []}, "sources": {"enabled": ["fake"]}}), "`set` is the file alone");
         core.set_setting("launch.esync", "false").await.unwrap();
         assert_eq!(core.settings().await["set"]["launch"]["esync"], serde_json::json!(false));
+    }
+
+    #[tokio::test]
+    async fn a_write_over_a_bad_value_set_under_a_running_core_names_the_bad_key_and_keeps_its_bytes() {
+        let _env = crate::paths::test_env();
+        let config = paths::config_file();
+        std::fs::write(&config, "schema = 2\n").unwrap();
+        let core = Core::open().await.unwrap();
+        let bad = "schema = 2\n[launch]\nhdr = \"yes\"\n";
+        std::fs::write(&config, bad).unwrap();
+        let err = core.set_setting("launch.fsync", "false").await.unwrap_err().to_string();
+        assert!(err.contains("launch.hdr") && !err.contains("launch.fsync"), "{err}");
+        assert_eq!(std::fs::read_to_string(&config).unwrap(), bad);
+        core.set_setting("launch.hdr", "true").await.expect("setting the bad key itself mends the file");
     }
 
     #[tokio::test]

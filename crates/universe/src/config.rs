@@ -494,8 +494,14 @@ impl Config {
         };
         let mut doc = document(&text)?;
         crate::game::set_dotted(&mut doc, key, value)?;
+        let held = text;
         let text = doc.to_string();
-        toml::from_str::<Config>(&text).map_err(|e| crate::Error::Invalid(format!("{key} = {value}: {}", e.message())))?;
+        if let Err(e) = toml::from_str::<Config>(&text) {
+            return Err(crate::Error::Invalid(match toml::from_str::<Config>(&held) {
+                Err(bad) => format!("{} already holds a bad {}: {}", path.display(), bad_key(&held, &bad).unwrap_or_else(|| "value".into()), bad.message()),
+                Ok(_) => format!("{key} = {value}: {}", e.message()),
+            }));
+        }
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -585,6 +591,60 @@ pub fn document(text: &str) -> crate::Result<toml_edit::DocumentMut> {
         doc["schema"] = toml_edit::value(SCHEMA);
     }
     Ok(doc)
+}
+
+/// The dotted key whose value `error` points at in `text`.
+fn bad_key(text: &str, error: &toml::de::Error) -> Option<String> {
+    fn walk(table: &dyn toml_edit::TableLike, prefix: &str, at: usize) -> Option<String> {
+        table.iter().find_map(|(k, item)| {
+            let path = if prefix.is_empty() { k.to_string() } else { format!("{prefix}.{k}") };
+            let inner = match item {
+                toml_edit::Item::ArrayOfTables(tables) => tables.iter().find_map(|t| walk(t, &path, at)),
+                _ => item.as_table_like().and_then(|t| walk(t, &path, at)),
+            };
+            inner.or_else(|| item.span().filter(|s| s.contains(&at)).map(|_| path))
+        })
+    }
+    let at = error.span()?.start;
+    walk(toml_edit::Document::parse(text).ok()?.as_table(), "", at)
+}
+
+/// None for a key config.toml takes, a field of its own or an entry of one of its maps; else the refusal, naming the closest key.
+pub fn unknown_key(key: &str) -> Option<String> {
+    use serde_json::Value;
+    fn leaves(v: &Value, prefix: &str, out: &mut Vec<String>) {
+        match v {
+            Value::Object(m) if !m.is_empty() => {
+                m.iter().for_each(|(k, v)| leaves(v, &if prefix.is_empty() { k.clone() } else { format!("{prefix}.{k}") }, out))
+            }
+            _ => out.push(prefix.to_string()),
+        }
+    }
+    let schema = serde_json::to_value(Config::default()).ok()?;
+    let parts: Vec<&str> = key.split('.').collect();
+    let mut node = &schema;
+    for (i, part) in parts.iter().enumerate() {
+        match node {
+            Value::Object(m) if m.is_empty() => return None,
+            Value::Object(m) => match m.get(*part) {
+                Some(next) => node = next,
+                // [modules.<id>] and [sources.<id>]: each extension's own table.
+                None if i == 1 && matches!(parts[0], "modules" | "sources") => return None,
+                None => break,
+            },
+            _ => break,
+        }
+        if i == parts.len() - 1 {
+            return None;
+        }
+    }
+    let mut known = Vec::new();
+    leaves(&schema, "", &mut known);
+    let closest = known.into_iter().map(|k| (strsim::jaro_winkler(key, &k), k)).max_by(|a, b| a.0.total_cmp(&b.0)).filter(|(score, _)| *score > 0.8);
+    Some(match closest {
+        Some((_, k)) => format!("unknown key {key}: did you mean {k}?"),
+        None => format!("unknown key {key}"),
+    })
 }
 
 fn owner_under(path: &Path, store: &Path) -> &'static str {

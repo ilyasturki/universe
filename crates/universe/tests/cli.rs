@@ -249,6 +249,31 @@ fn a_write_the_config_cannot_hold_or_to_a_read_only_config_is_refused() {
         assert!(text(&out.stderr).contains(key), "{}", text(&out.stderr));
         assert_eq!(std::fs::read(&config).unwrap(), held, "{key} left the file byte for byte");
     }
+    for (key, closest) in [("lanch.hdr", Some("launch.hdr")), ("desktop.profil", Some("desktop.profile")), ("keys.sgdb.more", None), ("zzz", None)] {
+        let out = universe(&dir, &["config", "set", key, "true"], &[]);
+        let err = text(&out.stderr);
+        assert_eq!(out.status.code(), Some(1), "{key}: {err}");
+        assert!(err.contains(&format!("unknown key {key}")) && closest.is_none_or(|c| err.contains(&format!("did you mean {c}?"))), "{err}");
+        assert_eq!(std::fs::read(&config).unwrap(), held, "{key} left the file byte for byte");
+    }
+    let open = [
+        ("proton.mine", "/opt/proton"),
+        ("runners.dolphin.exe", "/bin/true"),
+        ("launch.env.MANGOHUD", "1"),
+        ("modules.capture.gsr_extra_args", "-cr full"),
+        ("sources.gog.scan_dirs", "/games"),
+        ("controller.layout.8bitdo-pro-3", "xbox"),
+        ("paths.games_root", "/games"),
+        ("saves.auto_backup", "false"),
+        ("system.tdp", "15"),
+    ];
+    for (key, value) in open {
+        let out = universe(&dir, &["config", "set", "--", key, value], &[]);
+        assert!(out.status.success(), "{key}: {}", text(&out.stderr));
+    }
+    std::fs::write(&config, "schema = 2\n[lanch]\nhdr = true\n").unwrap();
+    assert!(universe(&dir, &["config", "set", "lanch.hdr"], &[]).status.success(), "a stray key the file holds can still be deleted");
+    assert!(!std::fs::read_to_string(&config).unwrap().contains("hdr"));
     assert!(universe(&dir, &["ls"], &[]).status.success(), "the next command still opens");
     std::fs::set_permissions(&config, std::os::unix::fs::PermissionsExt::from_mode(0o444)).unwrap();
     let out = universe(&dir, &["config", "set", "launch.hdr", "true"], &[]);

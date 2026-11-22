@@ -2993,6 +2993,7 @@ dependencies = [
  "sha1",
  "sha2",
  "shell-words",
+ "strsim",
  "tar",
  "tempfile",
  "thiserror",

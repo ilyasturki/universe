@@ -8,6 +8,7 @@ default-run = "universe"
 
 [dependencies]
 anyhow = "1"
+strsim = "0.11"
 thiserror = "2"
 tokio = { version = "1", features = ["full"] }
 zbus = { version = "6", default-features = false, features = ["tokio", "proxy", "service", "object-manager"] }
