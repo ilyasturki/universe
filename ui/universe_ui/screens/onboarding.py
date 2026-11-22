@@ -92,9 +92,7 @@ def _found_display(launcher):
         return "Waiting for a sign-in"
     if not launcher["games"]:
         return "No games"
-    if launcher["blocked"]:
-        return _plural(launcher["games"], "game")
-    return _plural(launcher["games"], "game") + " · " + launcher["detail"]
+    return _plural(launcher["games"], "game")
 
 
 def _where(launcher, sources):
@@ -112,12 +110,14 @@ def _importable(launcher):
 
 
 def _unusable(source, via):
-    """Why a launcher's games cannot go to the source that adopts them; empty when they can."""
+    """`(reason, why)` a launcher's games cannot go to the source that adopts them; empty when they can."""
     if source is None:
-        return f"no {via} source"
+        return "no_source", f"no {via} source"
     if source.get("available", True):
-        return ""
-    return str(source.get("incompatible") or "") or "needs " + ", ".join(source.get("missing") or ["its programs"])
+        return "", ""
+    if source.get("incompatible"):
+        return "incompatible", str(source["incompatible"])
+    return "missing", "needs " + ", ".join(source.get("missing") or ["its programs"])
 
 
 def _shown(entries):
@@ -233,20 +233,22 @@ class Onboarding(RowsForm):
             self._install_dirs = [d for d in report.get("install_dirs") or [] if d.get("dir")]
             self._first_root = self._games_root()
             self._launchers = [{**launcher, "state": "", "count": 0, "error": "", "blocked": ""} for launcher in report.get("launchers") or []]
-            found_via = {launcher.get("via") for launcher in self._launchers if launcher.get("found")}
             # A source that is off is offered only where the config takes the write that turns it on.
-            self._sources = [s for s in everything if s.get("available", True) and (s.get("enabled", True) or (self._writable and s["id"] in found_via))]
+            self._sources = [s for s in everything if s.get("available", True) and (s.get("enabled", True) or self._writable)]
             known = {s["id"]: s for s in everything}
             for launcher in self._launchers:
                 via = launcher.get("via") or ""
-                why = _unusable(known.get(via), via) if via and via not in IMPORTERS else ""
+                reason, why = _unusable(known.get(via), via) if via and via not in IMPORTERS else ("", "")
                 if why:
                     launcher["importable"] = False
-                launcher["detail"] = why or ("" if launcher["importable"] else NOT_YET)
+                elif not launcher["importable"]:
+                    reason, why = "not_yet", NOT_YET
+                launcher["detail"] = why
                 launcher["where"] = _where(launcher, known)
                 launcher["blocked"] = "" if self._writable or why else self._blocked(launcher, known.get(via), gog or {})
                 if launcher["blocked"]:
-                    launcher["importable"] = False
+                    reason, launcher["importable"] = "read_only", False
+                launcher["reason"] = reason
             # Offline where NetworkManager could join a Wi-Fi network: that comes first, the stores need it.
             offline = network.get("available") and network.get("device") and not network.get("link")
             steps = ["network", "found"] if offline else ["found"]
@@ -324,9 +326,10 @@ class Onboarding(RowsForm):
                     # `verb`: the row says what A does, the looks draw no arrow to a page it does not open.
                     row.update(via=launcher["via"], display="Add " + _plural(launcher["games"], "game"), action="Add", verb=True)
                 else:
-                    row = _static(launcher["id"], launcher["name"], _found_display(launcher), detail=launcher["error"] or launcher["blocked"])
+                    why = launcher["error"] or launcher["blocked"] or (launcher["detail"] if launcher["games"] and not launcher["state"] else "")
+                    row = _static(launcher["id"], launcher["name"], _found_display(launcher), detail=why)
                     # A reason is read whole: the folder to add is at its end.
-                    row.update(quiet=not _importable(launcher) and not launcher["state"] and not launcher["blocked"], wraps=bool(row["detail"]))
+                    row.update(quiet=not launcher["games"] and not launcher["state"], wraps=bool(why), reason=launcher["reason"])
                 entries.append(("", {**row, "state": launcher["state"], "count": launcher["count"]}, False))
             if not entries:
                 entries.append(("", _static("none", "Other launchers", "None found"), False))
@@ -502,7 +505,7 @@ class Onboarding(RowsForm):
     def _adopt(self, launcher):
         source = self._source(launcher["via"])
         if source is None:
-            self._set_state(launcher, "failed", error=_unusable(None, launcher["via"]))
+            self._set_state(launcher, "failed", error=_unusable(None, launcher["via"])[1])
             return
         if not source.get("enabled", True):
             if not self._writable:

@@ -84,9 +84,9 @@ def test_steps_and_found_rows(empty_api, empty):
         ("gog", "link"),
         ("gog", "code"),
     }
-    assert sorted(len({form.rows[i]["module"] for i in g["rows"]}) for g in form.groups) == [1, 1, 1], "a group per store"
+    assert sorted(len({form.rows[i]["module"] for i in g["rows"]}) for g in form.groups) == [1, 1, 1, 1], "a group per store"
     switches = {r["module"]: r["type"] for r in form.rows if r["key"] == "enabled"}
-    assert switches == {"epic": "bool", "steam": "bool"}, "off, offered since their launchers are here"
+    assert switches == {"epic": "bool", "itch": "bool", "steam": "bool"}, "off, offered whatever launchers are here"
     form.back()
     assert form.stepId == "found"
 
@@ -428,7 +428,7 @@ def test_the_setup_in_each_look(stores_signed_out, held_sources, look, empty_api
     until(lambda: focused(look, "setupNav"), "Down past the last row reaches the buttons")
     look.press(Qt.Key.Key_Return)
     until(lambda: form.stepId == "stores", "A on Continue moves on")
-    look.press(Qt.Key.Key_Down, 5)
+    look.press(Qt.Key.Key_Down, form.count)
     look.press(Qt.Key.Key_Left)
     look.press(Qt.Key.Key_Return)
     until(lambda: form.stepId == "found", "the Back button goes back")

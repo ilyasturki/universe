@@ -29,6 +29,10 @@ fn signed_out(source: &Value) -> bool {
     source["enabled"].as_bool() == Some(true) && source["available"].as_bool() != Some(false) && source["logged_in"].as_bool() != Some(true)
 }
 
+fn offered(store: &Value, writable: bool) -> bool {
+    writable && store["enabled"].as_bool() == Some(false) && store["available"].as_bool() != Some(false)
+}
+
 /// Why the store a launcher's `via` names cannot adopt its games; `None` when it can, turned on first if it is off.
 fn unusable(via: &str, sources: &[Value]) -> Option<String> {
     if IMPORTERS.contains(&via) {
@@ -120,7 +124,7 @@ struct Onboarding {
     win: glib::WeakRef<Window>,
     look: RefCell<Look>,
     ready: Cell<bool>,
-    /// The stores the stores page lists: signed out, or off with their launcher here.
+    /// The stores the stores page lists: signed out, or off where config.toml takes the switch that turns them on.
     stores: RefCell<Vec<Value>>,
     /// What the steps brought in, for the last page: `(what, how much)`.
     summary: RefCell<Vec<(String, String)>>,
@@ -355,14 +359,7 @@ fn found_page(this: &Rc<Onboarding>) -> adw::NavigationPage {
         group.remove(&looking);
         let writable = config["config_writable"].as_bool() != Some(false);
         let found: Vec<&Launcher> = report.launchers.iter().filter(|l| l.found && l.games > 0).collect();
-        let found_via: Vec<&str> = found.iter().map(|l| l.via.as_str()).collect();
-        let offered = |s: &Value| {
-            writable
-                && s["enabled"].as_bool() == Some(false)
-                && s["available"].as_bool() != Some(false)
-                && found_via.contains(&s["id"].as_str().unwrap_or_default())
-        };
-        this.stores.replace(sources.iter().filter(|s| signed_out(s) || offered(s)).cloned().collect());
+        this.stores.replace(sources.iter().filter(|s| signed_out(s) || offered(s, writable)).cloned().collect());
         this.look.replace(Look {
             gog_dirs: report.gog_dirs.clone(),
             install_dirs: report.install_dirs.clone(),
@@ -586,7 +583,7 @@ fn stores_page(this: &Rc<Onboarding>) -> adw::NavigationPage {
             content.append(&account(this, source));
             continue;
         }
-        // Off, with its launcher here: a switch turns it on, its sign-in below once it is.
+        // Off: a switch turns it on, its sign-in below once it is.
         let name = text(source, "name");
         let group = adw::PreferencesGroup::builder().title(&name).build();
         let switch = adw::SwitchRow::builder().title(gettext("Use {}").replace("{}", &name)).build();
@@ -930,6 +927,15 @@ mod tests {
         assert_eq!(unusable("steam", &sources).as_deref(), Some("needs steam"));
         assert_eq!(unusable("itch", &sources).as_deref(), Some("no itch source"));
         assert!(signed_out(&sources[0]) && !signed_out(&sources[1]), "off is not signed out: adopting turns it on");
+    }
+
+    #[test]
+    fn every_store_that_is_off_and_can_run_is_offered_where_the_config_takes_writes() {
+        let epic = serde_json::json!({"id": "epic", "available": true, "enabled": false});
+        let steam = serde_json::json!({"id": "steam", "available": false, "missing": ["steam"], "enabled": false});
+        assert!(offered(&epic, true), "no Heroic needed: Universe fetches legendary itself");
+        assert!(!offered(&steam, true), "no Steam without its client");
+        assert!(!offered(&epic, false), "a read-only config can't take the switch");
     }
 
     #[test]

@@ -8,6 +8,7 @@ import os
 import signal
 import socket
 import subprocess
+import sys
 import tomllib
 from pathlib import Path
 
@@ -493,6 +494,39 @@ def test_the_first_run_adds_what_lutris_installed_and_lands_on_home(journey):
     look.press(Qt.Key.Key_I)
     until(journey.client.core.onboarded, "Finish marks the machine set up")
     until(lambda: look.root.property("returnLaunches") == "dishonored", "Home, on the game")
+
+
+@pytest.mark.parametrize("name", LOOKS)
+def test_the_first_run_offers_every_store_it_can_turn_on_and_says_why_a_launcher_cant_be_added(journey, monkeypatch, name):
+    lutris(journey, gog_games(journey))
+    journey.write("home/.local/share/Steam/steamapps/appmanifest_620.acf", '"AppState"\n{\n\t"appid"\t\t"620"\n\t"name"\t\t"Portal 2"\n}\n')
+    (journey.config / "config.toml").unlink()
+    python = Path(sys.executable).parent
+    assert not (python / "steam").exists()
+    bin_dir = journey.root / "bin"
+    (bin_dir / "gogdl").unlink()
+    monkeypatch.setenv("PATH", os.pathsep.join(map(str, (TESTS / "shims", bin_dir, python))))
+
+    def stores():
+        look = journey.start(onboarded=False, look=name)
+        form = journey.api.screens.onboarding
+        until(lambda: not form.loading and form.stepId == "found", "the setup opens on what this machine holds")
+        page = look.page("onboardingPage")
+        until(lambda: (rows := page.findChild(QObject, "setupRows")) is not None and rows.property("activeFocus"))
+        found = down_to(look, lambda: read(page.findChild(QObject, "setupRows"), "currentRow") or {}, key="steam")
+        look.press(Qt.Key.Key_I)
+        until(lambda: form.stepId == "stores", "X moves on to the stores")
+        offered = {r["module"] for r in form.rows}
+        journey.quit_ui()
+        return found, offered
+
+    found, offered = stores()
+    assert found.get("reason") == "missing", "Steam's games are shown, with why they can't come in"
+    assert offered == {"gog", "epic", "itch"}, "the stores whose tools Universe fetches itself, and no Steam without its client"
+    (bin_dir / "steam").symlink_to(ROOT / "sources" / "steam" / "tests" / "shims" / "steam")
+    found, offered = stores()
+    assert found.get("action") == "Add" and not found.get("reason")
+    assert offered == {"gog", "epic", "itch", "steam"}
 
 
 def kid(item, qml_type):
