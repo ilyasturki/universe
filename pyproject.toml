@@ -8,6 +8,7 @@ markers = [
 # Its watchdog thread needs no GIL: a hang that holds it inside Qt's C++ is dumped and ended all the same.
 faulthandler_timeout = 60
 faulthandler_exit_on_timeout = true
+filterwarnings = ["error::pytest.PytestUnhandledThreadExceptionWarning"]
 qt_api = "pyside6"
 qt_log_level_fail = "WARNING"
 qt_log_ignore = [
