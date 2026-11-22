@@ -142,7 +142,6 @@ def test_a_long_picker_scrolls_under_the_finger_and_a_choice_is_one_tap(deck):
     x, y = centre(choices, 0.5, 0.8)
     gamepad.touch(window, [(x, y - k * 40) for k in range(10)])
     until(lambda: choices.property("contentY") > 300, "the list follows the finger, the card's own block under it")
-    until(lambda: not choices.property("moving"))
     assert picker.property("open") is True and picker.property("index") == 0, "a swipe picks nothing"
     x, y = centre(choices)
     local = choices.mapFromScene(QPointF(x, y))
@@ -150,6 +149,6 @@ def test_a_long_picker_scrolls_under_the_finger_and_a_choice_is_one_tap(deck):
         choices, "indexAt", Q_RETURN_ARG(int), Q_ARG(float, local.x() + choices.property("contentX")), Q_ARG(float, local.y() + choices.property("contentY"))
     )
     assert landed > 3
-    tap(window, (x, y))
-    until(lambda: picker.property("open") is False)
+    tap(window, (x, y), hold_ms=150)
+    until(lambda: picker.property("open") is False, "a finger on the list still coasting from the swipe stops it: the tap picks the row under it")
     assert picker.property("index") == landed

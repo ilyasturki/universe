@@ -79,6 +79,15 @@ Item {
         }
     }
 
+    // A finger down stops the coast, so the row under it stays there for its tap.
+    PointHandler {
+        target: null
+        acceptedDevices: PointerDevice.TouchScreen | PointerDevice.Mouse
+        acceptedButtons: Qt.LeftButton
+        onActiveChanged: if (active && mover.running)
+            swipe.halt()
+    }
+
     // Closes a fixed share of what is left each frame; a view moved by anything else (the keys) ends it there.
     FrameAnimation {
         id: mover
