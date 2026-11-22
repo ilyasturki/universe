@@ -11,6 +11,7 @@ from looks import (
     content_rows,
     current_row,
     focus_names,
+    held_notices,
     invoke,
     lit_fraction,
     lit_rows,
@@ -20,7 +21,7 @@ from looks import (
     render,
     settle,
 )
-from PySide6.QtCore import QCoreApplication, QDeadlineTimer, QEvent, QObject, Qt
+from PySide6.QtCore import QCoreApplication, QDeadlineTimer, QEvent, QObject, Qt, QUrl
 from PySide6.QtGui import QKeyEvent
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QTest
@@ -1151,6 +1152,24 @@ def test_a_key_pressed_while_a_reprise_page_loads_reaches_it_once_loaded(look, a
     until(lambda: page.findChild(QObject, "settingsCards").property("activeFocus") is True, "Right while the tab loads enters its cards once loaded")
     settle(look.window)
     assert trace.stop().foreign("homePage", "tabKeyHold", "settingsPage") == []
+
+
+@reprise
+@pytest.mark.qt_log_ignore(r"Broken\.qml", extend=True)
+def test_a_sub_page_that_fails_to_load_says_so_and_gives_the_keys_back(look, api, tmp_path):
+    broken = tmp_path / "Broken.qml"
+    broken.write_text("import QtQuick\nItem {\n")
+    root = look.root
+    home = look.home()
+    shown = game_id(home)
+    posted, _clear = held_notices(look.engine)
+    invoke(root, "openSub", QUrl.fromLocalFile(str(broken)).toString(), {"game": api.allGames.byId("the-technomancer")})
+    look.press(Qt.Key.Key_Escape)
+    until(lambda: root.property("subOpen") is False, "the page that never loaded is left")
+    until(lambda: [n["error"] for n in posted()] == [True], "and says so")
+    until(lambda: "homePage" in focus_names(look.window))
+    look.press(Qt.Key.Key_Right)
+    until(lambda: game_id(home) != shown, "the keys reach Home again")
 
 
 @reprise

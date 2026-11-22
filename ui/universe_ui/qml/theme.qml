@@ -1254,6 +1254,12 @@ FocusScope {
                 item.forceActiveFocus();
                 subHold.release();
             }
+            onStatusChanged: {
+                if (status === Loader.Error && root.subOpen) {
+                    Notices.fail("This page could not open");
+                    root.closeSub();
+                }
+            }
 
             Connections {
                 target: subLoader.item
