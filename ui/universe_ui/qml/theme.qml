@@ -163,6 +163,11 @@ FocusScope {
     }
 
     function goToTab(index) {
+        // An A held on the tab left neither opens a menu nor launches over the next one.
+        if (index !== tabIndex) {
+            acceptHeld = false;
+            holdTimer.stop();
+        }
         tabIndex = index;
     }
 
@@ -204,7 +209,13 @@ FocusScope {
     onActivePageChanged: {
         deliverLanding();
         if (activePage && focusOwner === "page" && !detailOpen && !subOpen && !menuOpen && !confirm.open && !whatsNew.open && !launching)
-            activePage.forceActiveFocus();
+            focusTab();
+    }
+
+    function focusTab() {
+        var loader = tabLoaders.itemAt(tabIndex);
+        if (loader)
+            loader.takeFocus();
     }
 
     function openAdd() {
@@ -235,8 +246,8 @@ FocusScope {
             searchLoader.item.forceActiveFocus();
         else if (focusOwner === "chrome")
             tabBar.forceActiveFocus();
-        else if (activePage)
-            activePage.forceActiveFocus();
+        else
+            focusTab();
     }
 
     function focusChrome() {
@@ -247,8 +258,7 @@ FocusScope {
 
     function focusPage() {
         focusOwner = "page";
-        if (activePage)
-            activePage.forceActiveFocus();
+        focusTab();
     }
 
     function openSearch() {
@@ -928,6 +938,8 @@ FocusScope {
             }
 
             Repeater {
+                id: tabLoaders
+
                 model: root.tabs
 
                 Loader {
@@ -963,8 +975,13 @@ FocusScope {
 
                         anchors.fill: parent
                         focus: true
-                        holding: !pageLoader.item
+                        holding: !pageLoader.item && pageLoader.status !== Loader.Error
                         passTabKeys: true
+                        target: pageLoader.item
+                    }
+
+                    function takeFocus() {
+                        (item && !tabHold.owes() ? item : tabHold).forceActiveFocus();
                     }
 
                     function publish() {
@@ -977,7 +994,6 @@ FocusScope {
                             item.leave();
                     }
                     onLoaded: {
-                        tabHold.release();
                         activated = true;
                         publish();
                         if ("menuOpen" in item)
@@ -988,6 +1004,7 @@ FocusScope {
                             item.flipCovering = Qt.binding(function () {
                                 return flip.covering;
                             });
+                        tabHold.release();
                     }
 
                     Connections {
@@ -1137,6 +1154,7 @@ FocusScope {
         anchors.fill: parent
         focus: root.detailOpen && !root.subOpen
         holding: !detailLoader.item
+        target: detailLoader.item
 
         Loader {
             id: detailLoader
@@ -1145,7 +1163,7 @@ FocusScope {
             active: root.detailOpen || detailLoader.opacity > 0.01
             asynchronous: true
             source: "pages/DetailPage.qml"
-            focus: !detailHold.holding
+            focus: !detailHold.taking
             opacity: root.detailOpen && !root.launching && !root.subOpen ? 1.0 : 0.0
             transform: Translate {
                 y: root.detailOpen ? 0 : Theme.dp(48)
@@ -1163,7 +1181,8 @@ FocusScope {
                 item.overlayHints = Qt.binding(function () {
                     return root.overlayHints;
                 });
-                item.forceActiveFocus();
+                if (!detailHold.owes())
+                    item.forceActiveFocus();
                 detailHold.release();
             }
 
@@ -1203,10 +1222,12 @@ FocusScope {
 
     KeyHold {
         id: subHold
+        objectName: "subKeyHold"
 
         anchors.fill: parent
         focus: root.subOpen
         holding: !subLoader.item
+        target: subLoader.item
 
         Loader {
             id: subLoader
@@ -1216,7 +1237,7 @@ FocusScope {
             active: root.subOpen || subLoader.opacity > 0.01
             asynchronous: true
             source: root.subSource
-            focus: !subHold.holding
+            focus: !subHold.taking
             opacity: root.subOpen && !root.launching && !root.subSwapping ? 1.0 : 0.0
             visible: opacity > 0.01
             transform: Translate {
@@ -1232,7 +1253,8 @@ FocusScope {
                 item.args = Qt.binding(function () {
                     return root.subArgs;
                 });
-                item.forceActiveFocus();
+                if (!subHold.owes())
+                    item.forceActiveFocus();
                 subHold.release();
             }
 

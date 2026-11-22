@@ -317,6 +317,37 @@ class Look:
         invoke(page, "land", section)
         return page
 
+    def find_setting(self, query):
+        """The settings search on `query`, its cursor on the first hit, and the search's name: Reprise's and the PS5's with
+        Settings never opened, Switch 2's from inside Settings, where it lives."""
+        search = self.api.screens.search
+        if self.name == "reprise":
+            self.root.openSearch()
+            overlay = self.find("searchOverlay")
+            for ch in query:
+                QTest.keyClick(self.window, ch)
+            until(lambda: overlay.property("hasSettings") is True)
+            for _ in range(8):
+                if overlay.property("zone") == "settings":
+                    break
+                self.press(Qt.Key.Key_Up)
+            until(lambda: overlay.property("zone") == "settings", "Up from the keys reaches the hits")
+            return "searchOverlay"
+        if self.name == "switch2":
+            self.open("pages/SettingsPage.qml")
+            page = self.open("pages/SettingsSearchPage.qml")
+            until(lambda: search.ready)
+            search.query = query
+        else:
+            page = self.open("pages/SearchPage.qml")
+            self.press(Qt.Key.Key_E)
+            until(lambda: search.ready)
+            page.setProperty("query", query)
+        until(lambda: search.count > 0)
+        self.press(Qt.Key.Key_F1)
+        until(lambda: page.property("typing") is False, "Start reaches the hits")
+        return page.objectName()
+
     def switch(self, name):
         """A live switch: the new look lands on its Themes section."""
         self.api.theme.set(name)

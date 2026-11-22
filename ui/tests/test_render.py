@@ -1084,6 +1084,70 @@ def test_a_key_pressed_while_a_reprise_page_loads_reaches_it_once_loaded(look, a
 
 
 @reprise
+def test_keys_pressed_as_a_reprise_tab_swaps_reach_the_new_tab_in_order(look, api):
+    root = look.root
+    look.home()
+    look.press(Qt.Key.Key_Up, 2)
+    until(lambda: root.property("focusOwner") == "chrome")
+    look.press(Qt.Key.Key_Right)
+    trace = FocusTrace(look.window)
+    look.press(Qt.Key.Key_Down)
+    until(lambda: look.page("libraryPage").property("activeFocus") is True, "Down from the bar onto a loading tab enters it once loaded")
+    settle(look.window)
+    assert trace.stop().foreign("tabKeyHold", "libraryPage") == []
+
+    tabs = []
+    root.tabIndexChanged.connect(lambda: tabs.append(root.property("tabIndex")))
+    look.press(Qt.Key.Key_E)
+    hold = look.window.activeFocusItem()
+    assert hold.objectName() == "tabKeyHold"
+    # RB once more as the load ends, before the held keys are replayed.
+    hold.parentItem().loaded.connect(lambda: QTest.keyClick(look.window, Qt.Key.Key_E))
+    look.press(Qt.Key.Key_Escape)
+    look.press(Qt.Key.Key_E)
+    media, library = root.property("mediaTab"), root.property("libraryTab")
+    until(lambda: tabs == [media, 0, library, media], f"B pressed as a tab loads takes it home, then each RB a tab on: {tabs}")
+    look.page("mediaPage")
+
+    look.press(Qt.Key.Key_Q, 2)
+    look.home()
+    settle(look.window)
+    trace = FocusTrace(look.window)
+    look.press(Qt.Key.Key_Q)
+    assert "tabKeyHold" in focus_names(look.window)
+    look.press(Qt.Key.Key_Return)
+    page = look.page("settingsPage")
+    until(lambda: page.findChild(QObject, "settingsCards").property("activeFocus") is True, "A pressed with LB enters the first section of the tab LB reached")
+    settle(look.window)
+    assert trace.stop().foreign("tabKeyHold", "settingsPage") == []
+    assert root.property("launching") is False and root.property("detailOpen") is False
+
+    look.press(Qt.Key.Key_E)
+    look.home()
+    QTest.keyPress(look.window, Qt.Key.Key_Return)
+    look.press(Qt.Key.Key_E)
+    pump(600)
+    QTest.keyRelease(look.window, Qt.Key.Key_Return)
+    look.page("libraryPage")
+    assert root.property("menuOpen") is False and root.property("launching") is False, "an A held on home does nothing once RB leaves it"
+
+
+@pytest.mark.parametrize("look", LOOKS, indirect=True)
+def test_a_at_once_after_a_settings_hit_in_a_cold_tab_acts_on_the_hit(look, api, fake):
+    look.home()
+    search = look.find_setting("mangohud")
+    assert (fake.config()["launch"] or {}).get("mangohud") in (None, False)
+    settle(look.window)
+    trace = FocusTrace(look.window)
+    look.press(Qt.Key.Key_Return, 2)
+    until(lambda: fake.config()["launch"].get("mangohud") is True, "the A pressed with the hit toggles its row")
+    settle(look.window)
+    assert trace.stop().foreign(search, "tabKeyHold", "settingsPage") == [], "no frame on the hidden home"
+    assert not look.root.property("launching") and api.universe.currentSession is None
+    assert not look.root.property("detailOpen")
+
+
+@reprise
 def test_the_reprise_game_page_holds_the_games_tools_and_the_hero_its_page_and_menu(look, api):
     def glyphs(hints):
         return {h["glyph"] for h in hints}
