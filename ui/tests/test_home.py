@@ -2,7 +2,7 @@ import os
 import threading
 
 import pytest
-from looks import FocusTrace, Look, focus_names, invoke, lit_fraction, read, settle
+from looks import FocusTrace, Look, call, focus_names, invoke, lit_fraction, read, settle
 from PySide6.QtCore import QObject, Qt, QTimer
 from PySide6.QtTest import QTest
 from uitest import descendant, record, until
@@ -512,6 +512,39 @@ def test_b_before_the_universe_poster_has_asked_for_the_launch_asks_for_none(api
     settle(look.window)
     assert requested == [] and api.home.pending is None and api.universe.currentSession is None, "the grab coming back starts nothing"
     look.close()
+
+
+@pytest.mark.parametrize(("look", "menu"), [("switch2", "picker"), ("ps5", "popup")], indirect=["look"])
+def test_the_power_menu_s_way_out_asks_first_while_a_game_runs(look, api, menu):
+    from PySide6.QtQml import qmlEngine
+
+    window, root = look.window, look.root
+    menu, dialog = look.find(menu), look.dialog()
+    engine = qmlEngine(root)
+    engine.quit.disconnect()
+    quits = record(engine.quit)
+    look.launch("dead-cells")
+    until(lambda: api.home.shown == "game" and root.property("launching") is False)
+    acts = [i["act"] for i in call(root, "powerItems")]
+    out = next(i for i, act in enumerate(acts) if act in ("quit", "logout"))
+
+    def way_out():
+        invoke(root, "askPower")
+        until(lambda: menu.property("open") is True)
+        while menu.property("index") != out:
+            QTest.keyClick(window, Qt.Key.Key_Down if menu.property("index") < out else Qt.Key.Key_Up)
+        QTest.keyClick(window, Qt.Key.Key_Return)
+        until(lambda: dialog.property("open") is True, "the game under Home would be closed")
+
+    way_out()
+    QTest.keyClick(window, Qt.Key.Key_Escape)
+    until(lambda: dialog.property("open") is False)
+    assert api.universe.currentSession and not quits, "Cancel leaves the game running"
+    way_out()
+    QTest.keyClick(window, Qt.Key.Key_Right)
+    QTest.keyClick(window, Qt.Key.Key_Return)
+    until(lambda: api.universe.currentSession is None, "Quit closes the game it said it would")
+    until(lambda: quits, "then Universe quits")
 
 
 def test_a_launch_that_fails_before_its_session_takes_the_dock_down(api, fake, monkeypatch, held):

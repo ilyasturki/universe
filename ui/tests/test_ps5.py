@@ -152,39 +152,6 @@ def test_a_trophy_s_unlock_date_is_relative_and_falls_back_to_the_store_s(app):
     assert unreadable == "shown" and placeholder == "shown", "a time JS cannot read, or a placeholder, shows the store's own date"
 
 
-def test_the_power_menu_s_way_out_asks_first_while_a_game_runs(ps5, api):
-    from PySide6.QtQml import qmlEngine
-
-    window, root = ps5
-    popup = root.findChild(QObject, "popup")
-    dialog = root.findChild(QObject, "dialog")
-    engine = qmlEngine(root)
-    engine.quit.disconnect()
-    quits = record(engine.quit)
-    invoke(root, "launch", api.allGames.byId("dead-cells"))
-    until(lambda: api.home.shown == "game")
-
-    def way_out():
-        invoke(root, "askPower")
-        until(lambda: popup.property("open") is True)
-        acts = [i["act"] for i in read(popup, "items")]
-        for _ in range(len(acts) - 1):
-            QTest.keyClick(window, Qt.Key.Key_Down)
-        assert acts[popup.property("index")] in ("quit", "logout")
-        QTest.keyClick(window, Qt.Key.Key_Return)
-        until(lambda: dialog.property("open") is True, "the game under Home would be closed")
-
-    way_out()
-    QTest.keyClick(window, Qt.Key.Key_Escape)
-    until(lambda: dialog.property("open") is False)
-    assert api.universe.currentSession, "Cancel leaves the game running"
-    way_out()
-    QTest.keyClick(window, Qt.Key.Key_Right)
-    QTest.keyClick(window, Qt.Key.Key_Return)
-    until(lambda: api.universe.currentSession is None, "Quit closes the game it said it would")
-    until(lambda: quits, "then Universe quits")
-
-
 def test_every_tab_bar_boxes_its_focused_tab_the_same_way(ps5):
     window, root = ps5
     for source in ["", "pages/LibraryPage.qml", "pages/InstallPage.qml", "pages/MediaGalleryPage.qml"]:

@@ -112,6 +112,7 @@ FocusScope {
     readonly property var session: api.universe.currentSession
     readonly property bool sessionRunning: session !== null && session !== undefined && session.session_id !== undefined
     property var pendingLaunch: null
+    property bool quitAfterStop: false
 
     readonly property var barItems: [
         {
@@ -240,7 +241,24 @@ FocusScope {
             })
         }, function (i) {
             var act = i >= 0 ? items[i].act : "";
-            if (act === "quit" || act === "logout")
+            if ((act === "quit" || act === "logout") && root.sessionRunning)
+                dialogAsk({
+                    message: act === "logout" ? "Log out?" : "Quit Universe?",
+                    detail: root.session.title + " will be closed. Unsaved progress will be lost.",
+                    buttons: ["Cancel", act === "logout" ? "Log Out" : "Quit"],
+                    danger: 1,
+                    index: 0
+                }, function (k) {
+                    if (k !== 1)
+                        return;
+                    // The game's unit outlives the launcher: Quit stops it first, Log Out ends the whole session.
+                    if (act === "quit" && root.sessionRunning) {
+                        root.quitAfterStop = true;
+                        root.stopSession();
+                    } else
+                        Qt.quit();
+                });
+            else if (act === "quit" || act === "logout")
                 Qt.quit();
             else if (act === "suspend")
                 api.system.run("suspend");
@@ -811,6 +829,7 @@ FocusScope {
         function onError(kind, message) {
             Base.Notices.fail(message);
             root.pendingLaunch = null;
+            root.quitAfterStop = false;
         }
         function onNotice(message) {
             Base.Notices.show(message);
@@ -822,6 +841,10 @@ FocusScope {
                 Base.Notices.fail(game.title + (end === "crashed" ? " crashed after " : " was killed after ") + minutes + ". See its Play Log.", "stop");
             else if (game)
                 Base.Notices.show(game.title + " · " + minutes, "stop");
+            if (root.quitAfterStop) {
+                Qt.quit();
+                return;
+            }
             if (root.pendingLaunch)
                 root.launch(root.pendingLaunch);
             root.pendingLaunch = null;
