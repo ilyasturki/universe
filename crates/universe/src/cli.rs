@@ -1097,6 +1097,19 @@ pub fn failed(json: bool, e: &anyhow::Error) -> i32 {
     status
 }
 
+/// Whether a failure prints its object on stdout under --json: never into a watch's stream, whose lines are its own events.
+pub fn prints_failures(cli: &Cli) -> bool {
+    let watch = matches!(
+        &cli.cmd,
+        Some(
+            Cmd::Controller { action: ControllerCmd::Watch { .. } }
+                | Cmd::Network { action: Some(NetworkCmd::Watch { .. }) }
+                | Cmd::Bluetooth { action: Some(BluetoothCmd::Watch { .. }) }
+        )
+    );
+    cli.json && !watch
+}
+
 /// A command that changed something: its line, or under --json the one object every such command prints (docs/api.md, CLI).
 fn done(json: bool, message: impl std::fmt::Display, result: impl serde::Serialize) -> anyhow::Result<()> {
     outcome(json, true, message, result)

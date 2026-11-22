@@ -2243,6 +2243,8 @@ fn network_and_bluetooth_lists_read_as_unavailable_without_a_system_bus() {
         let out = universe(&dir, &[what, "ls"], &[NO_SYSTEM_BUS]);
         assert_eq!(out.status.code(), Some(1), "{what}");
         assert!(text(&out.stderr).contains("unavailable:"), "{what}: {}", text(&out.stderr));
+        let out = command(&dir, &[what, "watch", "--json"], &[NO_SYSTEM_BUS]).stdin(std::process::Stdio::null()).output().unwrap();
+        assert_eq!((out.status.code(), text(&out.stdout)), (Some(1), String::new()), "{what}: a watch's stream holds its own events alone");
     }
 }
 

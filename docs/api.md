@@ -32,10 +32,11 @@ Every command behaves the same way on these four points:
   `io` (the core's error kinds), `usage` (the command line cannot run as given), `failed` (any other
   failure) or `partial` (part of it failed, and `result` says which); `message` is the line the
   terminal shows; `result` is the command's own data (the game for `add`, `{id, purged}` for `rm`,
-  `{updated, failed: [{id, error, message}], by_hand}` for `update --yes`, `null` for a failure).
+  `{updated, failed: [{id, error, message}], by_hand}` for `update --yes`, `null` for a failure); where a row below gives what a changing call returns, that is the CLI's `result`.
   A read-only command's `--json` prints its data as each table below says; when it fails it prints
   the same failure object. The hidden commands hooks and units run (`session-end`, `journal-add`,
-  `recording-file`, `achievement-unlocked`, …) print what their own rows say.
+  `recording-file`, `achievement-unlocked`, …) print what their own rows say, and a `watch --json`
+  stream holds its own events alone: its failure is on stderr only.
 - **Errors.** A failure is printed as `universe: <kind>: <message>` on stderr as well, `--json` or not:
   what a hook reading stderr shows.
 - **Questions.** A command that asks before it acts (`rm`, `uninstall`, `update`, `data <name>
