@@ -378,6 +378,14 @@ def _place(src, dest):
     return dest
 
 
+# The core's atomic write: a tmp of the writer's own, then a rename the directory watch sees.
+def _write_whole(path, text):
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=f".{os.path.basename(path)}.", suffix=".tmp")
+    with os.fdopen(fd, "w") as f:
+        f.write(text)
+    os.replace(tmp, path)
+
+
 def _coerce(schema, owner, key, value):
     if key not in schema:
         raise UniverseError("Invalid", f"{owner} has no setting '{key}'")
@@ -775,11 +783,10 @@ class FakeCore:
         d = self._game_dir(game["id"])
         for sub in ("media", "journal"):
             (d / sub).mkdir(parents=True, exist_ok=True)
-        # A rename, as the core's atomic write: the directory watch sees it, a rewrite in place it would not.
-        (d / "game.toml.tmp").write_text(
-            f'schema = 1\nid = "{game["id"]}"\ntitle = {json.dumps(game.get("title", game["id"]))}\n# {_now()} {json.dumps(game.get("launch") or {})}\n'
+        _write_whole(
+            d / "game.toml",
+            f'schema = 1\nid = "{game["id"]}"\ntitle = {json.dumps(game.get("title", game["id"]))}\n# {_now()} {json.dumps(game.get("launch") or {})}\n',
         )
-        os.replace(d / "game.toml.tmp", d / "game.toml")
 
     def _write_sessions(self, ident):
         lines = list(reversed(self._data.get("sessions", {}).get(ident, [])))
@@ -909,9 +916,7 @@ class FakeCore:
         if locked is None or self._closed:
             return
         locked["unlocked_at"] = _now()
-        path = self._game_dir(ident) / "achievements.json"
-        path.with_suffix(".tmp").write_text(json.dumps(self._data["achievements"][ident]))
-        os.replace(path.with_suffix(".tmp"), path)
+        _write_whole(self._game_dir(ident) / "achievements.json", json.dumps(self._data["achievements"][ident]))
 
     def _runner_of(self, launch):
         runner = str(launch.get("runner") or "") or "proton"

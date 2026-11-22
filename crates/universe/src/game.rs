@@ -331,10 +331,15 @@ impl Game {
 }
 
 pub fn atomic_write(path: &Path, bytes: &[u8]) -> crate::Result<()> {
-    let tmp = path.with_extension("tmp");
-    std::fs::write(&tmp, bytes)?;
-    std::fs::rename(&tmp, path)?;
-    Ok(())
+    static WRITES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let n = WRITES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let tmp = path.with_file_name(format!(".{name}.{}.{n}.tmp", std::process::id()));
+    let written = std::fs::write(&tmp, bytes).and_then(|()| std::fs::rename(&tmp, path));
+    if written.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    Ok(written?)
 }
 
 fn parse_value(value: &str) -> toml_edit::Value {
@@ -561,5 +566,23 @@ configpath = "the-technomancer-1780794348"
         let set: Game = toml::from_str("id = \"x\"\n[launch]\nrunner = \"citra\"\n").unwrap();
         assert_eq!(set.runner_id(), "azahar");
         assert_eq!(Game::new("n").runner_id(), "proton");
+    }
+
+    #[test]
+    fn writers_racing_on_one_file_each_land_whole() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("achievements.json");
+        let writers: Vec<_> = (0..8)
+            .map(|w| {
+                let path = path.clone();
+                std::thread::spawn(move || (0..200).try_for_each(|_| atomic_write(&path, format!("writer {w}").repeat(64).as_bytes())))
+            })
+            .collect();
+        for w in writers {
+            w.join().unwrap().expect("no writer loses its file to another's rename");
+        }
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!((0..8).any(|w| text == format!("writer {w}").repeat(64)), "one write, whole");
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1, "no tmp file left behind");
     }
 }

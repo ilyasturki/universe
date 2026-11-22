@@ -1,5 +1,6 @@
 import json
 import os
+import tempfile
 
 from looks import invoke
 from PySide6.QtCore import QObject, Qt
@@ -71,8 +72,10 @@ def test_an_unlock_mid_session_reaches_home_once_and_a_replay_shows_the_stamped_
 
     def stamp(at, keys):
         cache["replay"] = {"at": at, "keys": keys}
-        path.with_suffix(".tmp").write_text(json.dumps(cache))
-        os.replace(path.with_suffix(".tmp"), path)
+        fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".achievements.json.", suffix=".tmp")
+        with os.fdopen(fd, "w") as f:
+            json.dump(cache, f)
+        os.replace(tmp, path)
 
     stamp("2026-09-01T10:00:00+00:00", ["detective"])
     seen = record(api.home.achievementUnlocked)
