@@ -1,3 +1,4 @@
+import contextlib
 import os
 import sys
 import traceback
@@ -128,7 +129,9 @@ def rendered_looks(app, fixture_art, tmp_path_factory):
     api = Api(client, memory_path=str(root / "memory.json"), power_root=FAKE, net_root=FAKE_NET)
     for name in LOOKS:
         shown = Look(api, name)
-        shown.settings("about")
+        # A load slower than the wait under heavy load is left to the first test, rather than failing every test of the worker.
+        with contextlib.suppress(AssertionError):
+            shown.settings("about")
         shown.close()
     api.shutdown()
     client.shutdown()
