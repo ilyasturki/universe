@@ -789,6 +789,25 @@ fn a_recording_its_folder_refuses_or_cuts_short_stays_whole_in_pending_and_unlin
     assert_eq!(listed.len(), 2);
     assert_eq!(listed[1]["unit"], "universe-game-quest-20261106-000000.service");
     assert_eq!(std::path::Path::new(listed[1]["recording"].as_str().unwrap()), linked);
+
+    let (session, unit) = ("20261107-000000", "universe-game-quest-20261107-000000.service");
+    let mut history = std::fs::OpenOptions::new().append(true).open(&rows).unwrap();
+    std::io::Write::write_all(&mut history, format!("{{\"session\":\"{session}\",\"game\":\"quest\",\"unit\":\"{unit}\"}}\n").as_bytes()).unwrap();
+    let (left, obstruction) = (pending.join(format!("{session}.mkv")), folder.join(format!("{session}.mkv")));
+    std::fs::write(&left, &clip).unwrap();
+    std::fs::create_dir(&obstruction).unwrap();
+    let before = std::fs::read_to_string(&rows).unwrap();
+    let out = universe(&dir, &["recording-file", session, left.to_str().unwrap()], &[NO_BUS]);
+    assert!(!out.status.success(), "a folder in the clip's place: {}", text(&out.stderr));
+    assert_eq!(std::fs::read_to_string(&rows).unwrap(), before, "the folder is never linked");
+    assert_eq!(std::fs::read(&left).unwrap(), clip, "whole where the retry finds it");
+    assert_eq!(std::fs::read_dir(&folder).unwrap().count(), 3, "nothing staged beside the folder");
+    std::fs::remove_dir(&obstruction).unwrap();
+    let out = universe(&dir, &["recording-file", session, left.to_str().unwrap()], &[NO_BUS]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let row = rows_of(&rows).into_iter().find(|r| r["session"] == session).unwrap();
+    assert_eq!(row["unit"], unit);
+    assert_eq!(std::fs::read(row["recording"].as_str().unwrap()).unwrap(), clip, "a whole clip linked once the folder went");
 }
 
 #[test]

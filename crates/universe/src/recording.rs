@@ -131,7 +131,7 @@ pub fn file(game: &Game, session_id: &str, src: &Path, recordings_root: &Path, t
         };
         sessions::upsert(&game.sessions_path(), session_id, set, new)
     };
-    let replacing = dest != src && dest.exists();
+    let replacing = dest != src && dest.is_file();
     let placed = if replacing { dest.with_extension("next") } else { dest.clone() };
     let moved = if dest == src { Moved::Kept } else { place(src, &placed)? };
     let linked = link().and_then(|()| if replacing { std::fs::rename(&placed, &dest).map_err(Into::into) } else { Ok(()) });
