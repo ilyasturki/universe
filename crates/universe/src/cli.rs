@@ -1790,10 +1790,11 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     Some(s) => format!("writing {} ({})", s["game"].as_str().unwrap_or(""), s["session"].as_str().unwrap_or("")),
                     None => report["held"].as_str().or(report["error"].as_str()).unwrap_or("nothing waiting").to_string(),
                 };
-                done(json, said, &report)?;
+                let started = report["error"].is_null();
                 if json {
-                    return Ok(());
+                    return outcome(json, started, said, &report);
                 }
+                item(json, started, &said);
                 let due = report["due"].as_u64().unwrap_or(0);
                 if due > 0 {
                     println!("{due} more waiting; they go one at a time");
@@ -1801,7 +1802,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 if let Some(next) = report["next"].as_str().filter(|s| !s.is_empty()) {
                     println!("next try {}", when(next, &loc).dimmed());
                 }
-                return Ok(());
+                return outcome(json, started, "", Value::Null);
             }
             let name = name.ok_or_else(|| Stop::Usage("which game? (universe journal <name>)".into()))?;
             let id = pick(&core, &name).await?;
