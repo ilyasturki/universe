@@ -112,7 +112,7 @@ def fixture_art(app, xdg, tmp_path_factory):
     shutil.copytree(painted, os.path.join(os.environ["XDG_CACHE_HOME"], "universe", "fake-art"), dirs_exist_ok=True)
 
 
-# A process's first window on a look costs about a second its next ones do not: paid here, rather than in the first test's 2 s.
+# A process's first window on a look, and its first Settings page, cost about a second its next ones do not: paid here, rather than in the first test's 2 s.
 @pytest.fixture(scope="session")
 def rendered_looks(app, fixture_art, tmp_path_factory):
     from looks import LOOKS, Look
@@ -127,7 +127,9 @@ def rendered_looks(app, fixture_art, tmp_path_factory):
     client = CoreClient(FakeCore(FIXTURE, root / "core"))
     api = Api(client, memory_path=str(root / "memory.json"), power_root=FAKE, net_root=FAKE_NET)
     for name in LOOKS:
-        Look(api, name).close()
+        shown = Look(api, name)
+        shown.settings("about")
+        shown.close()
     api.shutdown()
     client.shutdown()
 
