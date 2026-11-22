@@ -66,6 +66,7 @@ Item {
 
             Touch {
                 current: tile.focused
+                menu: tile.kind === "game"
                 onPicked: rail.pointed(index)
             }
         }

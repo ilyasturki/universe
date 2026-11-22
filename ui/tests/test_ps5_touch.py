@@ -1,6 +1,7 @@
 import pytest
 from looks import Look, read
-from PySide6.QtCore import QPointF
+from PySide6.QtCore import QPointF, Qt
+from PySide6.QtTest import QTest
 from uitest import until
 
 from universe_ui import gamepad
@@ -48,6 +49,17 @@ def test_a_tap_on_a_tile_picks_it_and_a_second_tap_plays(deck):
     until(lambda: at_rest(rail), "the picked tile slides to the focus")
     tap(shown.window, tile)
     until(lambda: shown.root.property("launching") is True, "a tap on the focused tile is A: the game starts")
+
+
+def test_a_right_click_on_a_tile_picks_its_game_and_opens_its_menu(deck):
+    shown, rail = deck
+    home = shown.find("homePage")
+    after = read(home, "gameEntries")[2]["game"].property("id")
+    tile = next(t for t in tiles(rail) if (game := t.property("game")) is not None and game.property("id") == after)
+    QTest.mouseClick(shown.window, Qt.MouseButton.RightButton, Qt.KeyboardModifier.NoModifier, tile.mapToScene(tile.boundingRect().center()).toPoint())
+    until(lambda: shown.root.property("modal") is True, "a right click is the long press: the game picked, its menu up")
+    assert home.property("index") == 2 and home.property("currentGame").property("id") == after
+    assert {"info", "remove"} <= {i["act"] for i in read(shown.menu(), "items")}
 
 
 def test_a_sideways_swipe_on_the_row_steps_it(deck):
