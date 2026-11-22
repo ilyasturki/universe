@@ -1438,6 +1438,7 @@ FocusScope {
 
                 GridView {
                     id: shotGrid
+                    objectName: "ccShots"
 
                     readonly property int columns: 4
 

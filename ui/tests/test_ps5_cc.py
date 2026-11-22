@@ -128,6 +128,9 @@ def test_the_captures_cards_show_thumbnails_and_y_trashes_the_shot_under_the_cur
         key(overlay, Qt.Key.Key_Right)
     key(overlay, Qt.Key.Key_Return)
     until(lambda: cc.property("zone") == "sheet" and cc.property("sheet") == "captures")
+    grid = cc.findChild(QQuickItem, "ccShots")
+    cell = until(lambda: QMetaObject.invokeMethod(grid, "itemAtIndex", Q_RETURN_ARG("QQuickItem*"), Q_ARG(int, 0)))
+    assert cell.childItems()[0].property("image") == card["image"], "the sheet's cards too"
     trashed = shots[0]["name"]
     key(overlay, Qt.Key.Key_F)
     until(lambda: any(i.property("message") == "Remove this screenshot?" and i.property("visible") for i in cc.childItems()), "Y asks first")
