@@ -329,7 +329,7 @@ class Onboarding(RowsForm):
                     why = launcher["error"] or launcher["blocked"] or (launcher["detail"] if launcher["games"] and not launcher["state"] else "")
                     row = _static(launcher["id"], launcher["name"], _found_display(launcher), detail=why)
                     # A reason is read whole: the folder to add is at its end.
-                    row.update(quiet=not launcher["games"] and not launcher["state"], wraps=bool(why), reason=launcher["reason"])
+                    row.update(quiet=not launcher["games"] and not launcher["state"] and not launcher["blocked"], wraps=bool(why), reason=launcher["reason"])
                 entries.append(("", {**row, "state": launcher["state"], "count": launcher["count"]}, False))
             if not entries:
                 entries.append(("", _static("none", "Other launchers", "None found"), False))
