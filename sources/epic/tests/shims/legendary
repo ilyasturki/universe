@@ -88,6 +88,12 @@ elif verb in ("install", "update"):
     folder.mkdir(parents=True, exist_ok=True)
     print("[cli] INFO: Install size: 4.00 MiB", file=sys.stderr, flush=True)
     print("[cli] INFO: Download size: 2.00 MiB (Compression savings: 50.0%)", file=sys.stderr, flush=True)
+    if mode == "full":
+        # legendary 0.21.1 cli.py:1060-1069: the failure goes to stdout, then the last word is a CRITICAL that names no cause.
+        print("\nInstallation requirements check returned the following results:")
+        print(" ! Failure: Not enough available disk space! 0.50 GiB < 2.00 GiB", flush=True)
+        print("[cli] CRITICAL: Installation cannot proceed, exiting.", file=sys.stderr, flush=True)
+        sys.exit(1)
     if mode in ("cut-program", "cut-program-no-resume"):
         (folder / "x64").mkdir(exist_ok=True)
         (folder / "x64" / "Hades.exe").write_bytes(b"MZ")

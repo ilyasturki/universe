@@ -3,6 +3,7 @@ import json
 import os
 import shlex
 import shutil
+import sys
 import tarfile
 import time
 
@@ -531,3 +532,12 @@ def test_a_stopped_download_discarded_goes_to_the_trash_and_leaves_no_paused_row
     row = next(r for r in universe.library("epic", False) if r["id"] == "Min")
     assert (row["installed"], row["partial_dir"]) == (False, None), "no phantom Paused row"
     assert "Min" not in json.loads((core.data / "epic" / "partials.json").read_text()), "the store's record is cleared"
+
+
+def test_an_install_the_disk_cannot_hold_says_the_disk_is_full(core, src, tmp_path, monkeypatch):
+    for name, value in {"SHIM_MODE": "full", "SHIM_LIBRARY": json.dumps(LIBRARY), "SHIM_LOG": str(tmp_path / "legendary.log")}.items():
+        monkeypatch.setenv(name, value)
+    universe = core("epic", {"games_dir": str(tmp_path / "games"), "config_path": str(tmp_path / "legendary"), "adopt_from": ""})
+    with pytest.raises(sys.modules["universe_core"].UniverseError) as failed:
+        universe.install("epic", "Min")
+    assert failed.value.args[1] == src.FULL_DISK, "legendary's failure line, not the CRITICAL that follows it"

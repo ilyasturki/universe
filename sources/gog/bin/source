@@ -59,6 +59,9 @@ KILL_GRACE_S = 10
 PROGRESS_INTERVAL_S = 1.0
 PROGRESS_RE = re.compile(r"Progress: ([\d.]+) (\d+)/(\d+)")
 CRITICAL_MARK = "[TASK_EXEC] CRITICAL"
+# gogdl 1.4.0's check before a download (v2.py:264), and the OS's word when a write runs out of room mid-download.
+FULL_DISK_RE = re.compile(r"Not enough disk space|No space left on device|\[Errno 28\]")
+FULL_DISK = "Not enough free space on the disk."
 INFO_RE = re.compile(r"^goggame-(\d+)\.info$")
 LOCALE_RE = re.compile(r"^([a-z]{2})_([A-Z]{2})\b")
 RESUME_FILE = ".gogdl-resume"  # gogdl appends a line per finished file, removes it when the download completes
@@ -236,7 +239,7 @@ def gogdl_stream(settings, *args, timeout):
 
     threading.Thread(target=pump, daemon=True).start()
     deadline = time.monotonic() + timeout
-    last_emit = 0.0
+    last_emit, full = 0.0, False
     try:
         while True:
             remaining = deadline - time.monotonic()
@@ -249,10 +252,11 @@ def gogdl_stream(settings, *args, timeout):
                 continue
             if line is None:
                 break
+            full = full or bool(FULL_DISK_RE.search(line))
             if CRITICAL_MARK in line:
                 log(line)
                 kill_group(proc)
-                raise SourceError(f"gogdl {args[0]} reported a fatal error, killed")
+                raise SourceError(FULL_DISK if full else f"gogdl {args[0]} reported a fatal error, killed")
             match = PROGRESS_RE.search(line)
             if not match:
                 log(line)
@@ -265,6 +269,8 @@ def gogdl_stream(settings, *args, timeout):
         code = proc.wait()
     finally:
         _child = None
+    if full:
+        raise SourceError(FULL_DISK)
     if code != 0:
         raise SourceError(f"gogdl {args[0]} failed (exit {code})")
 

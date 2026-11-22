@@ -6,6 +6,7 @@ import os
 import shutil
 import sqlite3
 import subprocess
+import sys
 import time
 import urllib.error
 import zlib
@@ -981,3 +982,12 @@ def test_a_stopped_download_discarded_goes_to_the_trash_and_leaves_no_paused_row
     row = next(r for r in universe.library("gog", False) if r["id"] == "1434554947")
     assert (row["installed"], row["partial_dir"]) == (False, None), "no phantom Paused row"
     assert "1434554947" not in json.loads((core.data / "gog" / "partials.json").read_text()), "the store's record is cleared"
+
+
+def test_an_install_the_disk_cannot_hold_says_the_disk_is_full(core, src, tmp_path, monkeypatch):
+    monkeypatch.setenv("SHIM_MODE", "full")
+    monkeypatch.setenv("SHIM_LOG", str(tmp_path / "gogdl.log"))
+    universe = core("gog", {"games_dir": str(tmp_path / "games")})
+    with pytest.raises(sys.modules["universe_core"].UniverseError) as failed:
+        universe.install("gog", "1434554947")
+    assert failed.value.args[1] == src.FULL_DISK, "gogdl's own line, not its exit code"

@@ -39,6 +39,9 @@ PROGRESS_INTERVAL_S = 1.0
 PROGRESS_RE = re.compile(r"= Progress: ([\d.]+)% \((\d+)/(\d+)\)")
 DOWNLOAD_SIZE_RE = re.compile(r"Download size: ([\d.]+) MiB")
 ERROR_RE = re.compile(r"^\[[\w.]+\] (?:CRITICAL|ERROR): (.*)")
+# legendary 0.21.1's check before a download (` ! Failure: Not enough available disk space!` on stdout), and the OS's word mid-download.
+FULL_DISK_RE = re.compile(r"Not enough available disk space|No space left on device|\[Errno 28\]|OSError\(28,")
+FULL_DISK = "Not enough free space on the disk."
 NOT_LOGGED_IN = "<not logged in>"
 NO_CREDENTIALS = "ValueError: No saved credentials"  # legendary's traceback when a verb that logs in runs signed out
 LOGIN_FAILED = "Login failed!"  # list-installed --check-updates goes on from it: prints its cached list and exits 0
@@ -223,7 +226,7 @@ def legendary_stream(settings, verb, *args, timeout, total=None):
 
     threading.Thread(target=pump, daemon=True).start()
     deadline = time.monotonic() + timeout
-    last_emit, error = 0.0, ""
+    last_emit, error, full = 0.0, "", ""
     try:
         while True:
             remaining = deadline - time.monotonic()
@@ -236,11 +239,13 @@ def legendary_stream(settings, verb, *args, timeout, total=None):
                 continue
             if line is None:
                 break
+            if FULL_DISK_RE.search(line):
+                error = full = FULL_DISK
             if size := DOWNLOAD_SIZE_RE.search(line):
                 total = int(float(size.group(1)) * 1024 * 1024)
             match = PROGRESS_RE.search(line)
             if not match:
-                if found := ERROR_RE.match(line):
+                if (found := ERROR_RE.match(line)) and not full:
                     error = found.group(1)
                 log(line)
                 continue
@@ -253,6 +258,8 @@ def legendary_stream(settings, verb, *args, timeout, total=None):
         code = proc.wait()
     finally:
         _child = None
+    if full:
+        raise SourceError(FULL_DISK)
     if code != 0:
         raise SourceError(f"legendary {verb} failed (exit {code})" + (f": {error}" if error else ""))
     return error

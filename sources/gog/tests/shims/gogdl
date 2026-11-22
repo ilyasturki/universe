@@ -125,6 +125,10 @@ elif verb in ("download", "update"):
     if mode == "hang":
         time.sleep(60)
         sys.exit(0)
+    if mode == "full":
+        # gogdl 1.4.0 dl/managers/v2.py:262-265: the sizes, then this on stdout, exit 2.
+        print("1.00 GiB 1073741824\n2.00 GiB 2147483648\nUnable to proceed, Not enough disk space", flush=True)
+        sys.exit(2)
     if mode == "partial":
         folder = Path(args[args.index("--path") + 1]) / "Mini Metro"
         folder.mkdir(parents=True, exist_ok=True)
