@@ -278,11 +278,15 @@ impl Core {
         Ok(Held { _files: held })
     }
 
-    /// The game's files held for a change once what holds them lets go; the caller checks the game is idle.
-    async fn wait_files(&self, game: &Game) -> Result<Held> {
+    /// The game's files held once what holds them lets go, beside other holders when `shared`; the caller checks the game is idle.
+    async fn wait_files(&self, game: &Game, shared: bool) -> Result<Held> {
         let f = files_lock(&game.id)?;
         blocking(move || {
-            f.lock()?;
+            if shared {
+                f.lock_shared()?;
+            } else {
+                f.lock()?;
+            }
             Ok(Held { _files: vec![f] })
         })
         .await
@@ -481,8 +485,23 @@ impl Core {
     }
 
     pub async fn saves_backup(&self, id: &str) -> Result<saves::Outcome> {
+        self.backup_saves(id, false).await
+    }
+
+    /// Waits out a change holding the game's files rather than miss the saves the session left.
+    pub async fn saves_backup_after_session(&self, id: &str) -> Result<saves::Outcome> {
+        self.backup_saves(id, true).await
+    }
+
+    async fn backup_saves(&self, id: &str, wait: bool) -> Result<saves::Outcome> {
         let r = self.get(id).await?;
-        let _files = if std::env::var(FILES_HELD_FOR).is_ok_and(|held| held == id) { None } else { Some(self.share_files(&r.game)?) };
+        let _files = if std::env::var(FILES_HELD_FOR).is_ok_and(|held| held == id) {
+            None
+        } else if wait {
+            Some(self.wait_files(&r.game, true).await?)
+        } else {
+            Some(self.share_files(&r.game)?)
+        };
         let config = self.config.read().await.clone();
         let ask = self.saves_ask(&r.game, &config, true).await?;
         saves::backup(&ask, &config, id).await
@@ -491,7 +510,7 @@ impl Core {
     /// An empty `backup` is the latest.
     pub async fn saves_restore(&self, id: &str, backup: &str) -> Result<saves::Outcome> {
         let r = self.get(id).await?;
-        let _held = self.wait_files(&r.game).await?;
+        let _held = self.wait_files(&r.game, false).await?;
         self.running(&[id.to_string()]).await?;
         let config = self.config.read().await.clone();
         let ask = self.saves_ask(&r.game, &config, true).await?;

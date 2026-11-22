@@ -1465,11 +1465,20 @@ fn a_backup_under_way_keeps_its_saves_from_a_prefix_move_and_a_cloud_download_an
     wait_for(&gate_dir.join("entered"), &mut syncing);
     let refused = cli(&["saves", "backup", "fixture-game"]);
     assert!(!refused.status.success() && text(&refused.stderr).contains("busy:"), "a backup beside a download: {}", text(&refused.stderr));
+    let after_session = command(&game.dir, &["saves", "backup", "fixture-game", "--auto"], &[("PATH", &game.path)])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
     std::fs::write(gate_dir.join("release"), "").unwrap();
     let synced_out = syncing.wait_with_output().unwrap();
     assert!(synced_out.status.success(), "the download's own backup shares its hold: {}", text(&synced_out.stderr));
     assert_eq!(std::fs::read_to_string(&live).unwrap(), "cloud\n");
-    assert_eq!(kept(), ["local"], "what it replaced stays in a backup");
+    let after_out = after_session.wait_with_output().unwrap();
+    assert!(after_out.status.success(), "a session's backup waits the download out: {}", text(&after_out.stderr));
+    let mut both = kept();
+    both.sort();
+    assert_eq!(both, ["cloud\n", "local"], "what it replaced stays in a backup, and the session's backup took what came down");
     let moved = cli(&["data", "fixture-game", "move-prefix", "--yes"]);
     assert!(moved.status.success(), "{}", text(&moved.stderr));
 }

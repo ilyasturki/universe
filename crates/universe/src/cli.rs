@@ -1530,7 +1530,8 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             }
             SavesCmd::Backup { name, auto } => {
                 let id = pick(&core, &name).await?;
-                match core.saves_backup(&id).await {
+                let backup = if auto { core.saves_backup_after_session(&id).await } else { core.saves_backup(&id).await };
+                match backup {
                     Ok(done) if json => print_json(&done)?,
                     Ok(done) => println!("{id}: {}", backup_text(&done)),
                     Err(e @ (crate::Error::NotFound(_) | crate::Error::Unavailable(_))) if auto => tracing::info!("{id}: no backup: {e}"),
