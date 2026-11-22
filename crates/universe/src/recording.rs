@@ -105,36 +105,54 @@ pub fn file(game: &Game, session_id: &str, src: &Path, recordings_root: &Path, t
     let ds = dest.to_string_lossy().to_string();
     let duration_s = probe_duration(src).unwrap_or(0);
     let timeline = timeline.cloned().unwrap_or_default();
+    let clip = Clip { path: Some(ds.clone()), duration_s, started_at: timeline.started_at, pauses: timeline.pauses };
+    let was = std::cell::RefCell::new(None);
     let set = |s: &mut Session| {
-        s.recording = Some(ds.clone());
-        s.recording_duration_s = duration_s;
-        s.recording_started_at = timeline.started_at.clone();
-        s.recording_pauses = timeline.pauses.clone();
+        was.replace(Some(Clip::of(s)));
+        clip.put(s);
     };
     let link = || -> crate::Result<()> {
         if crate::session::change_unfiled(&game.id, session_id, set)? {
             return Ok(());
         }
         let (started_at, ended_at) = session_times(session_id, duration_s);
-        let new = || Session {
-            session: session_id.into(),
-            game: game.id.clone(),
-            started_at,
-            ended_at,
-            duration_s,
-            source: "import-recording".into(),
-            recording: Some(ds.clone()),
-            recording_duration_s: duration_s,
-            recording_started_at: timeline.started_at.clone(),
-            recording_pauses: timeline.pauses.clone(),
-            ..Default::default()
+        let new = || {
+            let mut s = Session {
+                session: session_id.into(),
+                game: game.id.clone(),
+                started_at,
+                ended_at,
+                duration_s,
+                source: "import-recording".into(),
+                ..Default::default()
+            };
+            clip.put(&mut s);
+            s
         };
         sessions::upsert(&game.sessions_path(), session_id, set, new)
+    };
+    // A row this filing added stays, naming the clip still there: a close may have taken it for its own meanwhile.
+    let unlink = || {
+        let there = was.take().unwrap_or_else(|| Clip { path: Some(ds.clone()), duration_s: probe_duration(&dest).unwrap_or(0), ..Default::default() });
+        let put = |s: &mut Session| there.put(s);
+        let back =
+            crate::session::change_unfiled(&game.id, session_id, put).and_then(|done| Ok(done || sessions::update(&game.sessions_path(), session_id, put)?));
+        if let Err(e) = back {
+            tracing::warn!("{ds}: its row still tells of the clip not filed: {e}");
+        }
     };
     let replacing = dest != src && dest.is_file();
     let placed = if replacing { dest.with_extension("next") } else { dest.clone() };
     let moved = if dest == src { Moved::Kept } else { place(src, &placed)? };
-    let linked = link().and_then(|()| if replacing { std::fs::rename(&placed, &dest).map_err(Into::into) } else { Ok(()) });
+    let linked = link().and_then(|()| {
+        if !replacing {
+            return Ok(());
+        }
+        std::fs::rename(&placed, &dest).map_err(|e| {
+            unlink();
+            e.into()
+        })
+    });
     if let Err(e) = linked {
         moved.undo(src, &placed);
         return Err(e);
@@ -145,6 +163,27 @@ pub fn file(game: &Game, session_id: &str, src: &Path, recordings_root: &Path, t
         }
     }
     Ok(dest)
+}
+
+#[derive(Default)]
+struct Clip {
+    path: Option<String>,
+    duration_s: u64,
+    started_at: String,
+    pauses: Vec<(String, String)>,
+}
+
+impl Clip {
+    fn of(s: &Session) -> Clip {
+        Clip { path: s.recording.clone(), duration_s: s.recording_duration_s, started_at: s.recording_started_at.clone(), pauses: s.recording_pauses.clone() }
+    }
+
+    fn put(&self, s: &mut Session) {
+        s.recording = self.path.clone();
+        s.recording_duration_s = self.duration_s;
+        s.recording_started_at = self.started_at.clone();
+        s.recording_pauses = self.pauses.clone();
+    }
 }
 
 enum Moved {

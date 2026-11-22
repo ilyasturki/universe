@@ -495,6 +495,7 @@ fn a_session_of_a_game_with_no_folder_is_dropped_without_failing_the_open() {
 const PAUSE_C: &str = r#"
 #define _GNU_SOURCE
 #include <dlfcn.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -509,19 +510,24 @@ static int matches(const char *path) {
     return n >= m && strcmp(path + n - m, suffix) == 0;
 }
 
-static void pause_once(void) {
-    char entered[4096], release[4096];
+static int pause_once(void) {
+    char entered[4096], release[4096], refuse[4096];
     snprintf(entered, sizeof entered, "%s/entered", getenv("PAUSE_DIR"));
     snprintf(release, sizeof release, "%s/release", getenv("PAUSE_DIR"));
-    if (access(entered, F_OK) == 0) return;
+    snprintf(refuse, sizeof refuse, "%s/refuse", getenv("PAUSE_DIR"));
+    if (access(entered, F_OK) == 0) return 0;
     FILE *f = fopen(entered, "w");
     if (f) fclose(f);
     while (access(release, F_OK) != 0 && access(getenv("PAUSE_DIR"), F_OK) == 0) usleep(20000);
+    return access(refuse, F_OK) == 0;
 }
 
 int rename(const char *from, const char *to) {
     int (*real)(const char *, const char *) = dlsym(RTLD_NEXT, "rename");
-    if (matches(from)) pause_once();
+    if (matches(from) && pause_once()) {
+        errno = EACCES;
+        return -1;
+    }
     return real(from, to);
 }
 
@@ -544,7 +550,8 @@ int open64(const char *path, int flags, ...) {
 "#;
 
 /// An `LD_PRELOAD` library: the first call of a process writing a path that ends in `PAUSE_SUFFIX` (a rename from it, a link or a
-/// create to it) touches `PAUSE_DIR/entered` and waits for `PAUSE_DIR/release`, or for `PAUSE_DIR` to go. `None`, the reason printed, without a C compiler.
+/// create to it) touches `PAUSE_DIR/entered` and waits for `PAUSE_DIR/release`, or for `PAUSE_DIR` to go; that rename then fails if
+/// `PAUSE_DIR/refuse` is there. `None`, the reason printed, without a C compiler.
 fn pause_shim(dir: &std::path::Path) -> Option<std::path::PathBuf> {
     let (src, lib) = (dir.join("pause.c"), dir.join("pause.so"));
     std::fs::write(&src, PAUSE_C).unwrap();
@@ -808,6 +815,25 @@ fn a_recording_its_folder_refuses_or_cuts_short_stays_whole_in_pending_and_unlin
     let row = rows_of(&rows).into_iter().find(|r| r["session"] == session).unwrap();
     assert_eq!(row["unit"], unit);
     assert_eq!(std::fs::read(row["recording"].as_str().unwrap()).unwrap(), clip, "a whole clip linked once the folder went");
+
+    let Some(lib) = pause_shim(dir.path()) else { return };
+    let (timeline, pause, newer) = (dir.path().join("timeline.json"), dir.path().join("pause"), vec![9u8; 1000]);
+    std::fs::write(&timeline, r#"{"started_at": "2026-11-06T00:00:05+01:00", "pauses": [["2026-11-06T00:01:00+01:00", "2026-11-06T00:02:00+01:00"]]}"#)
+        .unwrap();
+    std::fs::create_dir_all(&pause).unwrap();
+    for gate in ["release", "refuse"] {
+        std::fs::write(pause.join(gate), "").unwrap();
+    }
+    let left = pending.join("20261106-000000.mkv");
+    std::fs::write(&left, &newer).unwrap();
+    let before = std::fs::read_to_string(&rows).unwrap();
+    let held = [NO_BUS, ("LD_PRELOAD", lib.to_str().unwrap()), ("PAUSE_SUFFIX", ".next"), ("PAUSE_DIR", pause.to_str().unwrap())];
+    let out = universe(&dir, &["recording-file", "--timeline", timeline.to_str().unwrap(), "20261106-000000", left.to_str().unwrap()], &held);
+    assert!(!out.status.success(), "the new clip never took the old one's place: {}", text(&out.stderr));
+    assert!(pause.join("entered").exists(), "the refusal came from the final rename: {}", text(&out.stderr));
+    assert_eq!((std::fs::read(&linked).unwrap(), std::fs::read(&left).unwrap()), (clip.clone(), newer), "both clips where they were");
+    assert_eq!(std::fs::read_dir(&folder).unwrap().count(), 3, "nothing staged stays beside them");
+    assert_eq!(std::fs::read_to_string(&rows).unwrap(), before, "the row tells of the clip still there");
 }
 
 #[test]
