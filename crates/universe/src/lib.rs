@@ -124,6 +124,18 @@ impl Error {
             Error::NotFound(m) | Error::Ambiguous(m) | Error::Busy(m) | Error::Invalid(m) | Error::Unavailable(m) | Error::Io(m) => m,
         }
     }
+
+    /// The kind as a script reads it: the CLI's `error` under --json.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Error::NotFound(_) => "not_found",
+            Error::Ambiguous(_) => "ambiguous",
+            Error::Busy(_) => "busy",
+            Error::Invalid(_) => "invalid",
+            Error::Unavailable(_) => "unavailable",
+            Error::Io(_) => "io",
+        }
+    }
 }
 
 impl From<std::io::Error> for Error {

@@ -32,7 +32,11 @@ Environment:
   UNIVERSE_MODULES_PATH, UNIVERSE_SOURCES_PATH — extra module and source roots, colon-separated
   RUST_LOG — tracing filter, warn (and each screenshot's timings) by default
 
-Errors are printed as `universe: <kind>: <message>` on stderr with exit status 1; --json works on every command.";
+Errors are printed as `universe: <kind>: <message>` on stderr. --json works on every command: a command that changes something
+prints one object, {\"ok\", \"error\", \"message\", \"result\"}, as does any command that fails.
+A command that asks first takes --yes; without a terminal, or under --json, it refuses rather than ask.
+
+Exit status: 0 done; 1 failed, in whole or in part; 2 usage (the command line, or a question no one can answer); 130 play stopped by a second Ctrl-C.";
 
 #[derive(Parser, Debug)]
 #[command(name = "universe", version = crate::build(), about = "Universe: launch, record and remember your games", after_long_help = AFTER_HELP)]
@@ -264,11 +268,11 @@ pub enum Cmd {
     },
     /// Sources and their state: login, cached library, install folder
     Sources,
-    /// Log into a source (prints the URL, then takes the code)
+    /// Log into a source: prints the link and what to do there, then takes the code or key, from the terminal or piped on stdin
     Login {
         /// Source id
         source: String,
-        /// The code= value from the address bar after logging in
+        /// The code or key the link leads to; without a terminal, the command prints the link and stops
         code: Option<String>,
     },
     /// Owned titles of a source
@@ -1067,19 +1071,75 @@ async fn fetch_art(core: &Core, json: bool, ids: &[String]) {
     }
 }
 
-fn finish(json: bool, r: crate::Result<String>) {
-    match r {
-        Ok(m) => report(json, true, &m),
-        Err(e) => {
-            report(json, false, &e.to_string());
-            std::process::exit(1);
-        }
+/// How a command ends short of done; `failed` turns each into its exit status.
+#[derive(Debug, thiserror::Error)]
+enum Stop {
+    /// The command line cannot run as given: exit 2.
+    #[error("usage: {0}")]
+    Usage(String),
+    /// Part of what was asked failed and the output already says what: exit 1.
+    #[error("part of it failed")]
+    Reported,
+}
+
+/// A failed command's end: `universe: <kind>: <message>` on stderr, under --json its result object on stdout too; the exit status.
+pub fn failed(json: bool, e: &anyhow::Error) -> i32 {
+    let (kind, message, status) = match (e.downcast_ref::<Stop>(), e.chain().find_map(|c| c.downcast_ref::<crate::Error>())) {
+        (Some(Stop::Reported), _) => return 1,
+        (Some(Stop::Usage(m)), _) => ("usage", m.clone(), 2),
+        (_, Some(err)) => (err.kind(), err.message().to_string(), 1),
+        _ => ("failed", format!("{e:#}"), 1),
+    };
+    eprintln!("universe: {e:#}");
+    if json {
+        let _ = print_json(&serde_json::json!({"ok": false, "error": kind, "message": message, "result": null}));
     }
+    status
+}
+
+/// A command that changed something: its line, or under --json the one object every such command prints (docs/api.md, CLI).
+fn done(json: bool, message: impl std::fmt::Display, result: impl serde::Serialize) -> anyhow::Result<()> {
+    outcome(json, true, message, result)
+}
+
+/// `ok` false: part of what was asked failed, as `result` tells; the command exits 1 once printed.
+fn outcome(json: bool, ok: bool, message: impl std::fmt::Display, result: impl serde::Serialize) -> anyhow::Result<()> {
+    let message = message.to_string();
+    if json {
+        print_json(&serde_json::json!({"ok": ok, "error": if ok { None } else { Some("partial") }, "message": message, "result": result}))?;
+    } else if !message.is_empty() {
+        println!("{message}");
+    }
+    if ok {
+        Ok(())
+    } else {
+        Err(Stop::Reported.into())
+    }
+}
+
+/// Whether to go ahead with what `question` asks: --yes says yes and a terminal is asked; without one, or under --json, it is usage.
+fn confirmed(json: bool, yes: bool, question: &str) -> anyhow::Result<bool> {
+    if yes {
+        return Ok(true);
+    }
+    if json {
+        return Err(Stop::Usage(format!("--json asks nothing, and this asks \"{question}\": pass --yes to go ahead")).into());
+    }
+    if !std::io::IsTerminal::is_terminal(&std::io::stdin()) {
+        return Err(Stop::Usage(format!("no terminal to ask \"{question}\" on: pass --yes to go ahead")).into());
+    }
+    Ok(confirm(question))
+}
+
+fn declined() -> anyhow::Result<()> {
+    println!("{}", "nothing done".dimmed());
+    Ok(())
 }
 
 fn print_doctor(list: &[crate::doctor::Check], json: bool) -> anyhow::Result<()> {
     if json {
-        return print_json(&list);
+        print_json(&list)?;
+        return if list.iter().all(|c| c.ok) { Ok(()) } else { Err(Stop::Reported.into()) };
     }
     let width = list.iter().map(|c| c.label.chars().count()).max().unwrap_or(0);
     for c in list {
@@ -1096,24 +1156,30 @@ fn print_doctor(list: &[crate::doctor::Check], json: bool) -> anyhow::Result<()>
     let bad = list.iter().filter(|c| !c.ok).count();
     if bad > 0 {
         println!("{} checks pass, {}", list.len() - bad, format!("{bad} need{} attention", if bad == 1 { "s" } else { "" }).red());
-        std::process::exit(1);
+        return Err(Stop::Reported.into());
     }
     println!("{}", format!("all {} checks pass", list.len()).green());
     Ok(())
 }
 
-fn report(json: bool, ok: bool, message: &str) {
+/// One item of a command over several: its line on a terminal; under --json the result object lists them all.
+fn item(json: bool, ok: bool, message: &str) {
     if json {
-        let _ = print_json(&serde_json::json!({"ok": ok, "message": message}));
-    } else if ok {
+        return;
+    }
+    if ok {
         println!("{} {message}", "done".green());
     } else {
         println!("{} {message}", "failed".red());
     }
 }
 
+// --json, for `pick`, which asks nothing under it.
+static JSON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+
 pub async fn run(cli: Cli) -> anyhow::Result<()> {
     let json = cli.json;
+    let _ = JSON.set(json);
     let cmd = cli.cmd.unwrap_or(Cmd::Ls { all: false, removed: false });
     let loc = Locale::from_env();
     // Shell helpers stay off Core::open: a Tab must not reconcile a session or probe logins.
@@ -1219,11 +1285,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 core.adopt_scope().await?;
             }
             let sid = core.launch(&id, &screen, "").await?;
-            if json {
-                print_json(&serde_json::json!({"session": sid, "id": id}))?;
-            } else {
-                println!("{} {id} · session {sid}", "launched".green());
-            }
+            done(json, format!("launched {id} · session {sid}"), serde_json::json!({"session": sid, "id": id}))?;
             if no_wait {
                 return Ok(());
             }
@@ -1270,7 +1332,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         }
         Cmd::Stop => {
             core.stop("").await?;
-            println!("stopped");
+            done(json, "stopped", Value::Null)?;
         }
         Cmd::Status => {
             let cur = core.current().await;
@@ -1362,16 +1424,16 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 println!("installing {id} from {source}");
             }
             let mut p = progress_printer(json);
-            let installed = core.source_install(&source, &id, Some(&mut p)).await;
-            if let Some(game) = installed.as_ref().ok().filter(|g| !g.is_empty()) {
-                fetch_art(&core, json, std::slice::from_ref(game)).await;
+            let game = core.source_install(&source, &id, Some(&mut p)).await?;
+            if !game.is_empty() {
+                fetch_art(&core, json, std::slice::from_ref(&game)).await;
             }
-            finish(json, installed);
+            done(json, format!("installed {id} from {source}"), serde_json::json!({"source": source, "store_id": id, "id": game}))?;
         }
         Cmd::Update { name: Some(n), mark_current: Some(build), .. } => {
             let id = pick(&core, &n).await?;
             let seen = core.mark_current(&id, &build).await?;
-            report(json, true, &format!("{id} is current at build {seen}"));
+            done(json, format!("{id} is current at build {seen}"), serde_json::json!({"id": id, "build": seen}))?;
         }
         Cmd::Update { name: Some(n), .. } => {
             let id = pick(&core, &n).await?;
@@ -1380,8 +1442,8 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             let v = &g["version"];
             if s(v, "how") == "apply" {
                 let mut p = progress_printer(json);
-                finish(json, core.source_update(&s(v, "store"), &s(v, "store_id"), Some(&mut p)).await.map(|n| format!("{n} updated")));
-                return Ok(());
+                core.source_update(&s(v, "store"), &s(v, "store_id"), Some(&mut p)).await?;
+                return done(json, format!("updated {id}"), serde_json::json!({"updated": [id], "failed": [], "by_hand": []}));
             }
             if json {
                 return print_json(&update_row(&g));
@@ -1400,63 +1462,85 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             games.sort_by_cached_key(|g| s(g, "title").to_lowercase());
             let pending = |g: &Value| g["hidden"] != true && g["version"]["status"] == "update";
             let shown: Vec<&Value> = games.iter().filter(|g| all || pending(g)).collect();
-            if json {
+            if json && (all || !yes) {
                 return print_json(&shown.iter().map(|g| update_row(g)).collect::<Vec<_>>());
             }
-            if shown.is_empty() {
+            if !json && shown.is_empty() {
                 println!("everything is current");
                 return Ok(());
             }
-            println!("{}", update_table(shown.iter().copied()));
+            if !json {
+                println!("{}", update_table(shown.iter().copied()));
+            }
             if all {
                 return Ok(());
             }
             let apply: Vec<&&Value> = shown.iter().filter(|g| g["version"]["how"] == "apply" && g["version"]["status"] == "update").collect();
-            if !apply.is_empty()
-                && (yes || confirm(&format!("update {} through {}?", apply.len(), if apply.len() == 1 { "its store" } else { "their stores" })))
-            {
-                let mut p = progress_printer(json);
-                for g in apply {
-                    let v = &g["version"];
-                    match core.source_update(&s(v, "store"), &s(v, "store_id"), Some(&mut p)).await {
-                        Ok(_) => report(json, true, &s(g, "title")),
-                        Err(e) => report(json, false, &format!("{}: {e}", s(g, "title"))),
+            let asked = format!("update {} through {}?", apply.len(), if apply.len() == 1 { "its store" } else { "their stores" });
+            if !apply.is_empty() && !confirmed(json, yes, &asked)? {
+                return declined();
+            }
+            let (mut updated, mut failures) = (Vec::new(), Vec::new());
+            let mut p = progress_printer(json);
+            for g in apply {
+                let v = &g["version"];
+                match core.source_update(&s(v, "store"), &s(v, "store_id"), Some(&mut p)).await {
+                    Ok(_) => {
+                        item(json, true, &s(g, "title"));
+                        updated.push(s(g, "id"));
+                    }
+                    Err(e) => {
+                        item(json, false, &format!("{}: {e}", s(g, "title")));
+                        failures.push(serde_json::json!({"id": s(g, "id"), "error": e.kind(), "message": e.message()}));
                     }
                 }
             }
-            let by_hand: Vec<&Value> = shown.iter().map(|g| &g["version"]).filter(|v| v["how"] == "manual").collect();
-            if by_hand.iter().any(|v| v["markable"] == true) {
-                println!("update the others by hand, then: universe update <game> --mark-current");
+            let by_hand: Vec<&Value> = shown.iter().filter(|g| g["version"]["how"] == "manual").copied().collect();
+            let hand = if by_hand.iter().any(|g| g["version"]["markable"] == true) {
+                "update the others by hand, then: universe update <game> --mark-current"
             } else if !by_hand.is_empty() {
-                println!("update the others by hand");
-            }
+                "update the others by hand"
+            } else {
+                ""
+            };
+            let message = match (failures.len(), updated.len()) {
+                (0, _) if !json => hand.to_string(),
+                (0, n) => format!("{n} updated"),
+                (f, n) => format!("{f} of {} updates failed{}", f + n, if hand.is_empty() { String::new() } else { format!("; {hand}") }),
+            };
+            let by_hand: Vec<String> = by_hand.iter().map(|g| s(g, "id")).collect();
+            outcome(json, failures.is_empty(), message, serde_json::json!({"updated": updated, "failed": failures, "by_hand": by_hand}))?;
         }
         Cmd::Rm { name, yes, purge } => {
             let id = pick(&core, &name).await?;
-            if yes || confirm(&format!("remove {id}{}?", if purge { " and trash its prefix" } else { "" })) {
-                core.remove(&id, purge).await?;
-                println!("removed {id}");
+            if !confirmed(json, yes, &format!("remove {id}{}?", if purge { " and trash its prefix" } else { "" }))? {
+                return declined();
             }
+            core.remove(&id, purge).await?;
+            done(json, format!("removed {id}"), serde_json::json!({"id": id, "purged": purge}))?;
         }
         Cmd::Restore { name } => {
             let id = pick(&core, &name).await?;
-            for kept in core.restore(&id).await? {
-                eprintln!("{} stays archived: a file of that name is back in place", kept.display());
+            let kept = core.restore(&id).await?;
+            for k in &kept {
+                eprintln!("{} stays archived: a file of that name is back in place", k.display());
             }
-            println!("restored {id}");
+            done(json, format!("restored {id}"), serde_json::json!({"id": id, "kept_archived": kept}))?;
         }
         Cmd::Uninstall { name, yes, source: Some(source) } => {
-            if yes || confirm(&format!("trash {source}'s install of {name}?")) {
-                let trashed = core.source_trash(&source, &name).await?;
-                println!("trashed {trashed}");
+            if !confirmed(json, yes, &format!("trash {source}'s install of {name}?"))? {
+                return declined();
             }
+            let trashed = core.source_trash(&source, &name).await?;
+            done(json, format!("trashed {trashed}"), serde_json::json!({"source": source, "store_id": name, "trashed": trashed}))?;
         }
         Cmd::Uninstall { name, yes, source: None } => {
             let id = pick(&core, &name).await?;
-            if yes || confirm(&format!("uninstall {id} and remove its files?")) {
-                core.uninstall(&id).await?;
-                println!("uninstalled {id}");
+            if !confirmed(json, yes, &format!("uninstall {id} and remove its files?"))? {
+                return declined();
             }
+            core.uninstall(&id).await?;
+            done(json, format!("uninstalled {id}"), serde_json::json!({"id": id}))?;
         }
         Cmd::Data { name, action } => {
             let id = pick(&core, &name).await?;
@@ -1473,13 +1557,13 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     let from = launcher::prefix_of(&game, &config);
                     let keeps = keeps_old_path(crate::data::prefix_owner(&from, &game, &config), &from.to_string_lossy());
                     let asked = format!("move {id}'s prefix into prefixes_root?{}", keeps.as_ref().map(|k| format!(" {k}")).unwrap_or_default());
-                    if yes || confirm(&asked) {
-                        let moved = core.move_prefix(&id).await?;
-                        if json {
-                            return print_json(&moved);
-                        }
-                        println!("{} {} → {}", "moved".green(), s(&moved, "from"), s(&moved, "to"));
-                        if let Some(keeps) = keeps {
+                    if !confirmed(json, yes, &asked)? {
+                        return declined();
+                    }
+                    let moved = core.move_prefix(&id).await?;
+                    done(json, format!("moved {} → {}", s(&moved, "from"), s(&moved, "to")), &moved)?;
+                    if !json {
+                        if let Some(keeps) = &keeps {
                             println!("{}", keeps.yellow());
                         }
                         if !moved["left"].is_null() {
@@ -1488,13 +1572,11 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     }
                 }
                 Some(DataCmd::ResetPrefix { yes }) => {
-                    if yes || confirm(&format!("back {id}'s saves up and trash its prefix?")) {
-                        let reset = core.reset_prefix(&id).await?;
-                        if json {
-                            return print_json(&reset);
-                        }
-                        println!("{} {}", "trashed".green(), s(&reset, "trashed"));
+                    if !confirmed(json, yes, &format!("back {id}'s saves up and trash its prefix?"))? {
+                        return declined();
                     }
+                    let reset = core.reset_prefix(&id).await?;
+                    done(json, format!("trashed {}", s(&reset, "trashed")), &reset)?;
                 }
                 Some(tool) => {
                     let (tool, args) = match tool {
@@ -1508,7 +1590,8 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                         Some(_) => format!("{id}'s prefix stopped"),
                         None => format!("{tool} started as {}", s(&done, "unit")),
                     };
-                    finish(json, core.prefix_tool(&id, tool, &args).await.map(said));
+                    let ran = core.prefix_tool(&id, tool, &args).await?;
+                    done(json, said(ran.clone()), ran)?;
                 }
             }
         }
@@ -1521,10 +1604,11 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 print_storage(&storage);
             }
             Some(StorageCmd::Trash { path, yes }) => {
-                if yes || confirm(&format!("trash {path}?")) {
-                    core.trash_leftover(&path).await?;
-                    println!("trashed {path}");
+                if !confirmed(json, yes, &format!("trash {path}?"))? {
+                    return declined();
                 }
+                core.trash_leftover(&path).await?;
+                done(json, format!("trashed {path}"), serde_json::json!({"path": path}))?;
             }
         },
         Cmd::Saves { action } => match action {
@@ -1540,8 +1624,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 let id = pick(&core, &name).await?;
                 let backup = if auto { core.saves_backup_after_session(&id).await } else { core.saves_backup(&id).await };
                 match backup {
-                    Ok(done) if json => print_json(&done)?,
-                    Ok(done) => println!("{id}: {}", backup_text(&done)),
+                    Ok(backed) => done(json, format!("{id}: {}", backup_text(&backed)), &backed)?,
                     Err(e @ (crate::Error::NotFound(_) | crate::Error::Unavailable(_))) if auto => tracing::info!("{id}: no backup: {e}"),
                     Err(e) => return Err(e.into()),
                 }
@@ -1550,17 +1633,16 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 let id = pick(&core, &name).await?;
                 let which = backup.clone().unwrap_or_default();
                 let what = if which.is_empty() { "the latest backup".to_string() } else { which.clone() };
-                if yes || confirm(&format!("put {id}'s saves back from {what}? the saves there now are replaced")) {
-                    let done = core.saves_restore(&id, &which).await?;
-                    if json {
-                        return print_json(&done);
-                    }
-                    println!("{id}: {} restored ({})", files_text(done.files.len()), human_size(done.bytes));
+                if !confirmed(json, yes, &format!("put {id}'s saves back from {what}? the saves there now are replaced"))? {
+                    return declined();
                 }
+                let restored = core.saves_restore(&id, &which).await?;
+                done(json, format!("{id}: {} restored ({})", files_text(restored.files.len()), human_size(restored.bytes)), &restored)?;
             }
             SavesCmd::Export { name, to } => {
                 let id = pick(&core, &name).await?;
-                finish(json, core.saves_export(&id, &to).await.map(|zip| zip.to_string_lossy().into_owned()));
+                let zip = core.saves_export(&id, &to).await?;
+                done(json, zip.display(), serde_json::json!({"id": id, "zip": zip}))?;
             }
             SavesCmd::Cloud { name, download, upload, keep_local, keep_cloud, yes } => {
                 let id = pick(&core, &name).await?;
@@ -1573,59 +1655,63 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     "keep-cloud" => Some("the saves on this device are backed up, then replaced by the cloud's"),
                     _ => None,
                 };
-                if replaced.is_some_and(|what| !yes && !confirm(&format!("{id}: {what}?"))) {
-                    return Ok(());
+                if let Some(what) = replaced {
+                    if !confirmed(json, yes, &format!("{id}: {what}?"))? {
+                        return declined();
+                    }
                 }
                 let cloud = core.saves_cloud(&id, action).await?;
-                if json {
+                if action == "status" && json {
                     return print_json(&cloud);
                 }
-                println!("{id}: {}", cloud_text(&cloud));
+                done(json, format!("{id}: {}", cloud_text(&cloud)), &cloud)?;
             }
         },
         Cmd::Add { file, runner, title, platform, media } => {
             let payload = serde_json::json!({"title": title, "runner": runner, "exe": file.to_string_lossy(), "platform": platform});
             let id = core.add_game(&payload).await?;
             let g = core.get(&id).await?;
-            if media {
-                let mut p = progress_printer(json);
-                if let Err(e) = core.media_refresh(&id, false, Some(&mut p)).await {
-                    eprintln!("media: {e}");
-                }
+            let art = match media {
+                true => core.media_refresh(&id, false, Some(&mut progress_printer(json))).await.err(),
+                false => None,
+            };
+            let mut message = format!("added {id} · {} · {}", g.effective.runner_name, g.effective.platform);
+            if let Some(e) = &art {
+                message.push_str(&format!("; its artwork failed: {e}"));
             }
-            if json {
-                print_json(&core.get(&id).await?.to_json())?;
-            } else {
-                println!("{} {} · {} · {}", "added".green(), id, g.effective.runner_name, g.effective.platform);
-                if g.effective.runner_path.is_empty() && g.effective.runner_kind != "linux" {
-                    let offer = crate::components::cached(&crate::config::Config::load().unwrap_or_default())
-                        .components
-                        .get(&g.effective.runner)
-                        .and_then(|e| e.latest())
-                        .map(|b| format!("`universe component install {}` ({}), or ", g.effective.runner, b.version))
-                        .unwrap_or_default();
-                    println!(
-                        "{}",
-                        format!("{} was not found: {offer}install it, or `universe runner set {} exe=…`", g.effective.runner_name, g.effective.runner).yellow()
-                    );
-                }
+            let added = outcome(json, art.is_none(), message, core.get(&id).await?.to_json());
+            if !json && g.effective.runner_path.is_empty() && g.effective.runner_kind != "linux" {
+                let offer = crate::components::cached(&crate::config::Config::load().unwrap_or_default())
+                    .components
+                    .get(&g.effective.runner)
+                    .and_then(|e| e.latest())
+                    .map(|b| format!("`universe component install {}` ({}), or ", g.effective.runner, b.version))
+                    .unwrap_or_default();
+                println!(
+                    "{}",
+                    format!("{} was not found: {offer}install it, or `universe runner set {} exe=…`", g.effective.runner_name, g.effective.runner).yellow()
+                );
             }
+            added?;
         }
         Cmd::Runner { action } => return runner(core, action, json).await,
         Cmd::Component { action } => return component(core, action, json).await,
         Cmd::Extension { action } => return extension(core, action, json).await,
         Cmd::Set { name, pairs } => {
             let id = pick(&core, &name).await?;
+            let mut set = serde_json::Map::new();
             for p in pairs {
-                let (k, v) = p.split_once('=').ok_or_else(|| anyhow::anyhow!("expected key=value, got {p}"))?;
+                let (k, v) = p.split_once('=').ok_or_else(|| Stop::Usage(format!("expected key=value, got {p}")))?;
                 let k = match k {
                     "hide_cursor" => "desktop.hide_cursor".into(),
                     _ if crate::launch_keys::find(k.split('.').next().unwrap_or(k)).is_some() => format!("launch.{k}"),
                     _ => k.to_string(),
                 };
                 core.set(&id, &k, v).await?;
-                println!("{id}: {k} = {v}");
+                set.insert(k, v.into());
             }
+            let lines: Vec<String> = set.iter().map(|(k, v)| format!("{id}: {k} = {}", v.as_str().unwrap_or_default())).collect();
+            done(json, lines.join("\n"), serde_json::json!({"id": id, "set": set}))?;
         }
         Cmd::Sessions { name } => {
             let id = pick(&core, &name).await?;
@@ -1687,12 +1773,13 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     Some(n) => core.retry_journals(&pick(&core, n).await?).await,
                     None => core.sweep_journals().await,
                 };
+                let said = match report["started"].as_object() {
+                    Some(s) => format!("writing {} ({})", s["game"].as_str().unwrap_or(""), s["session"].as_str().unwrap_or("")),
+                    None => report["held"].as_str().or(report["error"].as_str()).unwrap_or("nothing waiting").to_string(),
+                };
+                done(json, said, &report)?;
                 if json {
-                    return print_json(&report);
-                }
-                match report["started"].as_object() {
-                    Some(s) => println!("{} {} ({})", "writing".yellow(), s["game"].as_str().unwrap_or(""), s["session"].as_str().unwrap_or("")),
-                    None => println!("{}", report["held"].as_str().or(report["error"].as_str()).unwrap_or("nothing waiting").dimmed()),
+                    return Ok(());
                 }
                 let due = report["due"].as_u64().unwrap_or(0);
                 if due > 0 {
@@ -1703,19 +1790,18 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 }
                 return Ok(());
             }
-            let name = name.ok_or_else(|| anyhow::anyhow!("which game? (universe journal <name>)"))?;
+            let name = name.ok_or_else(|| Stop::Usage("which game? (universe journal <name>)".into()))?;
             let id = pick(&core, &name).await?;
             if let Some(session) = write {
                 let unit = core.journal_write(&id, &session, force).await?;
-                println!("{} {session} ({unit})", "writing".yellow());
-                return Ok(());
+                return done(json, format!("writing {session} ({unit})"), serde_json::json!({"id": id, "session": session, "unit": unit}));
             }
             if let Some(session) = remove {
-                if yes || confirm(&format!("trash the journal entry {session} of {id}?")) {
-                    core.remove_journal_entry(&id, &session).await?;
-                    println!("removed {session}");
+                if !confirmed(json, yes, &format!("trash the journal entry {session} of {id}?"))? {
+                    return declined();
                 }
-                return Ok(());
+                core.remove_journal_entry(&id, &session).await?;
+                return done(json, format!("removed {session}"), serde_json::json!({"id": id, "session": session}));
             }
             let list = core.journal(&id).await?;
             if json {
@@ -1743,11 +1829,11 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Cmd::Recordings { name, remove, yes } => {
             let id = pick(&core, &name).await?;
             if let Some(session) = remove {
-                if yes || confirm(&format!("trash the recording {session} of {id}?")) {
-                    core.remove_recording(&id, &session).await?;
-                    println!("removed {session}");
+                if !confirmed(json, yes, &format!("trash the recording {session} of {id}?"))? {
+                    return declined();
                 }
-                return Ok(());
+                core.remove_recording(&id, &session).await?;
+                return done(json, format!("removed {session}"), serde_json::json!({"id": id, "session": session}));
             }
             let list: Vec<_> = core.sessions(&id).await?.into_iter().filter(|r| r.recording.is_some()).collect();
             if json {
@@ -1767,7 +1853,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 MediaCmd::Refresh { force } => {
                     let mut p = progress_printer(json);
                     let (changed, total) = core.media_refresh(&id, force, Some(&mut p)).await?;
-                    report(json, true, &format!("{changed}/{total} updated"));
+                    done(json, format!("{changed}/{total} updated"), serde_json::json!({"changed": changed, "total": total}))?;
                 }
                 MediaCmd::Status => {
                     let list = core.media_status(&id).await?;
@@ -1803,11 +1889,12 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                         let path = std::fs::canonicalize(&source)?;
                         core.media_set_slot(&id, &slot, &path.to_string_lossy()).await?
                     };
-                    report(json, true, &format!("{id}: {slot} → {placed}"));
+                    done(json, format!("{id}: {slot} → {placed}"), serde_json::json!({"id": id, "slot": slot, "path": placed}))?;
                 }
                 MediaCmd::Unset { slot } => {
                     let gone = core.media_unset(&id, &slot).await?;
-                    report(json, true, &if gone { format!("{id}: {slot} override removed") } else { format!("{id}: {slot} had no override") });
+                    let said = if gone { format!("{id}: {slot} override removed") } else { format!("{id}: {slot} had no override") };
+                    done(json, said, serde_json::json!({"id": id, "slot": slot, "removed": gone}))?;
                 }
                 MediaCmd::Candidates { slot, page } => {
                     print_json(&core.media_candidates(&id, &slot, page).await?)?;
@@ -1832,7 +1919,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 }
                 MediaCmd::Pin { provider, id: pid } => {
                     core.media_pin(&id, &provider, &pid).await?;
-                    println!("pinned");
+                    done(json, format!("{id}: pinned to {provider} {pid}"), serde_json::json!({"id": id, "provider": provider, "provider_id": pid}))?;
                 }
             }
         }
@@ -1851,11 +1938,11 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             }
             ModuleCmd::Enable { id } => {
                 core.enable_module(&id, true).await?;
-                println!("{id} enabled");
+                done(json, format!("{id} enabled"), serde_json::json!({"id": id, "enabled": true}))?;
             }
             ModuleCmd::Disable { id } => {
                 core.enable_module(&id, false).await?;
-                println!("{id} disabled");
+                done(json, format!("{id} disabled"), serde_json::json!({"id": id, "enabled": false}))?;
             }
             ModuleCmd::Settings { id, game } => {
                 let gid = match game {
@@ -1869,11 +1956,15 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     Some(g) => pick(&core, &g).await?,
                     None => String::new(),
                 };
+                let mut set = serde_json::Map::new();
                 for p in &pairs {
-                    let (k, v) = p.split_once('=').ok_or_else(|| anyhow::anyhow!("expected key=value"))?;
+                    let (k, v) = p.split_once('=').ok_or_else(|| Stop::Usage(format!("expected key=value, got {p}")))?;
                     core.set_module_setting(&id, &gid, k, v).await?;
-                    println!("{id}.{k} = {v}{}", if gid.is_empty() { String::new() } else { format!(" ({gid})") });
+                    set.insert(k.to_string(), v.into());
                 }
+                let at = if gid.is_empty() { String::new() } else { format!(" ({gid})") };
+                let lines: Vec<String> = set.iter().map(|(k, v)| format!("{id}.{k} = {}{at}", v.as_str().unwrap_or_default())).collect();
+                done(json, lines.join("\n"), serde_json::json!({"id": id, "game": gid, "set": set}))?;
             }
         },
         Cmd::Sources => print_sources(&core.sources().await, json)?,
@@ -1881,11 +1972,11 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             SourceCmd::Ls => print_sources(&core.sources().await, json)?,
             SourceCmd::Enable { id } => {
                 core.enable_source(&id, true).await?;
-                println!("{id} enabled");
+                done(json, format!("{id} enabled"), serde_json::json!({"id": id, "enabled": true}))?;
             }
             SourceCmd::Disable { id } => {
                 core.enable_source(&id, false).await?;
-                println!("{id} disabled");
+                done(json, format!("{id} disabled"), serde_json::json!({"id": id, "enabled": false}))?;
             }
             SourceCmd::Settings { id, game } => {
                 let gid = match game {
@@ -1899,24 +1990,61 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     Some(g) => pick(&core, &g).await?,
                     None => String::new(),
                 };
+                let mut set = serde_json::Map::new();
                 for p in &pairs {
-                    let (k, v) = p.split_once('=').ok_or_else(|| anyhow::anyhow!("expected key=value"))?;
+                    let (k, v) = p.split_once('=').ok_or_else(|| Stop::Usage(format!("expected key=value, got {p}")))?;
                     core.set_source_setting(&id, &gid, k, v).await?;
-                    println!("{id}.{k} = {v}{}", if gid.is_empty() { String::new() } else { format!(" ({gid})") });
+                    set.insert(k.to_string(), v.into());
                 }
+                let at = if gid.is_empty() { String::new() } else { format!(" ({gid})") };
+                let lines: Vec<String> = set.iter().map(|(k, v)| format!("{id}.{k} = {}{at}", v.as_str().unwrap_or_default())).collect();
+                done(json, lines.join("\n"), serde_json::json!({"id": id, "game": gid, "set": set}))?;
             }
         },
         Cmd::Login { source, code } => {
-            let code = match code {
+            let entry = core.source(&source).await?.to_json();
+            let login = &entry["login"];
+            let word = if s(login, "kind") == "key" { "key" } else { "code" };
+            let next = format!("universe login {source} <{word}>");
+            let terminal = std::io::IsTerminal::is_terminal(&std::io::stdin());
+            let piped = match (&code, terminal) {
+                (None, false) => {
+                    let mut line = String::new();
+                    let _ = std::io::stdin().read_line(&mut line);
+                    Some(line.trim().to_string()).filter(|l| !l.is_empty())
+                }
+                _ => None,
+            };
+            let code = match code.or(piped) {
                 Some(c) => c,
                 None => {
                     let url = core.source_login_url(&source).await?;
-                    println!("Open this URL, log in, then paste the code= value from the address bar:\n\n  {url}\n");
-                    ask("code:")
+                    let hint = s(login, "hint");
+                    if json || !terminal {
+                        return done(
+                            json,
+                            format!("{hint}\n\n  {url}\n\nthen: {next}"),
+                            serde_json::json!({"source": source, "url": url, "hint": hint, "next": next}),
+                        );
+                    }
+                    println!("{hint}\n\n  {url}\n");
+                    let typed = ask(&format!("{word}:"));
+                    if typed.is_empty() {
+                        return Err(Stop::Usage(format!("no {word} given: {next}")).into());
+                    }
+                    typed
                 }
             };
-            let user = core.source_login(&source, &code).await?;
-            report(json, true, &user);
+            let again = format!("a {word} works once: `universe login {source}` gives a new link");
+            let user = core.source_login(&source, &code).await.map_err(|e| hinted(e, &again))?;
+            let name = entry["name"].as_str().filter(|n| !n.is_empty()).unwrap_or(&source).to_string();
+            let mut then = vec![format!("`universe library {source}` lists your games")];
+            if s(login, "purpose") == "install games" {
+                then.push(format!("`universe install <id> --source {source}` installs one"));
+            }
+            then.push(format!("`universe scan {source}` adds the ones already installed"));
+            let said = format!("logged in to {name}{}\n{}", if user.is_empty() { String::new() } else { format!(" as {user}") }, then.join("\n"));
+            done(json, said, serde_json::json!({"source": source, "user": user, "next": then}))?;
         }
         Cmd::Library { source, refresh } => {
             let source = enabled_source(&core, source).await?;
@@ -1948,17 +2076,15 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Cmd::Scan { source, only: Some(id) } => {
             let source = enabled_source(&core, source).await?;
             let mut p = progress_printer(json);
-            let added = core.source_adopt(&source, &id, Some(&mut p)).await;
-            if let Ok(game) = &added {
-                fetch_art(&core, json, std::slice::from_ref(game)).await;
-            }
-            finish(json, added);
+            let game = core.source_adopt(&source, &id, Some(&mut p)).await?;
+            fetch_art(&core, json, std::slice::from_ref(&game)).await;
+            done(json, format!("added {game}"), serde_json::json!({"source": source, "store_id": id, "id": game}))?;
         }
         Cmd::Scan { source, only: None } => {
             let mut p = progress_printer(json);
             let found = core.source_scan(source.as_deref().unwrap_or(""), Some(&mut p)).await?;
             fetch_art(&core, json, &found).await;
-            report(json, true, &format!("{} game(s)", found.len()));
+            done(json, format!("{} game(s)", found.len()), serde_json::json!({"found": found}))?;
             if !json {
                 let active = core.active_source_ids().await;
                 let mut t = table(&["Title", "Source", "Store id", "Id", "Build"]);
@@ -1977,6 +2103,10 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 fetch_art(&core, json, &imported.imported).await;
             }
             let report = serde_json::to_value(imported)?;
+            if json && apply {
+                let n = report["imported"].as_array().map_or(0, |a| a.len());
+                return done(json, format!("imported {n}"), &report);
+            }
             if json {
                 return print_json(&report);
             }
@@ -2043,23 +2173,37 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         }
         Cmd::Doctor => return print_doctor(&core.doctor().await, json),
         Cmd::Setup => {
+            let mut steps = Vec::new();
             if core.desktop().await == crate::desktop::Profile::Gnome {
                 use crate::desktop::gnome::{self, ExtensionCopy};
                 let uuid = crate::desktop::UNIVERSE_EXTENSION;
-                match gnome::install_extension() {
-                    Ok(ExtensionCopy::Written(dir)) => println!("{} {uuid} into {}", "installed".green(), dir.display()),
-                    Ok(ExtensionCopy::Current) => println!("{uuid} is up to date"),
-                    Ok(ExtensionCopy::System) => println!("{uuid} comes with the system's package"),
-                    Err(e) => println!("{} {uuid}: {e}", "failed".red()),
-                }
+                steps.push(match gnome::install_extension() {
+                    Ok(ExtensionCopy::Written(dir)) => (true, format!("installed {uuid} into {}", dir.display())),
+                    Ok(ExtensionCopy::Current) => (true, format!("{uuid} is up to date")),
+                    Ok(ExtensionCopy::System) => (true, format!("{uuid} comes with the system's package")),
+                    Err(e) => (false, format!("{uuid}: {e}")),
+                });
                 match gnome::enable_extension().await {
-                    Ok(true) => println!("{} {uuid}: it loads at the next login", "enabled".green()),
+                    Ok(true) => steps.push((true, format!("enabled {uuid}: it loads at the next login"))),
                     Ok(false) => {}
-                    Err(e) => println!("{} to enable {uuid}: {e}", "failed".red()),
+                    Err(e) => steps.push((false, format!("to enable {uuid}: {e}"))),
                 }
+            }
+            let checks = core.doctor().await;
+            let ok = steps.iter().all(|(ok, _)| *ok) && checks.iter().all(|c| c.ok);
+            if json {
+                let steps: Vec<Value> = steps.iter().map(|(ok, m)| serde_json::json!({"ok": ok, "message": m})).collect();
+                let bad = checks.iter().filter(|c| !c.ok).count();
+                return outcome(json, ok, format!("{bad} checks need attention"), serde_json::json!({"steps": steps, "checks": checks}));
+            }
+            for (ok, m) in &steps {
+                item(json, *ok, m);
+            }
+            if !steps.is_empty() {
                 println!();
             }
-            return print_doctor(&core.doctor().await, json);
+            print_doctor(&checks, json)?;
+            return if ok { Ok(()) } else { Err(Stop::Reported.into()) };
         }
         Cmd::Config { action } => match action {
             ConfigCmd::Get { key } => {
@@ -2076,15 +2220,12 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             }
             ConfigCmd::Set { key, value } => {
                 core.set_setting(&key, &value).await?;
-                println!("{key} = {value}");
+                done(json, format!("{key} = {value}"), serde_json::json!({"key": key, "value": value}))?;
             }
         },
         Cmd::Output { id: Some(id) } => {
             let level = core.set_output(&id).await?;
-            if json {
-                return print_json(&level);
-            }
-            println!("playing through {}", s(&level, "output"));
+            done(json, format!("playing through {}", s(&level, "output")), &level)?;
         }
         Cmd::Output { id: None } => {
             let list = core.outputs().await?;
@@ -2097,7 +2238,10 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             }
             println!("{t}");
         }
-        Cmd::Screenshot => println!("{}", core.screenshot().await?),
+        Cmd::Screenshot => {
+            let path = core.screenshot().await?;
+            done(json, &path, serde_json::json!({"path": path}))?;
+        }
         Cmd::Screenshots { name, remove, yes } => {
             let id = match &name {
                 Some(n) => pick(&core, n).await?,
@@ -2105,13 +2249,13 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             };
             if let Some(shot) = remove {
                 if id.is_empty() {
-                    anyhow::bail!("--remove takes a game");
+                    return Err(Stop::Usage("--remove takes a game".into()).into());
                 }
-                if yes || confirm(&format!("trash the screenshot {shot} of {id}?")) {
-                    core.remove_screenshot(&id, &shot).await?;
-                    println!("removed {shot}");
+                if !confirmed(json, yes, &format!("trash the screenshot {shot} of {id}?"))? {
+                    return declined();
                 }
-                return Ok(());
+                core.remove_screenshot(&id, &shot).await?;
+                return done(json, format!("removed {shot}"), serde_json::json!({"id": id, "shot": shot}));
             }
             let list = core.screenshots(&id).await?;
             if json {
@@ -2126,10 +2270,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Cmd::Achievements { name, replay: true, count, .. } => {
             let id = pick(&core, &name).await?;
             let keys = core.achievements_replay(&id, count).await?;
-            if json {
-                return print_json(&keys);
-            }
-            println!("Replaying {}: {}", keys.len(), keys.join(", "));
+            done(json, format!("replaying {}: {}", keys.len(), keys.join(", ")), serde_json::json!({"id": id, "keys": keys}))?;
         }
         Cmd::Achievements { name, refresh, .. } => {
             let id = pick(&core, &name).await?;
@@ -2156,11 +2297,11 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             let report = core.rescan().await?;
             let added: Vec<String> = report.imported.iter().map(|f| f.id.clone()).collect();
             fetch_art(&core, json, &added).await;
-            if json {
-                return print_json(&serde_json::to_value(&report)?);
-            }
             let n = report.imported.len();
-            println!("rescanned, {n} game{} from the emulators' folders", if n == 1 { "" } else { "s" });
+            done(json, format!("rescanned, {n} game{} from the emulators' folders", if n == 1 { "" } else { "s" }), &report)?;
+            if json {
+                return Ok(());
+            }
             for f in &report.imported {
                 println!("  {} {} {}", f.id, f.runner.dimmed(), f.path.dimmed());
             }
@@ -2235,12 +2376,14 @@ async fn controller(core: Core, action: ControllerCmd, json: bool) -> anyhow::Re
         }
         ControllerCmd::Bind { family, button, trigger, action, keys, command } => {
             let m = controller::Macro { family, button, trigger, action, keys, command };
+            let said = format!("{} {} {}: {}", m.family, m.button, m.trigger, m.action);
+            let bound = serde_json::to_value(&m)?;
             core.set_controller_macro(m).await?;
-            report(json, true, "bound");
+            done(json, format!("bound {said}"), bound)?;
         }
         ControllerCmd::Unbind { family, button, trigger } => {
             core.remove_controller_macro(&family, &button, trigger.as_deref().unwrap_or("")).await?;
-            report(json, true, "unbound");
+            done(json, format!("unbound {family} {button}"), serde_json::json!({"family": family, "button": button, "trigger": trigger}))?;
         }
         ControllerCmd::Learn { family, slot } => {
             let fam = controller::family_by_id(&family).ok_or_else(|| anyhow::anyhow!("unknown family {family}"))?;
@@ -2253,15 +2396,12 @@ async fn controller(core: Core, action: ControllerCmd, json: bool) -> anyhow::Re
             let cfg = core.config.read().await.controller.clone();
             let (code, from) = controller::watch::learn_once(&cfg, fam, &slot).await?;
             core.reload_settings().await?;
-            if json {
-                print_json(&serde_json::json!({"family": family, "slot": slot, "code": code, "from": from}))?;
-            } else {
-                println!("{slot} = {code}{}", from.map(|f| format!(" (taken from {f})")).unwrap_or_default());
-            }
+            let said = format!("{slot} = {code}{}", from.as_ref().map(|f| format!(" (taken from {f})")).unwrap_or_default());
+            done(json, said, serde_json::json!({"family": family, "slot": slot, "code": code, "from": from}))?;
         }
         ControllerCmd::Forget { family, slot } => {
             core.set_controller_button(&family, &slot, None).await?;
-            report(json, true, "forgotten");
+            done(json, format!("forgot {family} {slot}"), serde_json::json!({"family": family, "slot": slot}))?;
         }
         ControllerCmd::Dump { id, walk } => {
             let mut pads = core.controller_record(id.as_deref().unwrap_or("")).await?;
@@ -2292,8 +2432,9 @@ async fn controller(core: Core, action: ControllerCmd, json: bool) -> anyhow::Re
         }
         ControllerCmd::Reconnect { id } => {
             let outcomes = core.controller_reconnect(&id).await?;
+            let ok = !outcomes.iter().any(|o| o["outcome"] == "failed");
             if json {
-                return print_json(&outcomes);
+                return outcome(json, ok, format!("{} pad(s)", outcomes.len()), &outcomes);
             }
             if outcomes.is_empty() {
                 println!("{}", "no pad connected".dimmed());
@@ -2307,6 +2448,7 @@ async fn controller(core: Core, action: ControllerCmd, json: bool) -> anyhow::Re
                 };
                 println!("{} {} · {what}", s(o, "id").dimmed(), s(o, "name").bold());
             }
+            outcome(json, ok, "", &outcomes)?;
         }
     }
     Ok(())
@@ -2462,7 +2604,7 @@ async fn network(action: &NetworkCmd, json: bool) -> anyhow::Result<()> {
         NetworkCmd::Ls => unreachable!(),
         NetworkCmd::Scan => {
             nm::scan(&conn).await.map_err(failed)?;
-            report(json, true, "scanning");
+            done(json, "scanning", Value::Null)?;
         }
         NetworkCmd::Connect { ssid } => {
             let state = nm::read(&conn).await;
@@ -2479,18 +2621,15 @@ async fn network(action: &NetworkCmd, json: bool) -> anyhow::Result<()> {
             }
             joined.map_err(failed)?;
             let connectivity = nm::check(&conn).await.unwrap_or_else(|_| "unknown".into());
-            if json {
-                return print_json(&serde_json::json!({"ok": true, "ssid": ssid, "connectivity": connectivity}));
-            }
-            report(json, true, &format!("on {ssid} · internet {connectivity}"));
+            done(json, format!("on {ssid} · internet {connectivity}"), serde_json::json!({"ssid": ssid, "connectivity": connectivity}))?;
         }
         NetworkCmd::Forget { ssid } => {
             nm::forget(&conn, ssid).await.map_err(failed)?;
-            report(json, true, &format!("forgot {ssid}"));
+            done(json, format!("forgot {ssid}"), serde_json::json!({"ssid": ssid}))?;
         }
         NetworkCmd::Wifi { state } => {
             nm::set_enabled(&conn, state == "on").await.map_err(failed)?;
-            report(json, true, &format!("Wi-Fi {state}"));
+            done(json, format!("Wi-Fi {state}"), serde_json::json!({"wifi": state}))?;
         }
         NetworkCmd::Check => {
             let connectivity = nm::check(&conn).await.map_err(failed)?;
@@ -2561,23 +2700,23 @@ async fn bluetooth(action: &BluetoothCmd, json: bool) -> anyhow::Result<()> {
                     },
                 }
             };
-            report(json, true, if connected { "paired and connected" } else { "paired" });
+            done(json, if connected { "paired and connected" } else { "paired" }, serde_json::json!({"address": address, "connected": connected}))?;
         }
         BluetoothCmd::Connect { address } => {
             bt::connect(&conn, address).await?;
-            report(json, true, "connected");
+            done(json, format!("connected {address}"), serde_json::json!({"address": address}))?;
         }
         BluetoothCmd::Disconnect { address } => {
             bt::disconnect(&conn, address).await?;
-            report(json, true, "disconnected");
+            done(json, format!("disconnected {address}"), serde_json::json!({"address": address}))?;
         }
         BluetoothCmd::Remove { address } => {
             bt::remove(&conn, address).await?;
-            report(json, true, "removed");
+            done(json, format!("removed {address}"), serde_json::json!({"address": address}))?;
         }
         BluetoothCmd::Power { state } => {
             bt::set_powered(&conn, state == "on").await?;
-            report(json, true, &format!("Bluetooth {state}"));
+            done(json, format!("Bluetooth {state}"), serde_json::json!({"power": state}))?;
         }
         BluetoothCmd::Watch { json: as_json } => bt::watch(conn, crate::nest::session(), stdin_lines(*as_json), watch_out(*as_json)).await?,
     }
@@ -2614,7 +2753,9 @@ async fn runner(core: Core, action: RunnerCmd, json: bool) -> anyhow::Result<()>
             println!("{t}");
         }
         RunnerCmd::Options { id } => {
-            let Some(r) = core.runners().await.into_iter().find(|r| s(r, "id") == crate::runners::canonical(&id)) else { anyhow::bail!("unknown runner {id}") };
+            let Some(r) = core.runners().await.into_iter().find(|r| s(r, "id") == crate::runners::canonical(&id)) else {
+                return Err(crate::Error::NotFound(format!("unknown runner {id}")).into());
+            };
             if json {
                 return print_json(&r);
             }
@@ -2628,14 +2769,18 @@ async fn runner(core: Core, action: RunnerCmd, json: bool) -> anyhow::Result<()>
             println!("{t}");
         }
         RunnerCmd::Set { id, pairs } => {
-            for p in &pairs {
-                let (k, v) = p.split_once('=').ok_or_else(|| anyhow::anyhow!("expected key=value, got {p}"))?;
-                core.set_runner_setting(&id, k, v).await?;
-                println!("runners.{}.{k} = {v}", crate::runners::canonical(&id));
-            }
             if pairs.is_empty() {
-                anyhow::bail!("nothing to set: key=value…");
+                return Err(Stop::Usage("nothing to set: key=value…".into()).into());
             }
+            let mut set = serde_json::Map::new();
+            for p in &pairs {
+                let (k, v) = p.split_once('=').ok_or_else(|| Stop::Usage(format!("expected key=value, got {p}")))?;
+                core.set_runner_setting(&id, k, v).await?;
+                set.insert(k.to_string(), v.into());
+            }
+            let runner = crate::runners::canonical(&id);
+            let lines: Vec<String> = set.iter().map(|(k, v)| format!("runners.{runner}.{k} = {}", v.as_str().unwrap_or_default())).collect();
+            done(json, lines.join("\n"), serde_json::json!({"id": runner, "set": set}))?;
         }
     }
     Ok(())
@@ -2678,49 +2823,41 @@ async fn component(core: Core, action: ComponentCmd, json: bool) -> anyhow::Resu
                 || match loaded.catalogue.components.get(&id).filter(|e| !e.notice.is_empty()) {
                     None => false,
                     Some(e) if json || !std::io::IsTerminal::is_terminal(&std::io::stdin()) => {
-                        anyhow::bail!("{}: {}\npass --yes to accept it and install", e.name, e.notice)
+                        return Err(Stop::Usage(format!("{}: {}\npass --yes to accept it and install", e.name, e.notice)).into());
                     }
                     Some(e) => {
                         eprintln!("{}", e.notice.yellow());
                         if !confirm(&format!("install {}?", e.name)) {
-                            return Ok(());
+                            return declined();
                         }
                         true
                     }
                 };
             let mut p = progress_printer(json);
-            finish(json, core.component_install(&id, version.as_deref().unwrap_or(""), accepted, Some(&mut p)).await.map(|v| format!("{id} {v} installed")));
+            let installed = core.component_install(&id, version.as_deref().unwrap_or(""), accepted, Some(&mut p)).await?;
+            done(json, format!("{id} {installed} installed"), serde_json::json!({"id": id, "version": installed}))?;
         }
         ComponentCmd::Remove { id, version } => {
             core.component_remove(&id, &version).await?;
-            report(json, true, &format!("{id} {version} removed"));
+            done(json, format!("{id} {version} removed"), serde_json::json!({"id": id, "version": version}))?;
         }
         ComponentCmd::Uninstall { id } => {
             let gone = core.component_uninstall(&id).await?;
-            report(json, true, &format!("{id} uninstalled: {} removed", gone.join(", ")));
+            done(json, format!("{id} uninstalled: {} removed", gone.join(", ")), serde_json::json!({"id": id, "removed": gone}))?;
         }
         ComponentCmd::Update { id } => {
             let mut p = progress_printer(json);
             let list = core.component_update(id.as_deref().unwrap_or(""), Some(&mut p)).await?;
-            if json {
-                return print_json(&list);
-            }
-            if list.is_empty() {
-                println!("everything is current");
-            }
-            for u in &list {
-                let error = s(u, "error");
-                let tail = if error.is_empty() { String::new() } else { format!(": {error}") };
-                report(false, error.is_empty(), &format!("{} {}{tail}", s(u, "name"), s(u, "version")));
-            }
+            updated(json, &list)?;
         }
         ComponentCmd::Rollback { id } => {
             let now = core.component_rollback(&id).await?;
-            report(json, true, &if now.is_empty() { format!("{id}: back on the system's build") } else { format!("{id}: back on {now}") });
+            let said = if now.is_empty() { format!("{id}: back on the system's build") } else { format!("{id}: back on {now}") };
+            done(json, said, serde_json::json!({"id": id, "version": now}))?;
         }
         ComponentCmd::Use { id, build } => {
             core.component_use(&id, &build).await?;
-            report(json, true, &format!("{id}: {build}"));
+            done(json, format!("{id}: {build}"), serde_json::json!({"id": id, "build": build}))?;
         }
     }
     Ok(())
@@ -2757,44 +2894,46 @@ async fn extension(core: Core, action: ExtensionCmd, json: bool) -> anyhow::Resu
             let staged = crate::extensions::prepare(origin, Some(&mut p), &std::sync::atomic::AtomicBool::new(false)).await?;
             if !yes {
                 if json || !std::io::IsTerminal::is_terminal(&std::io::stdin()) {
-                    anyhow::bail!("{}\npass --yes to accept it and install", staged.warning());
+                    return Err(Stop::Usage(format!("{}\npass --yes to accept it and install", staged.warning())).into());
                 }
                 eprintln!("{}", staged.warning().yellow());
                 if !confirm(&format!("install {}?", staged.name)) {
-                    return Ok(());
+                    return declined();
                 }
             }
-            let placed = core.extension_place(staged).await;
-            finish(
-                json,
-                placed.map(|v| {
-                    let (kind, id) = (s(&v, "kind"), s(&v, "id"));
-                    let on = if kind == "theme" { "Settings › Appearance picks it".into() } else { format!("universe {kind} enable {id} turns it on") };
-                    format!("{kind} {id} {} installed: {on}", s(&v, "version"))
-                }),
-            );
+            let placed = core.extension_place(staged).await?;
+            let (kind, id) = (s(&placed, "kind"), s(&placed, "id"));
+            let on = if kind == "theme" { "Settings › Appearance picks it".into() } else { format!("universe {kind} enable {id} turns it on") };
+            done(json, format!("{kind} {id} {} installed: {on}", s(&placed, "version")), &placed)?;
         }
         ExtensionCmd::Update { id } => {
             let mut p = progress_printer(json);
             let list = core.extension_update(id.as_deref().unwrap_or(""), Some(&mut p)).await?;
-            if json {
-                return print_json(&list);
-            }
-            if list.is_empty() {
-                println!("everything is current");
-            }
-            for u in &list {
-                let error = s(u, "error");
-                let tail = if error.is_empty() { String::new() } else { format!(": {error}") };
-                report(false, error.is_empty(), &format!("{} {}{tail}", s(u, "name"), s(u, "version")));
-            }
+            updated(json, &list)?;
         }
         ExtensionCmd::Remove { id } => {
             core.extension_remove(&id).await?;
-            report(json, true, &format!("{id} removed"));
+            done(json, format!("{id} removed"), serde_json::json!({"id": id}))?;
         }
     }
     Ok(())
+}
+
+/// `component update` and `extension update`: a line per build, then exit 1 when one of them failed.
+fn updated(json: bool, list: &[Value]) -> anyhow::Result<()> {
+    let failures = list.iter().filter(|u| !s(u, "error").is_empty()).count();
+    for u in list {
+        let error = s(u, "error");
+        let tail = if error.is_empty() { String::new() } else { format!(": {error}") };
+        item(json, error.is_empty(), &format!("{} {}{tail}", s(u, "name"), s(u, "version")));
+    }
+    let message = match (list.len(), failures) {
+        (0, _) => "everything is current".to_string(),
+        (_, 0) if !json => String::new(),
+        (n, 0) => format!("{n} updated"),
+        (n, f) => format!("{f} of {n} updates failed"),
+    };
+    outcome(json, failures == 0, message, list)
 }
 
 async fn keep_awake(reason: &str) -> anyhow::Result<()> {
@@ -3408,6 +3547,20 @@ fn fmt_duration(secs: u64) -> String {
     }
 }
 
+/// The same failure with a way out added to its words.
+fn hinted(e: crate::Error, hint: &str) -> crate::Error {
+    use crate::Error::*;
+    let m = format!("{}; {hint}", e.message());
+    match e {
+        NotFound(_) => NotFound(m),
+        Ambiguous(_) => Ambiguous(m),
+        Busy(_) => Busy(m),
+        Invalid(_) => Invalid(m),
+        Unavailable(_) => Unavailable(m),
+        Io(_) => Io(m),
+    }
+}
+
 async fn enabled_source(core: &Core, source: Option<String>) -> anyhow::Result<String> {
     if let Some(s) = source {
         return Ok(s);
@@ -3415,19 +3568,19 @@ async fn enabled_source(core: &Core, source: Option<String>) -> anyhow::Result<S
     let active = core.active_source_ids().await;
     match active.as_slice() {
         [only] => Ok(only.clone()),
-        [] => anyhow::bail!("no source is enabled (universe source enable <id>)"),
-        _ => anyhow::bail!("{} are enabled: name the source", active.join(", ")),
+        [] => Err(crate::Error::Unavailable("no source is enabled (universe source enable <id>)".into()).into()),
+        _ => Err(crate::Error::Ambiguous(format!("{} are enabled: name the source", active.join(", "))).into()),
     }
 }
 
 async fn pick(core: &Core, name: &str) -> anyhow::Result<String> {
     let ids = core.resolve(name).await;
     match ids.len() {
-        0 => anyhow::bail!("no game matches '{name}'"),
+        0 => Err(crate::Error::NotFound(format!("no game matches '{name}'")).into()),
         1 => Ok(ids[0].clone()),
         _ => {
-            if !std::io::IsTerminal::is_terminal(&std::io::stdin()) {
-                anyhow::bail!("'{name}' is ambiguous: {}", ids.join(", "));
+            if JSON.get() == Some(&true) || !std::io::IsTerminal::is_terminal(&std::io::stdin()) {
+                return Err(crate::Error::Ambiguous(format!("'{name}' is ambiguous: {}", ids.join(", "))).into());
             }
             for (i, id) in ids.iter().enumerate() {
                 println!("  {} {id}", i + 1);

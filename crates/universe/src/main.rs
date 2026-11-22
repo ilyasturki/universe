@@ -4,8 +4,8 @@ use clap::Parser;
 async fn main() {
     universe::init_tracing();
     let cli = universe::cli::Cli::parse();
+    let json = cli.json;
     if let Err(e) = universe::cli::run(cli).await {
-        eprintln!("universe: {e:#}");
-        std::process::exit(1);
+        std::process::exit(universe::cli::failed(json, &e));
     }
 }

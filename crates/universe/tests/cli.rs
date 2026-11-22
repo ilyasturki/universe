@@ -140,10 +140,10 @@ fn a_ps5_dump_in_each_ps5_emulators_game_folder_is_discovered_and_rescanned_and_
     assert_eq!((roms["found"].as_bool(), roms["games"].as_u64()), (Some(true), Some(2)), "{roms}");
     let rescan = json(&["rescan", "--json"]);
     let imported: Vec<(&str, &str)> =
-        rescan["imported"].as_array().unwrap().iter().map(|f| (f["id"].as_str().unwrap(), f["runner"].as_str().unwrap())).collect();
+        rescan["result"]["imported"].as_array().unwrap().iter().map(|f| (f["id"].as_str().unwrap(), f["runner"].as_str().unwrap())).collect();
     assert_eq!(imported, [("title-ppsa01234", "kytyps5"), ("title-ppsa09999", "sharpemu")]);
     let added = json(&["add", &elsewhere.join("eboot.bin").to_string_lossy(), "--runner", "kytyps5", "--json"]);
-    let effective = &added["effective"];
+    let effective = &added["result"]["effective"];
     assert_eq!((effective["runner"].as_str(), effective["platform"].as_str()), (Some("kytyps5"), Some("Sony PlayStation 5")));
     assert_eq!(effective["working_dir"].as_str(), Some(kyty.canonicalize().unwrap().to_str().unwrap()), "it starts beside the player's own Kyty");
 }
@@ -1061,7 +1061,7 @@ fn journal_add_files_an_entry_the_journal_lists_and_calls_only_a_refusal_invalid
     std::fs::write(&exe, "").unwrap();
     let added = universe(&dir, &["add", exe.to_str().unwrap(), "--runner", "linux", "--title", "Quest", "--json"], &[]);
     let game: serde_json::Value = serde_json::from_slice(&added.stdout).unwrap_or_else(|e| panic!("{e}: {}", text(&added.stderr)));
-    let id = game["id"].as_str().unwrap();
+    let id = game["result"]["id"].as_str().unwrap();
     let sid = "20261004-120000";
     let game_dir = dir.path().join("data/games").join(id);
     let (shot, frame) = (game_dir.join("screenshots/20261004-121500.png"), game_dir.join("journal/attachments/20261004-120000-1.png"));
@@ -1126,7 +1126,7 @@ fn a_ludusavi_lookup_dies_with_the_cli_killed_mid_way() {
     let added = universe(&dir, &["add", exe.to_str().unwrap(), "--runner", "linux", "--title", "Quest", "--json"], &[]);
     let game: serde_json::Value = serde_json::from_slice(&added.stdout).unwrap_or_else(|e| panic!("{e}: {}", text(&added.stderr)));
     let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap_or_default());
-    let mut cli = command(&dir, &["saves", "backup", game["id"].as_str().unwrap()], &[("PATH", &path)])
+    let mut cli = command(&dir, &["saves", "backup", game["result"]["id"].as_str().unwrap()], &[("PATH", &path)])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()
@@ -1682,8 +1682,8 @@ fn a_failed_export_leaves_no_zip_and_names_the_file_it_could_not_read() {
     std::fs::set_permissions(&stored, std::fs::Permissions::from_mode(0o000)).unwrap();
     let failed = game.saves(&["export", "fixture-game", zips.to_str().unwrap()]);
     std::fs::set_permissions(&stored, std::fs::Permissions::from_mode(0o644)).unwrap();
-    assert!(!failed.status.success(), "{}", text(&failed.stdout));
-    assert!(text(&failed.stdout).contains(stored.to_str().unwrap()), "{}", text(&failed.stdout));
+    assert!(!failed.status.success(), "{}", text(&failed.stderr));
+    assert!(text(&failed.stderr).contains(stored.to_str().unwrap()), "{}", text(&failed.stderr));
     assert_eq!(files_under(&zips), Vec::<std::path::PathBuf>::new());
 
     let done = game.saves(&["export", "fixture-game", zips.to_str().unwrap()]);
@@ -1988,7 +1988,8 @@ fn session_window_without_a_session_fails_at_once_even_told_to_wait() {
         let started = std::time::Instant::now();
         let out = universe(&dir, args, &[NO_BUS]);
         assert!(started.elapsed() < std::time::Duration::from_secs(20), "{args:?} waited for a session that is not there");
-        assert_eq!((out.status.code(), text(&out.stdout)), (Some(1), String::new()), "{args:?}");
+        let failed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        assert_eq!((out.status.code(), &failed["error"]), (Some(1), &serde_json::json!("not_found")), "{args:?}: not the `null` of no window");
         assert!(text(&out.stderr).contains("not found:"), "{args:?}: {}", text(&out.stderr));
     }
 }
@@ -2064,6 +2065,150 @@ fn an_extension_install_asks_first_then_lists_and_goes() {
     assert!(modules(&dir).iter().any(|m| m["id"] == "hello"), "an installed module is a module");
     assert!(universe(&dir, &["extension", "remove", "hello"], &env).status.success());
     assert!(!modules(&dir).iter().any(|m| m["id"] == "hello"));
+}
+
+#[test]
+fn a_question_without_a_terminal_or_yes_is_refused_and_every_change_answers_one_json_object() {
+    let dir = no_desktop();
+    let exe = dir.path().join("games/quest.sh");
+    std::fs::create_dir_all(exe.parent().unwrap()).unwrap();
+    std::fs::write(&exe, "#!/bin/sh\n").unwrap();
+    let object = |out: &std::process::Output| -> serde_json::Value {
+        serde_json::from_slice(&out.stdout).unwrap_or_else(|e| panic!("{e}: {} {}", text(&out.stdout), text(&out.stderr)))
+    };
+    let added = universe(&dir, &["add", exe.to_str().unwrap(), "--runner", "linux", "--title", "Quest", "--json"], &[NO_BUS]);
+    let added = object(&added);
+    assert_eq!((&added["ok"], &added["error"], &added["result"]["id"]), (&serde_json::json!(true), &serde_json::Value::Null, &serde_json::json!("quest")));
+    assert!(added["message"].is_string());
+    let asks: [&[&str]; 6] = [
+        &["rm", "quest"],
+        &["uninstall", "quest"],
+        &["data", "quest", "reset-prefix"],
+        &["journal", "quest", "--remove", "20261004-120000"],
+        &["recordings", "quest", "--remove", "20261004-120000"],
+        &["storage", "trash", "/nowhere"],
+    ];
+    for args in asks {
+        let out = universe(&dir, args, &[NO_BUS]);
+        assert_eq!(out.status.code(), Some(2), "{args:?}: {}", text(&out.stderr));
+        assert!(text(&out.stderr).contains("--yes"), "{args:?}: {}", text(&out.stderr));
+        let out = universe(&dir, &[&["--json"], args].concat(), &[NO_BUS]);
+        assert_eq!(out.status.code(), Some(2), "{args:?} --json");
+        assert_eq!((&object(&out)["ok"], &object(&out)["error"]), (&serde_json::json!(false), &serde_json::json!("usage")), "{args:?}");
+    }
+    assert!(dir.path().join("data/games/quest/game.toml").is_file(), "nothing was removed");
+    let missing = universe(&dir, &["--json", "info", "nope"], &[NO_BUS]);
+    assert_eq!((missing.status.code(), &object(&missing)["error"]), (Some(1), &serde_json::json!("not_found")));
+    assert!(text(&missing.stderr).contains("no game matches"), "stderr keeps the line a script reads");
+    for (args, key, expected) in [
+        (&["set", "quest", "fps_limit=60"][..], "set", serde_json::json!({"launch.fps_limit": "60"})),
+        (&["config", "set", "launch.hdr", "true"], "key", serde_json::json!("launch.hdr")),
+        (&["rm", "quest", "--yes"], "id", serde_json::json!("quest")),
+        (&["restore", "quest"], "id", serde_json::json!("quest")),
+    ] {
+        let out = universe(&dir, &[&["--json"], args].concat(), &[NO_BUS]);
+        assert!(out.status.success(), "{args:?}: {}", text(&out.stderr));
+        let done = object(&out);
+        assert_eq!((&done["ok"], &done["result"][key]), (&serde_json::json!(true), &expected), "{args:?}: {done}");
+    }
+}
+
+/// A store `shim` whose games `a` and `b` have an update; `b`'s fails. Its verbs land in `calls`.
+fn updating_store(dir: &tempfile::TempDir) -> std::path::PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::write(dir.path().join("config/config.toml"), "schema = 2\n[desktop]\nprofile = \"none\"\n[sources]\nenabled = [\"shim\"]\n").unwrap();
+    let source = dir.path().join("sources/shim");
+    std::fs::create_dir_all(&source).unwrap();
+    std::fs::write(source.join("source.toml"), "api = 2\nid = \"shim\"\nname = \"Shim\"\nexe = \"run\"\n[login]\nkind = \"key\"\nhint = \"Make a key.\"\n")
+        .unwrap();
+    let calls = dir.path().join("calls");
+    let run = format!(
+        r#"#!/bin/sh
+echo "$*" >> '{calls}'
+case "$1 $2" in
+  "update ") for g in a b; do echo "{{\"event\":\"update\",\"id\":\"$g\",\"title\":\"$g\",\"local_build\":\"1\",\"remote_build\":\"2\",\"version\":\"2\"}}"; done ;;
+  "update b") echo "disk full" >&2; exit 1 ;;
+  "login ") echo '{{"event":"login_url","url":"https://example.invalid/keys"}}' ;;
+  "login good") echo '{{"event":"logged_in","user":"player"}}' ;;
+  "login "*) echo "the store refused the key" >&2; exit 1 ;;
+esac
+echo '{{"event":"done"}}'
+"#,
+        calls = calls.display()
+    );
+    std::fs::write(source.join("run"), run).unwrap();
+    std::fs::set_permissions(source.join("run"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    for g in ["a", "b"] {
+        let folder = dir.path().join(format!("games/{g}"));
+        std::fs::create_dir_all(&folder).unwrap();
+        std::fs::write(folder.join("run.sh"), "#!/bin/sh\n").unwrap();
+        let game = dir.path().join(format!("data/games/{g}"));
+        std::fs::create_dir_all(&game).unwrap();
+        std::fs::write(
+            game.join("game.toml"),
+            format!(
+                "schema = 1\nid = \"{g}\"\ntitle = \"{g}\"\n[source]\nkind = \"shim\"\nid = \"{g}\"\ndir = \"{0}\"\n[launch]\nrunner = \"linux\"\nexe = \"{0}/run.sh\"\n",
+                folder.display()
+            ),
+        )
+        .unwrap();
+    }
+    calls
+}
+
+#[test]
+fn update_yes_exits_non_zero_when_one_store_update_fails_and_says_which_in_one_object() {
+    let dir = no_desktop();
+    let calls = updating_store(&dir);
+    let listed = universe(&dir, &["--json", "update"], &[NO_BUS]);
+    let rows: Vec<serde_json::Value> = serde_json::from_slice(&listed.stdout).unwrap_or_else(|e| panic!("{e}: {}", text(&listed.stderr)));
+    assert_eq!(rows.iter().map(|r| r["id"].clone()).collect::<Vec<_>>(), ["a", "b"], "--json without --yes lists");
+    let asked = universe(&dir, &["update"], &[NO_BUS]);
+    assert_eq!(asked.status.code(), Some(2), "{}", text(&asked.stderr));
+    let applied = |calls: &std::path::Path| std::fs::read_to_string(calls).unwrap().lines().filter(|l| l.starts_with("update ") && l.len() > 7).count();
+    assert_eq!(applied(&calls), 0, "no terminal, no --yes: nothing updated");
+    let out = universe(&dir, &["update", "--yes", "--json"], &[NO_BUS]);
+    assert_eq!(out.status.code(), Some(1), "{}", text(&out.stderr));
+    let done: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| panic!("{e}: {}", text(&out.stdout)));
+    assert_eq!(
+        (&done["ok"], &done["error"], &done["result"]["updated"]),
+        (&serde_json::json!(false), &serde_json::json!("partial"), &serde_json::json!(["a"]))
+    );
+    assert_eq!(done["result"]["failed"][0]["id"], "b", "{done}");
+    assert_eq!(applied(&calls), 2);
+    assert_eq!(universe(&dir, &["update", "--yes"], &[NO_BUS]).status.code(), Some(1), "on a terminal's text too");
+}
+
+#[test]
+fn login_without_a_terminal_hands_over_the_link_and_the_next_command_then_says_what_follows() {
+    let dir = no_desktop();
+    updating_store(&dir);
+    let piped = |args: &[&str], input: &str| {
+        use std::io::Write;
+        let mut child = command(&dir, args, &[NO_BUS])
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        child.stdin.take().unwrap().write_all(input.as_bytes()).unwrap();
+        child.wait_with_output().unwrap()
+    };
+    let link = piped(&["login", "shim"], "");
+    assert!(link.status.success(), "{}", text(&link.stderr));
+    assert!(text(&link.stdout).contains("https://example.invalid/keys") && text(&link.stdout).contains("universe login shim <key>"), "{}", text(&link.stdout));
+    let link: serde_json::Value = serde_json::from_slice(&piped(&["--json", "login", "shim"], "").stdout).unwrap();
+    assert_eq!(
+        (&link["result"]["url"], &link["result"]["next"]),
+        (&serde_json::json!("https://example.invalid/keys"), &serde_json::json!("universe login shim <key>"))
+    );
+    let refused = universe(&dir, &["login", "shim", "bad"], &[NO_BUS]);
+    assert_eq!(refused.status.code(), Some(1));
+    assert!(text(&refused.stderr).contains("`universe login shim`"), "a failed login says how to try again: {}", text(&refused.stderr));
+    let signed = piped(&["--json", "login", "shim"], "good\n");
+    let signed: serde_json::Value = serde_json::from_slice(&signed.stdout).unwrap_or_else(|e| panic!("{e}: {}", text(&signed.stderr)));
+    assert_eq!(signed["result"]["user"], "player", "a key piped in is taken");
+    assert!(signed["result"]["next"].as_array().unwrap().iter().any(|n| n.as_str().unwrap().contains("universe library shim")), "{signed}");
 }
 
 #[path = "../src/testbus/mod.rs"]

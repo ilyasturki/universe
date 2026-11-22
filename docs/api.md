@@ -16,6 +16,42 @@ The crate hands back its structs or `serde_json::Value`s, Python the same as dic
 the CLI prints them as JSON under `--json`. Each table below gives all three spellings of the same
 operation; a dash means the surface doesn't expose it.
 
+### The CLI's contract
+
+Every command behaves the same way on these four points:
+
+- **Results.** A command that changes something (`add`, `rm`, `restore`, `install`, `uninstall`,
+  `update --yes`, `set`, `config set`, `login`, `scan`, `rescan`, `migrate --apply`, `setup`, the
+  `module`, `source`, `runner`, `component`, `extension`, `controller`, `network` and `bluetooth`
+  verbs that change state, `media refresh|set|unset|pin`, `saves backup|restore|export` and `saves
+  cloud` with an action, `data <name> move-prefix|reset-prefix|winecfg|winetricks|run|kill`,
+  `storage trash`, the `--remove`, `--write` and `--retry` of `journal`, `recordings` and
+  `screenshots`, `achievements --replay`, `output <id>`, `screenshot`, `play`, `stop`) prints one
+  object under `--json`: `{"ok", "error", "message", "result"}`. `ok` is whether everything asked was
+  done; `error` is `null`, else the kind: `not_found`, `ambiguous`, `busy`, `invalid`, `unavailable`,
+  `io` (the core's error kinds), `usage` (the command line cannot run as given), `failed` (any other
+  failure) or `partial` (part of it failed, and `result` says which); `message` is the line the
+  terminal shows; `result` is the command's own data (the game for `add`, `{id, purged}` for `rm`,
+  `{updated, failed: [{id, error, message}], by_hand}` for `update --yes`, `null` for a failure).
+  A read-only command's `--json` prints its data as each table below says; when it fails it prints
+  the same failure object. The hidden commands hooks and units run (`session-end`, `journal-add`,
+  `recording-file`, `achievement-unlocked`, …) print what their own rows say.
+- **Errors.** A failure is printed as `universe: <kind>: <message>` on stderr as well, `--json` or not:
+  what a hook reading stderr shows.
+- **Questions.** A command that asks before it acts (`rm`, `uninstall`, `update`, `data <name>
+  move-prefix|reset-prefix`, `storage trash`, `saves restore`, `saves cloud --keep-local|--keep-cloud`,
+  the `--remove` of `journal`, `recordings` and `screenshots`, `component install` of a build with a
+  notice, `extension install`) asks on a terminal; `--yes` answers yes; with no terminal on stdin, or
+  under `--json`, it refuses as `usage` and does nothing. An ambiguous game name is asked about on a
+  terminal the same way and is `ambiguous` elsewhere. `bluetooth pair`'s passkey questions and
+  `login`'s code are no yes-or-no: `login` reads a code piped on stdin, and with none (or under
+  `--json`) prints the link, the source's hint and the command that takes the code, exit 0.
+- **Exit status.** `0`: everything asked was done (a question answered no on a terminal included);
+  `1`: it failed, in whole or in part (an update of `update --yes`, `component update` or
+  `extension update` that failed, `add --media` whose artwork failed, a pad `controller reconnect`
+  could not bring back, a failed `doctor` check); `2`: usage, clap's own errors and the questions
+  above; `130`: `play` stopped by a second Ctrl-C.
+
 ## Process model
 
 - A play session is a **transient systemd unit**, `universe-game-<id>-<session>.service`, with
@@ -811,8 +847,8 @@ source unavailable, and `doctor` reports it as fetched on first use.
 | `source_settings(source, game_id)` | `source_settings(source, game_id="")` | `universe source settings <id> [game]` | the source's settings, defaults under `config.toml [sources.<id>]`, then a game's own game-scope keys (`game.toml [sources.<id>]`) when `game_id` names one; an empty `games_dir` default reads `paths.games_root` |
 | `set_source_setting(source, game_id, key, value)` | `set_source_setting(source, key, value, game_id="")` | `universe source set <id> k=v [--game g]` | validated against `[[settings]]`; `game_id=""` writes `config.toml [sources.<id>]`, otherwise a game-scope key into `game.toml [sources.<id>]` (`set(id, "sources.<id>.<key>", value)` is the same write) |
 | `source_setting_choices(source, key)` | `source_setting_choices(…)` | — | the setting's choices, live through `choices_exec` (as for modules) |
-| `source_login_url(source)` | `login_url(source)` | `universe login <source>` | URL to open |
-| `source_login(source, code)` | `login(source, code)` | `universe login <source> <code>` | returns the user name |
+| `source_login_url(source)` | `login_url(source)` | `universe login <source>` | URL to open; the CLI prints it with the source's `login.hint` and asks for the code or key on a terminal, takes one piped on stdin, else names the command that takes it (`universe login <source> <code>`) |
+| `source_login(source, code)` | `login(source, code)` | `universe login <source> <code>` | returns the user name; the CLI then names what follows (`universe library`, `universe install` for a source whose `login.purpose` is installing, `universe scan`), and a refused code says to run `universe login <source>` again for a new link |
 | `source_library(source, refresh)` | `library(source, refresh)` | `universe library [source] [--refresh]` | `[SourceGame]`: the store's listing from cache unless `refresh` (the cache is the core's `library.json` under the source's data dir; a failed refresh keeps it), crossed with the disk through the source's `scan` every time: an install's `disk_size`, a stopped download's `partial_dir` and `partial_bytes` |
 | `source_search(source, query)` | `search(source, query)` | `universe search <query> [--source]` | `[SourceGame]` |
 | `source_info(source, game_id)` | `info(source, game_id)` | — | the source's raw `info` payload, plus the `download_size` and `disk_size` it reports; those two are remembered in the library cache, so a listing carries them from then on |

@@ -432,7 +432,7 @@ fn hud_limit_and_filter_changed_in_game_last_the_session_and_leave_the_settings_
     // The id names the layer's abstract socket, which every run on the machine shares.
     let title = format!("Session Quest {}", std::process::id());
     let added: serde_json::Value = serde_json::from_str(&universe(&["--json", "add", game.to_str().unwrap(), "--runner", "linux", "--title", &title])).unwrap();
-    let id = added["id"].as_str().unwrap().to_string();
+    let id = added["result"]["id"].as_str().unwrap().to_string();
     universe(&["set", &id, "mangohud=true", "fps_limit=60", "gamescope_filter=fsr", "gamescope_sharpness=3"]);
     let game_toml = root.join("data/games").join(&id).join("game.toml");
     let settings = || (std::fs::read_to_string(&game_toml).unwrap(), std::fs::read_to_string(&config).unwrap());

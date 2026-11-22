@@ -63,8 +63,8 @@ def universe(tmp_path_factory):
         (root / "roms" / file).touch()
         added = json.loads(run("--json", "add", str(root / "roms" / file), "--runner", runner, *(("--platform", platform) if platform else ())))
         if settings:
-            run("module", "set", "controls", *settings, "--game", added["id"])
-        games[key] = run("--json", "info", added["id"])
+            run("module", "set", "controls", *settings, "--game", added["result"]["id"])
+        games[key] = run("--json", "info", added["result"]["id"])
     run.env, run.games = env, games
     return run
 
