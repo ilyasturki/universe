@@ -839,7 +839,8 @@ job (`source_adopt`), which brings that one game in and no other, then a toast o
 the row linked. The first run's adoption and Universe Desktop's Find Installed Games stay the
 store's whole `scan`. `trash(id)`, by the store's id since the confirm outlives reloads, removes
 such a row's folder (`source_trash`: through the store, or to the trash), never while that row's
-add runs; the core's refusal is the toast.
+add runs. It and `uninstall(gameId)` end in `finished(key, ok, message)` (`trash:<id>`, `uninstall:<game>`), which main.qml
+toasts, so the result, or the core's refusal, still reaches the player once the page is closed.
 While an install or update runs
 `job` is `{id, game, title, label, message, done, total, ok, cancelled}`, `done`/`total` in bytes and
 `message` the live line ("Installing X · 42% · 3.4 GB of 8.2 GB"); the rows are rebuilt at its start
