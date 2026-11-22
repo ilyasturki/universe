@@ -133,7 +133,6 @@ pub fn prefix_sharer<'a>(g: &crate::game::Game, games: &'a [crate::library::Reso
     games.iter().map(|r| &r.game).find(|x| x.id != g.id && x.removed_at.is_empty() && same_prefix(x, g, config))
 }
 
-/// The one folder both prefixes are, whatever links either path goes through.
 pub fn same_prefix(a: &crate::game::Game, b: &crate::game::Game, config: &Config) -> bool {
     let real = |g| {
         let p = prefix_of(g, config);

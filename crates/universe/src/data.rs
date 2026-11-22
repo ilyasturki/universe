@@ -267,7 +267,7 @@ impl Core {
                 Ok(()) => held.push(f),
                 Err(std::fs::TryLockError::WouldBlock) => {
                     self.refuse_busy(g).await?;
-                    return Err(Error::Busy(format!("{}'s files are being changed: try again when that ends", g.title)));
+                    return Err(Error::Busy(format!("{}'s files are in use: try again when that ends", g.title)));
                 }
                 Err(std::fs::TryLockError::Error(e)) => return Err(e.into()),
             }
