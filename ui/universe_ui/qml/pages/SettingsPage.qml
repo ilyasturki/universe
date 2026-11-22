@@ -332,7 +332,6 @@ FocusScope {
                     installed: g.installed,
                     busy: g.busy,
                     partial: g.partial,
-                    partialDir: g.partial_dir,
                     pending: g.pending,
                     gameId: g.game_id,
                     image: g.image,

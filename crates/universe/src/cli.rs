@@ -1548,7 +1548,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             done(json, format!("restored {id}"), serde_json::json!({"id": id, "kept_archived": kept}))?;
         }
         Cmd::Uninstall { name, yes, source: Some(source) } => {
-            if !confirmed(json, yes, &format!("trash {source}'s install of {name}?"))? {
+            if !confirmed(json, yes, &format!("trash {source}'s install or stopped download of {name}?"))? {
                 return declined();
             }
             let trashed = core.source_trash(&source, &name).await?;

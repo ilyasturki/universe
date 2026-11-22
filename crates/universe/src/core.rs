@@ -177,8 +177,7 @@ fn trash_refusal(dir: &Path, games: &[Resolved], roots: &[PathBuf], except: &[&s
     user.map(|g| format!("refusing to trash {}: {} uses it", dir.display(), g.id))
 }
 
-/// A store download of `sid`, in any process: an install or update holds it shared while its verb runs, a discard alone.
-/// `None` while another holder rules it out.
+/// Held shared by an install or update of `sid` while its verb runs, alone by a trash, in any process; `None` while ruled out.
 fn download_lock(source: &str, sid: &str, alone: bool) -> Result<Option<std::fs::File>> {
     let name: String = format!("{source}-{sid}").chars().map(|c| if c.is_ascii_alphanumeric() || "._-".contains(c) { c } else { '_' }).collect();
     let p = paths::state_home().join("downloads").join(name);
@@ -2493,6 +2492,7 @@ impl Core {
     /// a stopped download of it is discarded the same way.
     pub async fn source_trash(&self, source: &str, game_id: &str) -> Result<String> {
         let m = self.source(source).await?;
+        let _download = download_lock(m.id(), game_id, true)?.ok_or_else(|| Error::Busy(format!("{game_id} is downloading: cancel it first")))?;
         let found: Vec<_> = Self::game_events(&self.run_verb(&m, "scan", &[], None).await?)
             .into_iter()
             .filter(|g| g.get("id").and_then(|v| v.as_str()) == Some(game_id))
@@ -2508,16 +2508,9 @@ impl Core {
         }
     }
 
-    /// A stopped download's folders go to the trash, then the store forgets it: in that order, a failure leaves a row to discard
-    /// again, never a record of nothing. A store without `discard` that uninstalls removes its own (Steam's client).
+    /// Trashes before the store forgets, so a failure leaves a row to discard again; a store with `uninstall` alone removes its own.
     async fn discard_download(&self, m: &Source, game_id: &str, g: &serde_json::Map<String, serde_json::Value>) -> Result<String> {
-        let title = g.get("title").and_then(|v| v.as_str()).filter(|t| !t.is_empty()).unwrap_or(game_id);
-        let _download = download_lock(m.id(), game_id, true)?.ok_or_else(|| Error::Busy(format!("{title} is downloading: cancel it first")))?;
         let shown = paths::expand(g.get("partial_dir").and_then(|v| v.as_str()).unwrap_or_default());
-        if !m.can("discard") && m.can("uninstall") {
-            self.run_verb(m, "uninstall", &[game_id.to_string()], None).await?;
-            return Ok(shown.to_string_lossy().into());
-        }
         let named: Option<Vec<PathBuf>> = g
             .get("partial_dirs")
             .and_then(|v| v.as_array())
@@ -2537,6 +2530,10 @@ impl Core {
             Some(g) => Some(self.hold_files(&[g]).await?),
             None => None,
         };
+        if !m.can("discard") && m.can("uninstall") {
+            self.run_verb(m, "uninstall", &[game_id.to_string()], None).await?;
+            return Ok(shown.to_string_lossy().into());
+        }
         for d in &dirs {
             trash(d)?;
         }
@@ -3592,10 +3589,14 @@ scan) for i in 1 2 3; do echo "{\"event\":\"game\",\"id\":\"$i\",\"title\":\"Gam
         for (_, d) in &installs {
             std::fs::create_dir_all(d.join("bin")).unwrap();
         }
-        let echo: Vec<String> = installs
+        let mut echo: Vec<String> = installs
             .iter()
             .map(|(id, d)| format!(r#"echo '{{"event":"game","id":"{id}","title":"{id}","owned":true,"installed":true,"dir":"{}"}}'"#, d.display()))
             .collect();
+        echo.push(format!(
+            r#"echo '{{"event":"game","id":"stopped","title":"stopped","owned":true,"installed":false,"partial_dir":"{}"}}'"#,
+            pc.join("Held").display()
+        ));
         std::fs::write(
             dir.path().join("sources/fake/run"),
             format!(
@@ -3637,6 +3638,7 @@ scan) for i in 1 2 3; do echo "{\"event\":\"game\",\"id\":\"$i\",\"title\":\"Gam
             .unwrap();
         let core = open().await;
         assert!(matches!(core.source_trash("fake", "held").await, Err(Error::Invalid(_))), "the store is asked only past the same guards");
+        assert!(matches!(core.source_trash("fake", "stopped").await, Err(Error::Invalid(_))), "a stopped download in a game's folder too");
         core.source_trash("fake", "kept").await.unwrap();
         assert_eq!(std::fs::read_to_string(&asked).unwrap(), "kept\n", "a store that uninstalls is asked, so it forgets the install too");
         assert!(pc.join("Kept").is_dir(), "its files are the store's to remove");

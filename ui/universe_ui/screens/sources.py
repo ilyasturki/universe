@@ -46,7 +46,6 @@ def _source_row(game, updates, art, banner, job):
         "installed": installed,
         "pending": pending,
         "partial": partial,
-        "partial_dir": str(game.get("partial_dir") or "") if partial else "",
         "busy": busy,
         "status": status,
         "disk_size": disk,
@@ -350,8 +349,7 @@ class SourcesBrowser(AsyncScreen):
 
     @Slot(str)
     def trash(self, game_id):
-        """By the store's id, not the row's index: the confirm before it outlives reloads that reorder the rows. A stopped
-        download is thrown away the same way."""
+        """By the store's id, not the row's index: the confirm before it outlives reloads that reorder the rows."""
         row = next((r for r in self._rows if r["id"] == game_id), None)
         found = row and row["installed"] and not row["game_id"]
         if not row or not (found or row["partial"]) or row["busy"] or (self._adding and self._adding["game"] == game_id):

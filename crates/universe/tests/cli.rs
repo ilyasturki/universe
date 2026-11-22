@@ -2136,8 +2136,9 @@ fn a_paused_gog_download_is_refused_while_it_runs_then_goes_to_the_trash_and_off
         assert!(started.elapsed() < std::time::Duration::from_secs(10), "gogdl began no download");
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
-    let out = universe(&dir, &["uninstall", "1434554947", "--source", "gog", "--yes"], &env);
-    assert!(!out.status.success() && text(&out.stderr).contains("downloading"), "refused while it runs: {}", text(&out.stderr));
+    let out = universe(&dir, &["uninstall", "1434554947", "--source", "gog", "--yes", "--json"], &env);
+    let refused: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| panic!("{e}: {}", text(&out.stderr)));
+    assert_eq!((out.status.code(), &refused["error"]), (Some(1), &serde_json::json!("busy")), "refused while it runs: {}", text(&out.stderr));
     assert!(folder.join("part.bin").is_file(), "the running download keeps its files");
     rustix::process::kill_process_group(rustix::process::Pid::from_raw(install.id() as i32).unwrap(), rustix::process::Signal::TERM).unwrap();
     install.wait().unwrap();

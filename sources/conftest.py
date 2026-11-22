@@ -75,8 +75,7 @@ def settings(monkeypatch):
 
 @pytest.fixture
 def core(tmp_path, monkeypatch, shims):
-    """The real in-process core on a sealed profile under `tmp_path/profile`, the source turned on with `settings`; the
-    trash is the profile's home's."""
+    """The real in-process core on a sealed profile; the trash is the profile's home's."""
     universe_core = pytest.importorskip("universe_core")
     root = tmp_path / "profile"
 

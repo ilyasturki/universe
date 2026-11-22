@@ -75,7 +75,6 @@ struct Entry {
     dir: String,
     /// A stopped download waits on the disk.
     partial: bool,
-    partial_dir: String,
     download: u64,
     disk: u64,
     kept: u64,
@@ -93,7 +92,6 @@ impl Entry {
             installed,
             dir: text(v, "dir"),
             partial: !installed && !text(v, "partial_dir").is_empty(),
-            partial_dir: text(v, "partial_dir"),
             download: bytes(v, "download_size"),
             disk: bytes(v, "disk_size"),
             kept: bytes(v, "partial_bytes"),
@@ -1008,7 +1006,7 @@ impl StorePage {
         let body = if caps.iter().any(|c| c == "uninstall") && !caps.iter().any(|c| c == "discard") {
             gettext("{} removes what came down.").replace("{}", &text(&self.store(), "name"))
         } else {
-            gettext("{} goes to the trash.").replace("{}", &tilde(&entry.partial_dir))
+            gettext("What came down goes to the trash.")
         };
         let dialog = adw::AlertDialog::new(Some(&gettext("Delete {}'s Download?").replace("{}", &entry.title)), Some(&body));
         dialog.add_responses(&[("cancel", &gettext("_Cancel")), ("trash", &gettext("_Delete Download"))]);

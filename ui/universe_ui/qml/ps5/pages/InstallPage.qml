@@ -509,7 +509,7 @@ FocusScope {
         } else if (id === "trash" && g.partial) {
             shell.dialogAsk({
                 message: "Delete " + title + "'s Download?",
-                detail: (sources.discardVia ? sources.discardVia + " removes it" : g.partial_dir + " goes to the trash") + ".",
+                detail: sources.discardVia ? sources.discardVia + " removes it." : "What came down goes to the trash.",
                 buttons: ["Cancel", "Delete"],
                 danger: 1,
                 index: 0
