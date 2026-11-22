@@ -12,6 +12,8 @@ Item {
     property int current: 0
     property bool active: false
     property bool titleShown: true
+    // The Games row's tiles are games with a menu; the Media row's are their channels.
+    property bool menus: false
     // Held off while the home builds itself back after a game: the tiles come in from the focused one out.
     property real reveal: 1.0
 
@@ -66,7 +68,7 @@ Item {
 
             Touch {
                 current: tile.focused
-                menu: tile.kind === "game"
+                menu: rail.menus && tile.kind === "game"
                 onPicked: rail.pointed(index)
             }
         }

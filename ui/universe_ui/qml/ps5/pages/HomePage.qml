@@ -1379,6 +1379,7 @@ FocusScope {
             y: Theme.dp(Theme.railY)
             width: parent.width
             entries: page.gameEntries
+            menus: true
             current: page.gamesIndex
             active: page.zone === "rail" && page.tab === 0 && page.activeFocus
             titleShown: page.titleShown
