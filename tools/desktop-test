@@ -25,10 +25,11 @@ fails. Where FUSE is at hand, a drive that never answers holds the library's
 read: Try Again goes on from there, not opening the core again, and once the
 drive is unmounted opens the library. A store refusing an install says why in
 its own words, whole in a toast. A paused download's row deletes it after
-asking, its folder to the trash and the store's record with it. A store game
-installed again elsewhere through the CLI plays from there. Each run is a script
-of steps (button:, has:, lacks:, view:, dialog:, answer:, toast:, said:, copy:,
-feed:, move:, action:, shot:; docs/frontends.md has them).
+asking, its folder to the trash and the store's record with it, unless a library
+game stands for it. A store game installed again elsewhere through the CLI plays
+from there. Each run is a script of steps (button:, has:, lacks:, view:, dialog:,
+answer:, toast:, said:, copy:, feed:, move:, action:, shot:; docs/frontends.md
+has them).
 
 Fails when weston or the app does not start, a script step fails (an action
 missing, a button missing or disabled, a view, dialog or toast not shown, a
@@ -436,12 +437,19 @@ smoke_toml="$tmp/config/sources/desktop-smoke/source.toml"
 cp "$smoke_toml" "$tmp/smoke-source.toml"
 
 # A paused download's row deletes it after asking: its folder to this run's own trash, the store's record gone, Install offered again.
+# One a library game stands for (123 is store-smoke's) has no delete: removing the game from the library comes first.
 paused="$tmp/games/Paused Smoke"
-mkdir -p "$paused"
+held="$tmp/games/Held Smoke"
+mkdir -p "$paused" "$held"
 printf 'x' >"$paused/part.bin"
+printf 'x' >"$held/part.bin"
 : >"$tmp/smoke-partial"
 echo 'capabilities = ["discard"]' >>"$smoke_toml"
-sed -i "s|^    info)|    scan) [ -e '$tmp/smoke-partial' ] \&\& [ -d '$paused' ] \&\& echo '{\"event\":\"game\",\"id\":\"123\",\"title\":\"Paused Smoke\",\"owned\":true,\"installed\":false,\"partial_dir\":\"$paused\",\"partial_bytes\":1}' ;;\n    discard) rm '$tmp/smoke-partial' ;;\n&|" "$smoke_run"
+sed -i "/^    library)/s| ;;\$|; echo '{\"event\":\"game\",\"id\":\"124\",\"title\":\"Paused Smoke: The Long Edition of a Game\",\"owned\":true,\"installed\":false,\"disk_size\":1000}' ;;|" "$smoke_run"
+sed -i "s|^    info)|    scan) echo '{\"event\":\"game\",\"id\":\"123\",\"title\":\"Held Smoke\",\"owned\":true,\"installed\":false,\"partial_dir\":\"$held\",\"partial_bytes\":1}'; [ -e '$tmp/smoke-partial' ] \&\& [ -d '$paused' ] \&\& echo '{\"event\":\"game\",\"id\":\"124\",\"title\":\"Paused Smoke: The Long Edition of a Game\",\"owned\":true,\"installed\":false,\"partial_dir\":\"$paused\",\"partial_bytes\":1}' ;;\n    discard) rm '$tmp/smoke-partial' ;;\n&|" "$smoke_run"
+grep -q '"id":"124"' "$smoke_run" || fail "the store stand-in lists no second game"
+listing="$UNIVERSE_DATA_HOME/sources/desktop-smoke/library.json"
+[ -f "$listing" ] && mv "$listing" "$tmp/listing-was.json"
 grep -q '^    discard)' "$smoke_run" || fail "the store stand-in keeps no paused download"
 # The recovery's two other stores keep Desktop Smoke's name, and the Store page may open on either.
 cp "$UNIVERSE_CONFIG_HOME/config.toml" "$tmp/config-was.toml"
@@ -449,13 +457,15 @@ sed -i 's/^enabled = \["desktop-smoke", "desktop-out", "desktop-gone"\]$/enabled
 grep -q '^enabled = \["desktop-smoke"\]$' "$UNIVERSE_CONFIG_HOME/config.toml" || fail "the config keeps other stores beside Desktop Smoke"
 (
     export HOME="$tmp/home" XDG_DATA_HOME="$tmp/home/.local/share"
-    run paused "action:win.view::store button:store.trash dialog:cancel answer:trash has:store.install::123"
+    run paused "action:win.view::store has:store.resume::123 lacks:store.trash::123 button:store.trash dialog:cancel answer:trash has:store.install::124"
 )
 [ ! -e "$paused" ] && [ -f "$tmp/home/.local/share/Trash/files/Paused Smoke/part.bin" ] || fail "the paused download is not in the trash ($out/paused.log)"
 [ ! -e "$tmp/smoke-partial" ] || fail "the store was not asked to forget the paused download ($out/paused.log)"
+[ -f "$held/part.bin" ] || fail "the download a library game stands for was deleted ($out/paused.log)"
 cp "$tmp/smoke-run" "$smoke_run"
 cp "$tmp/smoke-source.toml" "$smoke_toml"
 cp "$tmp/config-was.toml" "$UNIVERSE_CONFIG_HOME/config.toml"
+[ -f "$tmp/listing-was.json" ] && mv "$tmp/listing-was.json" "$listing"
 
 # A store that refuses an install says why in its own words, whole in a toast at the window's scripted size.
 python3 - "$repo" "$tmp" <<'PY'

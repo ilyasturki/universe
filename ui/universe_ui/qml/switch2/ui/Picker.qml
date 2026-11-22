@@ -7,6 +7,7 @@ Modal {
 
     property string title: ""
     property var choices: []
+    property var acts: []
     // One file per choice (a runner's logo), drawn before its label; empty entries draw nothing.
     property var icons: []
     property int index: 0
@@ -54,6 +55,7 @@ Modal {
         current = spec.index !== undefined ? spec.index : -1;
         index = Math.max(0, Math.min(spec.choices.length - 1, current));
         choices = spec.choices;
+        acts = spec.acts || [];
         icons = spec.icons || [];
         alt = spec.alt || "";
         present(done);

@@ -352,7 +352,7 @@ class SourcesBrowser(AsyncScreen):
         """By the store's id, not the row's index: the confirm before it outlives reloads that reorder the rows."""
         row = next((r for r in self._rows if r["id"] == game_id), None)
         found = row and row["installed"] and not row["game_id"]
-        if not row or not (found or row["partial"]) or row["busy"] or (self._adding and self._adding["game"] == game_id):
+        if not row or not (found or (row["partial"] and not row["game_id"])) or row["busy"] or (self._adding and self._adding["game"] == game_id):
             return
         source, title, uninstalls = self._source, row["title"], self._uninstalls()
         said = f"Uninstalled {title}" if uninstalls else f"{title}'s files are in the trash"

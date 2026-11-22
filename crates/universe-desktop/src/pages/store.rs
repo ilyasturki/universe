@@ -588,15 +588,17 @@ impl StorePage {
         for entry in &paused {
             let row = self.row(entry, &entry.paused());
             row.add_suffix(&button(&gettext("_Resume"), "store.resume", &entry.id));
-            let delete = gtk::Button::builder()
-                .icon_name("user-trash-symbolic")
-                .tooltip_text(gettext("Delete Download"))
-                .valign(gtk::Align::Center)
-                .action_name("store.trash")
-                .action_target(&entry.id.to_variant())
-                .css_classes(["flat"])
-                .build();
-            row.add_suffix(&delete);
+            if entry.game_id.is_empty() {
+                let delete = gtk::Button::builder()
+                    .icon_name("user-trash-symbolic")
+                    .tooltip_text(gettext("Delete Download"))
+                    .valign(gtk::Align::Center)
+                    .action_name("store.trash")
+                    .action_target(&entry.id.to_variant())
+                    .css_classes(["flat"])
+                    .build();
+                row.add_suffix(&delete);
+            }
             self.add(&imp.job_group, &row);
         }
         imp.job_row.set_visible(job.is_some());
@@ -976,7 +978,7 @@ impl StorePage {
     }
 
     fn confirm_trash(&self, id: &str) {
-        let Some(entry) = self.entry(id).filter(|e| (e.installed && e.game_id.is_empty()) || e.partial) else { return };
+        let Some(entry) = self.entry(id).filter(|e| (e.installed || e.partial) && e.game_id.is_empty()) else { return };
         if self.app().and_then(|app| app.job()).is_some_and(|job| job.target() == id) {
             return;
         }

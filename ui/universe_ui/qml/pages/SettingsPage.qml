@@ -1541,7 +1541,7 @@ FocusScope {
                 label: row.partial ? "Resume" : "Install",
                 action: row.partial ? "resume" : "install"
             });
-            if (row.partial)
+            if (row.partial && !row.gameId)
                 out.push({
                     icon: "trash",
                     label: "Delete download…",

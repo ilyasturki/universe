@@ -400,7 +400,7 @@ FocusScope {
 
     function moreOf(g) {
         var game = libraryGameOf(g);
-        var discard = g.partial && !g.busy ? [
+        var discard = g.partial && !g.busy && !g.game_id ? [
             {
                 label: "Delete Download…",
                 glyph: "trash",
@@ -430,7 +430,7 @@ FocusScope {
                 gap: true
             });
         }
-        return items.concat(discard);
+        return items;
     }
 
     function actionsFor(g) {

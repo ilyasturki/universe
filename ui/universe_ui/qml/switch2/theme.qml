@@ -422,6 +422,9 @@ FocusScope {
             title: title,
             choices: items.map(function (i) {
                 return i.label;
+            }),
+            acts: items.map(function (i) {
+                return i.act;
             })
         }, function (i) {
             if (i >= 0)

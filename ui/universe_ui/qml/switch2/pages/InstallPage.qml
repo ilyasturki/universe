@@ -235,9 +235,11 @@ FocusScope {
         }
         var items = [];
         var inLibrary = g.installed && g.game_id && !!api.allGames.byId(g.game_id);
-        if (g.partial)
-            items.push({ label: "Resume", act: "resume" }, { label: "Delete Download…", act: "trash" });
-        else if (g.pending)
+        if (g.partial) {
+            items.push({ label: "Resume", act: "resume" });
+            if (!g.game_id)
+                items.push({ label: "Delete Download…", act: "trash" });
+        } else if (g.pending)
             items.push({ label: "Update", act: "update" });
         if (g.installed && !g.game_id)
             items.push({ label: "Add to Library", act: "adopt" }, { label: "Delete Files…", act: "trash" });

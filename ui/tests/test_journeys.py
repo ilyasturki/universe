@@ -424,14 +424,9 @@ def test_a_paused_download_is_deleted_from_its_menu_after_asking_and_its_row_goe
         trace = FocusTrace(look.window, menu=menu)
         look.press(Qt.Key.Key_Return if name == "switch2" else Qt.Key.Key_F1)
         until(lambda: menu.property("open") is True)
-        if name == "switch2":
-            # Its picker holds labels alone: Resume, then the delete.
-            assert len(read(menu, "choices")) == 2, "the paused game's menu resumes or deletes it"
-            at = 1
-        else:
-            acts = [i["act"] for i in read(menu, "items")]
-            assert "trash" in acts, f"the paused game's menu deletes it: {acts}"
-            at = acts.index("trash")
+        acts = menu_acts(name, menu)
+        assert "trash" in acts, f"the paused game's menu deletes it: {acts}"
+        at = acts.index("trash")
         look.press(Qt.Key.Key_Down, at - menu.property("index"))
         look.press(Qt.Key.Key_Return)
         until(lambda: dialog.property("open") is True and dialog.property("index") == 0, "it asks first, Cancel under the cursor")
@@ -444,6 +439,36 @@ def test_a_paused_download_is_deleted_from_its_menu_after_asking_and_its_row_goe
     settle(look.window)
     trace.stop()
     assert trace.foreign(page.objectName(), MENU[name], DIALOG[name], "settingsMenu") == [], "the focus stays on the page, its menu or its question"
+
+
+def menu_acts(name, menu):
+    return menu_ids(menu) if name == "reprise" else read(menu, "acts") if name == "switch2" else [i["act"] for i in read(menu, "items")]
+
+
+@pytest.mark.parametrize("name", LOOKS)
+def test_a_paused_download_a_library_game_stands_for_offers_no_delete(journey, name):
+    store(journey)
+    folder = journey.root / "games" / "Mini Metro"
+    journey.write("games/Mini Metro/part.bin", b"x" * 300)
+    journey.write("games/Mini Metro/.gogdl-resume", "h:game:part.bin\n")
+    journey.write("data/sources/gog/partials.json", json.dumps({MINI_METRO: {"dir": str(folder), "title": "Mini Metro"}}))
+    journey.write("data/games/mini-metro/game.toml", f'schema = 1\nid = "mini-metro"\ntitle = "Mini Metro"\n[source]\nkind = "gog"\nid = "{MINI_METRO}"\n')
+    look = journey.start(look=name)
+    held = "the paused row is the library game's"
+    if name == "reprise":
+        page, row = settings(look, "install")
+        menu = page.findChild(QObject, "settingsMenu")
+        until(lambda: (r := store_row(journey, MINI_METRO)).get("partial") and r.get("game_id") == "mini-metro", held)
+        down_to(look, row, storeId=MINI_METRO)
+        look.press(Qt.Key.Key_Return)
+    else:
+        page = look.open("pages/InstallPage.qml")
+        menu = look.menu()
+        until(lambda: (r := store_row(journey, MINI_METRO)).get("partial") and r.get("game_id") == "mini-metro", held)
+        until(lambda: ((c := read(page, "current") or {}).get("game") or c).get("id") == MINI_METRO, "the paused game under the cursor")
+        look.press(Qt.Key.Key_Return if name == "switch2" else Qt.Key.Key_F1)
+    until(lambda: menu.property("open") is True)
+    assert "trash" not in menu_acts(name, menu), "the library holds that game: removing it from there comes first"
 
 
 @needs_tree
