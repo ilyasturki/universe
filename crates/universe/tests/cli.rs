@@ -1576,8 +1576,11 @@ fn another_games_saves_answer_beside_a_long_export_within_its_budget() {
     let zips = game.dir.path().join("zips");
     let (export, mut fifo) = game.stopped_at_the_mapping(&["export", "fixture-game", zips.to_str().unwrap()], &mapping);
 
-    // Its own game's backup and restore wait for it, and hold up no other game while they do.
-    let waiting = [game.spawn_backup(), game.spawn(&["restore", "fixture-game", "--yes"])];
+    // Its own game's restore and backup wait for it, and hold up no other game while they do. The restore goes first: the backup
+    // finds the game's files taken by it and queues behind it.
+    let restore = game.spawn(&["restore", "fixture-game", "--yes"]);
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    let waiting = [restore, game.spawn_backup()];
     std::thread::sleep(std::time::Duration::from_millis(100));
 
     let limit = speed_limit(1500, 20000);

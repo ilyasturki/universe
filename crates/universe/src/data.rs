@@ -227,6 +227,20 @@ fn files_lock(id: &str) -> Result<std::fs::File> {
     Ok(std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(p)?)
 }
 
+/// Shared by each restore of the game from before it waits for the files: a backup that finds them taken by one queues behind it.
+fn restore_queue(id: &str) -> Result<std::fs::File> {
+    let p = paths::state_home().join("restores").join(id);
+    std::fs::create_dir_all(p.parent().unwrap())?;
+    let f = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(p)?;
+    f.lock_shared()?;
+    Ok(f)
+}
+
+fn restore_queued(id: &str) -> bool {
+    let Ok(f) = std::fs::File::open(paths::state_home().join("restores").join(id)) else { return false };
+    matches!(f.try_lock(), Err(std::fs::TryLockError::WouldBlock))
+}
+
 impl Core {
     /// The library takes in the title ludusavi found, which the ask wrote to game.toml.
     async fn saves_ask(&self, game: &Game, config: &Config, fetch: bool) -> Result<saves::Ask> {
@@ -500,7 +514,12 @@ impl Core {
         } else if wait {
             Some(self.wait_files(&r.game, true).await?)
         } else {
-            Some(self.share_files(&r.game)?)
+            // A second try: the restore that held the files may have ended between the two checks.
+            Some(match self.share_files(&r.game) {
+                Err(Error::Busy(_)) if restore_queued(id) => self.wait_files(&r.game, true).await?,
+                Err(Error::Busy(_)) => self.share_files(&r.game)?,
+                held => held?,
+            })
         };
         let config = self.config.read().await.clone();
         let ask = self.saves_ask(&r.game, &config, true).await?;
@@ -510,6 +529,7 @@ impl Core {
     /// An empty `backup` is the latest.
     pub async fn saves_restore(&self, id: &str, backup: &str) -> Result<saves::Outcome> {
         let r = self.get(id).await?;
+        let _queued = restore_queue(id)?;
         let _held = self.wait_files(&r.game, false).await?;
         self.running(&[id.to_string()]).await?;
         let config = self.config.read().await.clone();
