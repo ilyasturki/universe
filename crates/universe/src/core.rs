@@ -333,6 +333,13 @@ impl Core {
         Ok(core)
     }
 
+    /// The core on the default settings, nothing made or reconciled: doctor's, when config.toml does not read.
+    pub fn on_defaults() -> Core {
+        let config = Config::default();
+        let host = Host::live(&config);
+        Core::new(config, host)
+    }
+
     async fn refresh_login(&self, m: &Source) {
         let user = self
             .run_verb(m, "status", &[], None)

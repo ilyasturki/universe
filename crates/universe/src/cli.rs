@@ -299,7 +299,7 @@ pub enum Cmd {
     },
     /// What other launchers (Lutris, Steam, Heroic) and the emulators' own folders hold on this machine, and what can be imported
     Discover,
-    /// Check prerequisites of the core, the enabled modules and sources
+    /// Check prerequisites of the core, the enabled modules and sources; past a config.toml that does not read, on the defaults
     Doctor,
     /// After an install: put the desktop's part in place (GNOME's shell extension), then run doctor
     Setup,
@@ -1218,6 +1218,9 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Cmd::Network { action } => return network(action.as_ref().unwrap_or(&NetworkCmd::Ls), json).await,
         Cmd::Bluetooth { action } => return bluetooth(action.as_ref().unwrap_or(&BluetoothCmd::Ls), json).await,
         _ => {}
+    }
+    if matches!(cmd, Cmd::Doctor) && crate::config::Config::load().is_err() {
+        return print_doctor(&Core::on_defaults().doctor().await, json);
     }
     let core = Core::open().await?;
     match cmd {

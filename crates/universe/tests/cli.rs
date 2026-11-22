@@ -81,6 +81,109 @@ fn doctor_needs_journalctl_not_the_systemd_clients() {
     let names: Vec<&str> = checks.iter().filter_map(|c| c["check"].as_str()).collect();
     assert!(names.contains(&"journalctl") && names.contains(&"umu-run"), "{names:?}");
     assert!(!names.contains(&"systemd-run") && !names.contains(&"systemctl"), "{names:?}");
+    let failed = checks.iter().any(|c| c["ok"] == false);
+    assert_eq!(out.status.code(), Some(if failed { 1 } else { 0 }), "--json exits as the text form does: {checks:?}");
+}
+
+/// `[paths]` and `[sources]` kept off the host's own folders and stores.
+fn doctor_config(dir: &tempfile::TempDir, extra: &str) -> String {
+    let at = |p: &str| dir.path().join(p).to_string_lossy().into_owned();
+    format!(
+        "schema = 2\n{extra}\n[paths]\ngames_root = \"{}\"\nrecordings_root = \"{}\"\n[desktop]\nprofile = \"none\"\n[sources]\nenabled = []\n",
+        at("Games"),
+        at("Videos/universe")
+    )
+}
+
+fn doctor_checks(dir: &tempfile::TempDir) -> (Option<i32>, Vec<serde_json::Value>) {
+    let out = universe(dir, &["doctor", "--json"], &[]);
+    (out.status.code(), serde_json::from_slice(&out.stdout).unwrap_or_else(|e| panic!("{e}: {}", text(&out.stdout))))
+}
+
+fn check<'a>(checks: &'a [serde_json::Value], id: &str) -> Option<&'a serde_json::Value> {
+    checks.iter().find(|c| c["check"] == id)
+}
+
+#[test]
+fn doctor_runs_on_the_defaults_past_a_config_that_does_not_read() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = dir.path().join("config/config.toml");
+    std::fs::create_dir_all(config.parent().unwrap()).unwrap();
+    std::fs::write(&config, "schema = 2\n[launch\n").unwrap();
+    let closing = dir.path().join("state/closing-sessions/s1.quest.json");
+    std::fs::create_dir_all(closing.parent().unwrap()).unwrap();
+    let record = r#"{"row":{"session":"s1","game":"quest","started_at":"2026-11-20T20:00:00+01:00"}}"#;
+    std::fs::write(&closing, record).unwrap();
+
+    let (code, checks) = doctor_checks(&dir);
+    assert_eq!(code, Some(1));
+    let failed = check(&checks, "config").expect("a config check");
+    assert_eq!(failed["ok"], false);
+    assert!(failed["detail"].as_str().unwrap().contains(&*config.to_string_lossy()), "{failed}");
+    assert!(check(&checks, "journalctl").is_some() && check(&checks, "umu-run").is_some(), "the other checks still run: {checks:?}");
+    assert_eq!(std::fs::read_to_string(&closing).unwrap(), record, "nothing is reconciled on settings it could not read");
+
+    let out = universe(&dir, &["doctor"], &[]);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(text(&out.stdout).contains(&*config.to_string_lossy()), "{}", text(&out.stdout));
+}
+
+#[test]
+fn doctor_checks_the_folders_universe_writes_into() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let config = dir.path().join("config/config.toml");
+    std::fs::create_dir_all(config.parent().unwrap()).unwrap();
+    std::fs::write(&config, doctor_config(&dir, "")).unwrap();
+    let (_, checks) = doctor_checks(&dir);
+    assert_eq!(check(&checks, "games_root").map(|c| &c["ok"]), Some(&serde_json::json!(true)), "a games folder not made yet: {checks:?}");
+    assert!(check(&checks, "recordings_root").is_none_or(|c| c["ok"] == true), "capture off, the recordings folder waits: {checks:?}");
+
+    let drive = dir.path().join("mnt");
+    std::fs::create_dir_all(&drive).unwrap();
+    std::fs::set_permissions(&drive, std::fs::Permissions::from_mode(0o555)).unwrap();
+    let unplugged = drive.join("games").to_string_lossy().into_owned();
+    let read_only = drive.to_string_lossy().into_owned();
+    let paths = format!("[paths]\ngames_root = \"{unplugged}\"\nrecordings_root = \"{read_only}\"\n");
+    std::fs::write(&config, format!("schema = 2\n[modules]\nenabled = [\"capture\"]\n{paths}[desktop]\nprofile = \"none\"\n[sources]\nenabled = []\n"))
+        .unwrap();
+    let (code, checks) = doctor_checks(&dir);
+    std::fs::set_permissions(&drive, std::fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(code, Some(1));
+    let games = check(&checks, "games_root").unwrap();
+    assert!(games["ok"] == false && games["detail"].as_str().unwrap().contains(&unplugged), "a games folder on a drive not there: {games}");
+    let recordings = check(&checks, "recordings_root").expect("capture on");
+    assert!(recordings["ok"] == false && recordings["detail"].as_str().unwrap().contains(&read_only), "{recordings}");
+}
+
+#[test]
+fn doctor_reports_a_game_file_that_does_not_read_and_a_session_left_unfiled() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join("config")).unwrap();
+    std::fs::write(dir.path().join("config/config.toml"), doctor_config(&dir, "")).unwrap();
+    let (_, checks) = doctor_checks(&dir);
+    assert_eq!(check(&checks, "game-files").map(|c| &c["ok"]), Some(&serde_json::json!(true)));
+    assert_eq!(check(&checks, "unfiled-sessions").map(|c| &c["ok"]), Some(&serde_json::json!(true)));
+
+    let broken = dir.path().join("data/games/broken/game.toml");
+    std::fs::create_dir_all(broken.parent().unwrap()).unwrap();
+    std::fs::write(&broken, "schema = 1\ntitle = [\n").unwrap();
+    let quest = dir.path().join("data/games/quest");
+    std::fs::create_dir_all(&quest).unwrap();
+    std::fs::write(quest.join("game.toml"), "schema = 1\nid = \"quest\"\ntitle = \"Quest\"\n").unwrap();
+    std::fs::write(quest.join("sessions.jsonl"), "").unwrap();
+    std::fs::set_permissions(quest.join("sessions.jsonl"), std::fs::Permissions::from_mode(0o444)).unwrap();
+    let closing = dir.path().join("state/closing-sessions/s1.quest.json");
+    std::fs::create_dir_all(closing.parent().unwrap()).unwrap();
+    std::fs::write(&closing, r#"{"row":{"session":"s1","game":"quest","started_at":"2026-11-20T20:00:00+01:00"}}"#).unwrap();
+
+    let (code, checks) = doctor_checks(&dir);
+    assert_eq!(code, Some(1));
+    let games = check(&checks, "game-files").unwrap();
+    assert!(games["ok"] == false && games["detail"].as_str().unwrap().contains(&*broken.to_string_lossy()), "{games}");
+    let unfiled = check(&checks, "unfiled-sessions").unwrap();
+    assert!(unfiled["ok"] == false && unfiled["detail"].as_str().unwrap().contains("quest"), "a history that refuses the row: {unfiled}");
 }
 
 #[test]

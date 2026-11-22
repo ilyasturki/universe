@@ -50,7 +50,7 @@ Every command behaves the same way on these four points:
 - **Exit status.** `0`: everything asked was done (a question answered no on a terminal included);
   `1`: it failed, in whole or in part (an update of `update --yes`, `component update` or
   `extension update` that failed, `add --media` whose artwork failed, a pad `controller reconnect`
-  could not bring back, a `journal --retry` that could not start its entry, a failed `doctor` check); `2`: usage, clap's own errors and the questions
+  could not bring back, a `journal --retry` that could not start its entry, a failed `doctor` check, `--json` or not); `2`: usage, clap's own errors and the questions
   above; `130`: `play` stopped by a second Ctrl-C.
 
 ## Process model

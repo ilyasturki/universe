@@ -236,6 +236,11 @@ fn closings() -> Vec<Closing> {
     files.iter().filter_map(|p| read_closing(p)).collect()
 }
 
+/// (game, started_at) of each ended session whose row its game's history has not taken yet.
+pub(crate) fn unfiled() -> Vec<(String, String)> {
+    closings().into_iter().filter(|c| !c.filed && !c.failed_launch).map(|c| (c.row.game, c.row.started_at)).collect()
+}
+
 pub(crate) fn closing_game(session_id: &str) -> Option<String> {
     closings().into_iter().find(|c| c.row.session == session_id && !c.filed).map(|c| c.row.game)
 }

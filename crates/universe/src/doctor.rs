@@ -188,7 +188,20 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
     } else {
         " read-only"
     };
-    push("config", "Config file", true, format!("{}{config_state}", config_file.display()), String::new(), "core");
+    match Config::load_from(&config_file) {
+        Ok(_) => push("config", "Config file", true, format!("{}{config_state}", config_file.display()), String::new(), "core"),
+        Err(e) => push(
+            "config",
+            "Config file",
+            false,
+            match e {
+                crate::Error::Invalid(why) => why,
+                e => format!("{}: {e}", config_file.display()),
+            },
+            format!("fix {} or move it aside: Universe does not start until it reads, and these checks ran on the default settings", config_file.display()),
+            "core",
+        ),
+    }
     let bus = match shell {
         Some(conn) => Some(conn.clone()),
         None => crate::host::session_bus().await,
@@ -429,13 +442,44 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
         };
         push("universe-extension", "Universe shell extension", ok, detail, fix, "core");
     }
-    let recordings = config.recordings_root();
+    let (ok, detail) = writable_folder(&config.games_root());
+    push("games_root", "Games install folder", ok, detail, "mount its drive or make it writable, or set paths.games_root to another folder".into(), "core");
+    if config.modules.enabled.iter().any(|m| m == "capture") {
+        let (ok, detail) = writable_folder(&config.recordings_root());
+        push(
+            "recordings_root",
+            "Recordings folder",
+            ok,
+            detail,
+            "mount its drive or make it writable, or set paths.recordings_root to another folder".into(),
+            "core",
+        );
+    }
+    let broken = unreadable_games();
     push(
-        "recordings_root",
-        "Recordings folder",
-        recordings.is_dir(),
-        if recordings.is_dir() { recordings.to_string_lossy().into() } else { format!("{} does not exist", recordings.display()) },
-        "create it, or set paths.recordings_root to a folder that exists".into(),
+        "game-files",
+        "Game files",
+        broken.is_empty(),
+        if broken.is_empty() { "every game.toml reads".into() } else { format!("left out of the library until they read: {}", broken.join("; ")) },
+        "fix each file by hand, or restore it from a backup".into(),
+        "core",
+    );
+    let unfiled = crate::session::unfiled();
+    push(
+        "unfiled-sessions",
+        "Sessions saved",
+        unfiled.is_empty(),
+        if unfiled.is_empty() {
+            "every session is in its game's history".into()
+        } else {
+            format!(
+                "{} still waiting in {}: {}",
+                if unfiled.len() == 1 { "a session is".to_string() } else { format!("{} sessions are", unfiled.len()) },
+                crate::paths::closing_sessions_dir().display(),
+                unfiled.iter().map(|(game, started)| format!("{game} ({started})")).collect::<Vec<_>>().join(", ")
+            )
+        },
+        "free some disk space or make each game's sessions.jsonl writable: the next start of Universe files them".into(),
         "core",
     );
     if nixos
@@ -662,6 +706,38 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
     out.retain(|c| !reported.iter().any(|r| r.module == c.module && r.check == c.check));
     out.extend(reported);
     attach_components(&mut out, config, crate::system_install::available().await);
+    out
+}
+
+/// A folder Universe writes into: there and writable, or missing under a writable folder, which it makes when first needed.
+fn writable_folder(path: &std::path::Path) -> (bool, String) {
+    let can_write = |p: &std::path::Path| rustix::fs::access(p, rustix::fs::Access::WRITE_OK).is_ok();
+    if path.is_dir() {
+        return if can_write(path) { (true, path.display().to_string()) } else { (false, format!("{} is read-only", path.display())) };
+    }
+    if let Ok(link) = std::fs::read_link(path) {
+        return (false, format!("{} links to {}, which is not there: is its drive mounted?", path.display(), link.display()));
+    }
+    if path.exists() {
+        return (false, format!("{} is not a folder", path.display()));
+    }
+    match path.ancestors().skip(1).find(|a| a.exists()) {
+        Some(above) if above.is_dir() && can_write(above) => (true, format!("{} (made when first needed)", path.display())),
+        Some(above) => (false, format!("{} does not exist, and {} is read-only: is its drive mounted?", path.display(), above.display())),
+        None => (false, format!("{} does not exist", path.display())),
+    }
+}
+
+/// Each game.toml in the library that does not read, with why: the library leaves it out.
+fn unreadable_games() -> Vec<String> {
+    let Ok(dir) = std::fs::read_dir(crate::paths::games_dir()) else { return Vec::new() };
+    let mut out: Vec<String> = dir
+        .flatten()
+        .map(|e| e.path().join("game.toml"))
+        .filter(|p| p.is_file())
+        .filter_map(|p| crate::game::Game::load(&p).err().map(|e| format!("{}: {e}", p.display())))
+        .collect();
+    out.sort();
     out
 }
 
