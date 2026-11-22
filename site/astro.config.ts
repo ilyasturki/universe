@@ -3,9 +3,10 @@ import starlight from '@astrojs/starlight';
 import type { AstroIntegration } from 'astro';
 import { defineConfig } from 'astro/config';
 import starlightLinksValidator from 'starlight-links-validator';
-import { checkBuiltLinks, writeCname } from './scripts/built';
+import { checkBuiltLinks, checkShareImage, writeCname } from './scripts/built';
 import { generate, generatedFrom } from './scripts/generate';
 import { settingsSidebar } from './scripts/settings';
+import { shareTags } from './src/lib/share';
 
 const site = 'https://universe.ilyasturki.com';
 const repo = 'https://github.com/ilyasturki/universe';
@@ -23,6 +24,7 @@ const universe: AstroIntegration = {
         },
         'astro:build:done': ({ dir }) => {
             checkBuiltLinks(dir);
+            checkShareImage(dir, site);
             writeCname(dir, site);
         },
     },
@@ -47,19 +49,22 @@ export default defineConfig({
             lastUpdated: true,
             customCss: ['@fontsource-variable/archivo', './src/styles/docs.css'],
             components: { SiteTitle: './src/components/SiteTitle.astro' },
-            head: umami
-                ? [
-                      {
-                          tag: 'script',
-                          attrs: {
-                              src: 'https://analytics.ilyasturki.com/script.js',
-                              'data-website-id': umami,
-                              'data-domains': new URL(site).hostname,
-                              defer: true,
+            head: [
+                ...shareTags(site).map((attrs) => ({ tag: 'meta' as const, attrs })),
+                ...(umami
+                    ? [
+                          {
+                              tag: 'script' as const,
+                              attrs: {
+                                  src: 'https://analytics.ilyasturki.com/script.js',
+                                  'data-website-id': umami,
+                                  'data-domains': new URL(site).hostname,
+                                  defer: true,
+                              },
                           },
-                      },
-                  ]
-                : [],
+                      ]
+                    : []),
+            ],
             plugins: [starlightLinksValidator()],
             sidebar: [
                 { label: 'Overview', slug: 'docs' },

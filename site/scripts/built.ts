@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { shareImage } from '../src/lib/share';
 
 /** The docs' link validator never reads the landing page, nor any link outside a page's Markdown. */
 export function checkBuiltLinks(dir: URL) {
@@ -16,6 +17,16 @@ export function checkBuiltLinks(dir: URL) {
         }
     }
     if (broken.length) throw new Error(`Links to nothing in the built site:\n${[...new Set(broken)].join('\n')}`);
+}
+
+export function checkShareImage(dir: URL, site: string) {
+    const out = fileURLToPath(dir);
+    const image = new URL(shareImage.path, site).href;
+    const missing = readdirSync(out, { recursive: true, encoding: 'utf8' })
+        .filter((f) => f.endsWith('.html'))
+        .filter((f) => !readFileSync(join(out, f), 'utf8').includes(`property="og:image" content="${image}"`));
+    if (missing.length) throw new Error(`Pages without the share image ${image}:\n${missing.join('\n')}`);
+    if (!existsSync(join(out, shareImage.path))) throw new Error(`${shareImage.path} is not in the built site: run \`bun run og\` and commit public/og.png`);
 }
 
 /** The custom domain, from `site`: site.yml's deploy checks it against the one Pages serves. */

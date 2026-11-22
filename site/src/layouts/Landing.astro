@@ -1,6 +1,7 @@
 ---
 import '@fontsource-variable/archivo';
 import '../styles/landing.css';
+import { shareTags } from '../lib/share';
 
 interface Props {
     title: string;
@@ -24,6 +25,7 @@ const host = Astro.site?.hostname;
         <meta property="og:description" content={description}>
         <meta property="og:type" content="website">
         <meta property="og:url" content={new URL(Astro.url.pathname, Astro.site)}>
+        {shareTags(Astro.site!).map((tag) => <meta {...tag} />)}
         <script is:inline>
         try {
             const stored = localStorage.getItem('starlight-theme');

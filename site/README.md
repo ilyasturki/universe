@@ -14,12 +14,14 @@ just docs-media fetch   # the screenshots and clips, from the site-media branch 
 - `src/pages/index.astro`: the landing page.
 - `src/content/docs/docs/<section>/<page>.md`: the docs, one folder per sidebar group. `.mdx` only for a page that shows a screenshot or a clip.
 - `src/content/docs/docs/reference/`, `developers/` and `changelog.md` are generated at build time and gitignored: `scripts/generate.ts` writes them from `universe __generate --markdown`, `universe --json launch-keys`, `universe --json runner ls`, the config.toml block of `docs/api.md`, the Nix modules, `docs/*.md` and `CHANGELOG.md`. Change those sources, never the pages.
+- `og/card.html`: the link-preview card, with its screenshot and font; `just site og` renders it to `public/og.png`, which is committed (needs chromium).
 - `media/takes.toml`: every screenshot and clip a page shows, recorded by `just docs-media record` at each release, and the ones a release's notes show (`release = "X.Y.Z"`).
 
 ## Rules the build checks
 
 - A page under `settings/` per section of `ui/universe_ui/qml/ui/Sections.js`, titled exactly as the app names it: a renamed or new section fails the build until its page follows.
 - Links are absolute (`/docs/running/runners/`) and land on a page and an anchor that exist (starlight-links-validator, and `scripts/built.ts` for the landing page).
+- Every page names the share image `og.png` by an absolute URL (`og:image` and `twitter:card` tags), and it is in the build.
 - `<Shot name="…" />` and `<Clip name="…" />` name a take of `media/takes.toml`, written literally. A take not recorded yet renders as a placeholder; `DOCS_STRICT=1` (the release deploy) refuses one.
 
 ## Writing a page
