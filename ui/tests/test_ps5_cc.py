@@ -117,6 +117,26 @@ def test_the_game_hub_card_lands_on_the_games_hero_at_home(api, fake, ps5):
     until(lambda: api.home.shown == "game")
 
 
+def test_the_captures_cards_show_thumbnails_and_y_trashes_the_shot_under_the_cursor(api, fake, ps5):
+    _shown, overlay = ps5
+    cc = open_cc(api, fake, overlay, "the-technomancer")
+    shots = until(lambda: read(cc, "shots"))
+    card = next(c for c in read(cc, "cards") if c["id"] == "captures")
+    thumbs = api.screens.thumbs
+    assert card["image"] == thumbs.url(shots[0]["thumb"]) != shots[0]["url"], "a card decodes the thumbnail, never the full shot"
+    for _ in range([c["id"] for c in read(cc, "cards")].index("captures")):
+        key(overlay, Qt.Key.Key_Right)
+    key(overlay, Qt.Key.Key_Return)
+    until(lambda: cc.property("zone") == "sheet" and cc.property("sheet") == "captures")
+    trashed = shots[0]["name"]
+    key(overlay, Qt.Key.Key_F)
+    until(lambda: any(i.property("message") == "Remove this screenshot?" and i.property("visible") for i in cc.childItems()), "Y asks first")
+    key(overlay, Qt.Key.Key_Right)
+    key(overlay, Qt.Key.Key_Return)
+    until(lambda: trashed not in [r["name"] for r in read(cc, "shots")], "Trash Screenshot takes it off the sheet")
+    assert not os.path.exists(shots[0]["path"])
+
+
 def test_the_trophies_card_grows_into_the_games_list(api, fake, ps5):
     _shown, overlay = ps5
     cc = open_cc(api, fake, overlay, "batman-arkham-origins")

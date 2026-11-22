@@ -42,6 +42,12 @@ FocusScope {
     readonly property bool listsAchievements: tracksAchievements && game !== null && game.achievementsTotal > 0
     readonly property var shots: api.screens.shots.rows
     readonly property var trophyRows: api.screens.dockAchievements.rows
+
+    // A card's picture is the shot's thumbnail, the shot itself only until that lands; `version` repaints it then.
+    function thumbOf(row) {
+        var thumb = row.thumb ? (api.screens.thumbs.version, api.screens.thumbs.url(row.thumb)) : "";
+        return thumb !== "" ? thumb : row.url;
+    }
     property var nextUp: null
 
     readonly property var cards: {
@@ -77,7 +83,7 @@ FocusScope {
             badge: "capture",
             caption: shots.length > 0 ? "Recently created" : "Media Gallery",
             title: shots.length > 0 ? "New screenshot" : "No screenshots yet",
-            image: shots.length > 0 ? shots[0].url : ""
+            image: shots.length > 0 ? thumbOf(shots[0]) : ""
         });
         if (nextUp)
             out.push({
@@ -1465,7 +1471,7 @@ FocusScope {
                             anchors.fill: parent
                             anchors.margins: Theme.dp(10)
                             anchors.bottomMargin: Theme.dp(20)
-                            image: modelData.url
+                            image: cc.thumbOf(modelData)
                             caption: modelData.dateText
                             focused: index === cc.shot && !cc.viewing
                             onPicked: {
