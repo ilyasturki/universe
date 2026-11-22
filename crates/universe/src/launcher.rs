@@ -130,8 +130,16 @@ pub fn working_dir(g: &crate::game::Game, home: Option<&crate::runners::Home>) -
 
 /// Another game in the library whose prefix is `g`'s too: a removed one no longer holds it.
 pub fn prefix_sharer<'a>(g: &crate::game::Game, games: &'a [crate::library::Resolved], config: &Config) -> Option<&'a crate::game::Game> {
-    let prefix = prefix_of(g, config);
-    games.iter().map(|r| &r.game).find(|x| x.id != g.id && x.removed_at.is_empty() && prefix_of(x, config) == prefix)
+    games.iter().map(|r| &r.game).find(|x| x.id != g.id && x.removed_at.is_empty() && same_prefix(x, g, config))
+}
+
+/// The one folder both prefixes are, whatever links either path goes through.
+pub fn same_prefix(a: &crate::game::Game, b: &crate::game::Game, config: &Config) -> bool {
+    let real = |g| {
+        let p = prefix_of(g, config);
+        p.canonicalize().unwrap_or(p)
+    };
+    real(a) == real(b)
 }
 
 fn dll_overrides_env(g: &crate::game::Game, env: &mut BTreeMap<String, String>) {

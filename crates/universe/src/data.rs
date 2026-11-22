@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 use crate::config::Config;
 use crate::core::{blocking, Core};
 use crate::game::Game;
-use crate::launcher::prefix_of;
+use crate::launcher::{prefix_of, same_prefix};
 use crate::library::Resolved;
 use crate::paths;
 use crate::runners::{self, Kind};
@@ -68,11 +68,10 @@ fn has_prefix(game: &Game) -> bool {
 }
 
 fn sharers(game: &Game, games: &[Resolved], config: &Config) -> Vec<String> {
-    let prefix = prefix_of(game, config);
     games
         .iter()
         .map(|r| &r.game)
-        .filter(|x| x.id != game.id && x.removed_at.is_empty() && has_prefix(x) && prefix_of(x, config) == prefix)
+        .filter(|x| x.id != game.id && x.removed_at.is_empty() && has_prefix(x) && same_prefix(x, game, config))
         .map(|x| x.id.clone())
         .collect()
 }
@@ -858,6 +857,24 @@ mod tests {
             assert!(matches!(core.move_prefix(&g.id).await, Err(Error::Invalid(_))), "Wine's default prefix never moves");
             assert!(default.join("drive_c").is_dir());
         }
+    }
+
+    #[tokio::test]
+    async fn a_prefix_another_game_reaches_through_a_link_is_neither_reset_nor_purged() {
+        let env = paths::test_env();
+        let prefixes = library(&env);
+        let place = prefixes.join("place");
+        std::fs::create_dir_all(&place).unwrap();
+        std::fs::write(place.join("user.reg"), b"kept").unwrap();
+        let link = env.path().join("linked-prefix");
+        std::os::unix::fs::symlink(&place, &link).unwrap();
+        proton_game(&env, "Sample", &place);
+        proton_game(&env, "Linked", &link);
+        let (core, _) = open().await;
+        assert_eq!(core.game_data("sample").await.unwrap()["prefix"]["shared_with"], json!(["linked"]));
+        assert!(matches!(core.reset_prefix("sample").await, Err(Error::Invalid(_))));
+        assert!(matches!(core.remove("sample", true).await, Err(Error::Invalid(_))));
+        assert_eq!(std::fs::read(place.join("user.reg")).unwrap(), b"kept", "Linked's prefix stays");
     }
 
     #[tokio::test]
