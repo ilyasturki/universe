@@ -92,7 +92,17 @@ async fn run_game(conn: zbus::Connection, units: Shared, name: String, props: Ve
         Some(cgroup) => cgroup.spawn(&mut cmd),
         None => cmd.spawn().unwrap(),
     };
-    units.lock().unwrap().loaded.get_mut(&name).unwrap().pid = child.id();
+    let stopped_first = {
+        let mut u = units.lock().unwrap();
+        let loaded = u.loaded.get_mut(&name).unwrap();
+        loaded.pid = child.id();
+        loaded.stopping.is_some()
+    };
+    // A stop that came before the spawn is systemd's stop of a starting unit: it ends the game as soon as there is one.
+    if let (true, Some(pid)) = (stopped_first, child.id()) {
+        // SAFETY: the game's process is this manager's child, still unreaped.
+        unsafe { libc::kill(pid as i32, libc::SIGTERM) };
+    }
     let status = child.wait().await.unwrap();
     let (code, why) = match std::os::unix::process::ExitStatusExt::signal(&status) {
         Some(15) => ("killed".to_string(), "TERM".to_string()),
