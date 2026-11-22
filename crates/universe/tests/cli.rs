@@ -1465,11 +1465,16 @@ fn a_backup_under_way_keeps_its_saves_from_a_prefix_move_and_a_cloud_download_an
     wait_for(&gate_dir.join("entered"), &mut syncing);
     let refused = cli(&["saves", "backup", "fixture-game"]);
     assert!(!refused.status.success() && text(&refused.stderr).contains("busy:"), "a backup beside a download: {}", text(&refused.stderr));
-    let after_session = command(&game.dir, &["saves", "backup", "fixture-game", "--auto"], &[("PATH", &game.path)])
+    let mut after_session = command(&game.dir, &["saves", "backup", "fixture-game", "--auto"], &[("PATH", &game.path)])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::piped())
         .spawn()
         .unwrap();
+    let started = std::time::Instant::now();
+    while after_session.try_wait().unwrap().is_none() && !waits_on_a_lock(after_session.id()) {
+        assert!(started.elapsed().as_secs() < 10, "the session's backup neither ended nor waited for the download");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
     std::fs::write(gate_dir.join("release"), "").unwrap();
     let synced_out = syncing.wait_with_output().unwrap();
     assert!(synced_out.status.success(), "the download's own backup shares its hold: {}", text(&synced_out.stderr));
