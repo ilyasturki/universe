@@ -1220,7 +1220,11 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         _ => {}
     }
     if matches!(cmd, Cmd::Doctor) && crate::config::Config::load().is_err() {
-        return print_doctor(&Core::on_defaults().doctor().await, json);
+        let mut checks = Core::on_defaults().doctor().await;
+        for c in checks.iter_mut().filter(|c| c.check == "config") {
+            c.fix.push_str(". These checks ran on the default settings");
+        }
+        return print_doctor(&checks, json);
     }
     let core = Core::open().await?;
     match cmd {

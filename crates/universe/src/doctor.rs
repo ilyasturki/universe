@@ -198,7 +198,7 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
                 crate::Error::Invalid(why) => why,
                 e => format!("{}: {e}", config_file.display()),
             },
-            format!("fix {} or move it aside: Universe does not start until it reads, and these checks ran on the default settings", config_file.display()),
+            format!("fix {} or move it aside: until it reads, Universe does not start", config_file.display()),
             "core",
         ),
     }
