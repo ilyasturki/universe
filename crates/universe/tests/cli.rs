@@ -443,6 +443,61 @@ fn a_write_keeps_a_linked_config_linked_and_a_store_link_says_who_owns_it() {
     assert_eq!(std::fs::read_link(&config).unwrap(), generated);
 }
 
+#[test]
+fn a_config_no_rename_can_replace_is_written_in_place_and_kept_whole_when_that_fails() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let folder = dir.path().join("config");
+    let config = folder.join("config.toml");
+    std::fs::create_dir_all(&folder).unwrap();
+    std::fs::write(&config, "schema = 2\n# mine\n").unwrap();
+    std::fs::set_permissions(&folder, std::fs::Permissions::from_mode(0o555)).unwrap();
+    let out = universe(&dir, &["config", "set", "launch.hdr", "true"], &[]);
+    std::fs::set_permissions(&folder, std::fs::Permissions::from_mode(0o755)).unwrap();
+    assert!(out.status.success(), "a writable file in a folder the core may not write: {}", text(&out.stderr));
+    let written = std::fs::read_to_string(&config).unwrap();
+    assert!(written.contains("# mine") && written.contains("hdr = true"), "{written:?}");
+
+    if !Command::new("unshare").args(["-Urm", "true"]).status().is_ok_and(|s| s.success()) {
+        eprintln!("skipped the bind mounts: no user namespaces here");
+        return;
+    }
+    let mine = dir.path().join("mine.toml");
+    std::fs::write(&mine, "schema = 2\n# mine\n").unwrap();
+    let full = dir.path().join("full");
+    std::fs::create_dir_all(&full).unwrap();
+    let held = format!("schema = 2\n#{}\n", "x".repeat(4000));
+    std::fs::write(dir.path().join("held.toml"), &held).unwrap();
+    // A one-page tmpfs: the file fits, the same file with a long value does not.
+    let script = r#"set -e
+mount --bind "$MINE" "$CONFIG"
+"$UNIVERSE" config set launch.hdr true
+umount "$CONFIG"
+mount -t tmpfs -o size=4k tmpfs "$FULL"
+cp "$HELD" "$FULL/config.toml"
+mount --bind "$FULL/config.toml" "$CONFIG"
+if "$UNIVERSE" config set paths.games_root "/$(printf 'g%.0s' $(seq 400))"; then echo "a write past the disk's end went through" >&2; exit 1; fi
+cp "$FULL/config.toml" "$FULL/../after.toml""#;
+    let probe = command(&dir, &[], &[]);
+    let mut cmd = Command::new("unshare");
+    cmd.args(["-Urm", "sh", "-c", script]);
+    for (var, value) in probe.get_envs() {
+        match value {
+            Some(value) => cmd.env(var, value),
+            None => cmd.env_remove(var),
+        };
+    }
+    let path = |p: &std::path::Path| p.to_string_lossy().into_owned();
+    cmd.env("UNIVERSE", env!("CARGO_BIN_EXE_universe")).env("MINE", path(&mine)).env("CONFIG", path(&config)).env("FULL", path(&full));
+    let out = cmd.env("HELD", path(&dir.path().join("held.toml"))).output().unwrap();
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let written = std::fs::read_to_string(&mine).unwrap();
+    assert!(written.contains("# mine") && written.contains("hdr = true"), "a bind-mounted config is written: {written:?}");
+    assert_eq!(std::fs::read_to_string(dir.path().join("after.toml")).unwrap(), held, "a write that fails halfway leaves the file as it was");
+    let left: Vec<_> = std::fs::read_dir(&folder).unwrap().flatten().map(|e| e.file_name()).collect();
+    assert_eq!(left, ["config.toml"], "no temporary file left");
+}
+
 fn left_open(dir: &tempfile::TempDir, game: &str, session: &str) -> (std::path::PathBuf, std::path::PathBuf) {
     left_open_after(dir, game, session, "")
 }

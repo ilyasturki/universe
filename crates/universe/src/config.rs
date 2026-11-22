@@ -558,30 +558,69 @@ pub fn migrate(path: &Path) -> crate::Result<bool> {
 
 /// Through a symlink to its target, so a config kept in a dotfiles repository stays linked; by a rename, so a process opening
 /// the file at the same moment reads the old one or the new one whole. `read`, the target's metadata when it was read, leaves a file changed since as it is.
+/// A file no rename can replace (bind-mounted, in a folder the core may not write) is written in place, its old bytes put back if that fails.
 pub(crate) fn replace(path: &Path, text: &[u8], read: Option<&std::fs::Metadata>) -> std::io::Result<()> {
-    use std::io::Write;
-    use std::os::unix::fs::MetadataExt;
+    use std::io::{ErrorKind, Write};
     static WRITES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let target = std::fs::canonicalize(path)?;
     let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     let n = WRITES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let tmp = target.with_file_name(format!(".{name}.{}.{n}.tmp", std::process::id()));
-    let kept = std::fs::File::create(&tmp)
-        .and_then(|mut f| f.write_all(text).and_then(|()| f.sync_all()))
-        .and_then(|()| std::fs::metadata(&target))
-        .and_then(|now| {
-            if let Some(was) = read {
-                if (was.dev(), was.ino(), was.len(), was.modified()?) != (now.dev(), now.ino(), now.len(), now.modified()?) {
-                    return Err(std::io::Error::other(format!("{} changed while being rewritten", target.display())));
-                }
+    let by_rename = match std::fs::File::create(&tmp) {
+        Err(e) if matches!(e.kind(), ErrorKind::PermissionDenied | ErrorKind::ReadOnlyFilesystem) => None,
+        Err(e) => return Err(e),
+        Ok(mut f) => {
+            let renamed = f
+                .write_all(text)
+                .and_then(|()| f.sync_all())
+                .and_then(|()| unchanged(&target, read))
+                .and_then(|now| std::fs::set_permissions(&tmp, now.permissions()))
+                .and_then(|()| std::fs::rename(&tmp, &target));
+            if renamed.is_err() {
+                let _ = std::fs::remove_file(&tmp);
             }
-            std::fs::set_permissions(&tmp, now.permissions())
-        })
-        .and_then(|()| std::fs::rename(&tmp, &target));
-    if kept.is_err() {
-        let _ = std::fs::remove_file(&tmp);
+            match renamed {
+                Err(e) if matches!(e.kind(), ErrorKind::ResourceBusy | ErrorKind::CrossesDevices) => None,
+                renamed => Some(renamed),
+            }
+        }
+    };
+    if let Some(renamed) = by_rename {
+        return renamed;
     }
-    kept
+    unchanged(&target, read)?;
+    in_place(&target, text)
+}
+
+fn unchanged(target: &Path, read: Option<&std::fs::Metadata>) -> std::io::Result<std::fs::Metadata> {
+    use std::os::unix::fs::MetadataExt;
+    let now = std::fs::metadata(target)?;
+    if let Some(was) = read {
+        if (was.dev(), was.ino(), was.len(), was.modified()?) != (now.dev(), now.ino(), now.len(), now.modified()?) {
+            return Err(std::io::Error::other(format!("{} changed while being rewritten", target.display())));
+        }
+    }
+    Ok(now)
+}
+
+fn in_place(target: &Path, text: &[u8]) -> std::io::Result<()> {
+    use std::io::{Read, Seek, Write};
+    let mut file = std::fs::OpenOptions::new().read(true).write(true).open(target)?;
+    let mut held = Vec::new();
+    file.read_to_end(&mut held)?;
+    let mut put = |bytes: &[u8]| -> std::io::Result<()> {
+        file.rewind()?;
+        file.write_all(bytes)?;
+        file.set_len(bytes.len() as u64)?;
+        file.sync_all()
+    };
+    let wrote = put(text);
+    if wrote.is_err() {
+        if let Err(e) = put(&held) {
+            tracing::error!("{}: its old bytes could not be put back: {e}", target.display());
+        }
+    }
+    wrote
 }
 
 /// A config.toml the core starts is current: a later start reads it as `SCHEMA`, not as one to migrate.
