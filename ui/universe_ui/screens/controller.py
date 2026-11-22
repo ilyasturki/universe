@@ -202,6 +202,7 @@ class ControllerScreen(AdvancedRows, QObject):
         self._walk_timer = QTimer(self)
         self._walk_timer.setInterval(1000)
         self._walk_timer.timeout.connect(self._walk_tick)
+        client.currentSessionChanged.connect(self._on_session)
         self._rebuild()
 
     def start(self, watcher):
@@ -444,6 +445,14 @@ class ControllerScreen(AdvancedRows, QObject):
             self._setup_due = None
             QTimer.singleShot(0, self._offer_connected)
 
+    def _playing(self):
+        current = self._client.currentSession
+        return bool(current and current.get("session_id"))
+
+    def _on_session(self):
+        if not self._playing():
+            QTimer.singleShot(0, self._offer_connected)
+
     def _offer_connected(self):
         for entry in self._devices:
             self._offer(entry)
@@ -453,6 +462,7 @@ class ControllerScreen(AdvancedRows, QObject):
         family = entry["family"]
         if (
             self._walk_offers_paused
+            or self._playing()
             or (self._setup_due is not None and self._setup_due())
             or family in self._offered
             or self._status != "ready"

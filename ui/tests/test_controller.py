@@ -511,7 +511,7 @@ POWER_MENU = {"reprise": "confirm", "switch2": "picker", "ps5": "popup"}
 
 
 # Start on Switch 2's Home opens a page, not a menu.
-COVERS = [(name, cover) for name in LOOKS for cover in ("power menu", "game menu", "launch") if (name, cover) != ("switch2", "game menu")]
+COVERS = [(name, cover) for name in LOOKS for cover in ("power menu", "game menu", "launch", "game") if (name, cover) != ("switch2", "game menu")]
 
 
 @pytest.mark.parametrize(("look", "cover"), COVERS, indirect=["look"])
@@ -519,12 +519,17 @@ def test_a_new_controller_waits_until_what_covers_home_closes(look, api, fake, m
     controller = api.screens.controller
     offers = record(controller.walkOffered)
     look.home()
+    playing = lambda: bool(api.universe.currentSession)
     if cover == "launch":
-        mapped, real = threading.Event(), fake.core.wait_session_window
-        monkeypatch.setattr(fake.core, "wait_session_window", lambda *args: (mapped.wait(5), real(*args))[1])
+        made, real = threading.Event(), fake.core.launch
+        monkeypatch.setattr(fake.core, "launch", lambda *args: (made.wait(5), real(*args))[1])
         look.press(Qt.Key.Key_Return)
         until(lambda: look.root.property("launching") is True, "A launches the game")
         covering = lambda: look.root.property("launching") is True
+    elif cover == "game":
+        look.press(Qt.Key.Key_Return)
+        until(lambda: playing() and look.root.property("launching") is False, "A launches the game, and it comes up")
+        covering = playing
     elif cover == "game menu":
         look.press(Qt.Key.Key_F1)
         menu = look.menu()
@@ -540,7 +545,13 @@ def test_a_new_controller_waits_until_what_covers_home_closes(look, api, fake, m
     settle(look.window)
     assert offers == [] and covering(), "a pad that comes under it is offered nothing yet"
     if cover == "launch":
-        mapped.set()
+        made.set()
+        until(lambda: playing() and look.root.property("launching") is False, "the game comes up")
+        settle(look.window)
+        assert offers == [], "nor under the game it launched"
+        covering = playing
+    if cover in ("launch", "game"):
+        api.universe.stop(api.universe.currentSession["session_id"])
     else:
         look.press(Qt.Key.Key_Escape)
     dialog = look.dialog()
