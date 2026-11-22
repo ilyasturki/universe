@@ -459,8 +459,8 @@ impl Core {
         self.core.source_cancel(&source, &game_id)
     }
     #[pyo3(signature = (source, game_id, progress=None))]
-    fn update(&self, py: Python<'_>, source: String, game_id: String, progress: Option<Py<PyAny>>) -> PyResult<usize> {
-        self.run(py, |c| async move {
+    fn update(&self, py: Python<'_>, source: String, game_id: String, progress: Option<Py<PyAny>>) -> PyResult<Py<PyAny>> {
+        self.value(py, |c| async move {
             let mut p = progress_of(&progress);
             c.source_update(&source, &game_id, p.as_deref_mut()).await
         })

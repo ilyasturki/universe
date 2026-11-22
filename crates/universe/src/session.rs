@@ -1458,7 +1458,7 @@ pub(crate) mod tests {
         assert_eq!(sessions::read(&core.get("sample").await.unwrap().game.sessions_path()).unwrap().len(), 1);
     }
 
-    async fn destroy(core: &Core) -> (Result<()>, Result<()>, Result<usize>) {
+    async fn destroy(core: &Core) -> (Result<()>, Result<()>, Result<crate::core::StoreUpdate>) {
         (core.uninstall("sample").await, core.remove("sample", true).await, core.source_update("fake", "s1", None).await)
     }
 
@@ -1558,7 +1558,7 @@ pub(crate) mod tests {
             assert_eq!(toml_of(), game_toml, "{when}: its game.toml");
             assert!(!asked.exists(), "{when}: the store is not asked");
         };
-        let busy = |(uninstall, purge, update): (Result<()>, Result<()>, Result<usize>), when: &str| {
+        let busy = |(uninstall, purge, update): (Result<()>, Result<()>, Result<crate::core::StoreUpdate>), when: &str| {
             assert!(matches!(uninstall, Err(Error::Busy(_))), "{when}: uninstall is {uninstall:?}");
             assert!(matches!(purge, Err(Error::Busy(_))), "{when}: rm --purge is {purge:?}");
             assert!(matches!(update, Err(Error::Busy(_))), "{when}: a store update is {update:?}");
@@ -1586,7 +1586,7 @@ pub(crate) mod tests {
         busy(destroy(&core).await, "running");
         leftovers_busy(trash_leftovers(&core).await, "running");
         assert!(core.trash_leftover(&prefix.to_string_lossy()).await.is_err(), "running and in the library, its prefix is no leftover");
-        assert_eq!(core.source_update("fake", "", None).await.unwrap(), 0, "updating all leaves the running game's pending");
+        assert_eq!(core.source_update("fake", "", None).await.unwrap().busy, ["sample"], "updating all leaves the running game pending, named");
         untouched("running", &game_toml);
         core.source_update("fake", "s2", None).await.unwrap();
         core.uninstall("other").await.unwrap();
@@ -1666,7 +1666,7 @@ pub(crate) mod tests {
             std::fs::write(&scan_fails, "").unwrap();
         }
         std::fs::remove_file(&scan_fails).unwrap();
-        assert_eq!(core.source_update("fake", "", None).await.unwrap(), 1, "updating all skips the busy imports");
+        assert_eq!(core.source_update("fake", "", None).await.unwrap(), crate::core::StoreUpdate { updated: 1, busy: vec!["sample".into(), "named".into()] }, "updating all skips the busy imports and names them");
         assert_eq!(std::fs::read_to_string(&asked).unwrap(), "update s2\n", "and still updates another game");
     }
 

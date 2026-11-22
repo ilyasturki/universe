@@ -272,6 +272,13 @@ fn pending(u: &serde_json::Map<String, serde_json::Value>) -> bool {
         && !crate::upstream::unanswered(u)
 }
 
+/// A store update: the titles it updated, and the library ids of the games it left because they were running or busy.
+#[derive(Debug, Default, PartialEq, serde::Serialize)]
+pub struct StoreUpdate {
+    pub updated: usize,
+    pub busy: Vec<String>,
+}
+
 fn runtime_of(c: &Current, seed: Runtime) -> Runtime {
     crate::session::read_marker().filter(|m| m.current.session_id == c.session_id).and_then(|m| m.runtime).unwrap_or(seed)
 }
@@ -2619,8 +2626,8 @@ impl Core {
         }
     }
 
-    /// Every pending title when `game_id` is empty.
-    pub async fn source_update(&self, source: &str, game_id: &str, mut progress: Option<Progress<'_, '_>>) -> Result<usize> {
+    /// Every pending title when `game_id` is empty, a busy game's left as it is.
+    pub async fn source_update(&self, source: &str, game_id: &str, mut progress: Option<Progress<'_, '_>>) -> Result<StoreUpdate> {
         let m = self.source(source).await?;
         let targets: Vec<String> = if game_id.is_empty() {
             let ev = self.run_verb(&m, "update", &[], progress.as_deref_mut()).await?;
@@ -2640,7 +2647,7 @@ impl Core {
         // Scanned once when a game no store claimed may stand for a title; `Some(None)`: that scan failed.
         let mut found: Option<Option<BTreeMap<String, PathBuf>>> = None;
         let imports = self.games.read().await.iter().any(|x| unclaimed(&x.game));
-        let mut n = 0;
+        let mut done = StoreUpdate::default();
         for t in targets {
             if imports && found.is_none() {
                 found = Some(self.installed_dirs(&m).await);
@@ -2657,6 +2664,13 @@ impl Core {
             let _held = match self.hold_files(&standing.iter().collect::<Vec<_>>()).await {
                 Err(e) if game_id.is_empty() => {
                     tracing::warn!("{t}: {e}");
+                    if matches!(e, Error::Busy(_)) {
+                        for g in &standing {
+                            if matches!(self.hold_files(&[g]).await, Err(Error::Busy(_))) {
+                                done.busy.push(g.id.clone());
+                            }
+                        }
+                    }
                     continue;
                 }
                 held => held?,
@@ -2669,9 +2683,9 @@ impl Core {
             for g in Self::game_events(&events) {
                 let _ = self.apply_source_game(source, &g, false, Arrival::Found).await;
             }
-            n += 1;
+            done.updated += 1;
         }
-        Ok(n)
+        Ok(done)
     }
 
     /// Asks Steam, titledb, Sony and the stores again what their answers kept are too old for, then judges every game by

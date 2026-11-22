@@ -1886,13 +1886,16 @@ class FakeCore:
 
     def update(self, source, game_id, progress=None):
         self._tick(progress, "Updating" + (f" {game_id}" if game_id else " everything"), 12)
+        running = (self.current() or {}).get("id")
+        busy = [] if game_id else [g["id"] for g in self._data["games"] if g["id"] == running and (g.get("version") or {}).get("store") == source]
+        busy_ids = {(g.get("version") or {}).get("store_id") for g in self._data["games"] if g["id"] in busy}
         before = len(self._data.get("updates", []))
-        self._data["updates"] = [u for u in self._data.get("updates", []) if game_id and u["id"] != game_id]
+        self._data["updates"] = [u for u in self._data.get("updates", []) if (game_id and u["id"] != game_id) or u["id"] in busy_ids]
         for game in self._data["games"]:
             v = game.get("version") or {}
-            if v.get("how") == "apply" and v.get("store") == source and game_id in ("", v.get("store_id")):
+            if v.get("how") == "apply" and v.get("store") == source and game_id in ("", v.get("store_id")) and game["id"] not in busy:
                 v.update(status="current", newer=0, installed=v.get("latest") or v.get("installed", ""))
-        return before - len(self._data["updates"])
+        return {"updated": before - len(self._data["updates"]), "busy": busy}
 
     def updates(self):
         return copy.deepcopy(self._data.get("updates", []))

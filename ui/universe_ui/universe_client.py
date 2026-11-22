@@ -642,7 +642,17 @@ class CoreClient(QObject):
 
     @Slot(str, str, result=str)
     def update(self, source, game_id):
-        return self._job("update", game_id, lambda progress: f"{self._core.update(source, game_id, progress)} updated", source=source)
+        return self._job("update", game_id, lambda progress: self._core.update(source, game_id, progress), source=source, text=self._updated)
+
+    def _updated(self, result):
+        def title(ident):
+            try:
+                return self._core.get(ident)["title"]
+            except UniverseError:
+                return ident
+
+        said = f"{result['updated']} updated"
+        return said + (f" · skipped {', '.join(map(title, result['busy']))}: in use" if result["busy"] else "")
 
     @Slot(str)
     def checkVersions(self, ident):
