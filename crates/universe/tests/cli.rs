@@ -1110,6 +1110,15 @@ fn journal_add_files_an_entry_the_journal_lists_and_calls_only_a_refusal_invalid
     let listed: serde_json::Value = serde_json::from_slice(&universe(&dir, &["journal", id, "--json"], &[]).stdout).unwrap();
     assert_eq!(listed, serde_json::json!([]));
     assert!(shot.is_file() && !frame.exists() && !copied.exists(), "the entry's frames and copies go with it, the player's shot stays");
+
+    let out = universe(&dir, &["journal", id, "--retry"], &[]);
+    assert!(out.status.success(), "nothing waiting: {}", text(&out.stderr));
+    let deferred = serde_json::json!({"session": sid, "game": id, "until": "2026-10-04T13:00:00+02:00", "reason": "rate limited"});
+    std::fs::write(game_dir.join(format!("journal/{sid}.deferred.json")), deferred.to_string()).unwrap();
+    assert_eq!(universe(&dir, &["journal", id, "--retry"], &[]).status.code(), Some(1), "a session the library lost cannot be written");
+    let out = universe(&dir, &["--json", "journal", id, "--retry"], &[]);
+    let retried: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| panic!("{e}: {}", text(&out.stdout)));
+    assert_eq!((out.status.code(), &retried["ok"], &retried["result"]["due"]), (Some(1), &serde_json::json!(false), &serde_json::json!(1)), "{retried}");
 }
 
 #[test]
