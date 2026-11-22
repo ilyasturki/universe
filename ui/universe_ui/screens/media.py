@@ -85,22 +85,26 @@ class Thumbs(QObject):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._version = 0
-        self._pending = set()
+        self._pending = {}
         self._poll = QTimer(self)
         self._poll.setInterval(THUMB_POLL_MS)
         self._poll.timeout.connect(self._check)
 
-    def want(self, paths):
-        new = {p for p in paths if p and not os.path.exists(p)}
+    def want(self, rows):
+        """Each (thumbnail, its shot): watched until the thumbnail lands, or the shot it would come from is gone."""
+        new = {thumb: shot for thumb, shot in rows if thumb and not os.path.exists(thumb)}
         if new:
             self._pending |= new
             self._poll.start()
 
     def _check(self):
-        landed = {p for p in self._pending if os.path.exists(p)}
+        landed = {t for t in self._pending if os.path.exists(t)}
+        lost = {t for t, shot in self._pending.items() if t not in landed and shot and not os.path.exists(shot)}
+        for t in landed | lost:
+            del self._pending[t]
         if landed:
-            self._pending -= landed
             self._version += 1
+        if landed or lost:
             self.versionChanged.emit()
         if not self._pending:
             self._poll.stop()
@@ -373,7 +377,7 @@ class ScreenshotsList(QObject):
         lines = self._client.sessions(game_id)
         journaled = {(str(line.get("game") or ""), str(line.get("session") or "")) for line in lines if line.get("journal")}
         self._rows = [_shot_row(shot, journaled) for shot in self._client.screenshots(game_id)]
-        self._thumbs.want(r["thumb"] for r in self._rows if not r["thumbReady"])
+        self._thumbs.want((r["thumb"], r["path"]) for r in self._rows if not r["thumbReady"])
         self.rowsChanged.emit()
 
     @Slot()
@@ -489,7 +493,7 @@ class MediaTimeline(QObject):
         self.loadingChanged.emit()
         self._recordings.adopt(frames)
         self._rows = rows
-        self._thumbs.want(r["thumb"] for r in rows if r["thumb"] and not r["thumbReady"])
+        self._thumbs.want((r["thumb"], r["path"]) for r in rows if r["thumb"] and not r["thumbReady"])
         self._thumbnails(force=True)
 
     # A recording's picture is its cached frame; the list is announced only when one of them changed.

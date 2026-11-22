@@ -940,13 +940,20 @@ def test_fake_cores_sharing_the_thumbnail_cache_list_their_shots_at_once(app, xd
 
 def test_thumbnails_are_announced_as_they_land(api, tmp_path):
     thumbs = api.screens.thumbs
-    missing = tmp_path / "shot-1.jpg"
-    thumbs.want([str(missing), ""])
+    missing, shot = tmp_path / "shot-1.jpg", tmp_path / "shot-1.png"
+    shot.write_bytes(b"png")
+    thumbs.want([(str(missing), str(shot)), ("", "")])
     assert thumbs.pending == 1 and thumbs.url(str(missing)) == ""
     version = thumbs.version
     missing.write_bytes(b"jpg")
     until(lambda: thumbs.version != version)
     assert thumbs.version == version + 1 and thumbs.pending == 0 and thumbs.url(str(missing)).startswith("file://")
+    lost, trashed = tmp_path / "shot-2.jpg", tmp_path / "shot-2.png"
+    trashed.write_bytes(b"png")
+    thumbs.want([(str(lost), str(trashed))])
+    trashed.unlink()
+    until(lambda: thumbs.pending == 0, "a thumbnail whose shot is gone can never land: no longer waited for")
+    assert not thumbs._poll.isActive() and thumbs.version == version + 1
 
 
 def test_selecting_a_recording_drops_the_frames_another_was_waiting_for(api, monkeypatch, tmp_path):
