@@ -314,6 +314,23 @@ def test_storage_says_it_is_measuring_and_offers_a_retry_when_the_measure_fails(
     settle(look.window)
     assert read(rows, "currentRow")["key"] == held_key, "the cursor keeps its row, not its index"
 
+    failing.append(True)
+    look.press(Qt.Key.Key_I)
+    until(lambda: read(rows, "currentRow")["key"] == "retry")
+    failing.clear()
+    while not read(rows, "currentRow")["key"].startswith("trash:"):
+        look.press(Qt.Key.Key_Down)
+    trashed, after = shown()[read(rows, "index") : read(rows, "index") + 2]
+    look.press(Qt.Key.Key_Return)
+    dialog = page.findChild(QObject, "dialog")
+    until(lambda: dialog.property("open") is True, "the trash asks first")
+    look.press(Qt.Key.Key_Down)
+    until(lambda: dialog.property("index") == 1)
+    look.press(Qt.Key.Key_Return)
+    until(lambda: trashed not in shown() and "retry" not in shown() and not api.screens.storage.loading, "the trash measures again")
+    settle(look.window)
+    assert read(rows, "currentRow")["key"] == after, "the cursor takes the next row, not the one two below"
+
     gate.clear()
     failing.append(True)
     look.press(Qt.Key.Key_I)

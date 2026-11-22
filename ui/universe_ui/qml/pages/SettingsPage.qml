@@ -1008,25 +1008,44 @@ FocusScope {
         else if (s === "system")
             api.system.reload();
         else if (s === "storage")
-            measure(s === sectionId);
+            api.screens.storage.load();
         else if (s === "themes") {
             api.theme.rescan();
             addons.load();
         }
     }
 
-    // A measure again takes Measure again away with its error: the cursor stays on its row, not on its index.
-    function measure(inPlace) {
-        var key = inPlace && cards.currentRow ? cards.currentRow.key : "";
-        api.screens.storage.load();
-        if (key !== "")
-            Qt.callLater(function () {
-                var at = page.content.rows.findIndex(function (r) {
-                    return r.key === key;
-                });
-                if (page.alive && at >= 0)
-                    cards.index = at;
+    // The cursor's row and the rows below it, as of the last settled move: a swap that already happened can't rewrite it.
+    property var storageCursor: []
+    function rememberStorageCursor() {
+        if (!page.alive || sectionId !== "storage" || !cards.currentRow)
+            return;
+        var rows = page.content.rows;
+        storageCursor = rows.slice(Math.max(0, cards.index)).map(function (r) {
+            return r.key;
+        });
+    }
+    Connections {
+        target: cards
+        function onCurrentRowChanged() {
+            Qt.callLater(page.rememberStorageCursor);
+        }
+    }
+
+    // Measure again leaves with its error from above the cursor: the cursor keeps its row, or the next one left.
+    function keepStorageCursor(keys) {
+        if (!page.alive || sectionId !== "storage")
+            return;
+        var rows = page.content.rows;
+        for (var k = 0; k < keys.length; k++) {
+            var at = rows.findIndex(function (r) {
+                return r.key === keys[k];
             });
+            if (at >= 0) {
+                cards.index = at;
+                return;
+            }
+        }
     }
 
     function refreshNow() {
@@ -1674,8 +1693,16 @@ FocusScope {
     // Measure again is the first card: a failed measure over the rows held puts the cursor there, where the reason shows.
     readonly property string storageError: api.screens.storage.error
     onStorageErrorChanged: {
-        if (storageError !== "" && sectionId === "storage")
+        if (sectionId !== "storage")
+            return;
+        if (storageError !== "") {
             Qt.callLater(cards.reset);
+            return;
+        }
+        var keys = storageCursor;
+        Qt.callLater(function () {
+            page.keepStorageCursor(keys);
+        });
     }
 
     function stepSection(d) {
