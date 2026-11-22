@@ -101,8 +101,9 @@ class BluetoothScreen(Streamed):
         elif event == "off":
             self._set_request(None)
             if self._pairing:
-                self._pairing = ""
+                address, self._pairing = self._pairing, ""
                 self.changed.emit()
+                self.failed.emit("pair", address, "off", "the Bluetooth service stopped answering")
 
     @Slot(str, result=bool)
     def pair(self, address):

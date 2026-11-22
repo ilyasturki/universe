@@ -9,7 +9,7 @@ Settings › **Bluetooth** pairs and connects controllers, headphones, keyboards
 
 - **Bluetooth** turns the adapter on or off.
 - **Paired** lists the devices paired with this machine, with their battery level when they report one. **A** (**Options**) offers **Connect** or **Disconnect**, and **Forget**.
-- **Found** lists the devices nearby in pairing mode, as long as the section is open. **A** (**Pair**) pairs one.
+- **Found** lists the devices nearby in pairing mode, as long as the section is open. **A** (**Pair**) pairs one. If Bluetooth stops answering during a pairing, a notice says so.
 
 [Bluetooth pairing](/docs/controllers/bluetooth/) goes through pairing a controller and the [questions](/docs/controllers/bluetooth/#pairing-questions) a device can ask.
 

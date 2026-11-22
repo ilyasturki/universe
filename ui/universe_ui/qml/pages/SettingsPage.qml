@@ -950,7 +950,10 @@ FocusScope {
             if (!page.checking)
                 return;
             page.checking = false;
-            Notices.show(Wifi.connectivity(connectivity));
+            if (connectivity === "unknown")
+                Notices.fail("The connection could not be tested");
+            else
+                Notices.show(Wifi.connectivity(connectivity));
         }
     }
 

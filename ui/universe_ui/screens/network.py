@@ -186,9 +186,14 @@ class WifiScreen(Streamed):
             self.failed.emit(ssid, reason, message, action)
         elif event == "off":
             self._status.release()
-            if self._connecting:
-                self._connecting = ""
+            connecting, checking = self._connecting, self._checking
+            self._connecting, self._checking = "", False
+            if connecting or checking:
                 self.changed.emit()
+            if connecting:
+                self.failed.emit(connecting, "off", "the network service stopped answering", "connect")
+            if checking:
+                self.checked.emit("unknown")
 
     # Whether joining `ssid` takes a password typed first: a secured network not saved yet.
     @Slot(str, result=bool)

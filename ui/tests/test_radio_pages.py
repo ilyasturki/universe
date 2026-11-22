@@ -1,7 +1,7 @@
 import pytest
-from looks import REVEAL, SUBMIT, activate, content_rows, invoke, read
+from looks import DIALOG, REVEAL, SUBMIT, activate, content_rows, held_notices, invoke, read
 from PySide6.QtCore import QObject, Qt
-from uitest import until
+from uitest import record, until
 
 from universe_ui.fake_radios import PASSWORD
 from universe_ui.screens.controller import FakeWatcher
@@ -116,6 +116,60 @@ def test_wifi_switches_off_from_its_row(look, api, fake):
     page = section(look, "network", key="wifi")
     activate(page, content_rows(page), key="wifi")
     until(lambda: {"cmd": "wifi", "on": False} in fake.core.wifi.commands)
+
+
+def lose_the_watch(radio):
+    """The `universe … watch` child ending under the page, as its process dying would: `off`, then gone."""
+    for w in list(radio.watches):
+        w.emit({"event": "off", "code": 1})
+        w.stop()
+
+
+def said(look, failed):
+    """Whether the look said the action failed: Reprise and Bluetooth everywhere in a failure notice, a connection test on
+    the consoles in its dialog."""
+    if failed():
+        return True
+    dialog = look.find(DIALOG[look.name])
+    return look.stacked and dialog.property("open") is True and dialog
+
+
+def test_a_connection_test_or_join_whose_watch_dies_says_so_and_can_run_again(look, api, fake, monkeypatch):
+    page = section(look, "network", key="check")
+    wifi, answer = api.screens.network, fake.core.wifi.command
+    monkeypatch.setattr(fake.core.wifi, "command", lambda w, cmd: cmd.get("cmd") == "check" or answer(w, cmd))
+    posted, _clear = held_notices(look.engine)
+    activate(page, content_rows(page), key="check")
+    until(lambda: wifi.checking, "Testing…")
+    lose_the_watch(fake.core.wifi)
+    until(lambda: not wifi.checking, "a dead watch ends the test")
+    dialog = until(lambda: said(look, lambda: [n for n in posted() if n["error"]]), "and says it could not run")
+    if dialog is not True:
+        look.press(Qt.Key.Key_Return)
+        until(lambda: dialog.property("open") is False)
+    monkeypatch.setattr(fake.core.wifi, "command", answer)
+    checked = record(wifi.checked)
+    activate(page, content_rows(page), key="check")
+    until(lambda: checked == [("full",)], "the test runs again")
+
+    monkeypatch.setattr(fake.core.wifi, "command", lambda w, cmd: cmd.get("cmd") == "connect" or answer(w, cmd))
+    failed = record(wifi.failed)
+    assert wifi.join("Atelier", PASSWORD)
+    lose_the_watch(fake.core.wifi)
+    until(lambda: [f[:2] for f in failed] == [("Atelier", "off")] and wifi.connecting == "", "a join the watch took with it fails as such")
+
+
+def test_a_pairing_whose_watch_dies_says_so(look, api, fake, monkeypatch):
+    page = section(look, "bluetooth", key="device", address=HEADSET, paired=True)
+    bt, answer = api.screens.bluetooth, fake.core.bt.command
+    until(lambda: shows(page, key="device", address=PAD, paired=False))
+    monkeypatch.setattr(fake.core.bt, "command", lambda w, cmd: cmd.get("cmd") == "pair" or answer(w, cmd))
+    posted, _clear = held_notices(look.engine)
+    activate(page, content_rows(page), key="device", address=PAD)
+    until(lambda: bt.pairing == PAD)
+    lose_the_watch(fake.core.bt)
+    until(lambda: bt.pairing == "", "a dead watch ends the pairing")
+    until(lambda: [n["error"] for n in posted()] == [True], "and says so")
 
 
 def test_the_bluetooth_section_searches_while_open_and_pairs_a_found_pad(look, api, fake):
