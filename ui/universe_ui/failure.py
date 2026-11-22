@@ -13,6 +13,26 @@ def reason_of(error):
     return reason
 
 
+def map_saved_pads(gamepad, unopened):
+    """Each pad here mapped as the controller setup saved it, again as one arrives: with no core, nothing else tells SDL."""
+    from .screens.controller import ControllerScreen, pad_mapping
+
+    def mapped():
+        try:
+            listed = unopened()
+        except Exception as error:  # noqa: BLE001  the page stays on the keyboard and the pads SDL knows
+            log.warning("the saved pad mappings could not be read: %s", error)
+            return
+        families = {f["id"]: f for f in listed["state"].get("families") or [] if f.get("id")}
+        for line in listed["pads"]:
+            mapping = pad_mapping(ControllerScreen._entry(line), families)
+            if mapping:
+                gamepad.setMapping(*mapping)
+
+    gamepad.added.connect(mapped)
+    mapped()
+
+
 class Failure(QObject):
     changed = Signal()
 

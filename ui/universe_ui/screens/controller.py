@@ -149,6 +149,16 @@ class FakeWatcher(QObject):
         self.started = False
 
 
+# The SDL mapper reads the pad as the watcher does, lettered buttons by their letters: (vendor, product, fields), or None.
+def pad_mapping(entry, families):
+    if not entry["vendor"] or not entry["sdl"]:
+        return None
+    family = families.get(entry["family"]) or {}
+    labels = {s["id"]: str(s.get("label") or "") for s in family.get("slots") or [] if s.get("id")}
+    fields = mapping_fields(entry["sdl"], entry["sdl_axes"], labels)
+    return (entry["vendor"], entry["product"], fields) if fields else None
+
+
 class ControllerScreen(AdvancedRows, QObject):
     gated = True
     devicesChanged = Signal()
@@ -278,15 +288,10 @@ class ControllerScreen(AdvancedRows, QObject):
             "rumble": bool(line.get("rumble")),
         }
 
-    # The SDL mapper reads the pad as the watcher does, lettered buttons by their letters.
     def _map(self, entry):
-        if not entry["vendor"] or not entry["sdl"]:
-            return
-        family = self._families().get(entry["family"]) or {}
-        labels = {s["id"]: str(s.get("label") or "") for s in family.get("slots") or [] if s.get("id")}
-        fields = mapping_fields(entry["sdl"], entry["sdl_axes"], labels)
-        if fields:
-            self.mapping.emit(entry["vendor"], entry["product"], fields)
+        mapped = pad_mapping(entry, self._families())
+        if mapped:
+            self.mapping.emit(*mapped)
 
     def _families(self):
         return {f["id"]: f for f in self._state.get("families") or [] if f.get("id")}

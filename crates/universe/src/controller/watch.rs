@@ -1461,12 +1461,8 @@ mod tests {
         let mut misprinted = vec![];
         for pad in super::super::corpus::pads() {
             let e = &pad.entry;
-            let (vendor, product, keys) = (pad.id_field("vendor"), pad.id_field("product"), pad.keys());
-            let family = detect_family_on(false, vendor, product, pad.name(), &keys);
-            let rumble = e["evdev"]["ff"].as_bool().unwrap();
-            let caps = Caps { name: pad.name().into(), family, vendor, product, keys, axes: pad.axes(), ranges: pad.ranges(), uniq: String::new(), rumble };
-            let (cmd, _rx) = mpsc::channel(1);
-            let seen = pad_of("pad".into(), PathBuf::new(), e["bus"].as_str().unwrap().into(), caps, &cfg, cmd).json();
+            let family = detect_family_on(false, pad.id_field("vendor"), pad.id_field("product"), pad.name(), &pad.keys());
+            let seen = read_as(&pad, &cfg);
             assert_eq!(seen["family"], e["family"], "{}", pad.id);
             for (slot, code) in e["buttons"].as_object().unwrap() {
                 assert_eq!(seen["slots"][slot]["code"], *code, "{}: {slot}", pad.id);
@@ -1482,6 +1478,32 @@ mod tests {
             }
         }
         assert_eq!(misprinted, ["8bitdo-pro-3-xinput-usb"], "only an 8BitDo in X-input mode, an Xbox 360 pad to xpad, reads as another print");
+    }
+
+    fn read_as(pad: &super::super::corpus::Pad, cfg: &ControllerConfig) -> serde_json::Value {
+        let (vendor, product, keys) = (pad.id_field("vendor"), pad.id_field("product"), pad.keys());
+        let family = detect_family_on(false, vendor, product, pad.name(), &keys);
+        let rumble = pad.entry["evdev"]["ff"].as_bool().unwrap();
+        let caps = Caps { name: pad.name().into(), family, vendor, product, keys, axes: pad.axes(), ranges: pad.ranges(), uniq: String::new(), rumble };
+        let (cmd, _rx) = mpsc::channel(1);
+        pad_of("pad".into(), PathBuf::new(), pad.entry["bus"].as_str().unwrap().into(), caps, cfg, cmd).json()
+    }
+
+    // With no core, a frontend still maps a pad as its controller setup left it: [controller] read alone from a file the core refuses.
+    #[test]
+    fn a_config_the_core_refuses_still_gives_the_pads_their_saved_buttons() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = dir.path().join("config.toml");
+        let pad = super::super::corpus::pad("8bitdo-pro-3-dinput-bt");
+        let swapped = "[controller.buttons.8bitdo-pro-3]\nsouth = [\"BTN_SOUTH\"]\neast = [\"BTN_EAST\"]\n";
+        let south = |text: &str| {
+            std::fs::write(&config, text).unwrap();
+            read_as(&pad, &super::super::saved(&config))["sdl"]["south"].clone()
+        };
+        let (seeded, learned) = (south(""), south(swapped));
+        assert_ne!(seeded, learned, "the learned button moves A");
+        assert_eq!(south(&format!("[launch]\nhdr = \"maybe\"\n{swapped}")), learned, "a bad value elsewhere leaves [controller] read");
+        assert_eq!(south(&format!("not toml [\n{swapped}")), seeded, "a file that is no TOML gives the seeds");
     }
 
     // The walk moves to the next step while the stick is still where the last one asked: only leaving rest answers.

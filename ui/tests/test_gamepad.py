@@ -221,6 +221,19 @@ def test_a_covered_pad_reads_no_input_but_tracks_its_devices(pad):
     assert pad.received() == [(RETURN, True)]
 
 
+# No core on the failure page: the pads still get the mapping their controller setup saved, one plugged in later too.
+def test_the_failure_page_maps_the_pads_as_their_controller_setup_saved_them(pad, fake):
+    from universe_ui.failure import map_saved_pads
+
+    line = {"id": "event7", "family": "xbox", "vendor": 0x0F0D, "product": 0x0186, "sdl": {"south": "b1", "east": "b0"}, "sdl_axes": {}}
+    listed = {"state": fake.controllerState(), "pads": []}
+    map_saved_pads(pad.thread, lambda: listed)
+    listed["pads"] = [line]
+    pad.feed(("added", 7))
+    pad.thread._apply_mappings(pad.sdl, pad.controllers)
+    assert pad.sdl.mappings == ["030000000d0f00008601000011010000,Pro 3  D-input,a:b1,b:b0,"]
+
+
 def test_the_pad_thread_starts_on_sdl3_and_stops(app, caplog):
     thread = gamepad.GamepadThread()
     with caplog.at_level("WARNING", logger="universe.gamepad"):

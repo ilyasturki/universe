@@ -95,7 +95,7 @@ def failure_screen(app, args, error):
     from PySide6.QtCore import QTimer, QUrl
     from PySide6.QtQml import QQmlApplicationEngine
 
-    from .failure import Failure
+    from .failure import Failure, map_saved_pads
     from .gamepad import GamepadThread, KeyScript
 
     core = None
@@ -118,6 +118,8 @@ def failure_screen(app, args, error):
     quit_on_signals(app)
     gamepad = None if args.no_gamepad else GamepadThread(app)
     if gamepad is not None:
+        if core:
+            map_saved_pads(gamepad, core.controller_unopened)
         gamepad.start()
     script = None
     if args.keys:

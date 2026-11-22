@@ -512,6 +512,17 @@ pub fn sdl_axis(code: u16, axes: &[u16]) -> Option<String> {
     order.iter().position(|a| *a == code).map(|i| format!("a{i}"))
 }
 
+/// What the controller setup saved, for a frontend whose core would not open: the file's `[controller]`, read alone when
+/// the rest of the file is what the core refuses; the defaults when even that is unreadable.
+pub fn saved(path: &std::path::Path) -> ControllerConfig {
+    let text = std::fs::read_to_string(path).unwrap_or_default();
+    if let Ok(config) = toml::from_str::<crate::config::Config>(&text) {
+        return config.controller;
+    }
+    let table = text.parse::<toml::Table>().ok().and_then(|mut t| t.remove("controller"));
+    table.and_then(|t| t.try_into().ok()).unwrap_or_default()
+}
+
 pub fn state_json(config: &ControllerConfig) -> serde_json::Value {
     let families: Vec<serde_json::Value> = families()
         .iter()

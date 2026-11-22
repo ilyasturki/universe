@@ -678,6 +678,14 @@ fn start_on_defaults(py: Python<'_>) -> PyResult<Option<String>> {
     Ok(kept.map(|p| p.to_string_lossy().into_owned()))
 }
 
+/// `controller_state()` and `controller_pads()` from what the controller setup saved, with no core: `{state, pads}`.
+#[pyfunction]
+fn controller_unopened(py: Python<'_>) -> PyResult<Py<PyAny>> {
+    let config = universe::controller::saved(&universe::paths::config_file());
+    let pads = py.detach(|| universe::controller::watch::enumerate_json(&config));
+    py_of(py, &serde_json::json!({"state": universe::controller::state_json(&config), "pads": pads}))
+}
+
 /// The fake core's forms: the core's own, built from the views it hands over (`forms::Inputs`).
 #[pyfunction]
 #[pyo3(name = "_form_fields", signature = (kind, id, inputs, screen=None))]
@@ -712,6 +720,7 @@ fn universe_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(host_gamescope, m)?)?;
     m.add_function(wrap_pyfunction!(config_broken, m)?)?;
     m.add_function(wrap_pyfunction!(start_on_defaults, m)?)?;
+    m.add_function(wrap_pyfunction!(controller_unopened, m)?)?;
     m.add_function(wrap_pyfunction!(form_fields, m)?)?;
     m.add_function(wrap_pyfunction!(set_writes, m)?)?;
     m.add_function(wrap_pyfunction!(all_games_writes, m)?)?;

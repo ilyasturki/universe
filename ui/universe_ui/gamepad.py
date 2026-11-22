@@ -236,6 +236,7 @@ class GamepadThread(QThread):
     # QKeyEvent's constructor parents the primary QInputDevice to the app on first use, so events are built on the main thread.
     key = Signal(int, bool, bool)
     stick = Signal(str, float)
+    added = Signal()
 
     def __init__(self, parent=None, pad=None):
         super().__init__(parent)
@@ -361,6 +362,7 @@ class GamepadThread(QThread):
             controller = sdl.SDL_OpenGamepad(which)
             if controller:
                 controllers[which] = controller
+                self.added.emit()
                 log.info("controller: %s", (sdl.SDL_GetGamepadName(controller) or b"?").decode(errors="replace"))
         elif t == EVENT_GAMEPAD_REMOVED:
             controller = controllers.pop(which, None)
