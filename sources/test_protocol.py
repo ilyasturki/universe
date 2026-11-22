@@ -28,9 +28,10 @@ FORMS = {
     "scan": ({"game"}, set()),
     "achievements <id>": ({"achievement"}, set()),
     "uninstall <id>": ({"progress"}, set()),
+    "discard <id>": (set(), set()),
     "cloud-saves <id>": ({"cloud"}, {"cloud"}),
 }
-CAPABILITIES = {"achievements", "uninstall", "cloud-saves"}
+CAPABILITIES = {"achievements", "uninstall", "cloud-saves", "discard"}
 CLOUD_STATES = {"", "synced", "conflict", "offline", "error", "unsupported"}
 
 NULL = type(None)
@@ -62,6 +63,7 @@ OPTIONAL = {
     "download_size": (int, NULL),
     "disk_size": (int, NULL),
     "partial_dir": str,
+    "partial_dirs": list,
     "partial_bytes": int,
     "release_year": (int, NULL),
     "dlcs": list,

@@ -288,3 +288,19 @@ def test_the_launch_target_follows_the_itch_apps_pick(src, env, tmp_path):
     (game / ".itch.toml").write_text('[[actions]]\nname = "play"\npath = "bin/Game.exe"\n')
     assert src.launch_target(str(game), "windows") == "bin/Game.exe", "the manifest's action wins"
     assert src.launch_target(str(tmp_path / "missing"), "linux") is None
+
+
+def test_a_stopped_download_discarded_sends_its_staging_to_the_trash_and_leaves_no_paused_row(env, core, monkeypatch):
+    monkeypatch.setenv("SHIM_MODE", "partial")
+    universe = core("itch", {"games_dir": str(env["games"]), "platform": "linux", "adopt_from": ""})
+    (core.data / "itch").mkdir(parents=True)
+    (core.data / "itch" / "library.json").write_text(json.dumps([{"id": "11", "title": "Celeste Classic", "owned": True, "installed": False}]))
+    universe.login("itch", "good-key")
+    assert core.stopped(universe, "itch", "11")["partial_bytes"] >= 300
+    staging = env["games"] / "downloads" / "op-11"
+    assert staging.is_dir()
+    universe.trash("itch", "11")
+    assert not staging.exists() and (core.trash / "op-11" / "operate-context.json").is_file(), "butler's staging to the trash"
+    row = next(r for r in universe.library("itch", False) if r["id"] == "11")
+    assert (row["installed"], row["partial_dir"]) == (False, None), "no Paused row resumed forever"
+    assert "11" not in json.loads((core.data / "itch" / "partials.json").read_text()), "the store's record is cleared"

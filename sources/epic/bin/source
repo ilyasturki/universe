@@ -613,6 +613,16 @@ def cmd_uninstall(settings, args):
     emit("done")
 
 
+def cmd_discard(settings, args):
+    app = require_id(args, "discard")
+    (Path(settings["config_path"]) / "tmp" / f"{app}.resume").unlink(missing_ok=True)
+    forgotten = load_json(forgotten_path())
+    # The entry's marker is what lets an old copy forgotten for this download come back with its drive.
+    if not (isinstance(forgotten, dict) and app in forgotten):
+        set_partial(app, None)
+    emit("done")
+
+
 def cmd_update(settings, args):
     installs = installed_games(settings)
     index = library_index()
@@ -1220,6 +1230,7 @@ VERBS = {
     "info": cmd_info,
     "install": cmd_install,
     "uninstall": cmd_uninstall,
+    "discard": cmd_discard,
     "update": cmd_update,
     "scan": cmd_scan,
     "achievements": cmd_achievements,

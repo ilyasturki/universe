@@ -722,6 +722,11 @@ def cmd_update(settings, args):
     emit("done")
 
 
+def cmd_discard(settings, args):
+    set_partial(require_id(args, "discard"), None)
+    emit("done")
+
+
 def cmd_scan(settings, args):
     index = library_index()
     installs = scan_installs(settings)
@@ -1460,6 +1465,7 @@ VERBS = {
     "install": cmd_install,
     "update": cmd_update,
     "scan": cmd_scan,
+    "discard": cmd_discard,
     "achievements": cmd_achievements,
     "cloud-saves": cmd_cloud_saves,
 }

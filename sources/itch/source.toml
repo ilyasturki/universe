@@ -4,7 +4,7 @@ name = "itch.io"
 version = "0.0.15"
 description = "Installs and updates the games you own on itch.io through butler, and adopts the itch app's installs."
 exe = "bin/source"
-capabilities = ["uninstall"]
+capabilities = ["uninstall", "discard"]
 
 [requires]
 bins = ["butler"]

@@ -177,6 +177,20 @@ fn trash_refusal(dir: &Path, games: &[Resolved], roots: &[PathBuf], except: &[&s
     user.map(|g| format!("refusing to trash {}: {} uses it", dir.display(), g.id))
 }
 
+/// A store download of `sid`, in any process: an install or update holds it shared while its verb runs, a discard alone.
+/// `None` while another holder rules it out.
+fn download_lock(source: &str, sid: &str, alone: bool) -> Result<Option<std::fs::File>> {
+    let name: String = format!("{source}-{sid}").chars().map(|c| if c.is_ascii_alphanumeric() || "._-".contains(c) { c } else { '_' }).collect();
+    let p = paths::state_home().join("downloads").join(name);
+    std::fs::create_dir_all(p.parent().unwrap())?;
+    let f = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(p)?;
+    match if alone { f.try_lock() } else { f.try_lock_shared() } {
+        Ok(()) => Ok(Some(f)),
+        Err(std::fs::TryLockError::WouldBlock) => Ok(None),
+        Err(std::fs::TryLockError::Error(e)) => Err(e.into()),
+    }
+}
+
 /// How a store's report comes in, for `added_at`: a scan finds what was there all along; an install lands the game as new, an
 /// add from the store's page unless the library held it already; either brings an archived one back.
 #[derive(Clone, Copy)]
@@ -2055,6 +2069,13 @@ impl Core {
     ) -> Result<Vec<SourceEvent>> {
         let mut events = Vec::new();
         let key = (matches!(verb, "install" | "update") && !args.is_empty()).then(|| format!("{}:{}", m.id(), args[0]));
+        let _download = match &key {
+            Some(_) => Some(
+                download_lock(m.id(), &args[0], false)?
+                    .ok_or_else(|| Error::Busy(format!("{}'s download is being deleted: try again when that ends", args[0])))?,
+            ),
+            None => None,
+        };
         let (ask, asked) = tokio::sync::watch::channel(None::<(String, String)>);
         let run = sources::run(
             m,
@@ -2219,10 +2240,13 @@ impl Core {
                         g.insert(k.into(), d.filter(|_| installed).and_then(|d| d.get(k)).cloned().unwrap_or(serde_json::Value::Null));
                     }
                 }
-                if let Some(d) = on_disk.as_ref().and_then(|m| m.get(&gid)) {
-                    for k in ["partial_dir", "partial_bytes"] {
-                        g.insert(k.into(), d.get(k).cloned().unwrap_or(serde_json::Value::Null));
+                // A listing fetched while the download was stopped names its folder too: the scan alone says it is still there.
+                if let Some(on_disk) = &on_disk {
+                    for k in ["partial_dir", "partial_dirs", "partial_bytes"] {
+                        g.insert(k.into(), on_disk.get(&gid).and_then(|d| d.get(k)).cloned().unwrap_or(serde_json::Value::Null));
                     }
+                }
+                if let Some(d) = on_disk.as_ref().and_then(|m| m.get(&gid)) {
                     let installed = d.get("installed").and_then(|v| v.as_bool()).unwrap_or(false);
                     for k in Self::SIZE_KEYS {
                         if let Some(v) = d.get(k).filter(|v| !v.is_null()) {
@@ -2465,12 +2489,66 @@ impl Core {
     }
 
     /// Removes the install of `game_id` the source's `scan` finds when no library game stands for it, through the store when it
-    /// uninstalls, else its folder to the trash: the folder. One the library holds goes through `uninstall`.
+    /// uninstalls, else its folder to the trash: the folder. One the library holds goes through `uninstall`. Without an install,
+    /// a stopped download of it is discarded the same way.
     pub async fn source_trash(&self, source: &str, game_id: &str) -> Result<String> {
         let m = self.source(source).await?;
-        let dir = self
-            .scanned_install(&m, game_id, None)
-            .await?
+        let found: Vec<_> = Self::game_events(&self.run_verb(&m, "scan", &[], None).await?)
+            .into_iter()
+            .filter(|g| g.get("id").and_then(|v| v.as_str()) == Some(game_id))
+            .collect();
+        let installed = |g: &&serde_json::Map<String, serde_json::Value>| g.get("installed").and_then(|v| v.as_bool()) == Some(true);
+        if let Some(g) = found.iter().find(installed) {
+            return self.trash_install(&m, game_id, g).await;
+        }
+        let partial = found.iter().find(|g| g.get("partial_dir").and_then(|v| v.as_str()).is_some_and(|d| !d.is_empty()));
+        match partial {
+            Some(g) => self.discard_download(&m, game_id, g).await,
+            None => Err(Error::NotFound(format!("{} finds no install of {game_id}", m.id()))),
+        }
+    }
+
+    /// A stopped download's folders go to the trash, then the store forgets it: in that order, a failure leaves a row to discard
+    /// again, never a record of nothing. A store without `discard` that uninstalls removes its own (Steam's client).
+    async fn discard_download(&self, m: &Source, game_id: &str, g: &serde_json::Map<String, serde_json::Value>) -> Result<String> {
+        let title = g.get("title").and_then(|v| v.as_str()).filter(|t| !t.is_empty()).unwrap_or(game_id);
+        let _download = download_lock(m.id(), game_id, true)?.ok_or_else(|| Error::Busy(format!("{title} is downloading: cancel it first")))?;
+        let shown = paths::expand(g.get("partial_dir").and_then(|v| v.as_str()).unwrap_or_default());
+        if !m.can("discard") && m.can("uninstall") {
+            self.run_verb(m, "uninstall", &[game_id.to_string()], None).await?;
+            return Ok(shown.to_string_lossy().into());
+        }
+        let named: Option<Vec<PathBuf>> = g
+            .get("partial_dirs")
+            .and_then(|v| v.as_array())
+            .map(|dirs| dirs.iter().filter_map(|d| d.as_str()).filter(|d| !d.is_empty()).map(paths::expand).collect());
+        let dirs: Vec<PathBuf> = named.unwrap_or_else(|| vec![shown.clone()]).into_iter().filter(|d| d.is_dir()).collect();
+        let roots = self.install_roots().await;
+        let archived = {
+            let games = self.games.read().await;
+            let twin = store_twin(&games, m.id(), game_id, None, &roots).filter(|x| !x.game.removed_at.is_empty());
+            let except: Vec<&str> = twin.map(|x| x.game.id.as_str()).into_iter().collect();
+            if let Some(why) = dirs.iter().find_map(|d| trash_refusal(d, &games, &roots, &except)) {
+                return Err(Error::Invalid(why));
+            }
+            twin.map(|x| x.game.clone())
+        };
+        let _held = match &archived {
+            Some(g) => Some(self.hold_files(&[g]).await?),
+            None => None,
+        };
+        for d in &dirs {
+            trash(d)?;
+        }
+        if m.can("discard") {
+            self.run_verb(m, "discard", &[game_id.to_string()], None).await?;
+        }
+        Ok(shown.to_string_lossy().into())
+    }
+
+    async fn trash_install(&self, m: &Source, game_id: &str, g: &serde_json::Map<String, serde_json::Value>) -> Result<String> {
+        let source = m.id();
+        let dir = g
             .get("dir")
             .and_then(|v| v.as_str())
             .filter(|d| !d.is_empty())
@@ -2496,7 +2574,7 @@ impl Core {
         };
         // A store that uninstalls forgets the install too; its folder alone in the trash would leave it listed as installed.
         if m.can("uninstall") {
-            self.run_verb(&m, "uninstall", &[game_id.to_string()], None).await?;
+            self.run_verb(m, "uninstall", &[game_id.to_string()], None).await?;
         } else {
             trash(&dir)?;
         }

@@ -132,7 +132,7 @@ pub enum Cmd {
         /// Do not ask for confirmation
         #[arg(long, short)]
         yes: bool,
-        /// Trash that store's install of <name>, which the library does not hold
+        /// Trash that store's install of <name>, which the library does not hold, or its stopped download
         #[arg(long)]
         source: Option<String>,
     },

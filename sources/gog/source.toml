@@ -4,7 +4,7 @@ name = "GOG"
 version = "0.0.15"
 description = "Installs and updates the games of your GOG account through gogdl; unlocks their achievements through comet."
 exe = "bin/source"
-capabilities = ["achievements", "cloud-saves"]
+capabilities = ["achievements", "cloud-saves", "discard"]
 
 [requires]
 bins = ["gogdl"]

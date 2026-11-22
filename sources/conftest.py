@@ -74,6 +74,50 @@ def settings(monkeypatch):
 
 
 @pytest.fixture
+def core(tmp_path, monkeypatch, shims):
+    """The real in-process core on a sealed profile under `tmp_path/profile`, the source turned on with `settings`; the
+    trash is the profile's home's."""
+    universe_core = pytest.importorskip("universe_core")
+    root = tmp_path / "profile"
+
+    def start(source, settings):
+        for kind in ("data", "config", "state", "cache"):
+            monkeypatch.setenv(f"UNIVERSE_{kind.upper()}_HOME", str(root / kind))
+        for name, rel in (("HOME", "home"), ("XDG_DATA_HOME", "home/share"), ("XDG_CONFIG_HOME", "home/config"), ("UNIVERSE_MODULES_PATH", "modules")):
+            (root / rel).mkdir(parents=True, exist_ok=True)
+            monkeypatch.setenv(name, str(root / rel))
+        monkeypatch.setenv("UNIVERSE_SOURCES_PATH", os.path.dirname(__file__))
+        monkeypatch.setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/dev/null/bus")
+        for name in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"):
+            monkeypatch.setenv(name, "http://127.0.0.1:9")
+        (root / "config").mkdir(parents=True, exist_ok=True)
+        lines = [f"{k} = {json.dumps(v)}" for k, v in settings.items()]
+        (root / "config" / "config.toml").write_text(
+            f'schema = 1\n[desktop]\nprofile = "none"\n[sources]\nenabled = ["{source}"]\n[sources.{source}]\n' + "\n".join(lines) + "\n"
+        )
+        return universe_core.Core()
+
+    start.data = root / "data" / "sources"
+    start.trash = root / "home" / "share" / "Trash" / "files"
+    start.stopped = stopped_install
+    return start
+
+
+def stopped_install(core, source, game_id):
+    """An install of `game_id` cancelled once its download began: the Paused row a player stopped."""
+    started = []
+
+    def progress(done, total, message):
+        if not started:
+            started.append(core.cancel(source, game_id))
+
+    with pytest.raises(sys.modules["universe_core"].UniverseError):
+        core.install(source, game_id, progress)
+    assert started == [True]
+    return next(r for r in core.library(source, False) if r["id"] == game_id)
+
+
+@pytest.fixture
 def interrupt(src):
     def interrupt(*argv):
         proc = subprocess.Popen([sys.executable, src.__file__, *argv], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)

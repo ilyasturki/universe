@@ -356,7 +356,8 @@ def partial_of(game_id, partials):
         return None
     staging = Path(str(entry.get("staging") or ""))
     kept = folder_size(staging) + (folder_size(entry["dir"]) if entry.get("dir") and os.path.isdir(entry["dir"]) else 0)
-    return {"dir": entry.get("dir") or str(staging), "bytes": kept, **{k: entry[k] for k in ("download_size", "disk_size") if entry.get(k)}}
+    dirs = [str(d) for d in (entry.get("dir"), staging) if d and os.path.isdir(d)]
+    return {"dir": entry.get("dir") or str(staging), "dirs": dirs, "bytes": kept, **{k: entry[k] for k in ("download_size", "disk_size") if entry.get(k)}}
 
 
 def game_event(known, owned, cave=None, partials=None):
@@ -384,7 +385,7 @@ def game_event(known, owned, cave=None, partials=None):
         installed = {"dir": None, "exe": None, "build": None}
         partial = partial_of(known["id"], partials if partials is not None else load_partials())
         if partial:
-            fields.update(partial_dir=partial["dir"], partial_bytes=partial["bytes"])
+            fields.update(partial_dir=partial["dir"], partial_dirs=partial["dirs"], partial_bytes=partial["bytes"])
             fields.update({k: partial[k] for k in ("download_size", "disk_size") if partial.get(k)})
     emit(
         "game",
@@ -643,6 +644,11 @@ def cmd_uninstall(settings, args):
     emit("done")
 
 
+def cmd_discard(settings, args):
+    set_partial(numeric_id(args, "discard"), None)
+    emit("done")
+
+
 def cmd_update(settings, args):
     index = library_index()
     with Butler(settings) as butler:
@@ -755,6 +761,7 @@ VERBS = {
     "info": cmd_info,
     "install": cmd_install,
     "uninstall": cmd_uninstall,
+    "discard": cmd_discard,
     "update": cmd_update,
     "scan": cmd_scan,
 }

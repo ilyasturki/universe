@@ -966,3 +966,18 @@ def test_umu_id_is_asked_once_and_a_failed_lookup_again(web, src, env, monkeypat
     assert [url for url, _ in web.seen] == [src.UMU_URL.format(id="1"), src.UMU_URL.format(id="2")], (
         "an expired miss and an old empty one are asked again, a fresh one is not"
     )
+
+
+def test_a_stopped_download_discarded_goes_to_the_trash_and_leaves_no_paused_row(core, tmp_path, monkeypatch):
+    monkeypatch.setenv("SHIM_MODE", "partial")
+    monkeypatch.setenv("SHIM_LOG", str(tmp_path / "gogdl.log"))
+    (core.data / "gog").mkdir(parents=True)
+    (core.data / "gog" / "library.json").write_text(json.dumps([{"id": "1434554947", "title": "Mini Metro", "owned": True, "installed": False}]))
+    universe = core("gog", {"games_dir": str(tmp_path / "games")})
+    folder = tmp_path / "games" / "Mini Metro"
+    assert core.stopped(universe, "gog", "1434554947")["partial_dir"] == str(folder)
+    assert universe.trash("gog", "1434554947") == str(folder)
+    assert not folder.exists() and (core.trash / "Mini Metro" / "part.bin").is_file(), "to the trash"
+    row = next(r for r in universe.library("gog", False) if r["id"] == "1434554947")
+    assert (row["installed"], row["partial_dir"]) == (False, None), "no phantom Paused row"
+    assert "1434554947" not in json.loads((core.data / "gog" / "partials.json").read_text()), "the store's record is cleared"

@@ -210,7 +210,7 @@ def test_a_game_a_failed_reinstall_forgot_comes_back_with_its_drive(env, run, mo
     assert code == 0 and not old.exists(), "legendary knows it again, so it removes it"
 
 
-@pytest.mark.parametrize("resume", [False, True], ids=["no-resume-file", "paused"])
+@pytest.mark.parametrize("resume", [False, True, "discarded"], ids=["no-resume-file", "paused", "paused-then-discarded"])
 def test_a_returning_games_drive_restores_the_whole_copy_after_a_cut_install(env, run, monkeypatch, resume):
     logged_in(env)
     seed_cache(env, [{"id": "Min", "title": "Hades", "folder": "Hades", "owned_dlcs": []}])
@@ -236,6 +236,9 @@ def test_a_returning_games_drive_restores_the_whole_copy_after_a_cut_install(env
         assert [(e["id"], e["installed"], e.get("partial_dir")) for e in games] == [("Min", False, str(folder))]
     else:
         assert games == []
+    if resume == "discarded":
+        assert run("discard", "Min")[0] == 0
+        assert [e for e in run("scan")[1] if e["event"] == "game"] == [], "no Paused row"
     assert not any(c[:2] == ["-y", "import"] for c in calls(env))
     env["games"].rename(env["tmp"] / "cut-download")
     away.rename(env["games"])
@@ -500,3 +503,21 @@ def test_an_empty_umu_answer_is_asked_again_once_a_week_old(web, src, env):
     asked = [url for url, _ in web.seen]
     assert asked == [src.UMU_URL.format(id="Old"), src.UMU_URL.format(id="Bare")], "an expired miss and an old empty answer are asked again"
     assert src.umu_id("Old") is None and len(web.seen) == 2, "the new miss is kept"
+
+
+def test_a_stopped_download_discarded_goes_to_the_trash_and_leaves_no_paused_row(core, tmp_path, monkeypatch):
+    shim = {"SHIM_MODE": "partial", "SHIM_FOLDER": "Hades", "SHIM_LIBRARY": json.dumps(LIBRARY), "SHIM_LOG": str(tmp_path / "legendary.log")}
+    for name, value in shim.items():
+        monkeypatch.setenv(name, value)
+    legendary = tmp_path / "legendary"
+    universe = core("epic", {"games_dir": str(tmp_path / "games"), "config_path": str(legendary), "adopt_from": ""})
+    (core.data / "epic").mkdir(parents=True)
+    (core.data / "epic" / "library.json").write_text(json.dumps([{"id": "Min", "title": "Hades", "folder": "Hades", "owned": True, "installed": False}]))
+    folder = tmp_path / "games" / "Hades"
+    assert core.stopped(universe, "epic", "Min")["partial_dir"] == str(folder)
+    assert universe.trash("epic", "Min") == str(folder)
+    assert not folder.exists() and (core.trash / "Hades" / "part.bin").is_file(), "to the trash"
+    assert not (legendary / "tmp" / "Min.resume").exists(), "legendary's resume file goes with it"
+    row = next(r for r in universe.library("epic", False) if r["id"] == "Min")
+    assert (row["installed"], row["partial_dir"]) == (False, None), "no phantom Paused row"
+    assert "Min" not in json.loads((core.data / "epic" / "partials.json").read_text()), "the store's record is cleared"

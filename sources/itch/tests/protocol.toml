@@ -35,3 +35,4 @@ SHIM_LOG = "{tmp}/butler.log"
 "install <id>" = ["14"]
 "update <id>" = ["11"]
 "uninstall <id>" = ["11"]
+"discard <id>" = ["11"]

@@ -2111,6 +2111,51 @@ fn a_store_game_whose_folder_vanished_installs_again_elsewhere_and_launches_from
 }
 
 #[test]
+fn a_paused_gog_download_is_refused_while_it_runs_then_goes_to_the_trash_and_off_the_listing() {
+    use std::os::unix::process::CommandExt;
+    let dir = no_desktop();
+    let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().unwrap();
+    let games = dir.path().join("games");
+    std::fs::write(
+        dir.path().join("config/config.toml"),
+        format!("schema = 1\n[desktop]\nprofile = \"none\"\n[sources]\nenabled = [\"gog\"]\n[sources.gog]\ngames_dir = \"{}\"\n", games.display()),
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.path().join("data/sources/gog")).unwrap();
+    std::fs::write(dir.path().join("data/sources/gog/library.json"), r#"[{"id": "1434554947", "title": "Mini Metro", "owned": true, "installed": false}]"#)
+        .unwrap();
+    let path = format!("{}:{}", repo.join("sources/gog/tests/shims").display(), std::env::var("PATH").unwrap());
+    let sources = repo.join("sources");
+    let log = dir.path().join("gogdl.log");
+    let env = [NO_BUS, ("PATH", path.as_str()), ("UNIVERSE_SOURCES_PATH", sources.to_str().unwrap()), ("SHIM_MODE", "partial"), ("SHIM_LOG", log.to_str().unwrap())];
+    let folder = games.join("Mini Metro");
+    let mut install = command(&dir, &["install", "1434554947", "--source", "gog"], &env).process_group(0).spawn().unwrap();
+    let started = std::time::Instant::now();
+    while !folder.join(".gogdl-resume").exists() {
+        assert!(started.elapsed() < std::time::Duration::from_secs(10), "gogdl began no download");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let out = universe(&dir, &["uninstall", "1434554947", "--source", "gog", "--yes"], &env);
+    assert!(!out.status.success() && text(&out.stderr).contains("downloading"), "refused while it runs: {}", text(&out.stderr));
+    assert!(folder.join("part.bin").is_file(), "the running download keeps its files");
+    rustix::process::kill_process_group(rustix::process::Pid::from_raw(install.id() as i32).unwrap(), rustix::process::Signal::TERM).unwrap();
+    install.wait().unwrap();
+    let partial = || -> serde_json::Value {
+        let out = universe(&dir, &["library", "gog", "--json"], &env);
+        let rows: Vec<serde_json::Value> = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| panic!("{e}: {}", text(&out.stderr)));
+        rows.into_iter().find(|r| r["id"] == "1434554947").expect("the game stays listed")["partial_dir"].clone()
+    };
+    assert_eq!(partial(), folder.to_string_lossy().as_ref(), "stopped: a Paused row");
+
+    let out = universe(&dir, &["uninstall", "1434554947", "--source", "gog", "--yes"], &env);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert!(!folder.exists() && dir.path().join(".local/share/Trash/files/Mini Metro/part.bin").is_file(), "to the trash");
+    assert_eq!(partial(), serde_json::Value::Null, "no Paused row on the next scan");
+    let partials = std::fs::read_to_string(dir.path().join("data/sources/gog/partials.json")).unwrap();
+    assert!(!partials.contains("1434554947"), "the store's record is cleared: {partials}");
+}
+
+#[test]
 fn update_lists_a_game_updated_by_hand_until_it_is_marked_current() {
     let dir = no_desktop();
     let exe = dir.path().join("games/GTA V/GTA5_Enhanced.exe");
