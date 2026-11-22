@@ -279,6 +279,9 @@ impl Window {
             action.set_enabled(self.app().failure().is_some());
         }
         self.imp().failed_file_button.set_visible(self.app().failed_file().is_some());
+        if let Some(action) = self.lookup_action("start-on-defaults").and_downcast::<gio::SimpleAction>() {
+            action.set_enabled(self.app().config_broken());
+        }
         self.imp().defaults_button.set_visible(self.app().config_broken());
     }
 

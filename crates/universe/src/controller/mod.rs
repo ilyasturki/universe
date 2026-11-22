@@ -512,10 +512,9 @@ pub fn sdl_axis(code: u16, axes: &[u16]) -> Option<String> {
     order.iter().position(|a| *a == code).map(|i| format!("a{i}"))
 }
 
-/// What the controller setup saved, for a frontend whose core would not open: the file's `[controller]`, read alone when
-/// the rest of the file is what the core refuses; the defaults when even that is unreadable.
+/// The file's `[controller]` with no core, read alone when the core refuses the rest; the defaults when even that is unreadable.
 pub fn saved(path: &std::path::Path) -> ControllerConfig {
-    let text = std::fs::read_to_string(path).unwrap_or_default();
+    let text = std::fs::read(path).map(|bytes| String::from_utf8_lossy(&bytes).into_owned()).unwrap_or_default();
     if let Ok(config) = toml::from_str::<crate::config::Config>(&text) {
         return config.controller;
     }

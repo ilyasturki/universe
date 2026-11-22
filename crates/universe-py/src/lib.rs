@@ -666,9 +666,9 @@ fn host_gamescope(py: Python<'_>, screen: String) -> PyResult<Option<Vec<String>
 
 /// config.toml's path when the core refuses its contents (`config::broken`), for the page shown when the core will not open.
 #[pyfunction]
-fn config_broken() -> Option<String> {
+fn config_broken(py: Python<'_>) -> Option<String> {
     let path = universe::paths::config_file();
-    universe::config::broken(&path).then(|| path.to_string_lossy().into_owned())
+    py.detach(|| universe::config::broken(&path)).then(|| path.to_string_lossy().into_owned())
 }
 
 /// The broken config.toml kept beside itself and the file started again on the defaults: the kept file's path, `None` when it loads again.
@@ -681,8 +681,11 @@ fn start_on_defaults(py: Python<'_>) -> PyResult<Option<String>> {
 /// `controller_state()` and `controller_pads()` from what the controller setup saved, with no core: `{state, pads}`.
 #[pyfunction]
 fn controller_unopened(py: Python<'_>) -> PyResult<Py<PyAny>> {
-    let config = universe::controller::saved(&universe::paths::config_file());
-    let pads = py.detach(|| universe::controller::watch::enumerate_json(&config));
+    let (config, pads) = py.detach(|| {
+        let config = universe::controller::saved(&universe::paths::config_file());
+        let pads = universe::controller::watch::enumerate_json(&config);
+        (config, pads)
+    });
     py_of(py, &serde_json::json!({"state": universe::controller::state_json(&config), "pads": pads}))
 }
 

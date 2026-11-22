@@ -1504,6 +1504,8 @@ mod tests {
         assert_ne!(seeded, learned, "the learned button moves A");
         assert_eq!(south(&format!("[launch]\nhdr = \"maybe\"\n{swapped}")), learned, "a bad value elsewhere leaves [controller] read");
         assert_eq!(south(&format!("not toml [\n{swapped}")), seeded, "a file that is no TOML gives the seeds");
+        std::fs::write(&config, [b"# \xff\n".as_slice(), swapped.as_bytes()].concat()).unwrap();
+        assert_eq!(read_as(&pad, &super::super::saved(&config))["sdl"]["south"], learned, "a byte that is no text leaves [controller] read");
     }
 
     // The walk moves to the next step while the stick is still where the last one asked: only leaving rest answers.

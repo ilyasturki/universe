@@ -2913,9 +2913,11 @@ mod tests {
         };
         let first = b"[launch]\nhdr = \"maybe\" # mine\n\xff".to_vec();
         std::fs::write(&config, &first).unwrap();
+        std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o600)).unwrap();
         assert!(Config::load().is_err() && crate::config::broken(&config));
         let kept = crate::config::start_on_defaults(&config).unwrap().expect("a broken file is set aside");
         assert_eq!(std::fs::read(&kept).unwrap(), first, "the broken file, byte for byte");
+        assert_eq!(std::fs::metadata(&kept).unwrap().permissions().mode() & 0o777, 0o600, "as private as it was");
         assert!(kept.file_name().unwrap().to_string_lossy().starts_with("config.toml.broken-"));
         assert!(!crate::config::broken(&config));
         let core = Core::open_with(Config::load().unwrap(), Host::memory().0).await.unwrap();
@@ -2932,6 +2934,7 @@ mod tests {
 
         std::fs::write(&config, "not toml [").unwrap();
         std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o444)).unwrap();
+        assert!(!crate::config::broken(&config), "a read-only file is not offered");
         assert!(crate::config::start_on_defaults(&config).is_err(), "a read-only file is fixed where it is written");
         assert_eq!((std::fs::read_to_string(&config).unwrap(), kept_files()), ("not toml [".to_string(), vec![kept, again]));
     }

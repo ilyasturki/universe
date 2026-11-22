@@ -558,8 +558,7 @@ pub fn migrate(path: &Path) -> crate::Result<bool> {
 }
 
 /// Through a symlink to its target, so a config kept in a dotfiles repository stays linked; by a rename, so a process opening
-/// the file at the same moment reads the old one or the new one whole. `read`, the target's metadata when it was read, leaves a file changed since as it is.
-/// A file no rename can replace (bind-mounted, in a folder the core may not write) is written in place, its old bytes put back if that fails.
+/// the file at the same moment reads the old one or the new one whole, or in place when no rename can replace it. `read`, the target's metadata when it was read, leaves a file changed since as it is.
 pub(crate) fn replace(path: &Path, text: &[u8], read: Option<&std::fs::Metadata>) -> std::io::Result<()> {
     use std::io::{ErrorKind, Write};
     static WRITES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -624,25 +623,29 @@ fn in_place(target: &Path, text: &[u8]) -> std::io::Result<()> {
     wrote
 }
 
-/// A file the core read but cannot take: not text, not TOML, or a value its keys refuse. A missing or unreadable one is not broken.
+/// A file the core read but cannot take (not text, not TOML, a value its keys refuse) and may rewrite; a missing, unreadable or read-only one is not.
 pub fn broken(path: &Path) -> bool {
-    std::fs::read(path).is_ok_and(|bytes| !takes(&bytes))
+    std::fs::read(path).is_ok_and(|bytes| !takes(&bytes)) && rewritable(path)
+}
+
+fn rewritable(path: &Path) -> bool {
+    Config::writable(path) && Config::owner(path) != HOME_MANAGER
 }
 
 fn takes(bytes: &[u8]) -> bool {
     std::str::from_utf8(bytes).is_ok_and(|text| toml::from_str::<Config>(text).is_ok())
 }
 
-/// A broken file kept byte for byte beside itself as `<name>.broken-<date>`, never over an earlier one, then started again on
-/// the defaults: the kept file's path, or `None` when the file loads again and is left as it is.
+/// The kept `<name>.broken-<date>[-n]` copy's path, or `None` when the file loads again and is left as it is.
 pub fn start_on_defaults(path: &Path) -> crate::Result<Option<PathBuf>> {
     use std::io::Write;
-    let held = std::fs::read(path).map_err(|e| crate::Error::Io(format!("{}: {e}", path.display())))?;
-    let read = std::fs::metadata(path)?;
+    let io = |e: std::io::Error| crate::Error::Io(format!("{}: {e}", path.display()));
+    let read = std::fs::metadata(path).map_err(io)?;
+    let held = std::fs::read(path).map_err(io)?;
     if takes(&held) {
         return Ok(None);
     }
-    if !Config::writable(path) || Config::owner(path) == HOME_MANAGER {
+    if !rewritable(path) {
         return Err(crate::Error::Invalid(format!("{} is read-only: it can only be fixed where it is written", path.display())));
     }
     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
@@ -654,8 +657,8 @@ pub fn start_on_defaults(path: &Path) -> crate::Result<Option<PathBuf>> {
             opened => Some(opened.map(|f| (kept, f))),
         })
         .expect("an unbounded range")
-        .map_err(|e| crate::Error::Io(format!("{}: {e}", path.display())))?;
-    if let Err(e) = file.write_all(&held).and_then(|()| file.sync_all()) {
+        .map_err(io)?;
+    if let Err(e) = file.set_permissions(read.permissions()).and_then(|()| file.write_all(&held)).and_then(|()| file.sync_all()) {
         let _ = std::fs::remove_file(&kept);
         return Err(crate::Error::Io(format!("{}: {e}", kept.display())));
     }
