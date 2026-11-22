@@ -75,7 +75,9 @@ context.objects = [
             if let Ok(Some(status)) = pw.daemon.try_wait() {
                 return testbus::server_missing(&format!("the test's private PipeWire exited before it came up ({status})"));
             }
-            assert!(up.elapsed() < WAIT, "the private PipeWire never came up");
+            if up.elapsed() > WAIT {
+                return testbus::server_missing("the test's private PipeWire never came up");
+            }
             std::thread::sleep(Duration::from_millis(10));
         }
         Some(pw)
