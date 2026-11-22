@@ -101,7 +101,7 @@ Window {
 
         Text {
             width: parent.width
-            text: failure.keptAt ? "Your old settings are in " + failure.keptAt + "." : failure.offersDefaults ? "Fix it from a terminal or another computer, then try again. Or start with default settings: your settings file is kept beside the new one." : "Fix it from a terminal or another computer, then try again."
+            text: failure.keptAt ? "Your old settings are in " + failure.keptAt + "." : failure.offersDefaults ? "Fix it from a terminal or another computer and try again, or start with default settings. Universe keeps this file next to the new one." : "Fix it from a terminal or another computer, then try again."
             textFormat: Text.PlainText
             color: Theme.textHint
             font.family: Theme.sans

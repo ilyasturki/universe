@@ -134,7 +134,7 @@ def failure_screen(app, args, error):
     if script is not None:
         args.keys = script.stop()
     if failure.client is not None and failure.kept:
-        args.notice = f"Started with default settings. Your old ones are in {Path(failure.kept).name}, beside the new file."
+        args.notice = f"Started with default settings. Your old settings are in {Path(failure.kept).name}, next to the new file."
     return failure.client
 
 

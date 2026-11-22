@@ -234,7 +234,7 @@ impl Window {
                     match backend::blocking(async { universe::config::start_on_defaults(&universe::paths::config_file()) }).await {
                         Ok(kept) => {
                             if let Some(name) = kept.as_ref().and_then(|k| k.file_name()) {
-                                let said = gettext("Started with default settings. Your old ones are in {file}, beside the new file.");
+                                let said = gettext("Started with default settings. Your old settings are in {file}, next to the new file.");
                                 win.toast(adw::Toast::new(&said.replace("{file}", &name.to_string_lossy())));
                             }
                             gio::prelude::ActionGroupExt::activate_action(&win, "retry", None);
