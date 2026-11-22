@@ -169,6 +169,7 @@ def test_an_update_opens_whats_new_once_and_about_opens_the_changelog(look):
     else:
         look.press(Qt.Key.Key_Escape)
         until(lambda: changelog.pending == [], "B closes it, seen")
+        until(lambda: look.root.property("onHome") is True, "one B: the start opened What's new once, Home under it")
 
     about = look.settings("about")
     until(lambda: about.property("sectionId") == "about")
