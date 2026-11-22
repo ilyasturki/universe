@@ -912,6 +912,43 @@ fn a_launch_killed_before_its_game_started_is_undone_on_the_next_open() {
 }
 
 #[test]
+fn a_store_uninstall_under_way_refuses_a_launch_in_another_process_and_spares_another_game() {
+    let dir = no_desktop();
+    let (gate_dir, launched) = (dir.path().join("gate"), dir.path().join("launched"));
+    std::fs::create_dir_all(&gate_dir).unwrap();
+    std::fs::write(dir.path().join("config/config.toml"), "schema = 1\n[desktop]\nprofile = \"none\"\n[sources]\nenabled = [\"held\"]\n").unwrap();
+    let source = dir.path().join("sources/held");
+    shim(&source, "run", &format!("case \"$1\" in uninstall) {} ;; esac\necho '{{\"event\":\"done\"}}'\n", gate(&gate_dir)));
+    std::fs::write(source.join("source.toml"), "api = 2\nid = \"held\"\nname = \"Held\"\nexe = \"run\"\ncapabilities = [\"uninstall\"]\n").unwrap();
+    for (id, sid) in [("quest", "q1"), ("other", "o1")] {
+        let folder = dir.path().join("games").join(id);
+        std::fs::create_dir_all(&folder).unwrap();
+        std::fs::write(folder.join("run.sh"), "").unwrap();
+        std::fs::create_dir_all(dir.path().join("data/games").join(id)).unwrap();
+        std::fs::write(
+            dir.path().join("data/games").join(id).join("game.toml"),
+            format!(
+                "schema = 1\nid = \"{id}\"\ntitle = \"{id}\"\n[source]\nkind = \"held\"\nid = \"{sid}\"\ndir = \"{0}\"\n[launch]\nrunner = \"linux\"\nexe = \"{0}/run.sh\"\npre_command = \"echo {id} >> {1}\"\n",
+                folder.display(),
+                launched.display()
+            ),
+        )
+        .unwrap();
+    }
+
+    let mut uninstall = command(&dir, &["uninstall", "quest", "-y"], &[NO_BUS]).stdout(std::process::Stdio::null()).spawn().unwrap();
+    wait_for(&gate_dir.join("entered"), &mut uninstall);
+    let play = universe(&dir, &["play", "quest", "--no-wait"], &[NO_BUS]);
+    assert!(!play.status.success() && text(&play.stderr).contains("busy:"), "{}", text(&play.stderr));
+    assert!(!dir.path().join("state/current-session.json").exists());
+    let other = universe(&dir, &["play", "other", "--no-wait"], &[NO_BUS]);
+    assert!(!text(&other.stderr).contains("busy:"), "{}", text(&other.stderr));
+    assert_eq!(std::fs::read_to_string(&launched).unwrap_or_default(), "other\n", "only the other game's launch began");
+    std::fs::write(gate_dir.join("release"), "").unwrap();
+    assert!(uninstall.wait().unwrap().success());
+}
+
+#[test]
 fn a_close_whose_record_cannot_be_noted_runs_every_step_and_ends_once_writable() {
     use std::os::unix::fs::PermissionsExt;
     let dir = no_desktop();

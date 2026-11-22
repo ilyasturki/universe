@@ -214,6 +214,17 @@ pub(crate) fn copy_tree(from: &Path, to: &Path) -> Result<()> {
     std::fs::set_permissions(to, std::fs::metadata(from)?.permissions()).map_err(|e| failed(to, e))
 }
 
+/// A game's lock on its files: exclusive for what changes or takes them, shared by a launch and a backup.
+pub(crate) struct Held {
+    _files: Vec<std::fs::File>,
+}
+
+fn files_lock(id: &str) -> Result<std::fs::File> {
+    let p = paths::state_home().join("locks").join(id);
+    std::fs::create_dir_all(p.parent().unwrap())?;
+    Ok(std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(p)?)
+}
+
 impl Core {
     /// The library takes in the title ludusavi found, which the ask wrote to game.toml.
     async fn saves_ask(&self, game: &Game, config: &Config, fetch: bool) -> Result<saves::Ask> {
@@ -242,11 +253,40 @@ impl Core {
         Ok(())
     }
 
-    /// The ids of the game running or starting and of every game whose saves are being backed up or restored.
-    pub(crate) async fn busy_games(&self) -> Result<Vec<String>> {
-        let mut ids: Vec<String> = self.occupant().await?.map(|(c, _)| c.id).into_iter().collect();
-        ids.extend(self.games.read().await.iter().map(|x| &x.game.id).filter(|id| saves::game_held(id)).cloned());
-        Ok(ids)
+    /// The games' files held for a change, then each checked idle under its lock, in any process: `Busy` at once otherwise.
+    pub(crate) async fn hold_files(&self, games: &[&Game]) -> Result<Held> {
+        let mut games = games.to_vec();
+        games.sort_by(|a, b| a.id.cmp(&b.id));
+        games.dedup_by(|a, b| a.id == b.id);
+        let mut held = Vec::new();
+        for g in &games {
+            let f = files_lock(&g.id)?;
+            match f.try_lock() {
+                Ok(()) => held.push(f),
+                Err(std::fs::TryLockError::WouldBlock) => {
+                    self.refuse_busy(g).await?;
+                    return Err(Error::Busy(format!("{}'s files are being changed: try again when that ends", g.title)));
+                }
+                Err(std::fs::TryLockError::Error(e)) => return Err(e.into()),
+            }
+        }
+        for g in &games {
+            self.refuse_busy(g).await?;
+        }
+        Ok(Held { _files: held })
+    }
+
+    /// The game's files held still by a launch or a backup, beside any other: `Busy` at once while a change holds them.
+    pub(crate) fn share_files(&self, game: &Game) -> Result<Held> {
+        let f = files_lock(&game.id)?;
+        match f.try_lock_shared() {
+            Ok(()) => Ok(Held { _files: vec![f] }),
+            Err(std::fs::TryLockError::WouldBlock) if saves::game_held(&game.id) => {
+                Err(Error::Busy(format!("{}'s saves are being backed up or restored: try again when that ends", game.title)))
+            }
+            Err(std::fs::TryLockError::WouldBlock) => Err(Error::Busy(format!("{}'s files are being changed: try again when that ends", game.title))),
+            Err(std::fs::TryLockError::Error(e)) => Err(e.into()),
+        }
     }
 
     /// Where a game's data lives, each part with its size: install, prefix, saves, Universe's own files, recordings, logs.
@@ -335,13 +375,10 @@ impl Core {
         let Some(item) = listed.iter().find(|l| l.path == path) else {
             return Err(Error::Invalid(format!("{path} is no leftover: only what the Storage view lists goes to the trash")));
         };
-        let busy = self.busy_games().await?;
         let dir = Path::new(&item.path);
         let on_it = |g: &Game| has_prefix(g) && nested(&prefix_of(g, &config), dir);
-        let owner = games.iter().map(|r| &r.game).filter(|g| busy.contains(&g.id)).find(|g| g.id == item.id || (item.kind == "prefix" && on_it(g)));
-        if let Some(g) = owner {
-            self.refuse_busy(g).await?;
-        }
+        let owners: Vec<&Game> = games.iter().map(|r| &r.game).filter(|g| g.id == item.id || (item.kind == "prefix" && on_it(g))).collect();
+        let _held = self.hold_files(&owners).await?;
         trash::delete(&item.path).map_err(|e| Error::Io(format!("trash {}: {e}", item.path)))?;
         if item.kind == "game" {
             self.reload_all().await;

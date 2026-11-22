@@ -537,6 +537,7 @@ impl Core {
         if !r.game.removed_at.is_empty() {
             return Err(Error::Unavailable(format!("{id} was removed")));
         }
+        let _files = self.share_files(&r.game)?;
         let cfg = self.config.read().await.clone();
         let spec = crate::runners::spec(&r.effective.runner);
         if spec.is_some_and(|s| (s.kind == crate::runners::Kind::Proton && r.game.launch.runner_exe.is_empty()) || s.via_proton) {

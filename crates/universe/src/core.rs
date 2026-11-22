@@ -530,7 +530,7 @@ impl Core {
     /// The game stays in the library with its hours, journal and recordings, not installed.
     pub async fn uninstall(&self, id: &str) -> Result<()> {
         let r = self.get(id).await?;
-        self.refuse_busy(&r.game).await?;
+        let _held = self.hold_files(&[&r.game]).await?;
         match self.uninstaller(&r.game).await {
             Some(m) => {
                 self.run_verb(&m, "uninstall", std::slice::from_ref(&r.game.source.id), None).await?;
@@ -563,9 +563,7 @@ impl Core {
 
     pub async fn remove(&self, id: &str, purge: bool) -> Result<()> {
         let r = self.get(id).await?;
-        if purge {
-            self.refuse_busy(&r.game).await?;
-        }
+        let _held = if purge { Some(self.hold_files(&[&r.game]).await?) } else { None };
         let config = self.config.read().await.clone();
         let prefix = crate::launcher::prefix_of(&r.game, &config);
         if purge && prefix.starts_with(config.prefixes_root()) {
@@ -2478,9 +2476,10 @@ impl Core {
             }
             twin.map(|x| x.game.clone())
         };
-        if let Some(g) = archived {
-            self.refuse_busy(&g).await?;
-        }
+        let _held = match &archived {
+            Some(g) => Some(self.hold_files(&[g]).await?),
+            None => None,
+        };
         // A store that uninstalls forgets the install too; its folder alone in the trash would leave it listed as installed.
         if m.can("uninstall") {
             self.run_verb(&m, "uninstall", &[game_id.to_string()], None).await?;
@@ -2549,36 +2548,30 @@ impl Core {
             vec![game_id.to_string()]
         };
         let roots = self.install_roots().await;
-        // Scanned the first time a busy game no store claimed may stand for a title; `Some(None)`: that scan failed.
+        // Scanned once when a game no store claimed may stand for a title; `Some(None)`: that scan failed.
         let mut found: Option<Option<BTreeMap<String, PathBuf>>> = None;
+        let imports = self.games.read().await.iter().any(|x| unclaimed(&x.game));
         let mut n = 0;
         for t in targets {
-            let busy = self.busy_games().await?;
-            let import_busy = self.games.read().await.iter().any(|x| busy.contains(&x.game.id) && unclaimed(&x.game));
-            if import_busy && found.is_none() {
+            if imports && found.is_none() {
                 found = Some(self.installed_dirs(&m).await);
             }
             let standing: Vec<Game> = {
                 let games = self.games.read().await;
-                let scanned = found.as_ref().filter(|_| import_busy);
-                let dir = scanned.and_then(Option::as_ref).and_then(|f| f.get(&t)).map(PathBuf::as_path);
+                let dir = found.as_ref().and_then(Option::as_ref).and_then(|f| f.get(&t)).map(PathBuf::as_path);
                 let mut twins = store_twins(&games, source, &t, dir, &roots);
-                if scanned.is_some_and(Option::is_none) {
+                if found.as_ref().is_some_and(Option::is_none) {
                     twins.extend(games.iter().filter(|x| unclaimed(&x.game)));
                 }
-                twins.into_iter().filter(|x| busy.contains(&x.game.id)).map(|x| x.game.clone()).collect()
+                twins.into_iter().map(|x| x.game.clone()).collect()
             };
-            let mut busy = Ok(());
-            for g in &standing {
-                busy = busy.and(self.refuse_busy(g).await);
-            }
-            match busy {
+            let _held = match self.hold_files(&standing.iter().collect::<Vec<_>>()).await {
                 Err(e) if game_id.is_empty() => {
                     tracing::warn!("{t}: {e}");
                     continue;
                 }
-                busy => busy?,
-            }
+                held => held?,
+            };
             let events = self.run_verb(&m, "update", std::slice::from_ref(&t), progress.as_deref_mut()).await.map_err(|e| Error::Io(format!("{t}: {e}")))?;
             let mut up = crate::upstream::Upstream::load();
             if up.applied(source, &t) {
