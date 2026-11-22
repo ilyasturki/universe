@@ -3639,6 +3639,9 @@ scan) for i in 1 2 3; do echo "{\"event\":\"game\",\"id\":\"$i\",\"title\":\"Gam
         let core = open().await;
         assert!(matches!(core.source_trash("fake", "held").await, Err(Error::Invalid(_))), "the store is asked only past the same guards");
         assert!(matches!(core.source_trash("fake", "stopped").await, Err(Error::Invalid(_))), "a stopped download in a game's folder too");
+        let updating = download_lock("fake", "kept", false).unwrap().unwrap();
+        assert!(matches!(core.source_trash("fake", "kept").await, Err(Error::Busy(_))), "not while its update runs, in any process");
+        drop(updating);
         core.source_trash("fake", "kept").await.unwrap();
         assert_eq!(std::fs::read_to_string(&asked).unwrap(), "kept\n", "a store that uninstalls is asked, so it forgets the install too");
         assert!(pc.join("Kept").is_dir(), "its files are the store's to remove");
