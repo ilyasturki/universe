@@ -51,6 +51,9 @@ pub enum Cmd {
         /// Show hidden games too
         #[arg(long)]
         all: bool,
+        /// The games rm removed instead: what restore brings back
+        #[arg(long, conflicts_with = "all")]
+        removed: bool,
     },
     /// Launch a game (exact › word › substring or path) and wait for it to end; the game ends with this command (Ctrl-C stops it)
     #[command(alias = "launch")]
@@ -1111,7 +1114,7 @@ fn report(json: bool, ok: bool, message: &str) {
 
 pub async fn run(cli: Cli) -> anyhow::Result<()> {
     let json = cli.json;
-    let cmd = cli.cmd.unwrap_or(Cmd::Ls { all: false });
+    let cmd = cli.cmd.unwrap_or(Cmd::Ls { all: false, removed: false });
     let loc = Locale::from_env();
     // Shell helpers stay off Core::open: a Tab must not reconcile a session or probe logins.
     match &cmd {
@@ -1179,12 +1182,17 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             }
             println!("{} {}×{} @ {} Hz", s(&mode, "screen"), mode["width"], mode["height"], mode["refresh"]);
         }
-        Cmd::Ls { all } => {
-            let list = core.list().await;
+        Cmd::Ls { all, removed } => {
+            let list = if removed { core.removed().await } else { core.list().await };
             if json {
                 return print_json(&list);
             }
-            let mut t = table(&["Title", "Runner", "Source", "Hours", "Last played"]);
+            if removed && list.is_empty() {
+                println!("{}", "no removed game to restore".dimmed());
+                return Ok(());
+            }
+            let all = all || removed;
+            let mut t = table(&["Title", "Runner", "Source", "Hours", if removed { "Removed" } else { "Last played" }]);
             for i in 1..=4 {
                 t.column_mut(i).unwrap().set_constraint(ColumnConstraint::ContentWidth);
             }
@@ -1199,7 +1207,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     Cell::new(s(&g["effective"], "runner")),
                     Cell::new(s(&g["source"], "kind")),
                     Cell::new(hours(&g)),
-                    Cell::new(day(&s(&g["stats"], "last_played"), &loc)),
+                    Cell::new(day(&if removed { s(&g, "removed_at") } else { s(&g["stats"], "last_played") }, &loc)),
                 ]);
             }
             println!("{t}");

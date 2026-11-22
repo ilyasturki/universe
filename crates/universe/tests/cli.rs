@@ -1877,8 +1877,14 @@ fn restore_brings_a_removed_game_back_with_its_recordings_and_overwrites_none() 
     let listed = |dir: &tempfile::TempDir| -> Vec<serde_json::Value> { serde_json::from_slice(&universe(dir, &["ls", "--json"], &[NO_BUS]).stdout).unwrap() };
     assert_eq!(listed(&dir)[0]["source"]["kind"], "manual", "a Lutris import from before reads as added by hand");
 
+    let removed = |dir: &tempfile::TempDir| -> Vec<serde_json::Value> {
+        serde_json::from_slice(&universe(dir, &["ls", "--removed", "--json"], &[NO_BUS]).stdout).unwrap()
+    };
+    assert!(removed(&dir).is_empty());
     assert!(universe(&dir, &["rm", "-y", "dishonored"], &[NO_BUS]).status.success());
     assert!(archived.join("b.mkv").is_file() && !live.exists(), "rm archives the recordings");
+    assert_eq!(removed(&dir).iter().map(|g| g["id"].clone()).collect::<Vec<_>>(), ["dishonored"], "ls --removed lists what restore brings back");
+    assert!(listed(&dir).is_empty());
     std::fs::create_dir_all(&live).unwrap();
     std::fs::write(live.join("a.mkv"), "recorded since").unwrap();
     let out = universe(&dir, &["restore", "dishonored"], &[NO_BUS]);
@@ -1890,6 +1896,7 @@ fn restore_brings_a_removed_game_back_with_its_recordings_and_overwrites_none() 
     assert!(!archived.join("b.mkv").exists() && !archived.join("clips").exists());
     let games = listed(&dir);
     assert_eq!((games.len(), games[0]["hidden"].as_bool(), games[0]["removed"].as_bool()), (1, Some(false), Some(false)), "in the library again");
+    assert!(removed(&dir).is_empty());
     assert!(!universe(&dir, &["restore", "dishonored"], &[NO_BUS]).status.success(), "a game in the library has nothing to restore");
 
     assert!(universe(&dir, &["rm", "-y", "dishonored"], &[NO_BUS]).status.success());
