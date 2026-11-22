@@ -27,6 +27,7 @@ from PySide6.QtTest import QTest
 from uitest import descendant, descendants, own, pump, record, until
 
 from universe_ui import host
+from universe_ui.errors import UniverseError
 from universe_ui.screens.settings import runner_logo
 from universe_ui.themes import THEMES
 
@@ -244,6 +245,54 @@ def test_the_media_tab_and_the_screenshots_page(look, api):
     until(lambda: shots.gameId == "the-technomancer" and shots.count > 0, "the sub-page loaded the game's shots")
     root.closeSub()
     until(lambda: root.property("subOpen") is False)
+
+
+@pytest.fixture(params=["core", "rows"])
+def unreadable_media(request, fake, monkeypatch):
+    """The media read failing from the first look on: the core's read, or the rows built from it off the UI thread."""
+    from universe_ui.screens import media as screen
+
+    failing = [True]
+    real = fake.core.media if request.param == "core" else screen._build_media
+
+    def failed(arg):
+        if failing:
+            if request.param == "core":
+                raise UniverseError("Io", "the recordings folder could not be read")
+            raise OSError("the recordings folder could not be read")
+        return real(arg)
+
+    if request.param == "core":
+        monkeypatch.setattr(fake.core, "media", failed)
+    else:
+        monkeypatch.setattr(screen, "_build_media", failed)
+    return failing
+
+
+@pytest.mark.parametrize("look", ["reprise", "ps5"], indirect=True)
+def test_a_media_tab_that_cannot_read_says_why_and_a_reads_again(unreadable_media, look, api):
+    store = api.screens.media
+    if look.stacked:
+        page = look.open("pages/MediaGalleryPage.qml")
+    else:
+        look.root.goToTab(look.root.property("mediaTab"))
+        page = look.page("mediaPage")
+    until(lambda: store.error == "the recordings folder could not be read" and not store.loading, "the read fails, and stops loading")
+    settle(look.window)
+    assert read(page, "shown") == []
+    if not look.stacked:
+        assert next(h for h in read(page, "hints") if h["glyph"] == "A")["label"] == "Try again"
+    unreadable_media.clear()
+    look.press(Qt.Key.Key_Return)
+    until(lambda: read(page, "shown") and store.error == "" and not store.loading, "A reads the media again")
+
+    shown = notices(look.engine)
+    unreadable_media.append(True)
+    store.load()
+    failed = until(lambda: (n := shown()) and n.get("error") and n, "a failed read over the rows says so in a notice")
+    assert failed["text"] == "the recordings folder could not be read"
+    until(lambda: not store.loading)
+    assert read(page, "shown") and store.error == "", "and the rows stay"
 
 
 @reprise

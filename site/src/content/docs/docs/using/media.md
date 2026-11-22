@@ -17,6 +17,8 @@ Up from the top row reaches the filters: Screenshots, Recordings and Journal. **
 
 The focused item's game is named in the middle of the tab bar.
 
+When Universe can't read your media, the tab says why, and **A** (**Try again**) reads it again. A failure while the tab already shows items leaves them and says so in a notice.
+
 - **A** on a screenshot shows it full screen, and Left and Right step through the others.
 - **A** on a recording plays it, and **A** on a journal entry opens it.
 - **X** opens the game's page, and **Y** jumps to the journal entry of a screenshot or a recording.

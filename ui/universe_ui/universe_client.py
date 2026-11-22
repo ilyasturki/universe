@@ -165,6 +165,11 @@ class CoreClient(QObject):
                 err = e
                 self._deliver.emit(lambda: on_error(err))
                 return
+            except Exception as e:
+                log.exception("a core call failed")
+                err = UniverseError("Io", str(e) or type(e).__name__)
+                self._deliver.emit(lambda: on_error(err))
+                return
             if on_reply is not None:
                 reply = on_reply
                 self._deliver.emit(lambda: reply(value))
@@ -535,8 +540,8 @@ class CoreClient(QObject):
         return self._guarded([], self._core.media, ident)
 
     # `build(rows)` runs on the worker too: a long list costs the UI thread only the reply.
-    def mediaAsync(self, ident, build, on_reply):
-        self._call_async(lambda: build(self._core.media(ident)), on_reply)
+    def mediaAsync(self, ident, build, on_reply, on_error=None):
+        self._call_async(lambda: build(self._core.media(ident)), on_reply, on_error)
 
     def _wait_window(self, session_id):
         def missed(e):

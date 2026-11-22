@@ -99,6 +99,11 @@ FocusScope {
 
     function open() {
         var row = current;
+        if (!row && store.error !== "") {
+            Sound.play("ok");
+            store.load();
+            return;
+        }
         if (!row) {
             Sound.play("edge");
             return;
@@ -508,7 +513,7 @@ FocusScope {
         visible: page.shown.length === 0 && !page.store.loading
         horizontalAlignment: Text.AlignHCenter
         wrapMode: Text.WordWrap
-        text: page.rows.length === 0 ? "Screenshots, recordings and journal entries land here as you play." : "Nothing here for this tab."
+        text: page.store.error !== "" ? page.store.error + "\nPress A to try again." : page.rows.length === 0 ? "Screenshots, recordings and journal entries land here as you play." : "Nothing here for this tab."
         color: Theme.textMuted
     }
 

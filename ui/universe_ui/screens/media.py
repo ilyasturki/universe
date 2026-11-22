@@ -449,6 +449,7 @@ class MediaTimeline(QObject):
         self._rows_out = None
         self._loaded = False
         self._loading = False
+        self._error = ""
         self._generation = 0
         self._reload = QTimer(self)
         self._reload.setSingleShot(True)
@@ -464,10 +465,21 @@ class MediaTimeline(QObject):
         self._loaded = True
         self._generation += 1
         generation = self._generation
-        if not self._loading:
-            self._loading = True
+        if not self._loading or self._error:
+            self._loading, self._error = True, ""
             self.loadingChanged.emit()
-        self._client.mediaAsync("", _build_media, lambda built: self._landed(generation, built))
+        self._client.mediaAsync("", _build_media, lambda built: self._landed(generation, built), lambda e: self._missed(generation, e))
+
+    # Over rows already shown the failure is a notice and the rows stay; with none, the page says why.
+    def _missed(self, generation, e):
+        if generation != self._generation:
+            return
+        self._loading = False
+        if self._rows:
+            self._client.error.emit(e.kind, e.message)
+        else:
+            self._error = e.message
+        self.loadingChanged.emit()
 
     def _landed(self, generation, built):
         if generation != self._generation:
@@ -506,6 +518,7 @@ class MediaTimeline(QObject):
     rows = Property(list, _rows_list, notify=rowsChanged)
     count = Property(int, lambda self: len(self._rows), notify=rowsChanged)
     loading = Property(bool, lambda self: self._loading, notify=loadingChanged)
+    error = Property(str, lambda self: self._error, notify=loadingChanged)
 
 
 # Off the UI thread: the rows, and a `Frames` (16 stats each) for every recording.

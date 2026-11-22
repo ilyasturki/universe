@@ -76,7 +76,7 @@ FocusScope {
         {
             glyph: "A",
             label: openLabel,
-            dim: current === null
+            dim: current === null && !failed
         },
         {
             glyph: "X",
@@ -99,7 +99,8 @@ FocusScope {
             label: "Back"
         }
     ])
-    readonly property string openLabel: current ? (current.kind === "shot" ? "View" : current.kind === "recording" ? "Play" : "Read") : "Open"
+    readonly property string openLabel: current ? (current.kind === "shot" ? "View" : current.kind === "recording" ? "Play" : "Read") : failed ? "Try again" : "Open"
+    readonly property bool failed: store.error !== ""
 
     readonly property int columns: 4
     readonly property real gap: Theme.dp(26)
@@ -149,6 +150,11 @@ FocusScope {
     }
 
     function open() {
+        if (failed) {
+            Sound.enter();
+            store.load();
+            return;
+        }
         if (!current || !currentGame) {
             Sound.edge();
             return;
@@ -393,7 +399,7 @@ FocusScope {
     Text {
         anchors.centerIn: parent
         visible: page.shown.length === 0 && !page.store.loading
-        text: page.store.count === 0 ? "Screenshots, recordings and journal entries land here as you play." : "Nothing of these kinds yet."
+        text: page.failed ? page.store.error : page.store.count === 0 ? "Screenshots, recordings and journal entries land here as you play." : "Nothing of these kinds yet."
         color: Theme.textSecondary
         font.family: Theme.sans
         font.pixelSize: Theme.dp(26)
