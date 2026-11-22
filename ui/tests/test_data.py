@@ -1,7 +1,7 @@
 import threading
 
 import pytest
-from looks import FocusTrace, activate, content_rows, focus_names, held_notices, notices, read, settle
+from looks import FocusTrace, activate, content_rows, focus_names, held_notices, invoke, notices, read, settle
 from PySide6.QtCore import SIGNAL, QObject, Qt
 from uitest import descendant, record, until
 
@@ -211,23 +211,48 @@ def test_a_leftover_trash_reports_once_whether_its_storage_page_stays_or_closes(
     assert [error for error, _ in trash(close=False)] == [False], "one notice with the page still open"
 
 
-@pytest.mark.parametrize("look", ["reprise"], indirect=True)
-def test_a_data_page_that_cannot_load_holds_the_focus_on_its_retry(api, fake, look, monkeypatch):
-    def unreadable(ident):
-        raise UniverseError("Io", "the game's folders could not be read")
+def listed(look, page):
+    """The rows a Data or Storage view shows: Reprise's Settings cards, the others' list with its status rows."""
+    return content_rows(page) if not look.stacked else read(descendant(page, "settingsRows"), "model")
 
-    readable = fake.core.game_data
-    monkeypatch.setattr(fake.core, "game_data", unreadable)
-    look.open("pages/DataPage.qml", look.game("the-technomancer"))
-    until(lambda: "retry" in focus_names(look.window), "the failure's one action takes the focus, not the hidden lists")
-    monkeypatch.setattr(fake.core, "game_data", readable)
+
+def under_cursor(page):
+    """The row under a console list's cursor while the list holds the focus."""
+    rows = descendant(page, "settingsRows")
+    return read(rows, "currentRow") or {} if rows.property("activeFocus") else {}
+
+
+def test_a_data_page_that_cannot_load_holds_the_focus_on_its_retry(api, fake, look, monkeypatch):
+    gate, readable, failing = threading.Event(), fake.core.game_data, [True]
+
+    def held(ident):
+        gate.wait(10)
+        if failing:
+            raise UniverseError("Io", "the game's folders could not be read")
+        return readable(ident)
+
+    monkeypatch.setattr(fake.core, "game_data", held)
+    page = look.open("pages/DataPage.qml", look.game("the-technomancer"))
+    if look.stacked:
+        until(lambda: [r["key"] for r in listed(look, page)] == ["reading"], "a read under way says so in the list")
+        assert not descendant(page, "emptyLabel").isVisible(), "and only there"
+    gate.set()
+    if look.stacked:
+        until(lambda: under_cursor(page).get("key") == "retry", "the failure's one action takes the focus")
+        assert under_cursor(page)["detail"] == "the game's folders could not be read"
+        assert not descendant(page, "emptyLabel").isVisible()
+    else:
+        until(lambda: "retry" in focus_names(look.window), "the failure's one action takes the focus, not the hidden lists")
+    failing.clear()
     look.press(Qt.Key.Key_Return)
     until(lambda: "backup" in keys(api.screens.gameData), "A reads the folders again")
-    until(lambda: "retry" not in focus_names(look.window) and "dataPage" in focus_names(look.window), "the rows take the focus back")
+    if look.stacked:
+        until(lambda: "retry" not in [r["key"] for r in listed(look, page)] and under_cursor(page).get("key"), "the rows take the cursor")
+    else:
+        until(lambda: "retry" not in focus_names(look.window) and "dataPage" in focus_names(look.window), "the rows take the focus back")
 
 
-@pytest.mark.parametrize("look", ["reprise"], indirect=True)
-def test_settings_storage_says_it_is_measuring_and_offers_a_retry_when_the_measure_fails(api, fake, look, monkeypatch):
+def test_storage_says_it_is_measuring_and_offers_a_retry_when_the_measure_fails(api, fake, look, monkeypatch):
     gate, real, failing = threading.Event(), fake.core.storage, [True]
 
     def held():
@@ -237,29 +262,114 @@ def test_settings_storage_says_it_is_measuring_and_offers_a_retry_when_the_measu
         return real()
 
     monkeypatch.setattr(fake.core, "storage", held)
-    page = look.settings("storage")
-    until(lambda: [r["key"] for r in content_rows(page)] == ["measuring"], "a measure under way says so")
+    page = look.open("pages/StoragePage.qml") if look.stacked else look.settings("storage")
+    cards = "settingsRows" if look.stacked else "settingsCards"
+
+    def shown():
+        return [r["key"] for r in listed(look, page)]
+
+    until(lambda: shown() == ["measuring"], "a measure under way says so")
+    if look.stacked:
+        assert not descendant(page, "emptyLabel").isVisible(), "and only in the list"
+    trace = FocusTrace(look.window)
     gate.set()
-    until(lambda: [r["key"] for r in content_rows(page)] == ["retry"], "a failed measure offers its retry")
-    until(lambda: "settingsCards" in focus_names(look.window))
+    until(lambda: shown() == ["retry"], "a failed measure offers its retry")
+    until(lambda: cards in focus_names(look.window))
+    settle(look.window)
+    assert trace.stop().foreign(cards) == [], "the focus stays in the rows from measuring to the retry"
+    if look.stacked:
+        assert not descendant(page, "emptyLabel").isVisible()
     failing.clear()
     trace = FocusTrace(look.window)
     look.press(Qt.Key.Key_Return)
-    until(lambda: "root:games" in [r["key"] for r in content_rows(page)], "A measures again")
+    until(lambda: "root:games" in shown(), "A measures again")
     settle(look.window)
-    assert trace.stop().foreign("settingsCards") == [], "the focus stays in the cards while the rows swap"
-    assert "retry" not in [r["key"] for r in content_rows(page)]
+    assert trace.stop().foreign(cards) == [], "the focus stays in the rows while they swap"
+    assert "retry" not in shown()
+    if look.stacked:
+        return
 
-    cards = descendant(page, "settingsCards")
+    rows = descendant(page, "settingsCards")
     look.press(Qt.Key.Key_Down, 3)
-    held_key = read(cards, "currentRow")["key"]
+    held_key = read(rows, "currentRow")["key"]
     gate.clear()
     failing.append(True)
     look.press(Qt.Key.Key_I)
     until(lambda: api.screens.storage.loading, "X measures again")
-    assert "measuring" not in [r["key"] for r in content_rows(page)], "the rows stay while they are measured again"
-    assert read(cards, "currentRow")["key"] == held_key, "and the cursor with them"
+    assert "measuring" not in shown(), "the rows stay while they are measured again"
+    assert read(rows, "currentRow")["key"] == held_key, "and the cursor with them"
+    trace = FocusTrace(look.window)
     gate.set()
-    until(lambda: "retry" in [r["key"] for r in content_rows(page)], "a failed measure over the rows offers its retry")
-    until(lambda: read(cards, "currentRow")["key"] == "retry", "the cursor goes to it")
-    assert read(cards, "caption") == "the games folder could not be read", "and shows why"
+    until(lambda: "retry" in shown(), "a failed measure over the rows offers its retry")
+    until(lambda: read(rows, "currentRow")["key"] == "retry", "the cursor goes to it")
+    assert read(rows, "caption") == "the games folder could not be read", "and shows why"
+    settle(look.window)
+    assert trace.stop().foreign("settingsCards") == [], "the focus stays in the cards as the retry comes in over the rows"
+
+    failing.clear()
+    look.press(Qt.Key.Key_Down, 2)
+    held_key = read(rows, "currentRow")["key"]
+    look.press(Qt.Key.Key_I)
+    until(lambda: "retry" not in shown() and not api.screens.storage.loading, "a measure that succeeds takes the retry away")
+    settle(look.window)
+    assert read(rows, "currentRow")["key"] == held_key, "the cursor keeps its row, not its index"
+
+    gate.clear()
+    failing.append(True)
+    look.press(Qt.Key.Key_I)
+    until(lambda: api.screens.storage.loading)
+    invoke(page, "land", "launch")
+    until(lambda: read(page, "sectionId") == "launch" and "settingsCards" in focus_names(look.window))
+    settle(look.window)
+    look.press(Qt.Key.Key_Down, 2)
+    elsewhere = read(rows, "currentRow")["key"]
+    gate.set()
+    until(lambda: api.screens.storage.error != "")
+    settle(look.window)
+    assert read(rows, "currentRow")["key"] == elsewhere and "settingsCards" in focus_names(look.window), "a failure on Storage leaves the section shown alone"
+
+
+@pytest.mark.parametrize("look", ["switch2", "ps5"], indirect=True)
+def test_a_console_storage_refresh_that_fails_over_its_rows_says_why_under_the_cursor(api, fake, look, monkeypatch):
+    real, failing = fake.core.storage, []
+    reason = "the games folder could not be read"
+
+    def measured():
+        if failing:
+            raise UniverseError("Io", reason)
+        return real()
+
+    monkeypatch.setattr(fake.core, "storage", measured)
+    page = look.open("pages/StoragePage.qml")
+
+    def down_to(prefix):
+        for _ in range(40):
+            if under_cursor(page).get("key", "").startswith(prefix):
+                return
+            look.press(Qt.Key.Key_Down)
+        raise AssertionError(f"no {prefix} row below the cursor")
+
+    until(lambda: any(r["key"].startswith("trash:") for r in listed(look, page)) and under_cursor(page))
+    down_to("trash:")
+    failing.append(True)
+    look.press(Qt.Key.Key_Return)
+    dialog = look.dialog()
+    until(lambda: dialog.property("open") is True, "the trash asks first")
+    look.press(Qt.Key.Key_Right)
+    until(lambda: dialog.property("index") == 1)
+    look.press(Qt.Key.Key_Return)
+    until(lambda: fake.core.trashed, "the leftover goes")
+    until(lambda: under_cursor(page).get("key") == "retry", "the reload after it fails: its retry takes the cursor, the rows held")
+    assert under_cursor(page)["detail"] == reason, "and says why"
+    assert any(r["key"].startswith("game:") for r in listed(look, page))
+
+    failing.clear()
+    look.press(Qt.Key.Key_Return)
+    until(lambda: "retry" not in [r["key"] for r in listed(look, page)] and not api.screens.storage.loading)
+    down_to("game:")
+    look.press(Qt.Key.Key_Return)
+    until(lambda: "dataPage" in focus_names(look.window), "a game's row opens its Data page")
+    failing.append(True)
+    look.press(Qt.Key.Key_Escape)
+    until(lambda: under_cursor(page).get("key") == "retry", "back on Storage, the reload fails: its retry takes the cursor")
+    assert under_cursor(page)["detail"] == reason

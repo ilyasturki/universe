@@ -16,6 +16,7 @@ var list = [
     { id: "bluetooth", label: "Accessories", icon: "bluetooth", first: "Bluetooth Accessories", group: "System" },
     { id: "sound", label: "Sound", icon: "sound", first: "Audio Output", group: "System" },
     { id: "performance", label: "Performance", icon: "bolt", detail: "Brightness, refresh, power limit, GPU clock and fan", group: "System" },
+    { id: "storage", label: "Storage", icon: "storage", page: "pages/StoragePage.qml", group: "System" },
     { id: "doctor", label: "System Check", icon: "doctor", first: "Checks", group: "Universe" },
     { id: "about", label: "About", icon: "info", first: "System Information", group: "Universe" }
 ];

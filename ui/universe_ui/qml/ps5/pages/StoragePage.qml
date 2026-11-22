@@ -14,7 +14,23 @@ FocusScope {
     readonly property var hints: []
     readonly property bool strip: false
 
-    readonly property var entries: store.rows.map(function (r) {
+    readonly property var entries: (store.error !== "" ? [
+            {
+                key: "retry",
+                label: "Measure Again",
+                type: "action",
+                detail: store.error,
+                icon: "refresh"
+            }
+        ] : store.loading && store.count === 0 ? [
+            {
+                key: "measuring",
+                label: "Measuring every folder…",
+                type: "static"
+            }
+        ] : []).concat(rows)
+    onEntriesChanged: list.swap(entries, "retry")
+    readonly property var rows: store.rows.map(function (r) {
         var kind = r.key.split(":")[0];
         return Object.assign({}, r, {
             icon: r.heading ? "" : kind === "root" ? "storage" : kind === "game" ? "gamepad" : kind === "trash" ? "trash" : ""
@@ -35,6 +51,10 @@ FocusScope {
 
     function activate(index, row) {
         Sound.play("ok");
+        if (row.key === "retry") {
+            store.load();
+            return;
+        }
         if (row.gameId) {
             shell.push("pages/DataPage.qml", {
                 gameId: row.gameId
@@ -68,13 +88,6 @@ FocusScope {
         trailing: page.store.free !== "" ? page.store.free + " free" : ""
     }
 
-    Label {
-        anchors.centerIn: list
-        visible: page.store.count === 0
-        text: page.store.loading ? "Measuring every folder…" : page.store.error
-        color: Theme.textMuted
-    }
-
     SettingsRows {
         id: list
 
@@ -84,7 +97,7 @@ FocusScope {
         width: parent.width - x - Theme.dp(Theme.columnRight + 16)
         height: parent.height - y - Theme.dp(40)
         focus: true
-        model: page.entries
+        Component.onCompleted: swap(page.entries, "retry")
 
         onActivated: function (index, row) {
             page.activate(index, row);

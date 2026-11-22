@@ -24,6 +24,22 @@ FocusScope {
         }
     ]
 
+    readonly property var entries: (store.error !== "" ? [
+            {
+                key: "retry",
+                label: "Measure Again",
+                type: "action",
+                detail: store.error
+            }
+        ] : store.loading && store.count === 0 ? [
+            {
+                key: "measuring",
+                label: "Measuring every folder…",
+                type: "static"
+            }
+        ] : []).concat(store.rows)
+    onEntriesChanged: list.swap(entries, "retry")
+
     signal closeRequested
 
     focus: true
@@ -38,6 +54,10 @@ FocusScope {
 
     function activate(index, row) {
         Sound.play("ok");
+        if (row.key === "retry") {
+            store.load();
+            return;
+        }
         if (row.gameId) {
             shell.push("pages/DataPage.qml", {
                 gameId: row.gameId
@@ -68,13 +88,6 @@ FocusScope {
         trailing: page.store.used !== "" ? page.store.used + " used" : ""
     }
 
-    Label {
-        anchors.centerIn: list
-        visible: page.store.count === 0
-        text: page.store.loading ? "Measuring every folder…" : page.store.error
-        color: Theme.textMuted
-    }
-
     SettingsRows {
         id: list
 
@@ -84,7 +97,7 @@ FocusScope {
         height: parent.height - y - Theme.dp(Theme.hintBarHeight) - Theme.dp(20)
         focus: true
         shell: page.shell
-        model: page.store.rows
+        Component.onCompleted: swap(page.entries, "retry")
 
         onActivated: function (index, row) {
             page.activate(index, row);

@@ -1005,11 +1005,25 @@ FocusScope {
         else if (s === "system")
             api.system.reload();
         else if (s === "storage")
-            api.screens.storage.load();
+            measure(s === sectionId);
         else if (s === "themes") {
             api.theme.rescan();
             addons.load();
         }
+    }
+
+    // A measure again takes Measure again away with its error: the cursor stays on its row, not on its index.
+    function measure(inPlace) {
+        var key = inPlace && cards.currentRow ? cards.currentRow.key : "";
+        api.screens.storage.load();
+        if (key !== "")
+            Qt.callLater(function () {
+                var at = page.content.rows.findIndex(function (r) {
+                    return r.key === key;
+                });
+                if (page.alive && at >= 0)
+                    cards.index = at;
+            });
     }
 
     function refreshNow() {

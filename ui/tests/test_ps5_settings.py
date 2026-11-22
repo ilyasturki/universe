@@ -119,6 +119,21 @@ def test_the_settings_search_lands_on_its_hit(ps5, api, query, section, field, w
     until(lambda: (focused_row(top) or {}).get(field) == want)
 
 
+def test_settings_holds_storage_and_the_search_lands_there(ps5, api):
+    window, root, _warnings = ps5
+    page = push(root, "pages/SettingsPage.qml", {})
+    assert "storage" in [s["id"] for s in value(page, "sections")], "Storage is a section of Settings"
+    push(root, "pages/SettingsSearchPage.qml", {})
+    search = api.screens.search
+    until(lambda: search.ready)
+    search.query = "storage"
+    until(lambda: search.count > 0)
+    click(window, Qt.Key.Key_F1)
+    click(window, Qt.Key.Key_Return)
+    until(lambda: root.property("topPage").objectName() == "storagePage", "the hit opens Storage, over the Settings that took it")
+    until(lambda: "root:games" in [r["key"] for r in api.screens.storage.rows])
+
+
 def test_the_offered_walk_mutes_the_rows_and_enter_keeps_what_it_set_up_where_escape_undoes_it(ps5, api, fake):
     window, root, _warnings = ps5
     family = "8bitdo-pro-3"

@@ -151,6 +151,23 @@ FocusScope {
         index = s.length > 0 ? s[0] : 0;
     }
 
+    // `lead`: a row that takes the cursor as it comes in, as a failure's retry, whose reason shows under the cursor. Any other
+    // swap keeps the cursor on its row.
+    function swap(next, lead) {
+        var has = function (rows) {
+            return rows.some(function (r) {
+                return r.key === lead;
+            });
+        };
+        var at = has(next) && !has(model) ? lead : currentRow ? currentRow.key : "";
+        model = next;
+        var i = model.findIndex(function (r) {
+            return !r.heading && r.key === at;
+        });
+        if (i >= 0)
+            index = i;
+    }
+
     // The cursor's row just went: the row above it takes the cursor, the first when there is none.
     function land() {
         var above = stops().filter(function (i) {
@@ -248,6 +265,7 @@ FocusScope {
     }
 
     Label {
+        objectName: "emptyLabel"
         anchors.centerIn: parent
         visible: rows.model.length === 0
         text: "Nothing here yet."

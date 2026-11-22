@@ -37,7 +37,23 @@ FocusScope {
             logs: "terminal"
         })
 
-    readonly property var entries: store.rows.map(function (r) {
+    readonly property var entries: (store.error !== "" ? [
+            {
+                key: "retry",
+                label: "Try Again",
+                type: "action",
+                detail: store.error,
+                icon: "refresh"
+            }
+        ] : store.loading && store.count === 0 ? [
+            {
+                key: "reading",
+                label: "Reading the game's folders…",
+                type: "static"
+            }
+        ] : []).concat(rows)
+    onEntriesChanged: list.swap(entries, "retry")
+    readonly property var rows: store.rows.map(function (r) {
         return Object.assign({}, r, {
             icon: r.heading ? "" : r.key.indexOf("restore:") === 0 ? "clock" : page.icons[r.key] || ""
         });
@@ -56,6 +72,10 @@ FocusScope {
 
     function activate(index, row) {
         Sound.play("ok");
+        if (row.key === "retry") {
+            store.reload();
+            return;
+        }
         if (row.key === "run") {
             shell.browse({
                 title: "Run a Program in the Prefix",
@@ -97,13 +117,6 @@ FocusScope {
         trailing: page.store.total
     }
 
-    Label {
-        anchors.centerIn: list
-        visible: page.store.count === 0
-        text: page.store.loading ? "Reading the game's folders…" : page.store.error
-        color: Theme.textMuted
-    }
-
     SettingsRows {
         id: list
 
@@ -113,7 +126,7 @@ FocusScope {
         width: parent.width - x - Theme.dp(Theme.columnRight + 16)
         height: parent.height - y - Theme.dp(40)
         focus: true
-        model: page.entries
+        Component.onCompleted: swap(page.entries, "retry")
 
         onActivated: function (index, row) {
             page.activate(index, row);
