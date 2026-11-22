@@ -52,6 +52,16 @@ Window {
     }
 
     Connections {
+        target: api.screens.sources
+        function onFinished(key, ok, message) {
+            if (ok)
+                Notices.show(message);
+            else
+                Notices.fail(message);
+        }
+    }
+
+    Connections {
         target: api.screens.add
         function onMessage(text) {
             Notices.show(text);

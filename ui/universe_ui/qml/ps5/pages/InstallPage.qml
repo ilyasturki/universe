@@ -251,7 +251,14 @@ FocusScope {
         }
     }
 
-    onCollectionsChanged: Qt.callLater(restore)
+    onCollectionsChanged: restoring.restart()
+
+    // Owned by the page, unlike a Qt.callLater: it dies with it.
+    Timer {
+        id: restoring
+        interval: 0
+        onTriggered: page.restore()
+    }
     onLinesChanged: {
         if (!line)
             lineIndex = firstLine();

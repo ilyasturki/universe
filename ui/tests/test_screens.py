@@ -1,8 +1,13 @@
 import os
+import threading
 from collections import Counter
 
 import pytest
+from looks import focus_names, held_notices
+from PySide6.QtCore import SIGNAL, Qt
 from uitest import index_of, own, record, rows_by_key, settle, until
+
+from universe_ui.errors import UniverseError
 
 PENDING = {
     "session": "20260912-200000",
@@ -634,31 +639,73 @@ def test_sources_browser_uninstall_and_remove(api, fake):
     browser = api.screens.sources
     browser.load()
     settle(browser)
-    said = record(browser.message)
+    said, told = record(browser.message), record(browser.finished)
     browser.uninstall("dead-cells")
     settle(browser)
     row = next(r for r in browser.rows if r["game_id"] == "dead-cells")
-    assert len(said) == 1 and not row["installed"], "uninstalled, it stays the library's game"
+    assert [t[:2] for t in told] == [("uninstall:dead-cells", True)] and not row["installed"], "uninstalled, it stays the library's game"
     browser.uninstall("")
     settle(browser)
-    assert len(said) == 1, "a game outside the library has nothing to uninstall"
+    assert len(told) == 1, "a game outside the library has nothing to uninstall"
     browser.uninstall("dead-cells")
     settle(browser)
-    assert len(said) == 2, "the core's refusal reaches the toast"
+    assert len(told) == 2 and told[-1][:2] == ("uninstall:dead-cells", False), "the core's refusal is told as a failure"
     browser.remove("the-technomancer")
     settle(browser)
-    assert len(said) == 3 and fake.game("the-technomancer")["removed"] is True
+    assert len(said) == 1 and fake.game("the-technomancer")["removed"] is True
     browser.remove("no-such-game")
     settle(browser)
-    assert len(said) == 4
+    assert len(said) == 2
     asylum = next(r["id"] for r in browser.rows if r["installed"] and not r["game_id"])
     linked = next(r["id"] for r in browser.rows if r["installed"] and r["game_id"])
     browser.trash(linked)
     settle(browser)
-    assert len(said) == 4, "a game the library holds goes through its uninstall"
+    assert len(told) == 2, "a game the library holds goes through its uninstall"
     browser.trash(asylum)
     settle(browser)
-    assert len(said) == 5 and not next(r for r in browser.rows if r["id"] == asylum)["installed"], "nobody's files go to the trash"
+    assert told[-1][:2] == (f"trash:{asylum}", True) and not next(r for r in browser.rows if r["id"] == asylum)["installed"], "nobody's files go to the trash"
+
+
+def test_a_store_uninstall_reports_once_whether_its_page_stays_or_closes(api, fake, look, monkeypatch):
+    sources = api.screens.sources
+    gate, real, failing, started = threading.Event(), fake.core.uninstall, [], []
+
+    def held(ident):
+        started.append(ident)
+        gate.wait(10)
+        if failing:
+            raise UniverseError("Busy", "Dead Cells is starting: quit it, then try again")
+        return real(ident)
+
+    monkeypatch.setattr(fake.core, "uninstall", held)
+    posted, clear = held_notices(look.engine)
+    shown = "installPage" if look.stacked else "settingsCards"
+
+    def uninstall(close):
+        gate.clear()
+        clear()
+        if look.stacked:
+            look.open("pages/InstallPage.qml")
+        else:
+            look.settings("install")
+        until(lambda: not sources.busy and sources.rows, "the store's games are listed")
+        sources.uninstall("dead-cells")
+        until(lambda: started, "Uninstall starts it")
+        started.clear()
+        while close and shown in focus_names(look.window):
+            look.press(Qt.Key.Key_Escape)
+        if not close:
+            assert sources.receivers(SIGNAL("finished(QString,bool,QString)")) == 1, "Notices folds a repeated text, so one listener is the guard"
+        gate.set()
+        until(posted, "the result reaches the notices")
+        until(lambda: not sources.busy)
+        return [(n["error"], n["text"]) for n in posted()]
+
+    failing.append(True)
+    assert uninstall(close=True) == [(True, "Dead Cells is starting: quit it, then try again")], "the refusal outlives its page"
+    assert uninstall(close=False) == [(True, "Dead Cells is starting: quit it, then try again")], "told once with the page still open"
+    failing.clear()
+    assert [error for error, _ in uninstall(close=True)] == [False], "so does the success"
 
 
 def test_an_installed_game_the_library_lacks_is_added_on_its_own(api, fake):

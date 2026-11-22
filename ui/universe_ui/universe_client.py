@@ -226,6 +226,10 @@ class CoreClient(QObject):
     def uninstall(self, ident):
         return self._done(self._core.uninstall, ident)
 
+    def uninstall_or_raise(self, ident):
+        """Raises the core's refusal, for the caller to say."""
+        return self._call(self._core.uninstall, ident)
+
     # The store's name when it removes the game's files itself; "" when its folder goes to the trash.
     @Slot(str, result=str)
     def uninstallVia(self, ident):

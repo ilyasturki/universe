@@ -101,6 +101,8 @@ class SourcesBrowser(AsyncScreen):
     arrivingChanged = Signal()
     queryChanged = Signal()
     message = Signal(str)
+    # An uninstall's or a trash's result, by `uninstall:<game>` or `trash:<store id>`: main.qml tells it, the page may be gone.
+    finished = Signal(str, bool, str)
 
     def __init__(self, client, games, parent=None):
         super().__init__(client, parent)
@@ -339,11 +341,11 @@ class SourcesBrowser(AsyncScreen):
             return
         title = self._title(game_id)
 
-        def done(ok, error):
-            self.message.emit(error or (f"Uninstalled {title}" if ok else f"Could not uninstall {title}"))
+        def done(_, error):
+            self.finished.emit(f"uninstall:{game_id}", not error, error or f"Uninstalled {title}")
             self._reload(False)
 
-        self._run(lambda: self._client.uninstall(game_id), done)
+        self._run(lambda: self._client.uninstall_or_raise(game_id), done)
 
     @Slot(str)
     def trash(self, game_id):
@@ -353,8 +355,8 @@ class SourcesBrowser(AsyncScreen):
             return
         source, title, uninstalls = self._source, row["title"], self._uninstalls()
 
-        def done(path, error):
-            self.message.emit(error or (f"Uninstalled {title}" if uninstalls else f"{title}'s files are in the trash"))
+        def done(_, error):
+            self.finished.emit(f"trash:{game_id}", not error, error or (f"Uninstalled {title}" if uninstalls else f"{title}'s files are in the trash"))
             self._reload(False)
 
         self._run(lambda: self._client.trash(source, game_id), done)
