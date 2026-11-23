@@ -1,7 +1,7 @@
 # Maintainer: Ilyas Turki <turki.ilyass@gmail.com>
 pkgbase=universe-git
 pkgname=(universe-git universe-desktop-git)
-pkgver=0.0.6.r160.g030024d
+pkgver=0.0.17.r0.gcccd7bd
 pkgrel=1
 pkgdesc='Gamepad-first game launcher: a Rust core, a PySide6 UI, games inside gamescope (latest commit)'
 arch=('x86_64')
