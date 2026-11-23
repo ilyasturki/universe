@@ -49,6 +49,10 @@
                 type == "directory" && lib.length (lib.splitString "/" rel) <= 2 || baseNameOf path == "source.toml"
               )
             )
+            # the paused download's cli test runs the gog source against its shims
+            || under "sources/gog/bin" rel
+            || rel == "sources/gog/tests"
+            || under "sources/gog/tests/shims" rel
             || lib.elem rel [
               "Cargo.toml"
               "Cargo.lock"
@@ -146,8 +150,10 @@
           pkgs.strace
           pkgs.wireplumber
           pkgs.xvfb
+          pkgs.python3
         ]
         ++ coreRuntime;
+        postPatch = "patchShebangs sources";
         nativeBuildInputs = [
           pkgs.pkg-config
           pkgs.installShellFiles
