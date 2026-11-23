@@ -137,6 +137,15 @@ def test_cancel_reaches_the_running_install_only(fake):
     assert row["installed"] is False and row["partial_bytes"] > 0
 
 
+def test_update_everything_leaves_the_running_game_pending_and_names_it(fake):
+    fake.core.launch("mini-metro", "")
+    finished = record(fake.jobFinished)
+    job = fake.update("gog", "")
+    assert until(lambda: finished)[0][:2] == (job, True)
+    assert fake.jobResult(job)["busy"] == ["mini-metro"]
+    assert any(u["id"] == "1434554947" for u in fake.core.updates()), "its update still waits"
+
+
 def test_a_failing_job_reports_its_end(fake):
     def broken(source, game_id, progress=None):
         raise RuntimeError("offline")

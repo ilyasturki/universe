@@ -652,7 +652,8 @@ class CoreClient(QObject):
                 return ident
 
         said = f"{result['updated']} updated"
-        return said + (f" · skipped {', '.join(map(title, result['busy']))}: in use" if result["busy"] else "")
+        busy = ", ".join(map(title, result["busy"]))
+        return said + (f" · {busy} {'is' if len(result['busy']) == 1 else 'are'} in use, not updated" if busy else "")
 
     @Slot(str)
     def checkVersions(self, ident):
