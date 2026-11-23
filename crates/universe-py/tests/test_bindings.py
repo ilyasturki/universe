@@ -58,6 +58,41 @@ def test_the_profile_comes_from_the_environment(core, tmp_path):
     assert core.version().startswith("0.")
 
 
+def test_a_launch_held_in_its_pre_launch_hook_is_called_off_from_another_thread(tmp_path, monkeypatch):
+    import threading
+    import time
+
+    module = tmp_path / "modules" / "slow"
+    (module / "bin").mkdir(parents=True)
+    (module / "module.toml").write_text('api = 2\nid = "slow"\n[hooks]\npre-launch = "bin/pre"\n')
+    entered = tmp_path / "entered"
+    (module / "bin" / "pre").write_text(f"#!/bin/sh\ntouch {entered}\nsleep 30\n")
+    (module / "bin" / "pre").chmod(0o755)
+    for kind in ("data", "config", "state", "cache"):
+        monkeypatch.setenv(f"UNIVERSE_{kind.upper()}_HOME", str(tmp_path / kind))
+    monkeypatch.setenv("UNIVERSE_MODULES_PATH", str(tmp_path / "modules"))
+    monkeypatch.setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/dev/null/bus")
+    (tmp_path / "config").mkdir()
+    (tmp_path / "config" / "config.toml").write_text('schema = 1\n[desktop]\nprofile = "none"\n[modules]\nenabled = ["slow"]\n')
+    game = tmp_path / "data" / "games" / "quest"
+    game.mkdir(parents=True)
+    (game / "game.toml").write_text(f'schema = 1\nid = "quest"\ntitle = "Quest"\n[launch]\nrunner = "linux"\nexe = "{tmp_path / "quest.sh"}"\n')
+    core = universe_core.Core()
+    assert core.cancel_launch() is False, "nothing preparing"
+    errors = []
+    launch = threading.Thread(target=lambda: errors.append(pytest.raises(universe_core.UniverseError, core.launch, "quest", "")))
+    launch.start()
+    deadline = time.monotonic() + 5
+    while not entered.exists():
+        assert time.monotonic() < deadline, "the hook never ran"
+        time.sleep(0.01)
+    assert core.cancel_launch() is True
+    launch.join(3)
+    assert not launch.is_alive(), "the launch returned"
+    assert "called off" in str(errors[0].value)
+    assert core.current() is None
+
+
 def test_a_game_written_on_disk_reads_back(core):
     games = Path(core.data_home()) / "games"
     (games / "sample").mkdir(parents=True)

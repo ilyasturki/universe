@@ -93,6 +93,7 @@ class CoreClient(QObject):
         self._job_seq = 0
         self._jobs = {}
         self._called_off = set()
+        self._launching = set()
         self._closed = False
         self._skipped_told = False
         self._fps_limit = ""
@@ -324,6 +325,7 @@ class CoreClient(QObject):
         self.launchRequested.emit(ident)
 
         def on_reply(session_id):
+            self._launching.discard(ident)
             self._called_off.discard(ident)
             session_id = str(session_id or "")
             self._track(session_id, ident)
@@ -331,6 +333,7 @@ class CoreClient(QObject):
             self._wait_window(session_id)
 
         def on_error(e):
+            self._launching.discard(ident)
             if ident in self._called_off:
                 self._called_off.discard(ident)
                 self.launchCalledOff.emit(ident)
@@ -342,6 +345,7 @@ class CoreClient(QObject):
                 self._called_off.discard(ident)
                 self.launchCalledOff.emit(ident)
                 return
+            self._launching.add(ident)
             self._call_async(lambda: self._core.launch(ident, screen, splash), on_reply, on_error)
 
         if poster is None or poster.isNull():
@@ -356,7 +360,8 @@ class CoreClient(QObject):
     # Its pre-launch hooks and tool fetches stop where they are; a launch past them still makes its session.
     def cancelLaunch(self, ident):
         self._called_off.add(ident)
-        self._guarded(False, self._core.cancel_launch)
+        if ident in self._launching:
+            self._guarded(False, self._core.cancel_launch)
 
     def stopNow(self, session_id):
         self._guarded(None, self._core.stop, session_id)

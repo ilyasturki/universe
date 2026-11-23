@@ -549,6 +549,11 @@ def test_b_while_the_universe_poster_is_written_never_reaches_the_core(api, fake
     until(lambda: called_off and api.home.pending is None, "the launch is called off once the poster is down")
     settle(look.window)
     assert not making.entered.is_set() and failed == [] and api.universe.currentSession is None, "the core is never asked"
+    making.set()
+    look.press(Qt.Key.Key_Return)
+    until(lambda: api.universe.currentSession, "the next A launches as ever")
+    assert failed == []
+    api.universe.stop(api.universe.currentSession["session_id"])
     look.close()
 
 
