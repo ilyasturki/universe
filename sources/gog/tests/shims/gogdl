@@ -44,6 +44,16 @@ elif verb == "auth":
     token = f"tok-{args[args.index('--client-id') + 1]}" if "--client-id" in args else "tok"
     refused = {"error": True} if "--code" in args else None
     print(json.dumps({"access_token": token, "refresh_token": "r", "user_id": "4242", "expires_in": 3600, "loginTime": 1} if ok else refused))
+elif verb == "info" and os.environ.get("SHIM_MODE") == "offline":
+    # gogdl 1.4.0 with a live token and no network, either platform: requests' error escapes, exit 1.
+    print("[GENERIC DOWNLOAD_MANAGER] INFO: Platform is Linux, redirecting download to Linux Native installer manager", file=sys.stderr)
+    print("Traceback (most recent call last):", file=sys.stderr)
+    print(
+        "requests.exceptions.ConnectionError: HTTPSConnectionPool(host='content-system.gog.com', port=443): Max retries exceeded"
+        ' (Caused by NewConnectionError("Failed to establish a new connection: [Errno 101] Network is unreachable"))',
+        file=sys.stderr,
+    )
+    sys.exit(1)
 elif verb == "info" and args[args.index("--platform") + 1] == "linux":
     # gogdl 1.4.0 dl/managers/linux.py:169-185: the installer's version, no build id; "Unknown" when GOG gave no game data.
     if os.environ.get("SHIM_MODE") == "info-fail":

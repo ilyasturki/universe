@@ -1051,13 +1051,21 @@ def test_a_linux_install_reads_unknown_without_an_answer_and_update_behind_a_new
     assert status() == "current", "its goggame build may not move with the installer: the store's word decides"
 
 
-def test_update_everything_offline_says_gog_is_out_of_reach(core, src, tmp_path, monkeypatch):
+@pytest.mark.parametrize("platform", ["windows", "linux"])
+def test_update_everything_and_install_offline_say_gog_is_out_of_reach(core, src, tmp_path, monkeypatch, platform):
     monkeypatch.setenv("SHIM_LOG", str(tmp_path / "gogdl.log"))
-    write_info(tmp_path / "games" / "Mini Metro", MINI_METRO, MINI_METRO, "Mini Metro")
-    universe = core("gog", {"games_dir": str(tmp_path / "games")})
-    with pytest.raises(sys.modules["universe_core"].UniverseError) as failed:
-        universe.update("gog", "")
-    assert failed.value.args == ("Unavailable", src.UNREACHABLE), "the core's proxy refuses every request"
+    monkeypatch.setenv("SHIM_MODE", "offline")
+    auth = tmp_path / "auth.json"
+    auth.write_text(json.dumps({src.GALAXY_CLIENT_ID: expired_session(loginTime=time.time())}))
+    root = tmp_path / "games" / "Mini Metro"
+    write_info(root / "game" if platform == "linux" else root, MINI_METRO, MINI_METRO, "Mini Metro")
+    if platform == "linux":
+        (root / "gameinfo").write_text("Mini Metro\n1.0\n")
+    universe = core("gog", {"games_dir": str(tmp_path / "games"), "platform": platform, "auth_path": str(auth)})
+    for attempt in (lambda: universe.update("gog", ""), lambda: universe.install("gog", "2")):
+        with pytest.raises(sys.modules["universe_core"].UniverseError) as failed:
+            attempt()
+        assert failed.value.args == ("Unavailable", src.UNREACHABLE), "a live token, so gogdl itself meets the network first"
 
 
 def test_an_install_the_disk_cannot_hold_says_the_disk_is_full(core, src, tmp_path, monkeypatch):
