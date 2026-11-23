@@ -75,6 +75,42 @@
           );
       };
 
+      testOnly = [
+        "tests"
+        "sources"
+        "packaging"
+        "modules"
+        "crates/universe/tests"
+      ];
+      members = [
+        "crates/universe-desktop"
+        "crates/universe-py"
+      ];
+      # A package's tree, without what only the tests read and with the members it does not build down to their manifests: an edit there leaves it cached
+      packageSrc =
+        kept:
+        let
+          stubbed = lib.subtractLists kept members;
+        in
+        lib.cleanSourceWith {
+          src = rustSrc;
+          filter =
+            path: type:
+            let
+              rel = relOf path;
+            in
+            !(lib.any (d: under d rel) testOnly)
+            && (
+              lib.elem rel (stubbed ++ map (d: "${d}/Cargo.toml") stubbed) || !(lib.any (d: under d rel) stubbed)
+            );
+        };
+      # cargo loads every workspace member, offline too, and refuses one without a target
+      stubMembers =
+        kept:
+        lib.concatMapStrings (d: "mkdir ${d}/src && touch ${d}/src/lib.rs\n") (
+          lib.subtractLists kept members
+        );
+
       # The trees a Python check needs plus the root pytest configuration, so one tree's change leaves the others cached
       pySrc =
         dirs:
@@ -130,7 +166,8 @@
       core = pkgs.rustPlatform.buildRustPackage {
         pname = "universe-core";
         inherit version;
-        src = rustSrc;
+        src = packageSrc [ ];
+        postPatch = stubMembers [ ];
         cargoLock.lockFile = ./Cargo.lock;
         cargoBuildFlags = [
           "-p"
@@ -156,6 +193,7 @@
       # The package's own tree and release profile, compiled by `cargo test` alone
       coreTest = core.overrideAttrs {
         pname = "universe-core-test";
+        src = rustSrc;
         dontBuild = true;
         doCheck = true;
         cargoTestFlags = [
@@ -184,7 +222,8 @@
         pname = "universe-core";
         inherit version;
         pyproject = true;
-        src = rustSrc;
+        src = packageSrc [ "crates/universe-py" ];
+        postPatch = stubMembers [ "crates/universe-py" ];
         cargoDeps = pkgs.rustPlatform.importCargoLock { lockFile = ./Cargo.lock; };
         nativeBuildInputs = with pkgs.rustPlatform; [
           cargoSetupHook
@@ -590,6 +629,8 @@
       # The package's vendored tree, linted instead of built: a lint failure leaves `nix build .#universe` alone
       rustLint = core.overrideAttrs (prev: {
         pname = "universe-rust-lint";
+        src = rustSrc;
+        postPatch = "";
         nativeBuildInputs =
           prev.nativeBuildInputs
           ++ desktopTools
