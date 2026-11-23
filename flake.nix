@@ -28,51 +28,64 @@
       ];
       under = dir: rel: rel == dir || lib.hasPrefix "${dir}/" rel;
 
+      rustFilter =
+        path: type:
+        let
+          rel = relOf path;
+        in
+        !(lib.elem (baseNameOf path) junk)
+        && !(lib.any (d: under d rel) pyOnly)
+        && (
+          lib.hasPrefix "crates" rel
+          # the controller tests read the recorded pads
+          || rel == "tests"
+          || under "tests/pads" rel
+          # the components tests read the tools each shipped source pins
+          || (
+            under "sources" rel
+            && (
+              type == "directory" && lib.length (lib.splitString "/" rel) <= 2 || baseNameOf path == "source.toml"
+            )
+          )
+          || lib.elem rel [
+            "Cargo.toml"
+            "Cargo.lock"
+            "rustfmt.toml"
+            # the core embeds the changelog for the apps' About and what's-new pages
+            "CHANGELOG.md"
+            # the core embeds the shell extension for `universe setup`
+            "extension"
+            "extension/extension.js"
+            "extension/metadata.json"
+            # the install helper's tests read the polkit policy that names it
+            "packaging"
+            "packaging/system"
+            "packaging/system/io.github.ilyasturki.universe.policy"
+            # the config migration's cli test reads the controls module's settings
+            "modules"
+            "modules/controls"
+            "modules/controls/module.toml"
+          ]
+        );
       rustSrc = lib.cleanSourceWith {
+        src = ./.;
+        filter = rustFilter;
+      };
+      # Kept out of rustSrc, so an edit to the gog source leaves the desktop app and the lint cached
+      coreTestSrc = lib.cleanSourceWith {
         src = ./.;
         filter =
           path: type:
           let
             rel = relOf path;
           in
-          !(lib.elem (baseNameOf path) junk)
-          && !(lib.any (d: under d rel) pyOnly)
-          && (
-            lib.hasPrefix "crates" rel
-            # the controller tests read the recorded pads
-            || rel == "tests"
-            || under "tests/pads" rel
-            # the components tests read the tools each shipped source pins
-            || (
-              under "sources" rel
-              && (
-                type == "directory" && lib.length (lib.splitString "/" rel) <= 2 || baseNameOf path == "source.toml"
-              )
-            )
-            # the paused download's cli test runs the gog source against its shims
-            || under "sources/gog/bin" rel
-            || rel == "sources/gog/tests"
-            || under "sources/gog/tests/shims" rel
-            || lib.elem rel [
-              "Cargo.toml"
-              "Cargo.lock"
-              "rustfmt.toml"
-              # the core embeds the changelog for the apps' About and what's-new pages
-              "CHANGELOG.md"
-              # the core embeds the shell extension for `universe setup`
-              "extension"
-              "extension/extension.js"
-              "extension/metadata.json"
-              # the install helper's tests read the polkit policy that names it
-              "packaging"
-              "packaging/system"
-              "packaging/system/io.github.ilyasturki.universe.policy"
-              # the config migration's cli test reads the controls module's settings
-              "modules"
-              "modules/controls"
-              "modules/controls/module.toml"
-            ]
-          );
+          rustFilter path type
+          ||
+            !(lib.elem (baseNameOf path) junk)
+            && (
+              # the paused download's cli test runs the gog source against its shims
+              under "sources/gog/bin" rel || rel == "sources/gog/tests" || under "sources/gog/tests/shims" rel
+            );
       };
 
       testOnly = [
@@ -190,10 +203,10 @@
         meta.mainProgram = "universe";
       };
 
-      # The package's own tree and release profile, compiled by `cargo test` alone
+      # The package's release profile, compiled by `cargo test` alone, on the tree its tests read
       coreTest = core.overrideAttrs {
         pname = "universe-core-test";
-        src = rustSrc;
+        src = coreTestSrc;
         dontBuild = true;
         doCheck = true;
         cargoTestFlags = [
