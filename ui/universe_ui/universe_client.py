@@ -9,6 +9,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+import shiboken6
 from PySide6.QtCore import QFileSystemWatcher, QObject, QTimer, Signal, Slot
 from PySide6.QtGui import QImage
 
@@ -129,8 +130,9 @@ class CoreClient(QObject):
             close()
         self._poll.stop()
         self._debounce.stop()
-        if self._watcher.directories():
-            self._watcher.removePaths(self._watcher.directories())
+        # Its inotify instance outlives the client otherwise: a process making many clients (the tests) runs out of them.
+        if shiboken6.isValid(self._watcher):
+            shiboken6.delete(self._watcher)
 
     def _call(self, fn, *args):
         try:

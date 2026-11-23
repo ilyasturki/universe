@@ -1,4 +1,6 @@
+import contextlib
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -166,6 +168,7 @@ def test_the_client_writes_and_watches_through_the_real_core(app):
     (games / "sample").mkdir(parents=True, exist_ok=True)
     (games / "sample" / "game.toml").write_text('schema = 1\nid = "sample"\ntitle = "Sample"\n')
     core.reload_game("sample")
+    watches = inotify_instances()
     client = CoreClient(core)
     assert [g["id"] for g in client.list()] == ["sample"]
     assert client.currentSession is None
@@ -204,6 +207,15 @@ def test_the_client_writes_and_watches_through_the_real_core(app):
     assert client.addGame("dolphin", str(rom), "F-Zero GX") == "" and seen[-1][0] == "Invalid"
     assert client.controllerSetButton("dualsense-edge", "south", "[]") and client.controllerSetButton("dualsense-edge", "south", "null")
     client.shutdown()
+    assert inotify_instances() == watches, "the client's watch closes with it"
+
+
+def inotify_instances():
+    links = []
+    for fd in Path("/proc/self/fd").iterdir():
+        with contextlib.suppress(OSError):
+            links.append(os.readlink(fd))
+    return links.count("anon_inode:inotify")
 
 
 def test_a_scan_job_hands_its_games_over_and_their_art_comes_next(fake):
