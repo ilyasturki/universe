@@ -44,6 +44,15 @@
     <color type="primary" scheme_preference="dark">#c64600</color>
   </branding>
   <releases>
+    <release version="0.0.17" date="2026-11-23">
+      <description>
+        <p>Fixed</p>
+        <ul>
+          <li>A Ctrl-C that ends a pre-launch step under <code>universe play</code> always calls the launch off, instead of sometimes saying the step refused the launch.</li>
+          <li>The AUR and Fedora packages build on a busy builder such as Chaotic-AUR's: their tests leave out the ones that race processes, which Universe's own CI runs under load before each release.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.0.16" date="2026-11-23">
       <description>
         <p>Added</p>

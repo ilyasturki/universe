@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.17] - 2026-11-23
+
+### Fixed
+
+- A Ctrl-C that ends a pre-launch step under `universe play` always calls the launch off, instead of sometimes saying the step refused the launch.
+- The AUR and Fedora packages build on a busy builder such as Chaotic-AUR's: their tests leave out the ones that race processes, which Universe's own CI runs under load before each release.
+
 ## [0.0.16] - 2026-11-23
 
 ### Added
@@ -513,6 +520,7 @@
 
 - The search row on the Reprise look's store page.
 
+[0.0.17]: https://github.com/ilyasturki/universe/compare/v0.0.16...v0.0.17
 [0.0.16]: https://github.com/ilyasturki/universe/compare/v0.0.15...v0.0.16
 [0.0.15]: https://github.com/ilyasturki/universe/compare/v0.0.14...v0.0.15
 [0.0.14]: https://github.com/ilyasturki/universe/compare/v0.0.13...v0.0.14
