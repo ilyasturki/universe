@@ -106,7 +106,7 @@ pub enum Undo {
     System {
         before: BTreeMap<String, String>,
     },
-    /// A pre-launch hook started: a launch whose unit never ran undoes it with that hooker's session-end alone.
+    /// A pre-launch hook started, undone by its hooker's session-end alone; kept off a started marker, which older builds cannot read.
     PreLaunch {
         hooker: String,
     },
@@ -779,7 +779,11 @@ impl Core {
         };
         match started {
             Ok(()) => {
-                if let Err(e) = update_marker(session_id, |m| m.starting = false) {
+                let started = |m: &mut Marker| {
+                    m.starting = false;
+                    m.undo.retain(|u| !matches!(u, Undo::PreLaunch { .. }));
+                };
+                if let Err(e) = update_marker(session_id, started) {
                     tracing::warn!("session {session_id} of {id}: {e}");
                 }
                 Ok(())
@@ -1955,7 +1959,7 @@ pub(crate) mod tests {
         assert!(!core.cancel_launch(), "nothing preparing any more");
         let sid = core.launch("sample", "", "").await.unwrap();
         assert!(memory.spec(&format!("universe-game-sample-{sid}.service")).is_some(), "the next launch goes through");
-        assert_eq!(undo_steps(&read_marker().unwrap()).iter().filter(|s| **s == "pre_launch").count(), 3);
+        assert!(!undo_steps(&read_marker().unwrap()).contains(&"pre_launch"), "a started session's end runs every session-end hook instead");
     }
 
     #[tokio::test]
