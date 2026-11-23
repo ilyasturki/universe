@@ -502,8 +502,7 @@ pub async fn run_blocking(hooker: &Hooker, hook: &str, env: &HookEnv) -> crate::
     run_lines(hooker, hook, env, |_| {}).await
 }
 
-/// `run_blocking` in a process group of its own, ended whole (TERM, then KILL past a grace) once `cancel` is set or the
-/// timeout passes: nothing the hook started outlives it.
+/// `run_blocking` in a process group of its own, ended whole once `cancel` is set or the timeout passes.
 pub async fn run_unless(hooker: &Hooker, hook: &str, env: &HookEnv, cancel: &std::sync::atomic::AtomicBool) -> crate::Result<HookOutcome> {
     run_hook(hooker, hook, env, |_| {}, Some(cancel)).await
 }
@@ -524,7 +523,9 @@ async fn end_group(child: &mut tokio::process::Child, group: libc::pid_t) {
     while (matches!(child.try_wait(), Ok(None)) || signal(0)) && tokio::time::Instant::now() < deadline {
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
-    signal(libc::SIGKILL);
+    if signal(0) {
+        signal(libc::SIGKILL);
+    }
     let _ = child.wait().await;
 }
 
