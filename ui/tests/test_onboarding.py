@@ -2,7 +2,7 @@ import json
 import threading
 
 import pytest
-from looks import SUBMIT, FocusTrace, Look, activate, focus_names, page_name, settle
+from looks import SUBMIT, FocusTrace, Look, activate, focus_names, invoke, page_name, settle
 from PySide6.QtCore import QObject, Qt
 from uitest import index_of, record, rows_by_key, until
 
@@ -391,6 +391,7 @@ def test_the_setup_in_each_look(stores_signed_out, held_sources, look, empty_api
     form = empty_api.screens.onboarding
     gate, entered = held_sources
     until(lambda: entered.is_set() and opened(look) and form.loading)
+    look.page("onboardingPage")
     marked, real_mark = [], empty.core.mark_onboarded
 
     def mark():
@@ -490,6 +491,26 @@ def test_the_skip_question_keeps_the_focus_when_the_machine_is_read(held_sources
     until(lambda: not question.property("open"))
     until(lambda: focused(look, "setupRows"), "back on the launchers the machine holds")
     assert opened(look) and not empty.onboarded()
+
+
+@pytest.mark.parametrize("look", ["reprise"], indirect=True)
+def test_the_power_question_over_the_reprise_setup_keeps_the_focus_when_the_machine_is_read(held_sources, look, empty_api):
+    form = empty_api.screens.onboarding
+    gate, entered = held_sources
+    until(lambda: entered.is_set() and form.loading)
+    look.page("onboardingPage")
+    invoke(look.root, "askPower")
+    question = look.dialog()
+    until(lambda: question.property("open"))
+    trace = FocusTrace(look.window)
+    gate.set()
+    until(lambda: not form.loading and form.stepId == "found")
+    settle(look.window)
+    settle(look.window)
+    assert trace.stop().foreign("confirm") == [], "the steps land under the question, as they do while the page still loads"
+    look.press(Qt.Key.Key_Escape)
+    until(lambda: not question.property("open"))
+    until(lambda: focused(look, "setupRows"), "and take the focus back once it closes")
 
 
 def test_the_offline_setup_joins_a_network_in_each_look(offline, look, empty_api, empty):

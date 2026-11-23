@@ -183,7 +183,8 @@ FocusScope {
         landWaits = false;
         cards.reset();
         nav.index = 1;
-        form.idle ? nav.forceActiveFocus() : cards.forceActiveFocus();
+        // Not forced: the machine may be read before the page has loaded, and the keys wait in the shell's hold until it is wired.
+        (form.idle ? nav : cards).focus = true;
     }
 
     Keys.onPressed: function (event) {
