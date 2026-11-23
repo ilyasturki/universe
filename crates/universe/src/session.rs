@@ -1666,7 +1666,11 @@ pub(crate) mod tests {
             std::fs::write(&scan_fails, "").unwrap();
         }
         std::fs::remove_file(&scan_fails).unwrap();
-        assert_eq!(core.source_update("fake", "", None).await.unwrap(), crate::core::StoreUpdate { updated: 1, busy: vec!["sample".into(), "named".into()] }, "updating all skips the busy imports and names them");
+        assert_eq!(
+            core.source_update("fake", "", None).await.unwrap(),
+            crate::core::StoreUpdate { updated: 1, busy: vec!["sample".into(), "named".into()] },
+            "updating all skips the busy imports and names them"
+        );
         assert_eq!(std::fs::read_to_string(&asked).unwrap(), "update s2\n", "and still updates another game");
     }
 
