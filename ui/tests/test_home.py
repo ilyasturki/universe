@@ -476,6 +476,21 @@ def test_quit_from_the_dock_over_a_loading_game_stops_it_through_the_launcher(ap
     assert fake.core.frames == 0, "no frame was asked for"
 
 
+def test_quit_from_the_dock_over_a_launch_not_made_takes_its_poster_down(look, api, fake, held, monkeypatch):
+    monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
+    making = held(fake.core, "launch")
+    called_off = record(fake.launchCalledOff)
+    api.home.attachOverlay(Overlay())
+    look.home()
+    look.press(Qt.Key.Key_Return)
+    until(lambda: look.root.property("launching") is True and making.entered.is_set(), "the poster holds, the core preparing")
+    api.home.openDock()
+    api.home.stop()
+    making.set()
+    until(lambda: called_off and api.home.pending is None, "the core calls the launch off")
+    until(lambda: look.root.property("launching") is False, "the poster goes with the launch called off")
+
+
 @pytest.mark.parametrize("made", [False, True], ids=["pending", "session"])
 def test_b_on_the_poster_calls_off_a_launch_not_made_and_lets_a_made_one_load(look, api, fake, held, made):
     making = held(fake.core, "launch")

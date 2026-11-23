@@ -74,6 +74,10 @@ Item {
             if (splash.game && splash.game.id === id)
                 splash.abort(message);
         }
+        function onLaunchCalledOff(id) {
+            if (splash.game && splash.game.id === id)
+                splash.done();
+        }
         function onSessionEnded(sessionId, id, duration) {
             if (splash.waiting && sessionId === splash.launchedSession)
                 splash.done();

@@ -71,6 +71,10 @@ Item {
             if (screen.game && screen.game.id === id)
                 screen.abort(message);
         }
+        function onLaunchCalledOff(id) {
+            if (screen.game && screen.game.id === id)
+                screen.done();
+        }
         function onSessionEnded(sessionId, id, duration) {
             if (screen.waiting && sessionId === screen.launchedSession)
                 screen.done();
