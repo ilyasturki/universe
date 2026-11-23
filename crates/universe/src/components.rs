@@ -616,17 +616,24 @@ pub(crate) async fn fetch(url: &str, dest: &Path, size: u64, label: &str, progre
     use sha2::Digest;
     use tokio::io::AsyncWriteExt;
     let failed = |e: reqwest::Error| Error::Unavailable(format!("{label} could not be downloaded: {e}"));
-    let mut resp = client()?.get(url).send().await.and_then(reqwest::Response::error_for_status).map_err(failed)?;
+    let cancelled = || Error::Busy(format!("{label}: cancelled"));
+    let mut resp = tokio::select! {
+        biased;
+        () = crate::called_off(cancel) => return Err(cancelled()),
+        sent = client()?.get(url).send() => sent.and_then(reqwest::Response::error_for_status).map_err(failed)?,
+    };
     let total = resp.content_length().filter(|n| *n > 0).unwrap_or(size);
     let mut file = tokio::fs::File::create(dest).await?;
     let mut hasher = sha2::Sha256::new();
     let (mut done, mut shown) = (0u64, None);
     let result: Result<()> = async {
         loop {
-            if cancel.load(Ordering::Relaxed) {
-                return Err(Error::Busy(format!("{label}: cancelled")));
-            }
-            let Some(chunk) = resp.chunk().await.map_err(failed)? else { break };
+            let chunk = tokio::select! {
+                biased;
+                () = crate::called_off(cancel) => return Err(cancelled()),
+                chunk = resp.chunk() => chunk.map_err(failed)?,
+            };
+            let Some(chunk) = chunk else { break };
             hasher.update(&chunk);
             file.write_all(&chunk).await?;
             done += chunk.len() as u64;

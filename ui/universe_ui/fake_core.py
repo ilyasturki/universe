@@ -454,6 +454,7 @@ class FakeCore:
         self._root = Path(self._tmp.name if self._tmp is not None else str(root))
         self._cache = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "universe", "fake-art")
         self._fake_launch = fake_launch
+        self._called_off = False
         self._lock = threading.Lock()
         self._timers = []
         self._process = None
@@ -1349,6 +1350,9 @@ class FakeCore:
         time.sleep(START_S)
         game = self._game(ident)
         with self._lock:
+            called_off, self._called_off = self._called_off, False
+            if called_off:
+                raise UniverseError("Busy", f"the launch of {game['title']} was called off")
             running = self.current()
             if running:
                 raise UniverseError("Busy", f"{running['title']} is running")
@@ -1442,6 +1446,11 @@ class FakeCore:
                 self._pend_journal(current["id"], current["session_id"])
             with contextlib.suppress(OSError):
                 self._marker().unlink()
+
+    def cancel_launch(self):
+        with self._lock:
+            self._called_off = self._session is None
+            return self._called_off
 
     def stop(self, session_id):
         self._stopped = True

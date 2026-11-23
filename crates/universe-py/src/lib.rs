@@ -279,6 +279,9 @@ impl Core {
     fn stop(&self, py: Python<'_>, session_id: String) -> PyResult<()> {
         self.run(py, |c| async move { c.stop(&session_id).await })
     }
+    fn cancel_launch(&self) -> bool {
+        self.core.cancel_launch()
+    }
     fn adopt_scope(&self, py: Python<'_>) -> PyResult<String> {
         self.run(py, |c| c.adopt_scope())
     }

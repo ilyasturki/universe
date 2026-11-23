@@ -307,6 +307,8 @@ pub struct Core {
     thumbs: crate::thumbs::Maker,
     pub(crate) host: Host,
     pub(crate) component_jobs: std::sync::Mutex<BTreeMap<String, std::sync::Arc<std::sync::atomic::AtomicBool>>>,
+    /// The launches of this process still preparing, each by the flag that calls it off.
+    pub(crate) launches: std::sync::Mutex<Vec<std::sync::Arc<std::sync::atomic::AtomicBool>>>,
 }
 
 impl Core {
@@ -332,6 +334,7 @@ impl Core {
             thumbs: crate::thumbs::Maker::default(),
             host,
             component_jobs: std::sync::Mutex::new(BTreeMap::new()),
+            launches: std::sync::Mutex::new(Vec::new()),
         }
     }
 

@@ -1102,6 +1102,39 @@ fn a_launch_marker_appears_whole_and_an_open_leaves_a_starting_session_alone() {
 }
 
 #[test]
+fn ctrl_c_in_a_pre_launch_hook_calls_the_launch_off_and_undoes_the_hook() {
+    let dir = no_desktop();
+    add_game(&dir, "Quest");
+    let hook = dir.path().join("hook");
+    std::fs::create_dir_all(&hook).unwrap();
+    let bin = dir.path().join("modules/pre/bin");
+    shim(&bin, "pre", &format!("sleep 30 &\necho $$ $! > {0}/pids\n{1}\n", hook.display(), gate(&hook)));
+    shim(&bin, "end", &format!("echo ended >> {}/ended\n", hook.display()));
+    std::fs::write(dir.path().join("modules/pre/module.toml"), "api = 2\nid = \"pre\"\n[hooks]\npre-launch = \"bin/pre\"\nsession-end = \"bin/end\"\n")
+        .unwrap();
+    let config = dir.path().join("config/config.toml");
+    std::fs::write(&config, std::fs::read_to_string(&config).unwrap() + "[modules]\nenabled = [\"pre\"]\n").unwrap();
+    let mut play =
+        command(&dir, &["play", "quest", "--no-wait"], &[NO_BUS]).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::piped()).spawn().unwrap();
+    wait_for(&hook.join("entered"), &mut play);
+    // SAFETY: the child is ours and still running.
+    unsafe { libc::kill(play.id() as i32, libc::SIGINT) };
+    let out = play.wait_with_output().unwrap();
+    assert!(!out.status.success() && text(&out.stderr).contains("called off"), "{}", text(&out.stderr));
+    let pids: Vec<i32> = std::fs::read_to_string(hook.join("pids")).unwrap().split_whitespace().map(|p| p.parse().unwrap()).collect();
+    let by = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    // SAFETY: signal 0 only asks whether the pid is there.
+    while pids.iter().any(|p| unsafe { libc::kill(*p, 0) } == 0) {
+        assert!(std::time::Instant::now() < by, "the hook and its child outlived the launch");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert_eq!(lines(&hook.join("ended")), 1, "the hook's session-end undid it");
+    assert!(!dir.path().join("state/current-session.json").exists());
+    assert_eq!(lines(&dir.path().join("data/games/quest/sessions.jsonl")), 0, "no row");
+    assert!(files_under(&dir.path().join("state/closing-sessions")).iter().all(|f| f.extension().is_none_or(|e| e != "json")));
+}
+
+#[test]
 fn a_launch_killed_before_its_game_started_is_undone_on_the_next_open() {
     use std::os::unix::process::ExitStatusExt;
     let dir = no_desktop();

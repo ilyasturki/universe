@@ -117,6 +117,7 @@ class Home(QObject):
         client.launchRequested.connect(self._on_requested)
         client.launched.connect(self._on_launched)
         client.launchFailed.connect(self._on_failed)
+        client.launchCalledOff.connect(lambda ident: self._on_failed(ident, ""))
         client.sessionShown.connect(self._on_shown)
         controller.buttonPressed.connect(self._on_button)
         controller.screenshotGrabbed.connect(self._pad_grabbed)
@@ -455,9 +456,10 @@ class Home(QObject):
         self._stopping = True
         self.stopping.emit(str(session.get("title") or ""))
         self.changed.emit()
-        # No session to stop yet: it is stopped the moment the core hands one back.
+        # No session yet: the core calls the launch off, or one it made past that is stopped the moment it is handed back.
         if session is self._pending:
             self._stop_on_launch = True
+            self._client.cancelLaunch(str(session.get("id") or ""))
             self.toLauncher()
         elif self._overlay_only:
             self.closeDock()

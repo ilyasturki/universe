@@ -19,14 +19,16 @@ def stop(api):
 
 @pytest.fixture
 def held(monkeypatch):
-    """`held(obj, name)` holds every call to `obj.name` until the returned event is set; the test's end sets it."""
+    """`held(obj, name)` holds every call to `obj.name` until the returned event is set, its `entered` set once a call waits; the test's end sets it."""
     gates = []
 
     def hold(obj, name):
         gate = threading.Event()
+        gate.entered = threading.Event()
         real = getattr(obj, name)
 
         def gated(*args):
+            gate.entered.set()
             gate.wait(5)
             return real(*args)
 
@@ -456,7 +458,7 @@ def test_quit_from_the_dock_over_a_loading_game_stops_it_through_the_launcher(ap
     home = api.home
     home.attachOverlay(Overlay())
     quitting = record(home.stopping)
-    launched, ended = record(fake.launched), record(fake.sessionEnded)
+    launched, ended, called_off = record(fake.launched), record(fake.sessionEnded), record(fake.launchCalledOff)
     fake.launch("mirrors-edge", "")
     if made:
         making.set()
@@ -465,7 +467,11 @@ def test_quit_from_the_dock_over_a_loading_game_stops_it_through_the_launcher(ap
     home.stop()
     assert quitting == [("Mirror's Edge",)] and not home.open and home.flipped and fake.core.frozen is False, "the launcher comes up, nothing frozen"
     making.set()
-    until(lambda: ended, "stopped, as soon as the session existed")
+    if made:
+        until(lambda: ended, "stopped, as soon as the session existed")
+    else:
+        until(lambda: called_off, "called off before the core made a session")
+        assert not ended
     assert home.pending is None and not home.loading and not home.flipped and home.shown == "launcher"
     assert fake.core.frames == 0, "no frame was asked for"
 
@@ -474,10 +480,10 @@ def test_quit_from_the_dock_over_a_loading_game_stops_it_through_the_launcher(ap
 def test_b_on_the_poster_calls_off_a_launch_not_made_and_lets_a_made_one_load(look, api, fake, held, made):
     making = held(fake.core, "launch")
     mapped = held(fake.core, "wait_session_window")
-    ended = record(fake.sessionEnded)
+    ended, failed, called_off = record(fake.sessionEnded), record(fake.launchFailed), record(fake.launchCalledOff)
     look.home()
     look.press(Qt.Key.Key_Return)
-    until(lambda: look.root.property("launching") is True and api.home.pending is not None, "A launches: the poster holds, no session yet")
+    until(lambda: look.root.property("launching") is True and making.entered.is_set(), "A launches: the poster holds, the core preparing")
     if made:
         making.set()
         until(lambda: api.universe.currentSession and api.home.pending is None, "the core makes the session, its window not up yet")
@@ -500,8 +506,10 @@ def test_b_on_the_poster_calls_off_a_launch_not_made_and_lets_a_made_one_load(lo
     settle(look.window)
     assert look.root.property("launching") is False, "nothing else starts while the called-off launch is still on its way"
     making.set()
-    until(lambda: ended, "the launch is stopped as soon as the core makes it")
-    assert api.universe.currentSession is None and api.home.pending is None and api.home.shown == "launcher"
+    until(lambda: called_off and api.home.pending is None, "the core calls the launch off before it makes a session")
+    settle(look.window)
+    assert ended == [] and failed == [], "no session to end, no failure to show"
+    assert api.universe.currentSession is None and api.home.shown == "launcher" and not api.home.quitting
     assert "homePage" in focus_names(look.window)
 
 
@@ -523,6 +531,24 @@ def test_b_before_the_universe_poster_has_asked_for_the_launch_asks_for_none(api
     settle(look.window)
     settle(look.window)
     assert requested == [] and api.home.pending is None and api.universe.currentSession is None, "the grab coming back starts nothing"
+    look.close()
+
+
+def test_b_while_the_universe_poster_is_written_never_reaches_the_core(api, fake, held):
+    from universe_ui import universe_client
+
+    look = Look(api, "reprise")
+    writing, making = held(universe_client, "write_poster"), held(fake.core, "launch")
+    failed, called_off = record(fake.launchFailed), record(fake.launchCalledOff)
+    look.home()
+    look.press(Qt.Key.Key_Return)
+    until(writing.entered.is_set, "the poster is being written")
+    look.press(Qt.Key.Key_Escape)
+    until(lambda: look.root.property("launching") is False, "B leaves the poster")
+    writing.set()
+    until(lambda: called_off and api.home.pending is None, "the launch is called off once the poster is down")
+    settle(look.window)
+    assert not making.entered.is_set() and failed == [] and api.universe.currentSession is None, "the core is never asked"
     look.close()
 
 

@@ -101,6 +101,13 @@ pub fn dies_with_parent(cmd: &mut tokio::process::Command) -> &mut tokio::proces
     }
 }
 
+/// Resolves once `flag` is set: a cancel flag raced against work that cannot look at it itself.
+pub(crate) async fn called_off(flag: &std::sync::atomic::AtomicBool) {
+    while !flag.load(std::sync::atomic::Ordering::Relaxed) {
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("not found: {0}")]

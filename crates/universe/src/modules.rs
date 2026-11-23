@@ -502,16 +502,50 @@ pub async fn run_blocking(hooker: &Hooker, hook: &str, env: &HookEnv) -> crate::
     run_lines(hooker, hook, env, |_| {}).await
 }
 
+/// `run_blocking` in a process group of its own, ended whole (TERM, then KILL past a grace) once `cancel` is set or the
+/// timeout passes: nothing the hook started outlives it.
+pub async fn run_unless(hooker: &Hooker, hook: &str, env: &HookEnv, cancel: &std::sync::atomic::AtomicBool) -> crate::Result<HookOutcome> {
+    run_hook(hooker, hook, env, |_| {}, Some(cancel)).await
+}
+
 /// `run_blocking`, each stdout line handed to `on_line` the moment the hook prints it.
-pub async fn run_lines(hooker: &Hooker, hook: &str, env: &HookEnv, mut on_line: impl FnMut(&str) + Send) -> crate::Result<HookOutcome> {
+pub async fn run_lines(hooker: &Hooker, hook: &str, env: &HookEnv, on_line: impl FnMut(&str) + Send) -> crate::Result<HookOutcome> {
+    run_hook(hooker, hook, env, on_line, None).await
+}
+
+const GROUP_GRACE: std::time::Duration = std::time::Duration::from_secs(2);
+
+async fn end_group(child: &mut tokio::process::Child, group: libc::pid_t) {
+    // SAFETY: kill(2) on a process group of our own child's making.
+    let signal = |sig| unsafe { libc::kill(-group, sig) == 0 };
+    signal(libc::SIGTERM);
+    let deadline = tokio::time::Instant::now() + GROUP_GRACE;
+    // The hook unreaped is a zombie the group still counts.
+    while (matches!(child.try_wait(), Ok(None)) || signal(0)) && tokio::time::Instant::now() < deadline {
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    signal(libc::SIGKILL);
+    let _ = child.wait().await;
+}
+
+async fn run_hook(
+    hooker: &Hooker,
+    hook: &str,
+    env: &HookEnv,
+    mut on_line: impl FnMut(&str) + Send,
+    cancel: Option<&std::sync::atomic::AtomicBool>,
+) -> crate::Result<HookOutcome> {
     use tokio::io::{AsyncBufReadExt, AsyncReadExt};
     let Some(exe) = hooker.hook(hook) else {
         return Ok(HookOutcome { status: 0, stdout: String::new(), stderr: String::new() });
     };
-    let mut child = command(&exe, hooker.dir(), &hooker.data_dir(), hooker.prefix())?
-        .envs(env.vars.iter().map(|(k, v)| (k.as_str(), v.as_str())))
-        .spawn()
-        .map_err(|e| crate::Error::Io(format!("{}: {e}", exe.display())))?;
+    let mut cmd = command(&exe, hooker.dir(), &hooker.data_dir(), hooker.prefix())?;
+    if cancel.is_some() {
+        cmd.process_group(0);
+    }
+    let mut child =
+        cmd.envs(env.vars.iter().map(|(k, v)| (k.as_str(), v.as_str()))).spawn().map_err(|e| crate::Error::Io(format!("{}: {e}", exe.display())))?;
+    let group = child.id().map_or(0, |pid| pid as libc::pid_t);
     let mut stdout = tokio::io::BufReader::new(child.stdout.take().expect("piped"));
     let mut stderr = child.stderr.take().expect("piped");
     let errors = async {
@@ -529,12 +563,31 @@ pub async fn run_lines(hooker: &Hooker, hook: &str, env: &HookEnv, mut on_line: 
         }
         Ok::<_, std::io::Error>(printed)
     };
-    let run = async {
-        let (stdout, stderr) = tokio::try_join!(printed, errors)?;
-        Ok::<_, std::io::Error>((child.wait().await?, stdout, stderr))
-    };
     let timeout = hooker.timeout();
-    match tokio::time::timeout(timeout, run).await {
+    let ran = {
+        let run = async {
+            let (stdout, stderr) = tokio::try_join!(printed, errors)?;
+            Ok::<_, std::io::Error>((child.wait().await?, stdout, stderr))
+        };
+        let stopped = async {
+            match cancel {
+                Some(flag) => crate::called_off(flag).await,
+                None => std::future::pending().await,
+            }
+        };
+        tokio::select! {
+            biased;
+            () = stopped => None,
+            ran = tokio::time::timeout(timeout, run) => Some(ran),
+        }
+    };
+    if cancel.is_some() && group > 0 && !matches!(ran, Some(Ok(_))) {
+        end_group(&mut child, group).await;
+    }
+    let Some(ran) = ran else {
+        return Err(crate::Error::Busy(format!("{}:{hook} was called off", hooker.id())));
+    };
+    match ran {
         Ok(Ok((status, stdout, stderr))) => {
             let o = HookOutcome { status: status.code().unwrap_or(-1), stdout, stderr };
             if o.status != 0 {

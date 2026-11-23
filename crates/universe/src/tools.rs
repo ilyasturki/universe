@@ -22,25 +22,39 @@ pub fn search_path() -> std::ffi::OsString {
 
 /// `Ok` for a missing program that is no tool Universe fetches: its caller reports it.
 pub async fn ensure(bin: &str, owner: &str) -> crate::Result<()> {
+    ensure_unless(bin, owner, &std::sync::atomic::AtomicBool::new(false)).await
+}
+
+/// `ensure`, given up the moment `cancel` is set: a fetch under way stops and leaves no part file.
+pub async fn ensure_unless(bin: &str, owner: &str, cancel: &std::sync::atomic::AtomicBool) -> crate::Result<()> {
     if crate::runners::on_path(bin).is_some() {
         return Ok(());
     }
     static FETCHING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-    let _one = FETCHING.lock().await;
+    let cancelled = || crate::Error::Busy(format!("the fetch of {bin}: cancelled"));
+    let _one = tokio::select! {
+        biased;
+        () = crate::called_off(cancel) => return Err(cancelled()),
+        one = FETCHING.lock() => one,
+    };
     if crate::runners::on_path(bin).is_some() {
         return Ok(());
     }
     let config = crate::config::Config::load().unwrap_or_default();
     let Some(_) = crate::components::cached(&config).tool(bin, owner) else { return Ok(()) };
-    let loaded = crate::components::load(&config, false).await;
-    let never = std::sync::atomic::AtomicBool::new(false);
+    let loaded = tokio::select! {
+        biased;
+        () = crate::called_off(cancel) => return Err(cancelled()),
+        loaded = crate::components::load(&config, false) => loaded,
+    };
     let mut failures = Vec::new();
     for catalogue in [loaded.catalogue, crate::components::pinned(&config)] {
         let Some((id, entry)) = catalogue.tool(bin, owner) else { continue };
         let Some(build) = entry.latest() else { continue };
         tracing::info!("{bin} not installed: fetching {} {}", entry.name, build.version);
-        match crate::components::install(id, entry, build, true, None, &never).await {
+        match crate::components::install(id, entry, build, true, None, cancel).await {
             Ok(_) => return Ok(()),
+            Err(_) if cancel.load(std::sync::atomic::Ordering::Relaxed) => return Err(cancelled()),
             Err(e) => failures.push(format!("{} {}: {e}", entry.name, build.version)),
         }
     }

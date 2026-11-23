@@ -59,7 +59,7 @@ pub enum Cmd {
         #[arg(long, conflicts_with = "all")]
         removed: bool,
     },
-    /// Launch a game (exact › word › substring or path) and wait for it to end; the game ends with this command (Ctrl-C stops it)
+    /// Launch a game (exact › word › substring or path) and wait for it to end; the game ends with this command (Ctrl-C stops it, or calls off a launch still getting ready)
     #[command(alias = "launch")]
     Play {
         /// Game: exact id, then whole word, substring or path
@@ -1304,15 +1304,32 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             if !no_wait {
                 core.adopt_scope().await?;
             }
-            let sid = core.launch(&id, &screen, "").await?;
+            use tokio::signal::unix::{signal, SignalKind};
+            let (mut int, mut term) = (signal(SignalKind::interrupt())?, signal(SignalKind::terminate())?);
+            // The pre-launch hooks run in a group of their own, out of the terminal's reach: Ctrl-C calls the launch off.
+            let launch = core.launch(&id, &screen, "");
+            tokio::pin!(launch);
+            let mut stopping = false;
+            let sid = loop {
+                tokio::select! {
+                    sid = &mut launch => break sid?,
+                    _ = int.recv() => {}
+                    _ = term.recv() => {}
+                }
+                stopping = true;
+                core.cancel_launch();
+            };
             done(json, format!("launched {id} · session {sid}"), serde_json::json!({"session": sid, "id": id}))?;
+            if stopping {
+                match core.stop(&sid).await {
+                    Ok(()) | Err(crate::Error::NotFound(_)) => {}
+                    Err(e) => eprintln!("universe: {e}"),
+                }
+            }
             if no_wait {
                 return Ok(());
             }
             let unit = format!("{}.service", launcher::unit_name(&id, &sid));
-            use tokio::signal::unix::{signal, SignalKind};
-            let (mut int, mut term) = (signal(SignalKind::interrupt())?, signal(SignalKind::terminate())?);
-            let mut stopping = false;
             while core.host.units.is_active(&unit).await {
                 let signalled = tokio::select! {
                     _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => false,

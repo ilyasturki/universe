@@ -329,6 +329,7 @@ What it derives is derived this way, and any frontend needs the equivalent:
 | `libraryChanged`, `mediaChanged`, `entryWritten`, `recordingFiled` | a `QFileSystemWatcher` on `games/`, `games/<id>/{,journal,journal/attachments,media,media/picked,media/picked/screenshots,screenshots}` and `state/` (a pick made from the CLI shows up), debounced 300 ms; `mediaChanged` also follows a pick or its removal made through the client |
 | `progress`, `jobFinished` | the job's own callback — install, update, scan and media refresh run on a host thread; `cancel(job)` stops an install or update (SIGTERM, the job fails) or a media refresh (`media_cancel`, it ends ok after the game in hand), `cancelled` set on the job either way; `jobResult(job)` is what the finished work returned (a scan: how many games became the source's), where `jobFinished`'s text is only for showing |
 | `launched`, `launchFailed`, `error` | the call's result |
+| `launchCalledOff` | `(id)`: a launch `cancelLaunch(id)` called off ended without a session, in place of `launchFailed`; one called off while its poster was still being written never reaches the core |
 
 A frontend decides who owns the game's lifetime. `adopt_scope()`, called once at startup, moves the
 frontend into `universe-launcher-<pid>.scope`; every game it launches from then on is bound to that
@@ -341,7 +342,10 @@ before `api.shutdown()`, so `session-end` has run before the scope goes. No conf
 
 Two consequences worth knowing before you design around them. **`launch` blocks on the pre-launch
 hooks** — up to the summed `timeout_s` of every blocking hook, 20 s by default — so it must not run
-on the UI thread if you want the launch animation to keep moving. And **long jobs die with the
+on the UI thread if you want the launch animation to keep moving; `cancel_launch()` from another
+thread calls it off (`api.home.stop()` on a pending launch does, through the client's
+`cancelLaunch`), and a launch past its preparation still makes its session, which `stop()` then
+stops the moment it is handed back. And **long jobs die with the
 process**: closing the frontend mid-install interrupts it, by design.
 
 ## Launch and the running view

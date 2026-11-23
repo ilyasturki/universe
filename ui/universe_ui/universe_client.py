@@ -77,6 +77,8 @@ class CoreClient(QObject):
     launched = Signal(str, str)
     notice = Signal(str)
     launchFailed = Signal(str, str)
+    # A launch `cancelLaunch` called off ended without a session: what it met on its way out is no failure to show.
+    launchCalledOff = Signal(str)
     sessionShown = Signal(str, bool)
     error = Signal(str, str)
 
@@ -90,6 +92,7 @@ class CoreClient(QObject):
         self._state = Path(core.state_home())
         self._job_seq = 0
         self._jobs = {}
+        self._called_off = set()
         self._closed = False
         self._skipped_told = False
         self._fps_limit = ""
@@ -321,13 +324,25 @@ class CoreClient(QObject):
         self.launchRequested.emit(ident)
 
         def on_reply(session_id):
+            self._called_off.discard(ident)
             session_id = str(session_id or "")
             self._track(session_id, ident)
             self.launched.emit(session_id, ident)
             self._wait_window(session_id)
 
+        def on_error(e):
+            if ident in self._called_off:
+                self._called_off.discard(ident)
+                self.launchCalledOff.emit(ident)
+            else:
+                self.launchFailed.emit(ident, e.message)
+
         def start(splash):
-            self._call_async(lambda: self._core.launch(ident, screen, splash), on_reply, lambda e: self.launchFailed.emit(ident, e.message))
+            if ident in self._called_off:
+                self._called_off.discard(ident)
+                self.launchCalledOff.emit(ident)
+                return
+            self._call_async(lambda: self._core.launch(ident, screen, splash), on_reply, on_error)
 
         if poster is None or poster.isNull():
             start("")
@@ -337,6 +352,11 @@ class CoreClient(QObject):
     @Slot(str)
     def stop(self, session_id):
         self._call_async(lambda: self._core.stop(session_id))
+
+    # Its pre-launch hooks and tool fetches stop where they are; a launch past them still makes its session.
+    def cancelLaunch(self, ident):
+        self._called_off.add(ident)
+        self._guarded(False, self._core.cancel_launch)
 
     def stopNow(self, session_id):
         self._guarded(None, self._core.stop, session_id)

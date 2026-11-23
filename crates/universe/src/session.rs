@@ -106,6 +106,10 @@ pub enum Undo {
     System {
         before: BTreeMap<String, String>,
     },
+    /// A pre-launch hook started: a launch whose unit never ran undoes it with that hooker's session-end alone.
+    PreLaunch {
+        hooker: String,
+    },
 }
 
 pub fn read_marker() -> Option<Marker> {
@@ -169,6 +173,38 @@ fn hold_starting() -> Result<std::fs::File> {
 fn still_starting() -> bool {
     let Ok(f) = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(starting_lock_file()) else { return false };
     matches!(f.try_lock(), Err(std::fs::TryLockError::WouldBlock))
+}
+
+/// A launch in `Core::launches` while it prepares, by the flag `cancel_launch` sets; out of it once dropped.
+struct Preparing<'a> {
+    core: &'a Core,
+    flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl<'a> Preparing<'a> {
+    fn new(core: &'a Core) -> Preparing<'a> {
+        let flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        core.launches.lock().unwrap().push(flag.clone());
+        Preparing { core, flag }
+    }
+
+    fn leave(self) -> std::sync::Arc<std::sync::atomic::AtomicBool> {
+        self.flag.clone()
+    }
+}
+
+impl Drop for Preparing<'_> {
+    fn drop(&mut self) {
+        self.core.launches.lock().unwrap().retain(|f| !std::sync::Arc::ptr_eq(f, &self.flag));
+    }
+}
+
+fn called(flag: &std::sync::atomic::AtomicBool) -> bool {
+    flag.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+fn called_off(title: &str) -> Error {
+    Error::Busy(format!("the launch of {title} was called off"))
 }
 
 /// What the launch is about to begin, on its marker before it begins.
@@ -339,11 +375,17 @@ fn claim_closing(game: &str, session_id: &str, claim: Claim, row: impl FnOnce(Op
                 row: Session { session: session_id.into(), game: game.into(), ..Session::default() },
                 filed: true,
                 undo: m.undo.clone(),
+                hook_env: Some(m.hook_env.clone()),
                 ended: true,
                 failed_launch: true,
+            },
+            // Its session-end hooks run whole, the pre-launch ones' undo among them.
+            Some(false) => Closing {
+                row: row(Some(m)),
+                undo: m.undo.iter().filter(|u| !matches!(u, Undo::PreLaunch { .. })).cloned().collect(),
+                hook_env: Some(m.hook_env.clone()),
                 ..Closing::default()
             },
-            Some(false) => Closing { row: row(Some(m)), undo: m.undo.clone(), hook_env: Some(m.hook_env.clone()), ..Closing::default() },
         },
         None if matches!(claim, Claim::FailedLaunch | Claim::Ended { seen: true, .. }) => return Ok(()),
         None => {
@@ -534,6 +576,8 @@ impl Core {
 
     /// Starts the game as a transient service; `splash` is a poster for gamescope's keep-alive window (`splash.rs`'s format), `""` for none.
     pub async fn launch(&self, id: &str, screen: &str, splash: &str) -> Result<String> {
+        let preparing = Preparing::new(self);
+        let off = &preparing.flag;
         self.reconcile().await?;
         if let Some(c) = self.current().await {
             return Err(Error::Busy(format!("{} is running ({})", c.title, c.session_id)));
@@ -546,7 +590,10 @@ impl Core {
         let cfg = self.config.read().await.clone();
         let spec = crate::runners::spec(&r.effective.runner);
         if spec.is_some_and(|s| (s.kind == crate::runners::Kind::Proton && r.game.launch.runner_exe.is_empty()) || s.via_proton) {
-            crate::tools::ensure(&cfg.launch.umu_run, "").await?;
+            crate::tools::ensure_unless(&cfg.launch.umu_run, "", off).await.map_err(|e| if called(off) { called_off(&r.game.title) } else { e })?;
+        }
+        if called(off) {
+            return Err(called_off(&r.game.title));
         }
         let started = chrono::Local::now();
         let session_id = sessions::session_id(started);
@@ -576,14 +623,17 @@ impl Core {
         };
         let starting = hold_starting()?;
         write_marker(&Marker { current: current.clone(), hook_env: base.vars.clone(), starting: true, ..Marker::default() })?;
-        let prepared = self.prepare(&r, &cfg, &base, &session_id, &screen, splash).await;
+        let prepared = self.prepare(&r, &cfg, &base, &session_id, &screen, splash, off).await;
+        // Out of the list first: a call-off after it is told it came too late, one before it is seen here.
+        let off = preparing.leave();
+        let prepared = match prepared {
+            _ if called(&off) => Err(called_off(&r.game.title)),
+            p => p,
+        };
         let (plan, runtime, overlay) = match prepared {
             Ok(p) => p,
             Err(e) => {
-                let _lock = marker_lock()?;
-                if read_marker().is_some_and(|m| m.current.session_id == session_id) {
-                    remove_marker();
-                }
+                self.close_failed_launch(id, &session_id).await;
                 return Err(e);
             }
         };
@@ -612,6 +662,34 @@ impl Core {
         Ok(session_id)
     }
 
+    /// Each noted on the marker before it starts, so a launch that goes no further undoes it; the first refusal or call-off ends them.
+    async fn pre_launch(
+        &self,
+        r: &Resolved,
+        cfg: &crate::config::Config,
+        base: &modules::HookEnv,
+        session_id: &str,
+        env_file: &Path,
+        off: &std::sync::atomic::AtomicBool,
+    ) -> Result<()> {
+        for m in self.hook_modules(r, "pre-launch").await {
+            if called(off) {
+                return Err(called_off(&r.game.title));
+            }
+            let mut env = self.module_env(&m, Some(&r.game), cfg, base);
+            env.set("UNIVERSE_ENV_FILE", env_file.to_string_lossy().to_string());
+            note_undo(session_id, Undo::PreLaunch { hooker: m.id().to_string() })?;
+            let out = modules::run_unless(&m, "pre-launch", &env, off).await?;
+            if out.status != 0 {
+                return Err(Error::Io(format!("pre-launch {} refused the launch: {}", m.id(), out.stderr.trim())));
+            }
+            for line in out.stderr.lines() {
+                tracing::info!("pre-launch {}: {line}", m.id());
+            }
+        }
+        Ok(())
+    }
+
     /// The pre-launch hooks, then the launch's plan, its runtime and the overlay's display file.
     async fn prepare(
         &self,
@@ -621,31 +699,22 @@ impl Core {
         session_id: &str,
         screen: &str,
         splash: &str,
+        off: &std::sync::atomic::AtomicBool,
     ) -> Result<(Plan, Runtime, Option<std::path::PathBuf>)> {
         let id = r.game.id.as_str();
         let env_file = paths::state_home().join(format!("env-{session_id}"));
         std::fs::create_dir_all(paths::state_home())?;
         std::fs::write(&env_file, "")?;
-        for m in self.hook_modules(r, "pre-launch").await {
-            let mut env = self.module_env(&m, Some(&r.game), cfg, base);
-            env.set("UNIVERSE_ENV_FILE", env_file.to_string_lossy().to_string());
-            let out = modules::run_blocking(&m, "pre-launch", &env).await?;
-            if out.status != 0 {
-                let _ = std::fs::remove_file(&env_file);
-                return Err(Error::Io(format!("pre-launch {} refused the launch: {}", m.id(), out.stderr.trim())));
-            }
-            for line in out.stderr.lines() {
-                tracing::info!("pre-launch {}: {line}", m.id());
-            }
-        }
-        let extra_env: BTreeMap<String, String> = std::fs::read_to_string(&env_file)
-            .unwrap_or_default()
+        let hooked = self.pre_launch(r, cfg, base, session_id, &env_file, off).await;
+        let written = std::fs::read_to_string(&env_file).unwrap_or_default();
+        let _ = std::fs::remove_file(&env_file);
+        hooked?;
+        let extra_env: BTreeMap<String, String> = written
             .lines()
             .filter_map(|l| l.split_once('='))
             .filter(|(k, _)| !k.trim().is_empty())
             .map(|(k, v)| (k.trim().to_string(), v.to_string()))
             .collect();
-        let _ = std::fs::remove_file(&env_file);
 
         let mode = crate::desktop::screen_mode(screen).await;
         let splash = (!splash.is_empty()).then(|| std::path::PathBuf::from(splash));
@@ -717,14 +786,27 @@ impl Core {
                 Ok(())
             }
             Err(e) => {
-                let closed = claim_closing(id, session_id, Claim::FailedLaunch, |_| Session::default());
-                match closed {
-                    Ok(()) => self.finish_closing(id, session_id).await.unwrap_or_else(|e| tracing::warn!("session {session_id} of {id}: {e}")),
-                    Err(e) => tracing::warn!("{e}"),
-                }
+                self.close_failed_launch(id, session_id).await;
                 Err(e)
             }
         }
+    }
+
+    /// A launch whose unit never started closes through its record: its undo alone, no row, no other hook.
+    async fn close_failed_launch(&self, id: &str, session_id: &str) {
+        match claim_closing(id, session_id, Claim::FailedLaunch, |_| Session::default()) {
+            Ok(()) => self.finish_closing(id, session_id).await.unwrap_or_else(|e| tracing::warn!("session {session_id} of {id}: {e}")),
+            Err(e) => tracing::warn!("{e}"),
+        }
+    }
+
+    /// Calls off every launch of this process still preparing; false when none was.
+    pub fn cancel_launch(&self) -> bool {
+        let launches = self.launches.lock().unwrap();
+        for flag in launches.iter() {
+            flag.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+        !launches.is_empty()
     }
 
     async fn start(&self, r: &Resolved, plan: &Plan, current: &Current) -> Result<()> {
@@ -818,6 +900,7 @@ impl Core {
                         }
                     }
                 }
+                Undo::PreLaunch { .. } => {}
             }
         }
     }
@@ -929,7 +1012,10 @@ impl Core {
             }
         }
         while let Some(step) = c.undo.pop() {
-            self.rollback(std::slice::from_ref(&step)).await;
+            match &step {
+                Undo::PreLaunch { hooker } => self.undo_pre_launch(id, hooker, &c).await,
+                _ => self.rollback(std::slice::from_ref(&step)).await,
+            }
             noted(change_closing(id, session_id, |kept| kept.undo.pop().is_some()).map(drop));
         }
         if !c.ended {
@@ -970,19 +1056,7 @@ impl Core {
     async fn run_session_end(&self, id: &str, c: &Closing) {
         let Ok(r) = self.get(id).await else { return };
         let cfg = self.config.read().await.clone();
-        let mut env_end = match &c.hook_env {
-            Some(vars) => HookEnv { vars: vars.clone() },
-            None => {
-                let mut e = self.hook_env_base(&r);
-                e.set("SESSION_ID", c.row.session.clone());
-                e.set("SESSION_UNIT", c.row.unit.clone());
-                e.set("SESSION_SCREEN", c.row.screen.clone());
-                e.set("SESSION_STARTED_AT", c.row.started_at.clone());
-                e
-            }
-        };
-        env_end.set("SESSION_ENDED_AT", c.row.ended_at.clone());
-        env_end.set("SESSION_DURATION_S", c.row.duration_s.to_string());
+        let env_end = self.session_end_env(&r, c);
         for m in self.hook_modules(&r, "session-end").await {
             let env = self.module_env(&m, Some(&r.game), &cfg, &env_end);
             if let Err(e) = modules::run_blocking(&m, "session-end", &env).await {
@@ -992,6 +1066,36 @@ impl Core {
         if cfg.saves.auto_backup && crate::saves::backs_up(&r.game, &cfg) {
             self.start_saves_backup(&r.game.id, &c.row.session).await;
         }
+    }
+
+    /// `hooker`'s session-end alone, for the pre-launch it ran in a launch that never started its unit.
+    async fn undo_pre_launch(&self, id: &str, hooker: &str, c: &Closing) {
+        let Ok(r) = self.get(id).await else { return };
+        let cfg = self.config.read().await.clone();
+        let env_end = self.session_end_env(&r, c);
+        for m in self.hook_modules(&r, "session-end").await.into_iter().filter(|m| m.id() == hooker) {
+            let env = self.module_env(&m, Some(&r.game), &cfg, &env_end);
+            if let Err(e) = modules::run_blocking(&m, "session-end", &env).await {
+                tracing::warn!("session-end {}: {e}", m.id());
+            }
+        }
+    }
+
+    fn session_end_env(&self, r: &Resolved, c: &Closing) -> HookEnv {
+        let mut env_end = match &c.hook_env {
+            Some(vars) => HookEnv { vars: vars.clone() },
+            None => {
+                let mut e = self.hook_env_base(r);
+                e.set("SESSION_ID", c.row.session.clone());
+                e.set("SESSION_UNIT", c.row.unit.clone());
+                e.set("SESSION_SCREEN", c.row.screen.clone());
+                e.set("SESSION_STARTED_AT", c.row.started_at.clone());
+                e
+            }
+        };
+        env_end.set("SESSION_ENDED_AT", c.row.ended_at.clone());
+        env_end.set("SESSION_DURATION_S", c.row.duration_s.to_string());
+        env_end
     }
 
     /// A unit of its own: ludusavi's first run fetches it and its manifest, too long for `ExecStopPost`.
@@ -1141,6 +1245,7 @@ pub(crate) mod tests {
                 Undo::Hud => "hud",
                 Undo::Filter => "filter",
                 Undo::System { .. } => "system",
+                Undo::PreLaunch { .. } => "pre_launch",
             })
             .collect()
     }
@@ -1782,6 +1887,124 @@ pub(crate) mod tests {
         assert_eq!(calls[2..], ["cursor:restore"]);
         memory.refuse_starts(false);
         assert!(core.launch("sample", "", "").await.is_ok());
+    }
+
+    fn hook_module(id: &str, hooks: &[(&str, &str)]) {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::path::PathBuf::from(std::env::var_os("UNIVERSE_MODULES_PATH").unwrap()).join(id);
+        std::fs::create_dir_all(dir.join("bin")).unwrap();
+        let table: String = hooks.iter().map(|(hook, _)| format!("{hook} = \"bin/{hook}\"\n")).collect();
+        std::fs::write(dir.join("module.toml"), format!("api = 2\nid = \"{id}\"\n[hooks]\n{table}")).unwrap();
+        for (hook, body) in hooks {
+            let exe = dir.join("bin").join(hook);
+            std::fs::write(&exe, format!("#!/bin/sh\n{body}\n")).unwrap();
+            std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+    }
+
+    async fn until(what: &str, done: impl Fn() -> bool) {
+        let by = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while !done() {
+            assert!(std::time::Instant::now() < by, "{what}");
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    }
+
+    fn gone(pid: i32) -> bool {
+        // SAFETY: signal 0 only asks whether the pid is there.
+        unsafe { libc::kill(pid, 0) != 0 }
+    }
+
+    #[tokio::test]
+    async fn a_launch_called_off_in_a_pre_launch_hook_files_nothing_and_undoes_the_hooks_that_ran() {
+        let sb = sandbox();
+        let log = paths::state_home().join("hooks.log");
+        let pids = paths::state_home().join("pids");
+        let (log, pids) = (log.display(), pids.display());
+        hook_module("first", &[("pre-launch", &format!("echo first >> {log}")), ("session-end", &format!("echo first-end >> {log}"))]);
+        let slow = format!(
+            "echo slow >> {log}\n[ -e {pids}.once ] && exit 0\ntouch {pids}.once\necho KEPT=1 >> \"$UNIVERSE_ENV_FILE\"\nsleep 30 &\necho $$ $! > {pids}.part\nmv {pids}.part {pids}\nwait"
+        );
+        hook_module("slow", &[("pre-launch", &slow), ("session-end", &format!("echo slow-end >> {log}"))]);
+        hook_module("then", &[("pre-launch", &format!("echo then >> {log}")), ("session-end", &format!("echo then-end >> {log}"))]);
+        std::fs::write(
+            paths::config_home().join("config.toml"),
+            "[launch]\ngamescope = false\nmangohud = false\nfps_limit = \"none\"\n[modules]\nenabled = [\"first\", \"slow\", \"then\"]\n",
+        )
+        .unwrap();
+        let (core, memory) = open().await;
+        let pids_file = paths::state_home().join("pids");
+        let (launched, asked) = tokio::join!(core.launch("sample", "", ""), async {
+            until("the slow hook started its child", || pids_file.exists()).await;
+            assert!(core.cancel_launch(), "a launch is preparing");
+            std::time::Instant::now()
+        });
+        assert!(asked.elapsed() < std::time::Duration::from_secs(1), "the hook is stopped, not waited for: {:?}", asked.elapsed());
+        assert!(launched.unwrap_err().to_string().contains("called off"));
+        let hook_pids: Vec<i32> = std::fs::read_to_string(&pids_file).unwrap().split_whitespace().map(|p| p.parse().unwrap()).collect();
+        until("the hook and its child are gone", || hook_pids.iter().all(|p| gone(*p))).await;
+        assert_eq!(
+            std::fs::read_to_string(paths::state_home().join("hooks.log")).unwrap(),
+            "first\nslow\nslow-end\nfirst-end\n",
+            "undone in reverse, the killed one included"
+        );
+        assert!(read_marker().is_none() && closings().is_empty(), "no session left open or closing");
+        assert!(core.get("sample").await.unwrap().sessions.is_empty(), "no row");
+        assert!(!std::fs::read_dir(paths::state_home()).unwrap().flatten().any(|e| e.file_name().to_string_lossy().starts_with("env-")), "no env file");
+        assert!(memory.calls().is_empty(), "no unit, no cursor: {:?}", memory.calls());
+        assert!(!sb.post_ran.exists(), "pre_command never ran, so post_command does not");
+        assert!(!core.cancel_launch(), "nothing preparing any more");
+        let sid = core.launch("sample", "", "").await.unwrap();
+        assert!(memory.spec(&format!("universe-game-sample-{sid}.service")).is_some(), "the next launch goes through");
+        assert_eq!(undo_steps(&read_marker().unwrap()).iter().filter(|s| **s == "pre_launch").count(), 3);
+    }
+
+    #[tokio::test]
+    async fn a_launch_called_off_while_umu_downloads_leaves_no_part_of_it() {
+        use std::io::{BufRead, BufReader, Write};
+        let _sb = sandbox();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/umu", listener.local_addr().unwrap());
+        std::thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                let mut reader = BufReader::new(stream.try_clone().unwrap());
+                let mut line = String::new();
+                while reader.read_line(&mut line).unwrap_or(0) > 0 && line != "\r\n" {
+                    line.clear();
+                }
+                let mut out = stream;
+                let _ = write!(out, "HTTP/1.1 200 OK\r\ncontent-length: 1000000\r\nconnection: close\r\n\r\n");
+                while out.write_all(b"x").and_then(|()| out.flush()).is_ok() {
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                }
+            }
+        });
+        let config = "[launch]\ngamescope = false\nmangohud = false\nfps_limit = \"none\"\numu_run = \"umu-run-trickled\"\n[modules]\nenabled = []\n";
+        std::fs::write(paths::config_home().join("config.toml"), config).unwrap();
+        let catalogue = serde_json::json!({
+            "url": crate::components::catalogue_url(&toml::from_str(config).unwrap()),
+            "fetched_at": "2026-11-23T00:00:00Z",
+            "catalogue": {"schema": 1, "components": {"umu-trickled": {"name": "umu-launcher", "kind": "tool", "bin": "umu-run-trickled",
+                "builds": [{"version": "1", "assets": [{"arch": "any", "format": "binary", "url": url, "sha256": "00"}]}]}}},
+        });
+        std::fs::create_dir_all(paths::cache_home()).unwrap();
+        std::fs::write(paths::cache_home().join("catalogue.json"), catalogue.to_string()).unwrap();
+        let mut g = Game::load(&paths::game_dir("sample").join("game.toml")).unwrap();
+        g.launch.runner = "proton".into();
+        g.launch.runner_exe = String::new();
+        g.save().unwrap();
+        let (core, memory) = open().await;
+        let tmp = crate::components::root().join(".tmp");
+        let parts = || std::fs::read_dir(&tmp).map(|d| d.flatten().count()).unwrap_or(0);
+        let launch = tokio::time::timeout(std::time::Duration::from_secs(2), core.launch("sample", "", ""));
+        let (launched, ()) = tokio::join!(launch, async {
+            until("the download started", || parts() > 0).await;
+            assert!(core.cancel_launch());
+        });
+        assert!(launched.expect("the download stops at once").unwrap_err().to_string().contains("called off"));
+        assert_eq!(parts(), 0, "no part file");
+        assert!(!crate::tools::dir().join("umu-run-trickled").exists() && crate::components::installed("umu-trickled").is_empty(), "nothing installed");
+        assert!(read_marker().is_none() && memory.calls().is_empty());
     }
 
     #[tokio::test]

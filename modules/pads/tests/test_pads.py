@@ -181,6 +181,17 @@ def test_a_forwarder_that_never_comes_up_does_not_hide_the_pads(hook):
     assert args is not None
 
 
+def test_the_end_of_a_launch_whose_pre_died_before_the_forwarder_is_quiet(tmp_path):
+    import subprocess
+
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    _shim(bindir / "systemctl", 'echo "Failed to stop $3: Unit $3 not loaded." >&2; exit 5')
+    env = {**os.environ, "PATH": f"{bindir}:{os.environ['PATH']}", "SESSION_ID": "s1"}
+    r = subprocess.run([sys.executable, str(BIN_DIR / "stop")], env=env, capture_output=True, text=True, check=False)
+    assert r.returncode == 0 and r.stderr == "", r.stderr
+
+
 class FakeSdl:
     """The forwarder's SDL, as far as a re-init goes: what was asked of it."""
 
