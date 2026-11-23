@@ -1,5 +1,56 @@
 # Changelog
 
+## [0.0.16] - 2026-11-23
+
+### Added
+
+- When Big Screen can't read its settings file, **Start with default settings** saves it as `config.toml.broken-` plus the date and opens Home on the defaults, your controller setup kept. Universe Desktop has it as **Start With Default Settings**. Neither offers it for a read-only or home-manager settings file.
+- While Universe is still getting a game ready, **B** on its poster calls the launch off in every look, and no play time is counted. Ctrl-C does the same during `universe play`.
+- **Delete download…** sends a paused download you no longer want to the trash, from its menu in every look and from a trash button beside **Resume** in Universe Desktop's Store. A paused game still in your library doesn't offer it.
+- Settings › System check also checks that the settings file and each game's file read, that every session reached its game's history, and that Universe can write to the games folder, and to the recordings folder while Video capture is on. A folder on a drive that isn't plugged in fails.
+- `universe doctor` runs even when the settings file is broken, on the default settings.
+- `universe ls --removed` lists the games `universe restore` can bring back.
+- `universe login` asks for the code on a terminal or takes one piped in, then says what to run next.
+
+### Changed
+
+- First-run setup offers Epic Games and itch.io without Heroic or the itch app on the machine, fetching the tools they need, and lists Steam once the Steam app is installed. A launcher whose games can't come in says why.
+- `universe` commands that ask before acting refuse without a terminal unless given `--yes`, and under `--json` every command that changes something prints one object with `ok`, `error`, `message` and `result`.
+- **Update everything** skips a game that is in use, such as one running, and names it.
+- GOG's **Depot platform** only changes what new installs download; a game already installed keeps checking and updating its own build.
+
+### Fixed
+
+- The page Big Screen shows when it can't start maps your controller with its saved button setup, even when the rest of the settings file is broken.
+- In the Universe look, buttons pressed while a tab loads reach it in order, and **A** held as you leave a tab no longer opens a menu or starts a game on the next one.
+- In the Universe look, a page that fails to open closes and says so.
+- The Media tab says why when it can't read your media, and **A** (**Try again**) reads it again; a failure while it already shows items keeps them and says so.
+- In the Switch 2 and PS5 looks, a game's data page and Storage say why they couldn't be read and offer to try again.
+- The Universe look's Settings › Storage keeps the cursor on its row once **Measure again** succeeds.
+- **Test connection** says when the test could not run, and a Wi-Fi join or Bluetooth pairing ends with a notice when the service stops answering.
+- The Switch 2 look asks before **Quit** or **Log Out** closes a running game.
+- In the PS5 look, a right click or long press on a game of the home row opens its game menu.
+- In the Switch 2 look, a tap on a list still scrolling stops it and lands on the row under your finger.
+- A controller that connects during a game is offered its button setup once the game has closed.
+- A game no longer starts while its uninstall or update is under way, and says to try again once that ends.
+- Restoring saves waits for a backup under way to end, and a backup waits for a restore. The backup after a session waits out an update or uninstall of the game, and moving its prefix or syncing its cloud saves is refused while its saves are being backed up.
+- Removing a game with its prefix, or **Reset the Prefix…**, leaves alone a prefix another game reaches through a link.
+- The result of **Uninstall…** or **Delete files…** on a store's page still shows after you leave the page.
+- A GOG game's Linux build installs and updates instead of failing as its download starts, and its updates follow the installer GOG lists. A Linux build you installed without Universe shows its update as unknown.
+- Offline, GOG and itch.io update checks say the store can't be reached.
+- A GOG or Epic install that runs out of disk space stops and says the disk is full.
+- Opening a game's page no longer asks again a store that went unanswered in the last 4 hours; the next check of every game does.
+- An Epic game whose program is spelled in another letter case than Epic records reads as installed.
+- A pre-launch step under `universe play` can ask its questions in the terminal, and a second Ctrl-C exits at once.
+- `universe config set` refuses a key the settings file has no place for and names the closest one, and it names a bad value the file already holds.
+- Settings save to a `config.toml` that is bind-mounted or in a folder Universe can't write to, and a failed write leaves the file whole.
+- A game's settings, achievements or journal entry saved from two places at the same moment no longer fails.
+- When a recording filed again can't replace its earlier clip, the session keeps the earlier clip and its length.
+
+### Performance
+
+- The PS5 look's control center shows its capture cards from thumbnails instead of full screenshots.
+
 ## [0.0.15] - 2026-11-12
 
 ### Added
@@ -462,6 +513,7 @@
 
 - The search row on the Reprise look's store page.
 
+[0.0.16]: https://github.com/ilyasturki/universe/compare/v0.0.15...v0.0.16
 [0.0.15]: https://github.com/ilyasturki/universe/compare/v0.0.14...v0.0.15
 [0.0.14]: https://github.com/ilyasturki/universe/compare/v0.0.13...v0.0.14
 [0.0.13]: https://github.com/ilyasturki/universe/compare/v0.0.12...v0.0.13

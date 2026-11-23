@@ -44,6 +44,59 @@
     <color type="primary" scheme_preference="dark">#c64600</color>
   </branding>
   <releases>
+    <release version="0.0.16" date="2026-11-23">
+      <description>
+        <p>Added</p>
+        <ul>
+          <li>When Big Screen can't read its settings file, <em>Start with default settings</em> saves it as <code>config.toml.broken-</code> plus the date and opens Home on the defaults, your controller setup kept. Universe Desktop has it as <em>Start With Default Settings</em>. Neither offers it for a read-only or home-manager settings file.</li>
+          <li>While Universe is still getting a game ready, <em>B</em> on its poster calls the launch off in every look, and no play time is counted. Ctrl-C does the same during <code>universe play</code>.</li>
+          <li><em>Delete download…</em> sends a paused download you no longer want to the trash, from its menu in every look and from a trash button beside <em>Resume</em> in Universe Desktop's Store. A paused game still in your library doesn't offer it.</li>
+          <li>Settings › System check also checks that the settings file and each game's file read, that every session reached its game's history, and that Universe can write to the games folder, and to the recordings folder while Video capture is on. A folder on a drive that isn't plugged in fails.</li>
+          <li><code>universe doctor</code> runs even when the settings file is broken, on the default settings.</li>
+          <li><code>universe ls --removed</code> lists the games <code>universe restore</code> can bring back.</li>
+          <li><code>universe login</code> asks for the code on a terminal or takes one piped in, then says what to run next.</li>
+        </ul>
+        <p>Changed</p>
+        <ul>
+          <li>First-run setup offers Epic Games and itch.io without Heroic or the itch app on the machine, fetching the tools they need, and lists Steam once the Steam app is installed. A launcher whose games can't come in says why.</li>
+          <li><code>universe</code> commands that ask before acting refuse without a terminal unless given <code>--yes</code>, and under <code>--json</code> every command that changes something prints one object with <code>ok</code>, <code>error</code>, <code>message</code> and <code>result</code>.</li>
+          <li><em>Update everything</em> skips a game that is in use, such as one running, and names it.</li>
+          <li>GOG's <em>Depot platform</em> only changes what new installs download; a game already installed keeps checking and updating its own build.</li>
+        </ul>
+        <p>Fixed</p>
+        <ul>
+          <li>The page Big Screen shows when it can't start maps your controller with its saved button setup, even when the rest of the settings file is broken.</li>
+          <li>In the Universe look, buttons pressed while a tab loads reach it in order, and <em>A</em> held as you leave a tab no longer opens a menu or starts a game on the next one.</li>
+          <li>In the Universe look, a page that fails to open closes and says so.</li>
+          <li>The Media tab says why when it can't read your media, and <em>A</em> (<em>Try again</em>) reads it again; a failure while it already shows items keeps them and says so.</li>
+          <li>In the Switch 2 and PS5 looks, a game's data page and Storage say why they couldn't be read and offer to try again.</li>
+          <li>The Universe look's Settings › Storage keeps the cursor on its row once <em>Measure again</em> succeeds.</li>
+          <li><em>Test connection</em> says when the test could not run, and a Wi-Fi join or Bluetooth pairing ends with a notice when the service stops answering.</li>
+          <li>The Switch 2 look asks before <em>Quit</em> or <em>Log Out</em> closes a running game.</li>
+          <li>In the PS5 look, a right click or long press on a game of the home row opens its game menu.</li>
+          <li>In the Switch 2 look, a tap on a list still scrolling stops it and lands on the row under your finger.</li>
+          <li>A controller that connects during a game is offered its button setup once the game has closed.</li>
+          <li>A game no longer starts while its uninstall or update is under way, and says to try again once that ends.</li>
+          <li>Restoring saves waits for a backup under way to end, and a backup waits for a restore. The backup after a session waits out an update or uninstall of the game, and moving its prefix or syncing its cloud saves is refused while its saves are being backed up.</li>
+          <li>Removing a game with its prefix, or <em>Reset the Prefix…</em>, leaves alone a prefix another game reaches through a link.</li>
+          <li>The result of <em>Uninstall…</em> or <em>Delete files…</em> on a store's page still shows after you leave the page.</li>
+          <li>A GOG game's Linux build installs and updates instead of failing as its download starts, and its updates follow the installer GOG lists. A Linux build you installed without Universe shows its update as unknown.</li>
+          <li>Offline, GOG and itch.io update checks say the store can't be reached.</li>
+          <li>A GOG or Epic install that runs out of disk space stops and says the disk is full.</li>
+          <li>Opening a game's page no longer asks again a store that went unanswered in the last 4 hours; the next check of every game does.</li>
+          <li>An Epic game whose program is spelled in another letter case than Epic records reads as installed.</li>
+          <li>A pre-launch step under <code>universe play</code> can ask its questions in the terminal, and a second Ctrl-C exits at once.</li>
+          <li><code>universe config set</code> refuses a key the settings file has no place for and names the closest one, and it names a bad value the file already holds.</li>
+          <li>Settings save to a <code>config.toml</code> that is bind-mounted or in a folder Universe can't write to, and a failed write leaves the file whole.</li>
+          <li>A game's settings, achievements or journal entry saved from two places at the same moment no longer fails.</li>
+          <li>When a recording filed again can't replace its earlier clip, the session keeps the earlier clip and its length.</li>
+        </ul>
+        <p>Performance</p>
+        <ul>
+          <li>The PS5 look's control center shows its capture cards from thumbnails instead of full screenshots.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.0.15" date="2026-11-12">
       <description>
         <p>Added</p>
