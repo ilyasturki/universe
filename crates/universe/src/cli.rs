@@ -1306,9 +1306,10 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             }
             use tokio::signal::unix::{signal, SignalKind};
             let (mut int, mut term) = (signal(SignalKind::interrupt())?, signal(SignalKind::terminate())?);
-            // SAFETY: tcgetpgrp and getpgrp only read.
-            let foreground = unsafe { libc::tcgetpgrp(0) == libc::getpgrp() };
-            crate::modules::SHARE_TERMINAL.store(foreground, std::sync::atomic::Ordering::Relaxed);
+            // SAFETY: tcgetpgrp and getpgrp only read; ignoring SIGTTOU lets this process take the terminal back from a hook.
+            if unsafe { libc::tcgetpgrp(0) == libc::getpgrp() && libc::signal(libc::SIGTTOU, libc::SIG_IGN) != libc::SIG_ERR } {
+                crate::modules::LEND_TERMINAL.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
             let launch = core.launch(&id, &screen, "");
             tokio::pin!(launch);
             let mut stopping = false;

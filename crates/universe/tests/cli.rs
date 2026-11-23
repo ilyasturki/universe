@@ -1103,24 +1103,62 @@ fn a_launch_marker_appears_whole_and_an_open_leaves_a_starting_session_alone() {
 
 #[test]
 fn ctrl_c_in_a_pre_launch_hook_calls_the_launch_off_and_undoes_the_hook() {
+    call_off_in_a_pre_launch_hook(false);
+}
+
+#[test]
+fn a_pre_launch_hook_prompts_on_play_s_terminal_and_a_ctrl_c_typed_there_calls_it_off() {
+    call_off_in_a_pre_launch_hook(true);
+}
+
+fn call_off_in_a_pre_launch_hook(on_a_terminal: bool) {
+    use std::os::fd::FromRawFd;
+    use std::os::unix::process::CommandExt;
     let dir = no_desktop();
     add_game(&dir, "Quest");
     let hook = dir.path().join("hook");
     std::fs::create_dir_all(&hook).unwrap();
     let bin = dir.path().join("modules/pre/bin");
-    shim(&bin, "pre", &format!("sleep 30 &\necho $$ $! > {0}/pids\n{1}\n", hook.display(), gate(&hook)));
+    let ask = if on_a_terminal { format!("read answer < /dev/tty; echo \"$answer\" > {}/got\n", hook.display()) } else { String::new() };
+    shim(&bin, "pre", &format!("{ask}sleep 30 &\necho $$ $! > {0}/pids\n{1}\n", hook.display(), gate(&hook)));
     shim(&bin, "end", &format!("echo ended >> {}/ended\n", hook.display()));
     std::fs::write(dir.path().join("modules/pre/module.toml"), "api = 2\nid = \"pre\"\n[hooks]\npre-launch = \"bin/pre\"\nsession-end = \"bin/end\"\n")
         .unwrap();
     let config = dir.path().join("config/config.toml");
     std::fs::write(&config, std::fs::read_to_string(&config).unwrap() + "[modules]\nenabled = [\"pre\"]\n").unwrap();
-    let mut play =
-        command(&dir, &["play", "quest", "--no-wait"], &[NO_BUS]).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::piped()).spawn().unwrap();
+    let mut cmd = command(&dir, &["play", "quest", "--no-wait"], &[NO_BUS]);
+    cmd.stdout(std::process::Stdio::null()).stderr(std::process::Stdio::piped());
+    let mut keys = None;
+    if on_a_terminal {
+        let (mut primary, mut terminal) = (0, 0);
+        // SAFETY: openpty fills both descriptors; no name, settings or size is asked for.
+        assert_eq!(unsafe { libc::openpty(&mut primary, &mut terminal, std::ptr::null_mut(), std::ptr::null(), std::ptr::null()) }, 0);
+        // SAFETY: the terminal goes to the child as its stdin, the primary types on it.
+        let (stdin, mut typed) = unsafe { (std::fs::File::from_raw_fd(terminal), std::fs::File::from_raw_fd(primary)) };
+        std::io::Write::write_all(&mut typed, b"yes\n").unwrap();
+        keys = Some(typed);
+        // SAFETY: between fork and exec, setsid and ioctl alone: the pty becomes the child's controlling terminal, it its foreground.
+        unsafe {
+            cmd.stdin(stdin).pre_exec(|| {
+                if libc::setsid() < 0 || libc::ioctl(0, libc::TIOCSCTTY, 0) < 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+    }
+    let mut play = cmd.spawn().unwrap();
     wait_for(&hook.join("entered"), &mut play);
-    // SAFETY: the child is ours and still running.
-    unsafe { libc::kill(play.id() as i32, libc::SIGINT) };
+    match keys.as_mut() {
+        Some(typed) => std::io::Write::write_all(typed, b"\x03").unwrap(),
+        // SAFETY: the child is ours and still running.
+        None => assert_eq!(unsafe { libc::kill(play.id() as i32, libc::SIGINT) }, 0),
+    };
     let out = play.wait_with_output().unwrap();
     assert!(!out.status.success() && text(&out.stderr).contains("called off"), "{}", text(&out.stderr));
+    if on_a_terminal {
+        assert_eq!(std::fs::read_to_string(hook.join("got")).unwrap().trim(), "yes", "the hook read its answer, not stopped in the background");
+    }
     let pids: Vec<i32> = std::fs::read_to_string(hook.join("pids")).unwrap().split_whitespace().map(|p| p.parse().unwrap()).collect();
     let by = std::time::Instant::now() + std::time::Duration::from_secs(2);
     // SAFETY: signal 0 only asks whether the pid is there.
@@ -1132,37 +1170,6 @@ fn ctrl_c_in_a_pre_launch_hook_calls_the_launch_off_and_undoes_the_hook() {
     assert!(!dir.path().join("state/current-session.json").exists());
     assert_eq!(lines(&dir.path().join("data/games/quest/sessions.jsonl")), 0, "no row");
     assert!(files_under(&dir.path().join("state/closing-sessions")).iter().all(|f| f.extension().is_none_or(|e| e != "json")));
-}
-
-#[test]
-fn a_pre_launch_hook_asks_on_the_terminal_play_holds() {
-    use std::os::fd::FromRawFd;
-    use std::os::unix::process::CommandExt;
-    let dir = no_desktop();
-    add_game(&dir, "Quest");
-    let got = dir.path().join("got");
-    shim(&dir.path().join("modules/ask/bin"), "pre", &format!("read answer < /dev/tty; echo \"$answer\" > {}\n", got.display()));
-    std::fs::write(dir.path().join("modules/ask/module.toml"), "api = 2\nid = \"ask\"\n[hooks]\npre-launch = \"bin/pre\"\ntimeout_s = 2\n").unwrap();
-    let config = dir.path().join("config/config.toml");
-    std::fs::write(&config, std::fs::read_to_string(&config).unwrap() + "[modules]\nenabled = [\"ask\"]\n").unwrap();
-    let (mut primary, mut terminal) = (0, 0);
-    // SAFETY: openpty fills both descriptors; no name, settings or size is asked for.
-    assert_eq!(unsafe { libc::openpty(&mut primary, &mut terminal, std::ptr::null_mut(), std::ptr::null(), std::ptr::null()) }, 0);
-    // SAFETY: the terminal goes to the child as its stdin, the primary types the answer.
-    let (stdin, mut keys) = unsafe { (std::fs::File::from_raw_fd(terminal), std::fs::File::from_raw_fd(primary)) };
-    std::io::Write::write_all(&mut keys, b"yes\n").unwrap();
-    let mut cmd = command(&dir, &["play", "quest", "--no-wait"], &[NO_BUS]);
-    // SAFETY: between fork and exec, setsid and ioctl alone: the pty becomes the child's controlling terminal, it its foreground.
-    unsafe {
-        cmd.stdin(stdin).pre_exec(|| {
-            if libc::setsid() < 0 || libc::ioctl(0, libc::TIOCSCTTY, 0) < 0 {
-                return Err(std::io::Error::last_os_error());
-            }
-            Ok(())
-        });
-    }
-    cmd.output().unwrap();
-    assert_eq!(std::fs::read_to_string(&got).unwrap_or_default().trim(), "yes", "the hook read its answer, not stopped in the background");
 }
 
 #[test]

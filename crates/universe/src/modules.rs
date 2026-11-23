@@ -502,7 +502,7 @@ pub async fn run_blocking(hooker: &Hooker, hook: &str, env: &HookEnv) -> crate::
     run_lines(hooker, hook, env, |_| {}).await
 }
 
-/// `run_blocking` ended whole once `cancel` is set or the timeout passes: its own process group, off a terminal's foreground.
+/// `run_blocking` in a process group of its own, ended whole once `cancel` is set or the timeout passes.
 pub async fn run_unless(hooker: &Hooker, hook: &str, env: &HookEnv, cancel: &std::sync::atomic::AtomicBool) -> crate::Result<HookOutcome> {
     run_hook(hooker, hook, env, |_| {}, Some(cancel)).await
 }
@@ -512,8 +512,30 @@ pub async fn run_lines(hooker: &Hooker, hook: &str, env: &HookEnv, on_line: impl
     run_hook(hooker, hook, env, on_line, None).await
 }
 
-/// Set by a command holding the terminal: a group of its own would be a background one there, and a prompt (sudo) would stop it.
-pub static SHARE_TERMINAL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// Set by a command in the terminal's foreground, SIGTTOU ignored: a cancellable hook's group holds the terminal while it runs,
+/// so a prompt there (sudo) is answered, and a Ctrl-C there calls the launch off.
+pub static LEND_TERMINAL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn hand_terminal(group: libc::pid_t) {
+    // SAFETY: tcsetpgrp on stdin, a terminal this process's group holds; SIGTTOU is ignored, so a background caller is not stopped.
+    unsafe { libc::tcsetpgrp(0, group) };
+}
+
+/// Resolves once the hook died of the terminal's Ctrl-C: what it left running may hold its pipes open long after.
+async fn interrupted_on(hook: Option<libc::pid_t>) {
+    let Some(pid) = hook else { return std::future::pending().await };
+    let died = tokio::task::spawn_blocking(move || {
+        // SAFETY: an all-zero siginfo_t is a valid value for waitid to fill.
+        let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+        // SAFETY: WNOWAIT leaves the child for tokio to reap.
+        let exited = unsafe { libc::waitid(libc::P_PID, pid as libc::id_t, &mut info, libc::WEXITED | libc::WNOWAIT) } == 0;
+        // SAFETY: filled by a waitid that returned an exited child.
+        exited && matches!((info.si_code, unsafe { info.si_status() }), (libc::CLD_KILLED | libc::CLD_DUMPED, libc::SIGINT) | (libc::CLD_EXITED, 130))
+    });
+    if !died.await.unwrap_or(false) {
+        std::future::pending::<()>().await;
+    }
+}
 
 const GROUP_GRACE: std::time::Duration = std::time::Duration::from_secs(2);
 
@@ -544,13 +566,16 @@ async fn run_hook(
         return Ok(HookOutcome { status: 0, stdout: String::new(), stderr: String::new() });
     };
     let mut cmd = command(&exe, hooker.dir(), &hooker.data_dir(), hooker.prefix())?;
-    let own_group = cancel.is_some() && !SHARE_TERMINAL.load(std::sync::atomic::Ordering::Relaxed);
-    if own_group {
+    if cancel.is_some() {
         cmd.process_group(0);
     }
     let mut child =
         cmd.envs(env.vars.iter().map(|(k, v)| (k.as_str(), v.as_str()))).spawn().map_err(|e| crate::Error::Io(format!("{}: {e}", exe.display())))?;
     let group = child.id().map_or(0, |pid| pid as libc::pid_t);
+    let lent = cancel.is_some() && group > 0 && LEND_TERMINAL.load(std::sync::atomic::Ordering::Relaxed);
+    if lent {
+        hand_terminal(group);
+    }
     let mut stdout = tokio::io::BufReader::new(child.stdout.take().expect("piped"));
     let mut stderr = child.stderr.take().expect("piped");
     let errors = async {
@@ -583,13 +608,19 @@ async fn run_hook(
         tokio::select! {
             biased;
             () = stopped => None,
+            () = interrupted_on(lent.then_some(group)) => None,
             ran = tokio::time::timeout(timeout, run) => Some(ran),
         }
     };
-    if own_group && group > 0 && !matches!(ran, Some(Ok(_))) {
+    if lent {
+        // SAFETY: getpgrp only reads.
+        hand_terminal(unsafe { libc::getpgrp() });
+    }
+    if let (None, Some(flag)) = (&ran, cancel) {
+        flag.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+    if cancel.is_some() && group > 0 && !matches!(ran, Some(Ok(_))) {
         end_group(&mut child, group).await;
-    } else if cancel.is_some() && !matches!(ran, Some(Ok(_))) {
-        let _ = child.kill().await;
     }
     let Some(ran) = ran else {
         return Err(crate::Error::Busy(format!("{}:{hook} was called off", hooker.id())));
