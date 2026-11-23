@@ -498,6 +498,7 @@
           py ? (ps: [ ]),
           runtime ? [ ],
           env ? { },
+          xdist ? false,
         }:
         pkgs.stdenvNoCC.mkDerivation {
           inherit name;
@@ -509,11 +510,12 @@
             }
             // env;
           dontWrapQtApps = true;
-          nativeBuildInputs = [ (pyEnv py) ] ++ runtime;
+          nativeBuildInputs = [ (pyEnv (ps: py ps ++ lib.optional xdist ps.pytest-xdist)) ] ++ runtime;
           postPatch = "patchShebangs .";
+          # At most 4 workers, a hosted runner's cores
           buildPhase = ''
             export HOME=$TMPDIR
-            python3 -m pytest -q -p no:cacheprovider ${lib.escapeShellArgs tests}
+            python3 -m pytest -q -p no:cacheprovider ${lib.optionalString xdist "-n $(( NIX_BUILD_CORES < 4 ? NIX_BUILD_CORES : 4 ))"} ${lib.escapeShellArgs tests}
           '';
           installPhase = "touch $out";
         };
@@ -535,6 +537,7 @@
           "tests/pads"
         ];
         tests = [ "ui" ];
+        xdist = true;
         py =
           ps:
           uiPy ps
