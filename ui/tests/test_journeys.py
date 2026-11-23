@@ -212,10 +212,10 @@ def walk(look, page, key):
 def settings(look, section):
     """Settings by keys: across the tabs, down the sidebar to `section`, into its rows; the page and its rows' cursor."""
     root = look.root
-    for _ in range(4):
-        if root.property("tabIndex") == root.property("settingsTab"):
-            break
+    # One RB a step: one held behind a key a loading tab waits on would land later, and four in a row would wrap past Settings.
+    while (tab := root.property("tabIndex")) != root.property("settingsTab"):
         look.press(Qt.Key.Key_E)
+        until(lambda tab=tab: root.property("tabIndex") != tab, "RB steps to the next tab")
     page = until(lambda: (p := root.property("activePage")) is not None and p.objectName() == "settingsPage" and p, "Settings is shown")
     ids = [s["id"] for s in read(page, "sections")]
     step = ids.index(section) - page.property("section")

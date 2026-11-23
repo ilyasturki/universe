@@ -1245,6 +1245,26 @@ def test_keys_pressed_as_a_reprise_tab_swaps_reach_the_new_tab_in_order(look, ap
     assert root.property("menuOpen") is False and root.property("launching") is False, "an A held on home does nothing once RB leaves it"
 
 
+@reprise
+def test_rb_after_a_question_answered_over_a_loading_tab_goes_through_at_once(look):
+    root = look.root
+    look.home()
+    confirm = look.find("confirm")
+    settle(look.window)
+    look.press(Qt.Key.Key_E)
+    assert "tabKeyHold" in focus_names(look.window), "the Library tab is still loading"
+    invoke(confirm, "ask", {"message": "?"}, None)
+    assert confirm.property("open") is True
+    look.press(Qt.Key.Key_Return)
+    assert "tabKeyHold" in focus_names(look.window), "the answer gives the focus back to the loading tab"
+    trace = FocusTrace(look.window)
+    look.press(Qt.Key.Key_E)
+    assert root.property("tabIndex") == root.property("mediaTab"), "the release of the A that answered holds no RB back"
+    look.page("mediaPage")
+    settle(look.window)
+    assert trace.stop().foreign("tabKeyHold", "mediaPage") == []
+
+
 @pytest.mark.parametrize("look", LOOKS, indirect=True)
 def test_a_at_once_after_a_settings_hit_in_a_cold_tab_acts_on_the_hit(look, api, fake):
     look.home()

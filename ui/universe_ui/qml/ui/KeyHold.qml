@@ -40,7 +40,8 @@ FocusScope {
             event.accepted = false;
             return;
         }
-        if (!event.isAutoRepeat)
+        // A release whose press went elsewhere (the A that closed a question over this page) is dropped, not queued ahead of RB.
+        if (!event.isAutoRepeat && (pressed || held.some(k => k.pressed && k.key === event.key)))
             held.push({
                 key: event.key,
                 pressed: pressed,
