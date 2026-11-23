@@ -730,11 +730,18 @@ int open64(const char *path, int flags, ...) {
     if (fd >= 0 && (flags & O_CREAT) && matches(path)) pause_once();
     return fd;
 }
+
+int tcsetpgrp(int fd, pid_t group) {
+    int (*real)(int, pid_t) = dlsym(RTLD_NEXT, "tcsetpgrp");
+    if (getenv("PAUSE_HANDOVER") && group != getpgrp()) usleep(300000);
+    return real(fd, group);
+}
 "#;
 
 /// An `LD_PRELOAD` library: the first call of a process writing a path that ends in `PAUSE_SUFFIX` (a rename from it, a link or a
 /// create to it) touches `PAUSE_DIR/entered` and waits for `PAUSE_DIR/release`, or for `PAUSE_DIR` to go; that rename then fails if
-/// `PAUSE_DIR/refuse` is there. `None`, the reason printed, without a C compiler.
+/// `PAUSE_DIR/refuse` is there. With `PAUSE_HANDOVER` set, a terminal handed to another group arrives 300 ms late. `None`, the reason
+/// printed, without a C compiler.
 fn pause_shim(dir: &std::path::Path) -> Option<std::path::PathBuf> {
     let (src, lib) = (dir.join("pause.c"), dir.join("pause.so"));
     std::fs::write(&src, PAUSE_C).unwrap();
@@ -752,10 +759,22 @@ fn wait_for(file: &std::path::Path, child: &mut std::process::Child) {
     while !file.exists() {
         if started.elapsed().as_secs() >= 10 || child.try_wait().unwrap().is_some() {
             let _ = child.kill();
-            panic!("{} never came", file.display());
+            let status = child.wait().unwrap();
+            panic!("{} never came; the process {status}, its stderr:\n{}", file.display(), stderr_so_far(child));
         }
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
+}
+
+/// What a piped stderr holds now, without waiting on the children that may still hold it open.
+fn stderr_so_far(child: &mut std::process::Child) -> String {
+    use std::os::fd::AsRawFd;
+    let Some(mut err) = child.stderr.take() else { return "(not piped)".into() };
+    // SAFETY: the descriptor is the pipe's, open for as long as `err` lives.
+    unsafe { libc::fcntl(err.as_raw_fd(), libc::F_SETFL, libc::fcntl(err.as_raw_fd(), libc::F_GETFL) | libc::O_NONBLOCK) };
+    let mut got = Vec::new();
+    let _ = std::io::Read::read_to_end(&mut err, &mut got);
+    String::from_utf8_lossy(&got).into_owned()
 }
 
 /// The process is waiting for an flock another holds.
@@ -1126,7 +1145,9 @@ fn call_off_in_a_pre_launch_hook(on_a_terminal: bool) {
         .unwrap();
     let config = dir.path().join("config/config.toml");
     std::fs::write(&config, std::fs::read_to_string(&config).unwrap() + "[modules]\nenabled = [\"pre\"]\n").unwrap();
-    let mut cmd = command(&dir, &["play", "quest", "--no-wait"], &[NO_BUS]);
+    let lib = if on_a_terminal { pause_shim(dir.path()) } else { None };
+    let late = lib.as_ref().map(|l| [("LD_PRELOAD", l.to_str().unwrap()), ("PAUSE_HANDOVER", "1")]);
+    let mut cmd = command(&dir, &["play", "quest", "--no-wait"], &[&[NO_BUS][..], late.as_ref().map_or(&[][..], |l| &l[..])].concat());
     cmd.stdout(std::process::Stdio::null()).stderr(std::process::Stdio::piped());
     let mut keys = None;
     if on_a_terminal {

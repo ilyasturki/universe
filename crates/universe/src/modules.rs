@@ -516,11 +516,6 @@ pub async fn run_lines(hooker: &Hooker, hook: &str, env: &HookEnv, on_line: impl
 /// so a prompt there (sudo) is answered, and a Ctrl-C there calls the launch off.
 pub static LEND_TERMINAL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-fn hand_terminal(group: libc::pid_t) {
-    // SAFETY: tcsetpgrp on stdin, a terminal this process's group holds; SIGTTOU is ignored, so a background caller is not stopped.
-    unsafe { libc::tcsetpgrp(0, group) };
-}
-
 /// Resolves once the hook died of the terminal's Ctrl-C: what it left running may hold its pipes open long after.
 async fn interrupted_on(hook: Option<libc::pid_t>) {
     let Some(pid) = hook else { return std::future::pending().await };
@@ -569,13 +564,25 @@ async fn run_hook(
     if cancel.is_some() {
         cmd.process_group(0);
     }
+    let terminal = (cancel.is_some() && LEND_TERMINAL.load(std::sync::atomic::Ordering::Relaxed))
+        .then(|| std::os::fd::AsFd::as_fd(&std::io::stdin()).try_clone_to_owned().ok())
+        .flatten();
+    if let Some(fd) = terminal.as_ref().map(std::os::fd::AsRawFd::as_raw_fd) {
+        // SAFETY: async-signal-safe calls alone, before exec: lent after spawn, the terminal comes too late for a hook reading it at once.
+        unsafe {
+            cmd.pre_exec(move || {
+                libc::setpgid(0, 0);
+                libc::tcsetpgrp(fd, libc::getpid());
+                libc::signal(libc::SIGTTOU, libc::SIG_DFL);
+                Ok(())
+            });
+        }
+    }
     let mut child =
         cmd.envs(env.vars.iter().map(|(k, v)| (k.as_str(), v.as_str()))).spawn().map_err(|e| crate::Error::Io(format!("{}: {e}", exe.display())))?;
     let group = child.id().map_or(0, |pid| pid as libc::pid_t);
-    let lent = cancel.is_some() && group > 0 && LEND_TERMINAL.load(std::sync::atomic::Ordering::Relaxed);
-    if lent {
-        hand_terminal(group);
-    }
+    let lent = terminal.is_some() && group > 0;
+    drop(terminal);
     let mut stdout = tokio::io::BufReader::new(child.stdout.take().expect("piped"));
     let mut stderr = child.stderr.take().expect("piped");
     let errors = async {
@@ -613,8 +620,8 @@ async fn run_hook(
         }
     };
     if lent {
-        // SAFETY: getpgrp only reads.
-        hand_terminal(unsafe { libc::getpgrp() });
+        // SAFETY: tcsetpgrp on stdin, the terminal the hook held; SIGTTOU is ignored, so this background caller is not stopped.
+        unsafe { libc::tcsetpgrp(0, libc::getpgrp()) };
     }
     if let (None, Some(flag)) = (&ran, cancel) {
         flag.store(true, std::sync::atomic::Ordering::Relaxed);
