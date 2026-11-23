@@ -1286,7 +1286,8 @@ def test_a_at_once_after_a_settings_hit_in_a_cold_tab_acts_on_the_hit(look, api,
     assert (fake.config()["launch"] or {}).get("mangohud") in (None, False)
     settle(look.window)
     trace = FocusTrace(look.window)
-    look.press(Qt.Key.Key_Return, 2)
+    # Reprise's cold tab holds both As as it loads; the consoles focus a pushed page a tick later, so their second A needs that tick.
+    (look.press if look.stacked else look.send)(Qt.Key.Key_Return, 2)
     until(lambda: fake.config()["launch"].get("mangohud") is True, "the A pressed with the hit toggles its row")
     settle(look.window)
     assert trace.stop().foreign(search, "tabKeyHold", "settingsPage") == [], "no frame on the hidden home"
