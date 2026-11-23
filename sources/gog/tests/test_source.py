@@ -979,6 +979,21 @@ def test_post_launch_without_this_sessions_comet_does_nothing(src, hooks, capsys
     assert hooks["ran"] == []
 
 
+def test_a_pre_launch_killed_while_comet_comes_up_leaves_its_session_end_the_comet(src, hooks, monkeypatch):
+    class Killed(BaseException):
+        pass
+
+    def killed(port):
+        raise Killed
+
+    monkeypatch.setattr(src, "port_open", killed)
+    with pytest.raises(Killed):
+        src.main(["pre-launch"])
+    hooks["ran"].clear()
+    assert src.main(["session-end"]) == 0
+    assert hooks["ran"] == [["systemctl", "--user", "--quiet", "--no-block", "stop", src.COMET_UNIT]]
+
+
 def test_session_end_stops_its_own_comet_only(src, hooks, monkeypatch, capsys):
     src.save_json(src.session_path(), {"session": "20260924-200000", "user_id": "4242", "data_home": "/x"})
     assert src.main(["session-end"]) == 0

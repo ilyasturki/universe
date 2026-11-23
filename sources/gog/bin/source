@@ -1483,13 +1483,13 @@ def start_session_comet(settings):
     except (OSError, ValueError) as exc:
         log(f"Galaxy service: {exc}")
     user = remembered_user()
-    user_id = user.get("user_id") or ""
+    # Written first: a pre-launch killed while comet comes up leaves session-end the comet to stop.
+    save_json(session_path(), {"session": os.environ.get("SESSION_ID", ""), "user_id": user.get("user_id") or "", "data_home": str(data_home())})
     try:
         start_comet(settings, comet, user.get("username") or "Universe")
     except (OSError, subprocess.SubprocessError) as exc:
         log(f"comet did not start: {exc}")
-        return
-    save_json(session_path(), {"session": os.environ.get("SESSION_ID", ""), "user_id": user_id, "data_home": str(data_home())})
+        session_path().unlink(missing_ok=True)
 
 
 def unlocked_rows(db):
