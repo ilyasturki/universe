@@ -5,7 +5,7 @@ sidebar:
   order: 4
 ---
 
-Universe installs and updates what you own on itch.io, and takes over the games the itch app installed. The store is off until you press **Y** on **itch.io** in Settings › **Stores**.
+Universe installs and updates what you own on itch.io, and takes over the games the itch app installed. The store is off until you turn it on: **Use** in first-run setup, or **Y** on **itch.io** in Settings › **Stores**.
 
 ## Signing in with an API key
 

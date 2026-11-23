@@ -17,7 +17,7 @@ Settings › [System check](/docs/settings/system-check/) runs every check Unive
 
 ## When Universe won't start
 
-Big Screen says what stopped it. Fix the problem, then **A** (**Try again**) carries on to Home. If the settings file is broken, **Start with default settings** saves it as `config.toml.broken-` plus the date and opens Home on the defaults, your controller setup kept. **B** quits, or logs out of the Universe session.
+Big Screen says what stopped it. Fix the problem, then **A** (**Try again**) carries on to Home. If the settings file is broken, **Start with default settings** saves it as `config.toml.broken-` plus the date and opens Home on the defaults, your controller setup kept. It isn't offered when the settings file is read-only, such as one home-manager writes. **B** quits, or logs out of the Universe session.
 
 `universe doctor` in a terminal runs System check even then. When the settings file doesn't read, it names the file and runs the other checks on the default settings.
 
