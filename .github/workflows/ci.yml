@@ -35,7 +35,14 @@ jobs:
         env:
           UI_BIN: ${{ runner.temp }}/package-1/bin/universe-ui
       # The lint job builds the two lint checks; listing the rest keeps this job from compiling the Rust tree twice
-      - run: nix build .#checks.x86_64-linux.core-test .#checks.x86_64-linux.pytest-ui .#checks.x86_64-linux.pytest-modules .#checks.x86_64-linux.pytest-sources .#checks.x86_64-linux.pytest-core-py .#checks.x86_64-linux.desktop-test -o "$RUNNER_TEMP/check" -L
+      - run: nix build .#checks.x86_64-linux.core-test .#checks.x86_64-linux.pytest-ui .#checks.x86_64-linux.pytest-modules .#checks.x86_64-linux.pytest-sources .#checks.x86_64-linux.pytest-core-py .#checks.x86_64-linux.desktop-test -o "$RUNNER_TEMP/check" -L 2>&1 | tee "$RUNNER_TEMP/check.log"
+      # A UI test that passed only on its rerun stays green but is named here, to be fixed
+      - if: always()
+        run: |
+          grep -ao 'RERUN ui/tests/[^ ]*' "$RUNNER_TEMP/check.log" | sort -u > "$RUNNER_TEMP/unstable" || true
+          [ -s "$RUNNER_TEMP/unstable" ] || exit 0
+          { echo "### Unstable UI tests (passed on their rerun)"; sed 's/^RERUN /- /' "$RUNNER_TEMP/unstable"; } >> "$GITHUB_STEP_SUMMARY"
+          sed 's/^RERUN /::warning title=Unstable UI test::/' "$RUNNER_TEMP/unstable"
       - run: nix flake check --no-build
       # 5G keeps the toolchain and the vendored crates beside the gc roots; the purge keeps one entry per branch inside the repo's 10 GB
       - if: always() && steps.nix-cache.outputs.hit-primary-key != 'true'

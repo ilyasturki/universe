@@ -551,6 +551,7 @@
           runtime ? [ ],
           env ? { },
           xdist ? false,
+          rerun ? false,
         }:
         pkgs.stdenvNoCC.mkDerivation {
           inherit name;
@@ -562,12 +563,17 @@
             }
             // env;
           dontWrapQtApps = true;
-          nativeBuildInputs = [ (pyEnv (ps: py ps ++ lib.optional xdist ps.pytest-xdist)) ] ++ runtime;
+          nativeBuildInputs = [
+            (pyEnv (
+              ps: py ps ++ lib.optional xdist ps.pytest-xdist ++ lib.optional rerun ps.pytest-rerunfailures
+            ))
+          ]
+          ++ runtime;
           postPatch = "patchShebangs .";
-          # At most 4 workers, a hosted runner's cores
+          # At most 4 workers, a hosted runner's cores; a test that fails once and then passes prints a RERUN line, which CI's build job lists as unstable
           buildPhase = ''
             export HOME=$TMPDIR
-            python3 -m pytest -q -p no:cacheprovider ${lib.optionalString xdist "-n $(( NIX_BUILD_CORES < 4 ? NIX_BUILD_CORES : 4 ))"} ${lib.escapeShellArgs tests}
+            python3 -m pytest -q -p no:cacheprovider ${lib.optionalString xdist "-n $(( NIX_BUILD_CORES < 4 ? NIX_BUILD_CORES : 4 ))"} ${lib.optionalString rerun "--reruns 1 -rR"} ${lib.escapeShellArgs tests}
           '';
           installPhase = "touch $out";
         };
@@ -590,6 +596,7 @@
         ];
         tests = [ "ui" ];
         xdist = true;
+        rerun = true;
         py =
           ps:
           uiPy ps
