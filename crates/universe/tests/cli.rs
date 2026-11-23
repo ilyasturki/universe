@@ -1161,8 +1161,11 @@ fn call_off_in_a_pre_launch_hook(on_a_terminal: bool) {
     }
     let pids: Vec<i32> = std::fs::read_to_string(hook.join("pids")).unwrap().split_whitespace().map(|p| p.parse().unwrap()).collect();
     let by = std::time::Instant::now() + std::time::Duration::from_secs(2);
-    // SAFETY: signal 0 only asks whether the pid is there.
-    while pids.iter().any(|p| unsafe { libc::kill(*p, 0) } == 0) {
+    // A zombie counts as gone: a container's PID 1 (CI's `tail -f /dev/null`) never reaps the orphaned child.
+    let running = |pid: i32| {
+        std::fs::read_to_string(format!("/proc/{pid}/stat")).is_ok_and(|stat| stat.rsplit_once(") ").is_some_and(|(_, state)| !state.starts_with('Z')))
+    };
+    while pids.iter().any(|p| running(*p)) {
         assert!(std::time::Instant::now() < by, "the hook and its child outlived the launch");
         std::thread::sleep(std::time::Duration::from_millis(20));
     }

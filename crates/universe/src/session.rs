@@ -1934,8 +1934,9 @@ pub(crate) mod tests {
         let pids = paths::state_home().join("pids");
         let (log, pids) = (log.display(), pids.display());
         hook_module("first", &[("pre-launch", &format!("echo first >> {log}")), ("session-end", &format!("echo first-end >> {log}"))]);
+        // The hook reaps its child: a container's PID 1 (CI's `tail -f /dev/null`) never would, and the zombie keeps the group there.
         let slow = format!(
-            "echo slow >> {log}\n[ -e {pids}.once ] && exit 0\ntouch {pids}.once\necho KEPT=1 >> \"$UNIVERSE_ENV_FILE\"\nsleep 30 &\necho $$ $! > {pids}.part\nmv {pids}.part {pids}\nwait"
+            "echo slow >> {log}\n[ -e {pids}.once ] && exit 0\ntouch {pids}.once\necho KEPT=1 >> \"$UNIVERSE_ENV_FILE\"\ntrap 'wait; exit 143' TERM\nsleep 30 &\necho $$ $! > {pids}.part\nmv {pids}.part {pids}\nwait"
         );
         hook_module("slow", &[("pre-launch", &slow), ("session-end", &format!("echo slow-end >> {log}"))]);
         hook_module("then", &[("pre-launch", &format!("echo then >> {log}")), ("session-end", &format!("echo then-end >> {log}"))]);
