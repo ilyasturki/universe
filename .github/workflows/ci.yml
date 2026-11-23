@@ -35,7 +35,7 @@ jobs:
         env:
           UI_BIN: ${{ runner.temp }}/package-1/bin/universe-ui
       # The lint job builds the two lint checks; listing the rest keeps this job from compiling the Rust tree twice
-      - run: nix build .#checks.x86_64-linux.pytest-ui .#checks.x86_64-linux.pytest-modules .#checks.x86_64-linux.pytest-sources .#checks.x86_64-linux.pytest-core-py .#checks.x86_64-linux.desktop-test -o "$RUNNER_TEMP/check" -L
+      - run: nix build .#checks.x86_64-linux.core-test .#checks.x86_64-linux.pytest-ui .#checks.x86_64-linux.pytest-modules .#checks.x86_64-linux.pytest-sources .#checks.x86_64-linux.pytest-core-py .#checks.x86_64-linux.desktop-test -o "$RUNNER_TEMP/check" -L
       - run: nix flake check --no-build
       # 5G keeps the toolchain and the vendored crates beside the gc roots; the purge keeps one entry per branch inside the repo's 10 GB
       - if: always() && steps.nix-cache.outputs.hit-primary-key != 'true'

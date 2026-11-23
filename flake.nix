@@ -136,24 +136,8 @@
           "-p"
           "universe"
         ];
-        cargoTestFlags = [
-          "-p"
-          "universe"
-        ];
-        # chrono ignores TZDIR, so the zone is given as a file; a shared builder's load holds the speed budgets to their loose limits; the saves tests skip where ludusavi is missing, and the bus, sound and X tests where their server will not start, but not here
-        preCheck = "export TZ=${pkgs.tzdata}/share/zoneinfo/Europe/Paris UNIVERSE_TEST_BUDGET_S=0 UNIVERSE_TEST_LUDUSAVI=1 UNIVERSE_TEST_DISPLAY=1";
-        # reqwest's platform verifier refuses to build a client on an empty CA store; the NetworkManager and BlueZ tests run their own dbus-daemon, the volume keys' test its own PipeWire, the game session's an Xvfb for gamescope
-        nativeCheckInputs = [
-          pkgs.cacert
-          pkgs.dbus
-          pkgs.pipewire
-          pkgs.strace
-          pkgs.wireplumber
-          pkgs.xvfb
-          pkgs.python3
-        ]
-        ++ coreRuntime;
-        postPatch = "patchShebangs sources";
+        # Its tests are the core-test check: in the package they cost 40% of every build.
+        doCheck = false;
         nativeBuildInputs = [
           pkgs.pkg-config
           pkgs.installShellFiles
@@ -167,6 +151,33 @@
           installManPage gen/man/*.1
         '';
         meta.mainProgram = "universe";
+      };
+
+      # The package's own tree and release profile, compiled by `cargo test` alone
+      coreTest = core.overrideAttrs {
+        pname = "universe-core-test";
+        dontBuild = true;
+        doCheck = true;
+        cargoTestFlags = [
+          "-p"
+          "universe"
+        ];
+        postPatch = "patchShebangs sources";
+        # chrono ignores TZDIR, so the zone is given as a file; a shared builder's load holds the speed budgets to their loose limits; the saves tests skip where ludusavi is missing, and the bus, sound and X tests where their server will not start, but not here
+        preCheck = "export TZ=${pkgs.tzdata}/share/zoneinfo/Europe/Paris UNIVERSE_TEST_BUDGET_S=0 UNIVERSE_TEST_LUDUSAVI=1 UNIVERSE_TEST_DISPLAY=1";
+        # reqwest's platform verifier refuses to build a client on an empty CA store; the NetworkManager and BlueZ tests run their own dbus-daemon, the volume keys' test its own PipeWire, the game session's an Xvfb for gamescope
+        nativeCheckInputs = [
+          pkgs.cacert
+          pkgs.dbus
+          pkgs.pipewire
+          pkgs.strace
+          pkgs.wireplumber
+          pkgs.xvfb
+          pkgs.python3
+        ]
+        ++ coreRuntime;
+        installPhase = "touch $out";
+        postInstall = "";
       };
 
       corePy = pkgs.python3Packages.buildPythonPackage {
@@ -730,6 +741,7 @@
 
       checks.${system} = {
         core = core;
+        core-test = coreTest;
         desktop = desktop;
         desktop-test = desktopTest;
         lint = lint;
