@@ -1266,7 +1266,16 @@ pub(crate) mod tests {
         assert_eq!(spec.stop_post[1..], ["session-end".to_string(), "sample".into(), sid.clone()]);
         assert!(spec.bind_to.is_none(), "no scope adopted");
         assert_eq!(spec.env["UNIVERSE_BIN"], paths::self_exe().to_string_lossy());
-        assert_eq!(memory.spec(&format!("universe-controller-{sid}")).expect("the watcher").bind_to.as_deref(), Some(unit.as_str()));
+        let watcher = memory.spec(&format!("universe-controller-{sid}")).expect("the watcher");
+        assert_eq!(watcher.bind_to.as_deref(), Some(unit.as_str()));
+        let profile = include_str!("paths.rs")
+            .split('"')
+            .filter(|s| s.starts_with("UNIVERSE_") && !s.ends_with('_') && *s != "UNIVERSE_BIN" && s.bytes().all(|b| b.is_ascii_uppercase() || b == b'_'));
+        for var in profile {
+            for started in [&spec, &watcher] {
+                assert_eq!(started.env.get(var), Some(&std::env::var(var).unwrap()), "{var} reaches {}", started.name);
+            }
+        }
         assert!(memory.spec(&format!("universe-overlay-{sid}")).is_none(), "no gamescope of its own, no overlay");
         let marker = read_marker().expect("a marker");
         assert_eq!((marker.current.session_id.as_str(), marker.current.unit.as_str()), (sid.as_str(), unit.as_str()));

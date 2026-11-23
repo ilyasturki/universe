@@ -78,6 +78,10 @@ fn universe_home(var: &str, xdg_var: &str, fallback: &str) -> PathBuf {
     std::env::var_os(var).map(PathBuf::from).unwrap_or_else(|| xdg(xdg_var, fallback).join("universe"))
 }
 
+/// What a profile sets: each reaches the units a launch starts, whose manager would hand them its own XDG dirs.
+pub const PROFILE_VARS: [&str; 6] =
+    ["UNIVERSE_DATA_HOME", "UNIVERSE_CONFIG_HOME", "UNIVERSE_STATE_HOME", "UNIVERSE_CACHE_HOME", "UNIVERSE_MODULES_PATH", "UNIVERSE_SOURCES_PATH"];
+
 pub fn data_home() -> PathBuf {
     universe_home("UNIVERSE_DATA_HOME", "XDG_DATA_HOME", ".local/share")
 }

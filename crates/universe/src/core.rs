@@ -223,11 +223,6 @@ pub(crate) fn passthrough_env() -> BTreeMap<String, String> {
         "XDG_CURRENT_DESKTOP",
         "XDG_SESSION_TYPE",
         "GI_TYPELIB_PATH",
-        "UNIVERSE_DATA_HOME",
-        "UNIVERSE_CONFIG_HOME",
-        "UNIVERSE_STATE_HOME",
-        "UNIVERSE_MODULES_PATH",
-        "UNIVERSE_SOURCES_PATH",
         "RUST_LOG",
         "GAMESCOPE_WAYLAND_DISPLAY",
         crate::nest::OWN_ENV,
@@ -235,7 +230,10 @@ pub(crate) fn passthrough_env() -> BTreeMap<String, String> {
         "SDL_VIDEODRIVER",
         "SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS",
         "vk_xwayland_wait_ready",
-    ] {
+    ]
+    .into_iter()
+    .chain(paths::PROFILE_VARS)
+    {
         if let Ok(v) = std::env::var(k) {
             env.insert(k.to_string(), v);
         }

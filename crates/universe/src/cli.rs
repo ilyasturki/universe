@@ -28,7 +28,7 @@ Files:
   $XDG_RUNTIME_DIR/universe/active-pad — the sysfs device of the pad a button was last pressed on: player 1 in the emulators
 
 Environment:
-  UNIVERSE_CONFIG_HOME, UNIVERSE_DATA_HOME, UNIVERSE_STATE_HOME — replace the XDG directories
+  UNIVERSE_CONFIG_HOME, UNIVERSE_DATA_HOME, UNIVERSE_STATE_HOME, UNIVERSE_CACHE_HOME — replace the XDG directories
   UNIVERSE_MODULES_PATH, UNIVERSE_SOURCES_PATH — extra module and source roots, colon-separated
   RUST_LOG — tracing filter, warn (and each screenshot's timings) by default
 
