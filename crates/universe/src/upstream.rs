@@ -478,9 +478,11 @@ fn by_store(game: &Game, read: &Installed, list: &Store, store: &str, id: &str) 
         return Check { store, store_id, ..manual("unknown", "no-answer") };
     }
     let text = |k: &str| row.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
-    let local = if read.build.is_empty() { text("local_build") } else { read.build.clone() };
+    // A row naming no build (a GOG Linux installer, known by its version name) is judged by the store's word alone.
+    let by_word = read.build.is_empty() || text("remote_build").is_empty();
+    let local = if by_word { text("local_build") } else { read.build.clone() };
     // A store's build labels may match across an update (an itch upload changed in place): only its word or the files say current.
-    let current = if read.build.is_empty() { row.get("current") == Some(&Value::Bool(true)) } else { read.build == text("remote_build") };
+    let current = if by_word { row.get("current") == Some(&Value::Bool(true)) } else { read.build == text("remote_build") };
     let skipped = !text("skipped").is_empty();
     Check {
         status: if current { "current" } else { "update" },

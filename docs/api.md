@@ -1022,6 +1022,12 @@ TLS failures behind a captive portal included). With that line the session still
 client's token included) fail with `GOG could not be reached.`; a `null` without it reads as signed out.
 A stopped download is kept in `partials.json` with its folder while that folder holds gogdl's
 `.gogdl-resume`; `discard` drops the entry.
+`update` asks GOG's content system for the builds of a Windows install, and gogdl (`info --platform
+linux`) for the installer of a Linux one (a `gameinfo` beside `game/goggame-<id>.info`), which has a
+version name and no build. The version `install` and `update` installed is kept in
+`linux-versions.json`; a Linux install without one, gogdl failing or listing `Unknown` gives an
+`unanswered` row. An update check that reached GOG for no install fails with `GOG could not be
+reached.`, exit 3; a download gogdl stops for a full disk fails with `Not enough free space on the disk.`
 
 ### Epic Games
 
@@ -2319,7 +2325,7 @@ player reads (`Io`); the verb and exit code go to the log. A verb that failed be
 | `search` | `<text>` | `{"event":"game", …}` |
 | `info` | `<id>` | `{"event":"info","data":{…},"download_size":…,"disk_size":…}`, the sizes optional |
 | `install` | `<id>` | `progress` lines (`done`/`total` in bytes when the source knows them), then the installed `game`. On SIGTERM the source stops its downloader, keeps the files and exits non-zero; a later `install` of the same id resumes |
-| `update` | `[id]` | without an id: `{"event":"update","id","title","local_build","remote_build","version","date"}` per pending update, and optionally one with `"current": true` per install at the published build; `local_version` (optional) names the installed build as the store lists it, `skipped` (optional, `not owned`) marks an update the store would refuse. `{"event":"update","id","title","unanswered":true}` stands for an install the store could not be asked about while others answered; with none answering the verb fails. A row with none of `current`, `skipped` and `unanswered` is pending, whatever its build labels say; with an id: `progress` then `game` |
+| `update` | `[id]` | without an id: `{"event":"update","id","title","local_build","remote_build","version","date"}` per pending update, and optionally one with `"current": true` per install at the published build; `local_version` (optional) names the installed build as the store lists it, `skipped` (optional, `not owned`) marks an update the store would refuse. `{"event":"update","id","title","unanswered":true}` stands for an install the store could not be asked about while others answered; with none answering the verb fails. A row with none of `current`, `skipped` and `unanswered` is pending, whatever its build labels say. A row with an empty `remote_build` names no build (GOG's Linux installers, listed by version name): `current` alone says it is current, whatever build the game's files name; with an id: `progress` then `game` |
 | `scan` | | `{"event":"game", …}` per installation found (`disk_size` measured) and per stopped download (`installed: false`, `partial_dir`, `partial_bytes`, and `partial_dirs` when its files lie in more folders than `partial_dir`), `owned` crossed with the cached library |
 | `achievements` | `<id>` | `{"event":"achievement", …}` per achievement of the game, an `Achievement` (see Achievements); only asked of a source whose `capabilities` names it |
 | `uninstall` | `<id>` | optional `progress` lines, then `done` once the store has removed the game's files and forgotten the install (nothing to do is no error); only asked of a source whose `capabilities` names it, by `uninstall(id)` instead of trashing `source.dir` |

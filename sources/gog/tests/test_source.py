@@ -320,7 +320,7 @@ def test_info_adds_the_shared_language_and_dlc_sizes_of_the_set_platform(env, ru
     settings(with_dlcs=False, platform="linux")
     _, events, _ = run("info", "1")
     assert calls(env)[1]["args"][-3:] == ["--platform", "linux", "--skip-dlcs"]
-    assert (events[0]["download_size"], events[0]["disk_size"]) == (800, 1200)
+    assert (events[0]["download_size"], events[0]["disk_size"]) == (700, 1000), "gogdl's Linux shape: the sizes at the top"
 
 
 def test_size_total_falls_back_to_the_first_language(src):
@@ -526,6 +526,44 @@ def test_a_game_with_no_build_for_the_depot_platform_is_an_answer(web, src, env,
         fake_fetch(web, {products: failure})
         code, events, _ = run("update")
         assert code == (src.UNREACHABLE_EXIT if isinstance(failure, OSError) else 1) and events == [], "an HTTP error is GOG answering"
+
+
+def test_a_linux_install_is_judged_by_gogdls_linux_listing(web, src, env, run, settings, monkeypatch):
+    settings(platform="linux")
+    shutil.rmtree(env["scan"])
+    monkeypatch.setenv("SHIM_LINUX_VERSION", "1.0 (gog-1)")
+    code, events, err = run("install", MINI_METRO)
+    assert code == 0, err
+    root = env["games"] / "Mini Metro"
+    unrecorded = env["games"] / "Imported"
+    write_info(unrecorded / "game", "2", "2", "Imported")
+    (unrecorded / "gameinfo").write_text("Imported\n1.0\n")
+
+    def rows():
+        code, events, err = run("update")
+        assert code == 0, err
+        return {e["id"]: e for e in events if e["event"] == "update"}
+
+    monkeypatch.setenv("SHIM_LINUX_VERSION", "1.1 (gog-2)")
+    listed = rows()
+    assert (listed[MINI_METRO]["remote_build"], listed[MINI_METRO]["version"], listed[MINI_METRO]["local_version"]) == ("", "1.1 (gog-2)", "1.0 (gog-1)")
+    assert "current" not in listed[MINI_METRO] and "unanswered" not in listed[MINI_METRO], "a newer installer is pending"
+    assert listed["2"].get("unanswered") is True, "a Linux install Universe never recorded is no answer, never current"
+    assert not web.seen, "GOG's content system lists no Linux builds: gogdl's listing is asked"
+    assert ["info", MINI_METRO, "--platform", "linux", "--skip-dlcs"] in [c["args"][2:] for c in calls(env)]
+
+    for mode in ("info-fail", "info-unknown"):
+        monkeypatch.setenv("SHIM_MODE", mode)
+        code, events, _ = run("update")
+        assert code == 1 and events == [], f"{mode}: no install answered"
+    monkeypatch.delenv("SHIM_MODE")
+
+    code, events, err = run("update", MINI_METRO)
+    assert code == 0, err
+    assert calls(env)[-1]["args"][2:] == ["update", MINI_METRO, "--platform", "linux", "--with-dlcs", "--path", str(root)]
+    assert rows()[MINI_METRO].get("current") is True, "updated, it is at the installer listed"
+    code, events, err = run("update", MINI_METRO)
+    assert code == 0 and events == [{"event": "done"}] and "already current" in err
 
 
 def test_updates_with_nothing_installed_ask_nobody(web, src, env, run):
@@ -984,6 +1022,26 @@ def test_a_stopped_download_discarded_goes_to_the_trash_and_leaves_no_paused_row
     row = next(r for r in universe.library("gog", False) if r["id"] == "1434554947")
     assert (row["installed"], row["partial_dir"]) == (False, None), "no phantom Paused row"
     assert "1434554947" not in json.loads((core.data / "gog" / "partials.json").read_text()), "the store's record is cleared"
+
+
+def test_a_linux_install_reads_unknown_without_an_answer_and_update_behind_a_newer_installer(core, tmp_path, monkeypatch):
+    monkeypatch.setenv("SHIM_LOG", str(tmp_path / "gogdl.log"))
+    monkeypatch.setenv("SHIM_LINUX_VERSION", "1.0 (gog-1)")
+    universe = core("gog", {"games_dir": str(tmp_path / "games"), "platform": "linux"})
+    game = universe.install("gog", MINI_METRO)
+
+    def status():
+        return universe.get(game)["version"]["status"]
+
+    monkeypatch.setenv("SHIM_MODE", "info-fail")
+    universe.check_versions(game)
+    assert status() == "unknown", "gogdl gave no listing: no answer, not current"
+    monkeypatch.delenv("SHIM_MODE")
+    monkeypatch.setenv("SHIM_LINUX_VERSION", "1.1 (gog-2)")
+    universe.check_versions("")
+    assert status() == "update", "a newer installer listed"
+    universe.update("gog", MINI_METRO)
+    assert status() == "current", "its goggame build may not move with the installer: the store's word decides"
 
 
 def test_update_everything_offline_says_gog_is_out_of_reach(core, src, tmp_path, monkeypatch):

@@ -44,6 +44,17 @@ elif verb == "auth":
     token = f"tok-{args[args.index('--client-id') + 1]}" if "--client-id" in args else "tok"
     refused = {"error": True} if "--code" in args else None
     print(json.dumps({"access_token": token, "refresh_token": "r", "user_id": "4242", "expires_in": 3600, "loginTime": 1} if ok else refused))
+elif verb == "info" and args[args.index("--platform") + 1] == "linux":
+    # gogdl 1.4.0 dl/managers/linux.py:169-185: the installer's version, no build id; "Unknown" when GOG gave no game data.
+    if os.environ.get("SHIM_MODE") == "info-fail":
+        print("Traceback (most recent call last):\nTypeError: 'NoneType' object is not subscriptable", file=sys.stderr)
+        sys.exit(1)
+    version = "Unknown" if os.environ.get("SHIM_MODE") == "info-unknown" else os.environ.get("SHIM_LINUX_VERSION", "1.1 (gog-2)")
+    print(
+        json.dumps(
+            {"download_size": 700, "disk_size": 1000, "dlcs": [], "languages": ["en"], "folder_name": "Mini Metro", "dependencies": [], "versionName": version}
+        )
+    )
 elif verb == "info":
     print(
         json.dumps(
@@ -141,6 +152,21 @@ elif verb in ("download", "update"):
     folder = Path(args[args.index("--path") + 1])
     if verb == "download":
         folder = folder / "Mini Metro"
+    if args[args.index("--platform") + 1] == "linux":
+        # gogdl 1.4.0's Linux manager unpacks the installer's data/noarch into the folder: gameinfo, game/goggame-<id>.info.
+        info = {
+            "gameId": game_id,
+            "rootGameId": game_id,
+            "name": "Mini Metro",
+            "buildId": "L1",
+            "playTasks": [{"isPrimary": True, "type": "FileTask", "path": "MiniMetro"}],
+        }
+        (folder / "game").mkdir(parents=True, exist_ok=True)
+        (folder / "game" / f"goggame-{game_id}.info").write_text(json.dumps(info))
+        (folder / "game" / "MiniMetro").write_text("")
+        (folder / "gameinfo").write_text(f"Mini Metro\n{os.environ.get('SHIM_LINUX_VERSION', '1.1 (gog-2)')}\n\nen-US\n{game_id}\n")
+        print("[PROGRESS] INFO: = Progress: 100.00 1000/1000, Running for: 00:00:01, ETA: 00:00:00", file=sys.stderr, flush=True)
+        sys.exit(0)
     info = {
         "gameId": game_id,
         "rootGameId": game_id,

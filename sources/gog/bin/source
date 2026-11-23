@@ -121,8 +121,8 @@ def load_settings():
     return settings
 
 
-def platform_args(settings):
-    return ["--platform", settings["platform"], "--with-dlcs" if settings["with_dlcs"] else "--skip-dlcs"]
+def platform_args(settings, platform=None):
+    return ["--platform", platform or settings["platform"], "--with-dlcs" if settings["with_dlcs"] else "--skip-dlcs"]
 
 
 def fetch(url, token=None, headers=None, timeout=HTTP_TIMEOUT_S):
@@ -343,9 +343,11 @@ def size_total(sizes, lang="en-US"):
 
 def size_info(settings, game_id):
     data = gogdl_json(settings, "info", game_id, *platform_args(settings))
-    total = size_total(data.get("size") if isinstance(data, dict) else None) or {}
+    data = data if isinstance(data, dict) else {}
+    # gogdl's Linux manager gives the sizes at the top, DLCs counted in.
+    total = size_total(data.get("size")) or {k: data[k] for k in ("download_size", "disk_size") if isinstance(data.get(k), int)}
     if settings["with_dlcs"]:
-        for dlc in (data.get("dlcs") or []) if isinstance(data, dict) else []:
+        for dlc in data.get("dlcs") or []:
             for key, value in (size_total(dlc.get("size")) or {}).items():
                 total[key] = total.get(key, 0) + value
     return data, total
@@ -445,6 +447,53 @@ def fetch_builds(settings, game_ids):
     def one(game_id):
         try:
             return game_id, fetch_build(settings, game_id)
+        except SourceError as exc:
+            return game_id, exc
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        return dict(pool.map(one, game_ids))
+
+
+# gogdl's Linux installers unpack gameinfo at the root and the .info under game/ (gogdl 1.4.0 imports.py:64-70,108-113).
+def linux_root(install):
+    for folder in (Path(install["dir"]), Path(install["dir"]).parent):
+        if (folder / "gameinfo").is_file():
+            return folder
+    return None
+
+
+def versions_path():
+    return data_dir() / "linux-versions.json"
+
+
+# GOG lists a Linux installer by its version name alone; the one installed is the one listed when Universe installed it.
+def recorded_versions():
+    versions = load_json(versions_path())
+    return versions if isinstance(versions, dict) else {}
+
+
+def record_version(game_id, version):
+    save_json(versions_path(), {**recorded_versions(), game_id: version})
+
+
+def linux_version(settings, game_id):
+    data = gogdl_json(settings, "info", game_id, "--platform", "linux", "--skip-dlcs")
+    version = data.get("versionName") if isinstance(data, dict) else None
+    if not version or version == "Unknown":
+        raise SourceError(f"gogdl listed no Linux installer of {game_id}")
+    return version
+
+
+def linux_versions(settings, game_ids):
+    # gogdl writes a refreshed token back to the auth file: one refresh first, so the listings side by side only read it.
+    try:
+        access_token(settings)
+    except SourceError as exc:
+        return dict.fromkeys(game_ids, exc)
+
+    def one(game_id):
+        try:
+            return game_id, linux_version(settings, game_id)
         except SourceError as exc:
             return game_id, exc
 
@@ -679,6 +728,9 @@ def cmd_install(settings, args):
     install = find_install(settings, game_id, [games_dir])
     if install is None:
         raise SourceError(f"gogdl finished but no goggame-{game_id}.info under {games_dir}")
+    version = data.get("versionName") if isinstance(data, dict) else None
+    if linux_root(install) and version and version != "Unknown":
+        record_version(game_id, version)
     set_partial(game_id, None)
     game_event(game_id, install["title"], True, install, (index or {}).get(game_id))
     emit("done")
@@ -688,15 +740,21 @@ def cmd_update(settings, args):
     installs = scan_installs(settings)
     index = library_index()
     if not args:
-        remotes = fetch_builds(settings, [i["id"] for i in installs])
+        linux = {i["id"] for i in installs if linux_root(i)}
+        remotes = fetch_builds(settings, [i["id"] for i in installs if i["id"] not in linux])
+        remotes.update(linux_versions(settings, sorted(linux)) if linux else {})
         failures = [r for r in remotes.values() if isinstance(r, SourceError)]
         if failures and len(failures) == len(remotes):
             raise next((f for f in failures if not isinstance(f, Offline)), failures[0])
+        recorded = recorded_versions()
         for install in installs:
             remote = remotes.get(install["id"])
             if isinstance(remote, SourceError):
                 log(f"{install['title']}: {remote}")
                 emit("update", id=install["id"], title=install["title"], unanswered=True)
+                continue
+            if install["id"] in linux:
+                linux_row(install, remote, recorded.get(install["id"]), index)
                 continue
             if remote is None:
                 log(f"{install['title']}: no build published for {settings['platform']}, skipped")
@@ -721,6 +779,9 @@ def cmd_update(settings, args):
         raise SourceError(f"{game_id} is not installed under {', '.join(settings['scan_dirs'])}")
     if owned_status(game_id, index) is False:
         raise SourceError(f"{install['title']} is not in the GOG library, refusing to update")
+    if root := linux_root(install):
+        update_linux(settings, install, root, index)
+        return
     remote = fetch_build(settings, game_id)
     if remote is None:
         raise SourceError(f"no build published for {game_id} on {settings['platform']}")
@@ -733,6 +794,42 @@ def cmd_update(settings, args):
     after = find_install(settings, game_id, [install["dir"]])
     if after is None or after["build"] != remote["build"]:
         raise SourceError(f"gogdl finished but {install['title']} is at build {after['build'] if after else 'unknown'}, expected {remote['build']}")
+    game_event(game_id, after["title"], True, after, (index or {}).get(game_id))
+    emit("done")
+
+
+# No build id names a Linux installer: the row says current or not itself, and its empty remote_build tells the core so.
+def linux_row(install, remote, local, index):
+    if local is None:
+        log(f"{install['title']}: no Linux version recorded for it, so whether it is current is unknown")
+        emit("update", id=install["id"], title=install["title"], unanswered=True)
+        return
+    emit(
+        "update",
+        id=install["id"],
+        title=install["title"],
+        local_build=None,
+        remote_build="",
+        version=remote,
+        date="",
+        local_version=local,
+        **({"current": True} if local == remote else {}),
+        **({"skipped": "not owned"} if owned_status(install["id"], index) is False else {}),
+    )
+
+
+def update_linux(settings, install, root, index):
+    game_id = install["id"]
+    remote = linux_version(settings, game_id)
+    if recorded_versions().get(game_id) == remote:
+        log(f"{install['title']} is already current ({remote})")
+        emit("done")
+        return
+    gogdl_stream(settings, "update", game_id, *platform_args(settings, "linux"), "--path", str(root), timeout=settings["install_timeout_s"])
+    after = find_install(settings, game_id, [str(root)])
+    if after is None:
+        raise SourceError(f"gogdl finished but no goggame-{game_id}.info under {root}")
+    record_version(game_id, remote)
     game_event(game_id, after["title"], True, after, (index or {}).get(game_id))
     emit("done")
 
