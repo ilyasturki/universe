@@ -152,6 +152,11 @@ elif verb in ("download", "update"):
     folder = Path(args[args.index("--path") + 1])
     if verb == "download":
         folder = folder / "Mini Metro"
+    exclude = Path(os.environ["GOGDL_CONFIG_PATH"]) / "heroic_gogdl" / "exclude" / game_id
+    if args[args.index("--platform") + 1] == "linux" and not exclude.is_file():
+        # gogdl 1.4.0 dl/managers/linux.py:259 opens it unguarded.
+        print(f"FileNotFoundError: [Errno 2] No such file or directory: '{exclude}'", file=sys.stderr)
+        sys.exit(1)
     if args[args.index("--platform") + 1] == "linux":
         # gogdl 1.4.0's Linux manager unpacks the installer's data/noarch into the folder: gameinfo, game/goggame-<id>.info.
         info = {

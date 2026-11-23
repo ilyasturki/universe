@@ -179,6 +179,13 @@ def forget_manifest(game_id):
     (gogdl_config() / "heroic_gogdl" / "manifests" / game_id).unlink(missing_ok=True)
 
 
+# gogdl 1.4.0's Linux download opens this list of files to leave out with no check (linux.py:259); Heroic writes it, an empty one leaves out nothing.
+def ensure_exclude(game_id):
+    exclude = gogdl_config() / "heroic_gogdl" / "exclude" / game_id
+    exclude.parent.mkdir(parents=True, exist_ok=True)
+    exclude.touch()
+
+
 def gogdl_json_and_log(settings, *args):
     try:
         proc = subprocess.run(gogdl_command(settings, *args), env=gogdl_env(), capture_output=True, text=True, timeout=GOGDL_JSON_TIMEOUT_S, check=False)
@@ -724,6 +731,7 @@ def cmd_install(settings, args):
         set_partial(game_id, {"dir": os.path.join(games_dir, folder), "title": title, **total})
     if find_install(settings, game_id, [games_dir]) is None:
         forget_manifest(game_id)
+    ensure_exclude(game_id)
     gogdl_stream(settings, "download", game_id, *platform_args(settings), "--path", games_dir, timeout=settings["install_timeout_s"])
     install = find_install(settings, game_id, [games_dir])
     if install is None:
@@ -745,7 +753,7 @@ def cmd_update(settings, args):
         remotes.update(linux_versions(settings, sorted(linux)) if linux else {})
         failures = [r for r in remotes.values() if isinstance(r, SourceError)]
         if failures and len(failures) == len(remotes):
-            raise next((f for f in failures if not isinstance(f, Offline)), failures[0])
+            raise next((f for f in failures if isinstance(f, Offline)), failures[0])
         recorded = recorded_versions()
         for install in installs:
             remote = remotes.get(install["id"])
@@ -825,6 +833,7 @@ def update_linux(settings, install, root, index):
         log(f"{install['title']} is already current ({remote})")
         emit("done")
         return
+    ensure_exclude(game_id)
     gogdl_stream(settings, "update", game_id, *platform_args(settings, "linux"), "--path", str(root), timeout=settings["install_timeout_s"])
     after = find_install(settings, game_id, [str(root)])
     if after is None:
