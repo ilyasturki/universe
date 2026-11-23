@@ -403,7 +403,8 @@ class Check:
         gadget = devices.start(self.pad, "kernel") if self.pad.usb else None
         try:
             time.sleep(2)
-            checks = self.profile.json("doctor")
+            # doctor exits 1 when a check fails, as the Switch 2 one must here
+            checks = json.loads(self.profile.run("--json", "doctor", check=False))
             line = next((c for c in checks if c.get("check") == "switch2-pro"), None)
             if gadget is not None and (line is None or line.get("ok")):
                 raise Failed(f"doctor says nothing of a Switch 2 Pro on USB: {line}")
