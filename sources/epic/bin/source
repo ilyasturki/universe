@@ -404,13 +404,14 @@ def game_event(settings, app, title, owned, install=None, known=None, installs=N
 # legendary records the manifest's spelling of the program, which may differ in case from the file on disk.
 def on_disk(folder, relative):
     path = Path(folder)
-    for part in relative.split("/"):
-        if part in ("", "."):
+    for wanted in relative.split("/"):
+        if wanted in ("", "."):
             continue
+        part = wanted
         if not (path / part).exists():
             try:
                 with os.scandir(path) as entries:
-                    part = next((e.name for e in entries if e.name.lower() == part.lower()), None)
+                    part = next((e.name for e in entries if e.name.lower() == wanted.lower()), None)
             except OSError:
                 return None
             if part is None:
