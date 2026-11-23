@@ -578,8 +578,15 @@ async fn run_hook(
             });
         }
     }
-    let mut child =
-        cmd.envs(env.vars.iter().map(|(k, v)| (k.as_str(), v.as_str()))).spawn().map_err(|e| crate::Error::Io(format!("{}: {e}", exe.display())))?;
+    let take_back = || {
+        // SAFETY: tcsetpgrp on stdin, the terminal the hook held; SIGTTOU is ignored, so this background caller is not stopped.
+        unsafe { libc::tcsetpgrp(0, libc::getpgrp()) };
+    };
+    let spawned = cmd.envs(env.vars.iter().map(|(k, v)| (k.as_str(), v.as_str()))).spawn();
+    if spawned.is_err() && terminal.is_some() {
+        take_back();
+    }
+    let mut child = spawned.map_err(|e| crate::Error::Io(format!("{}: {e}", exe.display())))?;
     let group = child.id().map_or(0, |pid| pid as libc::pid_t);
     let lent = terminal.is_some() && group > 0;
     drop(terminal);
@@ -620,8 +627,7 @@ async fn run_hook(
         }
     };
     if lent {
-        // SAFETY: tcsetpgrp on stdin, the terminal the hook held; SIGTTOU is ignored, so this background caller is not stopped.
-        unsafe { libc::tcsetpgrp(0, libc::getpgrp()) };
+        take_back();
     }
     if let (None, Some(flag)) = (&ran, cancel) {
         flag.store(true, std::sync::atomic::Ordering::Relaxed);

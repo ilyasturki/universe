@@ -1197,6 +1197,53 @@ fn call_off_in_a_pre_launch_hook(on_a_terminal: bool) {
 }
 
 #[test]
+fn a_pre_launch_hook_that_cannot_start_gives_play_s_terminal_back() {
+    use std::os::fd::FromRawFd;
+    use std::os::unix::process::CommandExt;
+    let dir = no_desktop();
+    add_game(&dir, "Quest");
+    shim(&dir.path().join("modules/pre/bin"), "pre", "");
+    std::fs::write(dir.path().join("modules/pre/bin/pre"), "#!/nonexistent/interpreter\n").unwrap();
+    std::fs::write(dir.path().join("modules/pre/module.toml"), "api = 2\nid = \"pre\"\n[hooks]\npre-launch = \"bin/pre\"\n").unwrap();
+    let config = dir.path().join("config/config.toml");
+    std::fs::write(&config, std::fs::read_to_string(&config).unwrap() + "[modules]\nenabled = [\"pre\"]\n").unwrap();
+    let play = command(&dir, &["play", "quest", "--no-wait"], &[NO_BUS]);
+    let got = dir.path().join("got");
+    let mut script = Command::new("sh");
+    script
+        .arg("-c")
+        .arg(format!("\"$0\" play quest --no-wait 2> /dev/null; read next < /dev/tty; echo \"$next\" > {}", got.display()))
+        .arg(play.get_program())
+        .envs(play.get_envs().filter_map(|(k, v)| v.map(|v| (k, v))))
+        .stdout(std::process::Stdio::null());
+    let (mut primary, mut terminal) = (0, 0);
+    // SAFETY: openpty fills both descriptors; no name, settings or size is asked for.
+    assert_eq!(unsafe { libc::openpty(&mut primary, &mut terminal, std::ptr::null_mut(), std::ptr::null(), std::ptr::null()) }, 0);
+    // SAFETY: the terminal goes to the script as its stdin, the primary types on it.
+    let (stdin, mut typed) = unsafe { (std::fs::File::from_raw_fd(terminal), std::fs::File::from_raw_fd(primary)) };
+    std::io::Write::write_all(&mut typed, b"after\n").unwrap();
+    // SAFETY: between fork and exec, setsid and ioctl alone: the pty becomes the script's controlling terminal, it its foreground.
+    unsafe {
+        script.stdin(stdin).pre_exec(|| {
+            if libc::setsid() < 0 || libc::ioctl(0, libc::TIOCSCTTY, 0) < 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    let mut running = script.spawn().unwrap();
+    let by = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while running.try_wait().unwrap().is_none() {
+        if std::time::Instant::now() > by {
+            let _ = running.kill();
+            panic!("the script was left in the background of its terminal");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert_eq!(std::fs::read_to_string(&got).unwrap().trim(), "after", "the next command read its terminal");
+}
+
+#[test]
 fn a_launch_killed_before_its_game_started_is_undone_on_the_next_open() {
     use std::os::unix::process::ExitStatusExt;
     let dir = no_desktop();
