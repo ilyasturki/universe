@@ -532,6 +532,11 @@ async fn interrupted_on(hook: Option<libc::pid_t>) {
     }
 }
 
+fn ended_by_ctrl_c(status: &std::process::ExitStatus) -> bool {
+    use std::os::unix::process::ExitStatusExt;
+    status.signal() == Some(libc::SIGINT) || status.code() == Some(130)
+}
+
 const GROUP_GRACE: std::time::Duration = std::time::Duration::from_secs(2);
 
 async fn end_group(child: &mut tokio::process::Child, group: libc::pid_t) {
@@ -623,7 +628,11 @@ async fn run_hook(
             biased;
             () = stopped => None,
             () = interrupted_on(lent.then_some(group)) => None,
-            ran = tokio::time::timeout(timeout, run) => Some(ran),
+            ran = tokio::time::timeout(timeout, run) => match ran {
+                // Its pipes closed with it, the hook a Ctrl-C ended can finish before interrupted_on sees it go.
+                Ok(Ok((status, ..))) if lent && ended_by_ctrl_c(&status) => None,
+                ran => Some(ran),
+            },
         }
     };
     if lent {
