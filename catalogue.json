@@ -546,6 +546,48 @@
       {
        "arch": "x86_64",
        "format": "tar.gz",
+       "sha256": "26bcea3324b68dee68bf6b9b005f4425cdb9c29872e126d790df5abfebe332a8",
+       "size": 598620532,
+       "url": "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton11-14/GE-Proton11-14-x86_64.tar.gz"
+      },
+      {
+       "arch": "aarch64",
+       "format": "tar.gz",
+       "sha256": "f6353f4417bd8c1148d7db18bc383d8e2c59c403e367425fd8b9daaaecc2fad8",
+       "size": 682442196,
+       "url": "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton11-14/GE-Proton11-14-aarch64.tar.gz"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-11-23T10:19:36Z",
+     "version": "GE-Proton11-14"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "tar.gz",
+       "sha256": "2761e8efec78e37f12812269d6157c3dd52f8bfed34568a2d4fcac3ca1b9ff22",
+       "size": 598647969,
+       "url": "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton11-13/GE-Proton11-13-x86_64.tar.gz"
+      },
+      {
+       "arch": "aarch64",
+       "format": "tar.gz",
+       "sha256": "40948339dcfa2b3e01ffef316b37539166f1257d700a50f51e5e13c0cd1889c7",
+       "size": 682451489,
+       "url": "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton11-13/GE-Proton11-13-aarch64.tar.gz"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-11-23T03:10:43Z",
+     "version": "GE-Proton11-13"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "tar.gz",
        "sha256": "0595159e417c3dbbfb7cc3ae0d3ed15a617cc607aa23ef756ea79029d7af5d70",
        "size": 566859228,
        "url": "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton11-12/GE-Proton11-12-x86_64.tar.gz"
@@ -624,48 +666,6 @@
      "channel": "stable",
      "date": "2026-10-14T00:14:59Z",
      "version": "GE-Proton11-9"
-    },
-    {
-     "assets": [
-      {
-       "arch": "x86_64",
-       "format": "tar.gz",
-       "sha256": "dbb2129cbcece65dcd9d926dbdd7d0ffc474f34ffab987ddc6ab8ce52537d976",
-       "size": 564684172,
-       "url": "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton11-8/GE-Proton11-8-x86_64.tar.gz"
-      },
-      {
-       "arch": "aarch64",
-       "format": "tar.gz",
-       "sha256": "195a3e0628668d4132f824f93c19e222c9bb7eb930968be3c6f4d666b5654803",
-       "size": 647948811,
-       "url": "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton11-8/GE-Proton11-8-aarch64.tar.gz"
-      }
-     ],
-     "channel": "stable",
-     "date": "2026-10-13T20:46:41Z",
-     "version": "GE-Proton11-8"
-    },
-    {
-     "assets": [
-      {
-       "arch": "x86_64",
-       "format": "tar.gz",
-       "sha256": "c5448b76a230384e2d7bc6beb5ccb97bafb7e2c3b6c527cb03a1a546bbcb00a0",
-       "size": 563784602,
-       "url": "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton11-7/GE-Proton11-7-x86_64.tar.gz"
-      },
-      {
-       "arch": "aarch64",
-       "format": "tar.gz",
-       "sha256": "b77ac906186568c2f3c66674b85c712b145ccf73ff2718a50dd7bf6248b67ba3",
-       "size": 645786140,
-       "url": "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton11-7/GE-Proton11-7-aarch64.tar.gz"
-      }
-     ],
-     "channel": "stable",
-     "date": "2026-09-16T02:28:16Z",
-     "version": "GE-Proton11-7"
     }
    ],
    "family": "proton-ge",
@@ -759,6 +759,36 @@
        "arch": "x86_64",
        "format": "tar.gz",
        "program": "kyty_emulator",
+       "sha256": "4def827810ea7d46b2b86bcb23f7aedef41b5651e54881b2e0b0bf5fceae4175",
+       "size": 42279599,
+       "url": "https://github.com/KytyPS5/KytyPS5/releases/download/KytyPS5-2026-11-23-578f2d4/KytyPS5-2026-11-23-578f2d4-Linux-x86_64.tar.gz"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-11-23T15:31:36Z",
+     "version": "2026-11-23-578f2d4"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "tar.gz",
+       "program": "kyty_emulator",
+       "sha256": "5fba34a8059d7eeaa7d6b2258fd41cee06246b0f27f3a036d4d7a7e54b3bfda7",
+       "size": 42279938,
+       "url": "https://github.com/KytyPS5/KytyPS5/releases/download/KytyPS5-2026-11-23-bd4a9e7/KytyPS5-2026-11-23-bd4a9e7-Linux-x86_64.tar.gz"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-11-23T15:15:01Z",
+     "version": "2026-11-23-bd4a9e7"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "tar.gz",
+       "program": "kyty_emulator",
        "sha256": "c52cfd44a729703ff953cd8dd17223f0fc0085df67614b5c1eb2c790a48a2e3f",
        "size": 42243279,
        "url": "https://github.com/KytyPS5/KytyPS5/releases/download/KytyPS5-2026-11-22-a0b083c/KytyPS5-2026-11-22-a0b083c-Linux-x86_64.tar.gz"
@@ -812,36 +842,6 @@
      "channel": "stable",
      "date": "2026-11-21T11:22:32Z",
      "version": "2026-11-21-39936ff"
-    },
-    {
-     "assets": [
-      {
-       "arch": "x86_64",
-       "format": "tar.gz",
-       "program": "kyty_emulator",
-       "sha256": "f9a32fdb21b41680b2d01569ee8db697fa7387643166677c21708000336b5bb2",
-       "size": 42271070,
-       "url": "https://github.com/KytyPS5/KytyPS5/releases/download/KytyPS5-2026-11-21-727ccd1/KytyPS5-2026-11-21-727ccd1-Linux-x86_64.tar.gz"
-      }
-     ],
-     "channel": "stable",
-     "date": "2026-11-21T09:54:00Z",
-     "version": "2026-11-21-727ccd1"
-    },
-    {
-     "assets": [
-      {
-       "arch": "x86_64",
-       "format": "tar.gz",
-       "program": "kyty_emulator",
-       "sha256": "e5ec066acfd9d0cb4dbd9b70a61466fce3dca0c072babedcc669dc09a2f728c3",
-       "size": 42272703,
-       "url": "https://github.com/KytyPS5/KytyPS5/releases/download/KytyPS5-2026-11-20-a21fd80/KytyPS5-2026-11-20-a21fd80-Linux-x86_64.tar.gz"
-      }
-     ],
-     "channel": "stable",
-     "date": "2026-11-20T21:40:13Z",
-     "version": "2026-11-20-a21fd80"
     }
    ],
    "homepage": "https://github.com/KytyPS5/KytyPS5",
@@ -1398,6 +1398,20 @@
       {
        "arch": "x86_64",
        "format": "appimage",
+       "sha256": "84ae6d65b746e86e2e22d819d06ab63ac6a48c0998d7f826f8fc169c6852406e",
+       "size": 83311458,
+       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-0ba0a70b549ff1377f1a93a22c8703a129d123b8/rpcs3-v0.0.43-20645-0ba0a70b_linux64.AppImage"
+      }
+     ],
+     "channel": "rolling",
+     "date": "2026-11-23T14:08:37Z",
+     "version": "0.0.43-20645-0ba0a70b"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "appimage",
        "sha256": "740e05347a811e5dff370c68ebf1231052daff61a2808809eede3ebd436e26b5",
        "size": 82540884,
        "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-3bfac607760d39dcdbe77eb137ab6dbb723b3b36/rpcs3-v0.0.43-20644-3bfac607_linux64.AppImage"
@@ -1462,20 +1476,6 @@
      "channel": "rolling",
      "date": "2026-11-17T20:00:38Z",
      "version": "0.0.43-20623-0ebb6369"
-    },
-    {
-     "assets": [
-      {
-       "arch": "x86_64",
-       "format": "appimage",
-       "sha256": "659e8cc2f71ff56289db761c4897ea2d74807bcfbc1dcc3473c78d45deba2c70",
-       "size": 83093973,
-       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-fb6737b1c8306ceeccb53b7fa051acfc9e641cd7/rpcs3-v0.0.43-20607-fb6737b1_linux64.AppImage"
-      }
-     ],
-     "channel": "rolling",
-     "date": "2026-11-16T17:37:32Z",
-     "version": "0.0.43-20607-fb6737b1"
     }
    ],
    "homepage": "https://github.com/RPCS3/rpcs3-binaries-linux",
@@ -1819,21 +1819,21 @@
       {
        "arch": "x86_64",
        "format": "appimage",
-       "sha256": "503c45eec55886c9788bf5ca95aba458ef4b879f0ad32e7fdd28b234aea34c97",
-       "size": 89888739,
+       "sha256": "c1eea9ffebfd37a55e0bba79dfcfaa7fffe98bafa5d8f937a8be768efd2df099",
+       "size": 90183882,
        "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-x86_64.AppImage"
       },
       {
        "arch": "aarch64",
        "format": "appimage",
-       "sha256": "798a8f8ade2bee506ecd827e66ce6c13aaf5cf0ab7495dd492cc61e54a5a53f4",
-       "size": 90047778,
+       "sha256": "d8e745edc5feb7f3e9e116c11e0685b043eada55610b09ae6cb83c3e096edab8",
+       "size": 90617788,
        "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-aarch64.AppImage"
       }
      ],
      "channel": "rolling",
-     "date": "2026-11-21T17:50:16Z",
-     "version": "2026.11.21"
+     "date": "2026-11-23T15:14:39Z",
+     "version": "2026.11.23"
     }
    ],
    "homepage": "https://github.com/Vita3K/Vita3K",
@@ -2065,6 +2065,6 @@
    "name": "xemu"
   }
  },
- "generated_at": "2026-11-22T13:28:17Z",
+ "generated_at": "2026-11-23T16:14:11Z",
  "schema": 1
 }
