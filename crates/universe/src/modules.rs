@@ -502,7 +502,7 @@ pub async fn run_blocking(hooker: &Hooker, hook: &str, env: &HookEnv) -> crate::
     run_lines(hooker, hook, env, |_| {}).await
 }
 
-/// `run_blocking` in a process group of its own, ended whole once `cancel` is set or the timeout passes.
+/// `run_blocking` ended whole once `cancel` is set or the timeout passes: its own process group, off a terminal's foreground.
 pub async fn run_unless(hooker: &Hooker, hook: &str, env: &HookEnv, cancel: &std::sync::atomic::AtomicBool) -> crate::Result<HookOutcome> {
     run_hook(hooker, hook, env, |_| {}, Some(cancel)).await
 }
@@ -511,6 +511,9 @@ pub async fn run_unless(hooker: &Hooker, hook: &str, env: &HookEnv, cancel: &std
 pub async fn run_lines(hooker: &Hooker, hook: &str, env: &HookEnv, on_line: impl FnMut(&str) + Send) -> crate::Result<HookOutcome> {
     run_hook(hooker, hook, env, on_line, None).await
 }
+
+/// Set by a command holding the terminal: a group of its own would be a background one there, and a prompt (sudo) would stop it.
+pub static SHARE_TERMINAL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 const GROUP_GRACE: std::time::Duration = std::time::Duration::from_secs(2);
 
@@ -541,7 +544,8 @@ async fn run_hook(
         return Ok(HookOutcome { status: 0, stdout: String::new(), stderr: String::new() });
     };
     let mut cmd = command(&exe, hooker.dir(), &hooker.data_dir(), hooker.prefix())?;
-    if cancel.is_some() {
+    let own_group = cancel.is_some() && !SHARE_TERMINAL.load(std::sync::atomic::Ordering::Relaxed);
+    if own_group {
         cmd.process_group(0);
     }
     let mut child =
@@ -582,8 +586,10 @@ async fn run_hook(
             ran = tokio::time::timeout(timeout, run) => Some(ran),
         }
     };
-    if cancel.is_some() && group > 0 && !matches!(ran, Some(Ok(_))) {
+    if own_group && group > 0 && !matches!(ran, Some(Ok(_))) {
         end_group(&mut child, group).await;
+    } else if cancel.is_some() && !matches!(ran, Some(Ok(_))) {
+        let _ = child.kill().await;
     }
     let Some(ran) = ran else {
         return Err(crate::Error::Busy(format!("{}:{hook} was called off", hooker.id())));

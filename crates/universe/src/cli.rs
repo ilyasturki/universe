@@ -1306,7 +1306,9 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             }
             use tokio::signal::unix::{signal, SignalKind};
             let (mut int, mut term) = (signal(SignalKind::interrupt())?, signal(SignalKind::terminate())?);
-            // The pre-launch hooks run in a group of their own, out of the terminal's reach: Ctrl-C calls the launch off.
+            // SAFETY: tcgetpgrp and getpgrp only read.
+            let foreground = unsafe { libc::tcgetpgrp(0) == libc::getpgrp() };
+            crate::modules::SHARE_TERMINAL.store(foreground, std::sync::atomic::Ordering::Relaxed);
             let launch = core.launch(&id, &screen, "");
             tokio::pin!(launch);
             let mut stopping = false;
@@ -1316,15 +1318,26 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     _ = int.recv() => {}
                     _ = term.recv() => {}
                 }
+                if stopping {
+                    std::process::exit(130);
+                }
                 stopping = true;
+                if !json {
+                    eprintln!("calling off {id}…");
+                }
                 core.cancel_launch();
             };
-            done(json, format!("launched {id} · session {sid}"), serde_json::json!({"session": sid, "id": id}))?;
             if stopping {
+                // Past its preparation when the signal came: made, then stopped at once.
                 match core.stop(&sid).await {
                     Ok(()) | Err(crate::Error::NotFound(_)) => {}
                     Err(e) => eprintln!("universe: {e}"),
                 }
+                if no_wait {
+                    std::process::exit(130);
+                }
+            } else {
+                done(json, format!("launched {id} · session {sid}"), serde_json::json!({"session": sid, "id": id}))?;
             }
             if no_wait {
                 return Ok(());

@@ -1135,6 +1135,37 @@ fn ctrl_c_in_a_pre_launch_hook_calls_the_launch_off_and_undoes_the_hook() {
 }
 
 #[test]
+fn a_pre_launch_hook_asks_on_the_terminal_play_holds() {
+    use std::os::fd::FromRawFd;
+    use std::os::unix::process::CommandExt;
+    let dir = no_desktop();
+    add_game(&dir, "Quest");
+    let got = dir.path().join("got");
+    shim(&dir.path().join("modules/ask/bin"), "pre", &format!("read answer < /dev/tty; echo \"$answer\" > {}\n", got.display()));
+    std::fs::write(dir.path().join("modules/ask/module.toml"), "api = 2\nid = \"ask\"\n[hooks]\npre-launch = \"bin/pre\"\ntimeout_s = 2\n").unwrap();
+    let config = dir.path().join("config/config.toml");
+    std::fs::write(&config, std::fs::read_to_string(&config).unwrap() + "[modules]\nenabled = [\"ask\"]\n").unwrap();
+    let (mut primary, mut terminal) = (0, 0);
+    // SAFETY: openpty fills both descriptors; no name, settings or size is asked for.
+    assert_eq!(unsafe { libc::openpty(&mut primary, &mut terminal, std::ptr::null_mut(), std::ptr::null(), std::ptr::null()) }, 0);
+    // SAFETY: the terminal goes to the child as its stdin, the primary types the answer.
+    let (stdin, mut keys) = unsafe { (std::fs::File::from_raw_fd(terminal), std::fs::File::from_raw_fd(primary)) };
+    std::io::Write::write_all(&mut keys, b"yes\n").unwrap();
+    let mut cmd = command(&dir, &["play", "quest", "--no-wait"], &[NO_BUS]);
+    // SAFETY: between fork and exec, setsid and ioctl alone: the pty becomes the child's controlling terminal, it its foreground.
+    unsafe {
+        cmd.stdin(stdin).pre_exec(|| {
+            if libc::setsid() < 0 || libc::ioctl(0, libc::TIOCSCTTY, 0) < 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    cmd.output().unwrap();
+    assert_eq!(std::fs::read_to_string(&got).unwrap_or_default().trim(), "yes", "the hook read its answer, not stopped in the background");
+}
+
+#[test]
 fn a_launch_killed_before_its_game_started_is_undone_on_the_next_open() {
     use std::os::unix::process::ExitStatusExt;
     let dir = no_desktop();
