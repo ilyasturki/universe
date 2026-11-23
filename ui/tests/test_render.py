@@ -1247,18 +1247,23 @@ def test_keys_pressed_as_a_reprise_tab_swaps_reach_the_new_tab_in_order(look, ap
 
 @reprise
 def test_rb_after_a_question_answered_over_a_loading_tab_goes_through_at_once(look):
+    def click(key):
+        # QTest's clicks pump the event loop, which would let the tab finish loading between them.
+        for kind in (QEvent.Type.KeyPress, QEvent.Type.KeyRelease):
+            QCoreApplication.sendEvent(look.window, QKeyEvent(kind, key, Qt.KeyboardModifier.NoModifier))
+
     root = look.root
     look.home()
     confirm = look.find("confirm")
     settle(look.window)
-    look.press(Qt.Key.Key_E)
+    click(Qt.Key.Key_E)
     assert "tabKeyHold" in focus_names(look.window), "the Library tab is still loading"
     invoke(confirm, "ask", {"message": "?"}, None)
     assert confirm.property("open") is True
-    look.press(Qt.Key.Key_Return)
+    click(Qt.Key.Key_Return)
     assert "tabKeyHold" in focus_names(look.window), "the answer gives the focus back to the loading tab"
     trace = FocusTrace(look.window)
-    look.press(Qt.Key.Key_E)
+    click(Qt.Key.Key_E)
     assert root.property("tabIndex") == root.property("mediaTab"), "the release of the A that answered holds no RB back"
     look.page("mediaPage")
     settle(look.window)
