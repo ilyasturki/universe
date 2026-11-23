@@ -30,17 +30,18 @@ echo "── test"
 TZ=Europe/Paris UNIVERSE_TEST_BUDGET_S=0 UNIVERSE_TEST_DISPLAY=1 cargo test --quiet --locked -p universe --manifest-path "$repo/Cargo.toml"
 
 echo "── headless test"
-# A packager's builder (Chaotic-AUR, COPR) whose bus, sound and X servers will not start: their tests skip, saying why, and the rest pass
+# A packager's builder (Chaotic-AUR, COPR), as their check() runs it, whose bus, sound and X servers will not start: their tests skip, saying why, as do the ones racing processes, and the rest pass
 mkdir "$work/servers"
 for bin in dbus-daemon Xvfb pipewire wpctl; do
     printf '#!/bin/sh\nexit 1\n' > "$work/servers/$bin"
     chmod +x "$work/servers/$bin"
 done
-env -u UNIVERSE_TEST_DISPLAY -u DISPLAY -u WAYLAND_DISPLAY -u DBUS_SESSION_BUS_ADDRESS PATH="$work/servers:$PATH" TZ=Europe/Paris UNIVERSE_TEST_BUDGET_S=0 \
+env -u UNIVERSE_TEST_DISPLAY -u DISPLAY -u WAYLAND_DISPLAY -u DBUS_SESSION_BUS_ADDRESS PATH="$work/servers:$PATH" TZ=Europe/Paris UNIVERSE_TEST_BUDGET_S=0 UNIVERSE_TEST_PACKAGER=1 \
     cargo test --quiet --locked -p universe --manifest-path "$repo/Cargo.toml" -- --nocapture > "$work/headless.log" 2>&1 || { cat "$work/headless.log"; exit 1; }
 for server in dbus-daemon Xvfb pipewire; do
     grep -qi "skipped: .*$server" "$work/headless.log" || { cat "$work/headless.log"; echo "distro-check: no test skipped for want of $server" >&2; exit 1; }
 done
+grep -q "left out of a packager's build" "$work/headless.log" || { cat "$work/headless.log"; echo "distro-check: no test racing processes left out" >&2; exit 1; }
 echo "headless: $(grep -c 'skipped: ' "$work/headless.log") skipped"
 
 echo "── dist"

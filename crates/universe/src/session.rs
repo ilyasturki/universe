@@ -1929,6 +1929,9 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn a_launch_called_off_in_a_pre_launch_hook_files_nothing_and_undoes_the_hooks_that_ran() {
+        if crate::testbus::races_processes("a hook is stopped within a second of a call-off") {
+            return;
+        }
         let sb = sandbox();
         let log = paths::state_home().join("hooks.log");
         let pids = paths::state_home().join("pids");

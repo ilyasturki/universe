@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+    cat <<'USAGE'
+usage: tools/race-check [rounds]
+
+The core's tests that race processes (signals, a terminal, a pause shim, a
+deadline), which a packager's build leaves out: each one found by its
+`skipped: …, left out of a packager's build: <test>` line, then replayed
+`rounds` times (default 40), RACE_COPIES copies at once (default twice the
+cores), so a loaded builder's interleavings come up here first. Fails on the
+first run that fails, printing it.
+USAGE
+}
+
+case "${1:-}" in
+    -h | --help) usage; exit 0 ;;
+esac
+rounds="${1:-40}"
+copies="${RACE_COPIES:-$(($(nproc) * 2))}"
+repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+export TZ=Europe/Paris UNIVERSE_TEST_BUDGET_S=0
+
+cargo test --quiet --locked -p universe --manifest-path "$repo/Cargo.toml" --no-run --message-format=json 2> /dev/null |
+    python3 -c 'import json, sys
+for line in sys.stdin:
+    m = json.loads(line)
+    if m.get("reason") == "compiler-artifact" and m.get("executable") and m["profile"]["test"]:
+        print(m["executable"])' > "$work/binaries"
+
+total=0
+while read -r bin <&3; do
+    UNIVERSE_TEST_PACKAGER=1 "$bin" --nocapture < /dev/null > "$work/listing" 2>&1 || { cat "$work/listing"; exit 1; }
+    sed -n "s/.*left out of a packager's build: //p" "$work/listing" | sort -u > "$work/tests"
+    [ -s "$work/tests" ] || continue
+    mapfile -t tests < "$work/tests"
+    total=$((total + ${#tests[@]}))
+    for round in $(seq "$rounds"); do
+        pids=()
+        for copy in $(seq "$copies"); do
+            "$bin" --quiet --exact "${tests[@]}" < /dev/null > "$work/run-$copy" 2>&1 &
+            pids+=("$!")
+        done
+        for copy in $(seq "$copies"); do
+            wait "${pids[$((copy - 1))]}" || {
+                cat "$work/run-$copy"
+                echo "race-check: $(basename "$bin") failed in round $round of $rounds, copy $copy of $copies" >&2
+                exit 1
+            }
+        done
+    done
+done 3< "$work/binaries"
+[ "$total" -gt 0 ] || { echo "race-check: no test said it races processes" >&2; exit 1; }
+echo "race-check: $total tests, $rounds rounds of $copies copies"

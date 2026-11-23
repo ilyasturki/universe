@@ -83,6 +83,27 @@ jobs:
             target
             !target/distro-check
           key: cargo-${{ matrix.image }}-${{ steps.rustc.outputs.version }}-${{ hashFiles('Cargo.lock') }}
+  # The tests a packager's build leaves out, which race processes, replayed under load: a release waits on this run
+  races:
+    runs-on: ubuntu-26.04
+    container: archlinux:latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: tools/ci-deps
+      - id: rustc
+        run: echo "version=$(runuser -u ci -- env HOME=/home/ci rustc -V | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+      # The distros job's arch cache, which it saves
+      - uses: actions/cache/restore@v6
+        with:
+          path: |
+            /home/ci/.cargo/registry
+            /home/ci/.cargo/git
+            target
+            !target/distro-check
+          key: cargo-archlinux:latest-${{ steps.rustc.outputs.version }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-archlinux:latest-${{ steps.rustc.outputs.version }}-
+      - run: chown -R ci . /home/ci
+      - run: runuser -u ci -- env HOME=/home/ci CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 tools/race-check
   # Each desktop profile started without a GPU: windows, cursor, OSD and shots
   desktops:
     runs-on: ubuntu-26.04

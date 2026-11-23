@@ -3382,6 +3382,9 @@ scan) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":true
 
     #[tokio::test]
     async fn cancel_sigterms_the_running_install_and_nothing_else() {
+        if crate::testbus::races_processes("a SIGTERM ends a running install") {
+            return;
+        }
         // The downloader child is detached from the pipes and killed on TERM, as the gog source does with gogdl.
         let _dir = fake_source(
             r#"install) sleep 30 >/dev/null 2>&1 & dl=$!; trap 'kill $dl; exit 143' TERM; echo '{"event":"progress","done":1,"total":10,"message":"10%"}'; wait $dl; exit 1 ;;"#,

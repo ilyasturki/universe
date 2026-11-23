@@ -12,6 +12,24 @@ pub fn server_missing<T>(why: &str) -> Option<T> {
     None
 }
 
+/// A test racing processes (signals, a terminal, a deadline) on a packager's build (`UNIVERSE_TEST_PACKAGER`): it skips, named, for tools/race-check to replay under load.
+pub fn races_processes(why: &str) -> bool {
+    let packager = std::env::var_os("UNIVERSE_TEST_PACKAGER").is_some();
+    if packager {
+        eprintln!("skipped: {why}, left out of a packager's build: {}", std::thread::current().name().unwrap_or("?"));
+    }
+    packager
+}
+
+/// A test whose verdict is a time measured to the moment, which a loaded machine moves: it skips on a packager's build, and tools/race-check leaves it alone.
+pub fn timed_to_the_moment(why: &str) -> bool {
+    let packager = std::env::var_os("UNIVERSE_TEST_PACKAGER").is_some();
+    if packager {
+        eprintln!("skipped: {why}, timed too finely for a packager's build");
+    }
+    packager
+}
+
 pub struct Bus {
     daemon: Child,
     pub address: String,

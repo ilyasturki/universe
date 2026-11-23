@@ -35,6 +35,15 @@ fn no_desktop() -> tempfile::TempDir {
 
 const NO_BUS: (&str, &str) = ("DBUS_SESSION_BUS_ADDRESS", "unix:path=/dev/null/bus");
 
+/// The core's `testbus::races_processes`, for this crate: on a packager's build the test skips, named, for tools/race-check to replay under load.
+fn races_processes(why: &str) -> bool {
+    let packager = std::env::var_os("UNIVERSE_TEST_PACKAGER").is_some();
+    if packager {
+        eprintln!("skipped: {why}, left out of a packager's build: {}", std::thread::current().name().unwrap_or("?"));
+    }
+    packager
+}
+
 fn text(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
 }
@@ -791,6 +800,9 @@ fn rows_of(path: &std::path::Path) -> Vec<serde_json::Value> {
 
 #[test]
 fn a_recording_filed_while_a_close_files_its_row_leaves_both_rows() {
+    if races_processes("a pause shim holds one process between another's steps") {
+        return;
+    }
     let dir = no_desktop();
     let Some(lib) = pause_shim(dir.path()) else { return };
     add_game(&dir, "Quest");
@@ -935,6 +947,9 @@ fn closing(dir: &tempfile::TempDir, session: &str, undo: &str) -> std::path::Pat
 
 #[test]
 fn a_recording_its_folder_refuses_or_cuts_short_stays_whole_in_pending_and_unlinked() {
+    if races_processes("a pause shim holds one process between another's steps") {
+        return;
+    }
     use std::os::unix::fs::PermissionsExt;
     let dir = no_desktop();
     let (root, filed) = recording_hook(&dir);
@@ -1072,6 +1087,9 @@ fn gate(dir: &std::path::Path) -> String {
 
 #[test]
 fn a_launch_marker_appears_whole_and_an_open_leaves_a_starting_session_alone() {
+    if races_processes("a pause shim holds one process between another's steps") {
+        return;
+    }
     let dir = no_desktop();
     let Some(lib) = pause_shim(dir.path()) else { return };
     add_game(&dir, "Quest");
@@ -1131,6 +1149,9 @@ fn a_pre_launch_hook_prompts_on_play_s_terminal_and_a_ctrl_c_typed_there_calls_i
 }
 
 fn call_off_in_a_pre_launch_hook(on_a_terminal: bool) {
+    if races_processes("a Ctrl-C ends a hook mid-launch") {
+        return;
+    }
     use std::os::fd::FromRawFd;
     use std::os::unix::process::CommandExt;
     let dir = no_desktop();
@@ -1199,6 +1220,9 @@ fn call_off_in_a_pre_launch_hook(on_a_terminal: bool) {
 
 #[test]
 fn a_pre_launch_hook_that_cannot_start_gives_play_s_terminal_back() {
+    if races_processes("play hands its terminal to a hook and takes it back") {
+        return;
+    }
     use std::os::fd::FromRawFd;
     use std::os::unix::process::CommandExt;
     let dir = no_desktop();
@@ -1424,6 +1448,9 @@ fn journal_add_files_an_entry_the_journal_lists_and_calls_only_a_refusal_invalid
 
 #[test]
 fn a_ludusavi_lookup_dies_with_the_cli_killed_mid_way() {
+    if races_processes("the CLI is killed mid-way") {
+        return;
+    }
     let dir = no_desktop();
     let bin = dir.path().join("bin");
     std::fs::create_dir_all(&bin).unwrap();
@@ -2255,6 +2282,9 @@ fn a_store_game_whose_folder_vanished_installs_again_elsewhere_and_launches_from
 
 #[test]
 fn a_paused_gog_download_is_refused_while_it_runs_then_goes_to_the_trash_and_off_the_listing() {
+    if races_processes("a download is stopped by a signal mid-way") {
+        return;
+    }
     use std::os::unix::process::CommandExt;
     let dir = no_desktop();
     let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().unwrap();
@@ -2629,6 +2659,9 @@ fn echoes(fd: i32) -> bool {
 // Ctrl-C at the password prompt ends the CLI with the terminal's echo back on.
 #[tokio::test]
 async fn a_password_prompt_cut_short_puts_the_terminals_echo_back() {
+    if races_processes("a Ctrl-C cuts a terminal prompt short") {
+        return;
+    }
     use std::os::fd::FromRawFd;
     let Some(bus) = testbus::Bus::start() else { return };
     let nm = testbus::nm::Nm::serve(&bus, testbus::nm::Router::default()).await;

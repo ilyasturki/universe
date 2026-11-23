@@ -925,6 +925,9 @@ while True:
 
     #[tokio::test]
     async fn a_game_ignoring_sigterm_is_killed_after_its_grace_with_no_core_to_dump() {
+        if crate::testbus::timed_to_the_moment("a stop's grace is timed to a second") {
+            return;
+        }
         let Some(cgroup) = Cgroup::new().map(Arc::new) else { return };
         let Some(bus) = Bus::start() else { return };
         let _manager = Manager::serve(&bus, UNIT, cgroup.clone()).await;
@@ -942,6 +945,9 @@ while True:
 
     #[tokio::test]
     async fn a_frozen_game_runs_a_moment_before_its_sigterm() {
+        if crate::testbus::timed_to_the_moment("a SIGTERM lands right behind a thaw") {
+            return;
+        }
         let freeze = Duration::from_millis(600);
         let (Some(hazard), Some(cgroup)) = (Cgroup::new(), Cgroup::new().map(Arc::new)) else { return };
         let (exit, _) = game(&hazard, CATCHES_UP).await;
