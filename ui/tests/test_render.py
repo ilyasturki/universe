@@ -1180,10 +1180,10 @@ def test_a_key_pressed_while_a_reprise_page_loads_reaches_it_once_loaded(look, a
     until(lambda: root.property("subOpen") is False, "B pressed as a sub page loads closes it")
     settle(look.window)
     trace = FocusTrace(look.window)
-    look.press(Qt.Key.Key_E, root.property("settingsTab"))
+    look.send(Qt.Key.Key_E, root.property("settingsTab"))
     assert root.property("tabIndex") == root.property("settingsTab")
     assert "tabKeyHold" in focus_names(look.window)
-    look.press(Qt.Key.Key_Right)
+    look.send(Qt.Key.Key_Right)
     page = look.page("settingsPage")
     until(lambda: page.findChild(QObject, "settingsCards").property("activeFocus") is True, "Right while the tab loads enters its cards once loaded")
     settle(look.window)
@@ -1225,13 +1225,13 @@ def test_keys_pressed_as_a_reprise_tab_swaps_reach_the_new_tab_in_order(look, ap
 
     tabs = []
     root.tabIndexChanged.connect(lambda: tabs.append(root.property("tabIndex")))
-    look.press(Qt.Key.Key_E)
+    look.send(Qt.Key.Key_E)
     hold = look.window.activeFocusItem()
     assert hold.objectName() == "tabKeyHold"
     # RB once more as the load ends, before the held keys are replayed.
     hold.parentItem().loaded.connect(lambda: QTest.keyClick(look.window, Qt.Key.Key_E))
-    look.press(Qt.Key.Key_Escape)
-    look.press(Qt.Key.Key_E)
+    look.send(Qt.Key.Key_Escape)
+    look.send(Qt.Key.Key_E)
     media, library = root.property("mediaTab"), root.property("libraryTab")
     until(lambda: tabs == [media, 0, library, media], f"B pressed as a tab loads takes it home, then each RB a tab on: {tabs}")
     look.page("mediaPage")
@@ -1240,9 +1240,9 @@ def test_keys_pressed_as_a_reprise_tab_swaps_reach_the_new_tab_in_order(look, ap
     look.home()
     settle(look.window)
     trace = FocusTrace(look.window)
-    look.press(Qt.Key.Key_Q)
+    look.send(Qt.Key.Key_Q)
     assert "tabKeyHold" in focus_names(look.window)
-    look.press(Qt.Key.Key_Return)
+    look.send(Qt.Key.Key_Return)
     page = look.page("settingsPage")
     until(lambda: page.findChild(QObject, "settingsCards").property("activeFocus") is True, "A pressed with LB enters the first section of the tab LB reached")
     settle(look.window)
@@ -1261,23 +1261,18 @@ def test_keys_pressed_as_a_reprise_tab_swaps_reach_the_new_tab_in_order(look, ap
 
 @reprise
 def test_rb_after_a_question_answered_over_a_loading_tab_goes_through_at_once(look):
-    def click(key):
-        # QTest's clicks pump the event loop, which would let the tab finish loading between them.
-        for kind in (QEvent.Type.KeyPress, QEvent.Type.KeyRelease):
-            QCoreApplication.sendEvent(look.window, QKeyEvent(kind, key, Qt.KeyboardModifier.NoModifier))
-
     root = look.root
     look.home()
     confirm = look.find("confirm")
     settle(look.window)
-    click(Qt.Key.Key_E)
+    look.send(Qt.Key.Key_E)
     assert "tabKeyHold" in focus_names(look.window), "the Library tab is still loading"
     invoke(confirm, "ask", {"message": "?"}, None)
     assert confirm.property("open") is True
-    click(Qt.Key.Key_Return)
+    look.send(Qt.Key.Key_Return)
     assert "tabKeyHold" in focus_names(look.window), "the answer gives the focus back to the loading tab"
     trace = FocusTrace(look.window)
-    click(Qt.Key.Key_E)
+    look.send(Qt.Key.Key_E)
     assert root.property("tabIndex") == root.property("mediaTab"), "the release of the A that answered holds no RB back"
     look.page("mediaPage")
     settle(look.window)

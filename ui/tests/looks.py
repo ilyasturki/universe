@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from PySide6.QtCore import Q_ARG, Q_RETURN_ARG, QMetaObject, QObject, Qt, QUrl
-from PySide6.QtGui import QColor
+from PySide6.QtCore import Q_ARG, Q_RETURN_ARG, QCoreApplication, QEvent, QMetaObject, QObject, Qt, QUrl
+from PySide6.QtGui import QColor, QKeyEvent
 from PySide6.QtQml import QQmlApplicationEngine, QQmlComponent, QQmlEngine
 from PySide6.QtQuick import QQuickWindow  # noqa: F401  (rootObjects() down-cast, for grabWindow)
 from PySide6.QtTest import QTest
@@ -358,6 +358,13 @@ class Look:
     def press(self, key, times=1):
         for _ in range(times):
             QTest.keyClick(self.window, key)
+
+    def send(self, key, times=1):
+        """Presses `key` as `press` does, without the run of the event loop QTest's clicks make after each event: a page that
+        loads meanwhile is still loading after the last one."""
+        for _ in range(times):
+            for kind in (QEvent.Type.KeyPress, QEvent.Type.KeyRelease):
+                QCoreApplication.sendEvent(self.window, QKeyEvent(kind, key, Qt.KeyboardModifier.NoModifier))
 
     def close(self):
         """Closes the window and drops the engine now: a failed test's frame would keep it for a later collection to tear down mid-test."""
