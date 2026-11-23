@@ -2707,10 +2707,15 @@ impl Core {
         };
         let now = chrono::Utc::now().timestamp();
         let kept = crate::upstream::Upstream::load();
-        let stores: Vec<&Source> = sources.iter().filter(|m| wants.stores.contains(m.id()) && kept.store_stale(m.id(), now)).collect();
+        // One game's check (its page opening) leaves a store that just failed to answer until the next full check.
+        let stores: Vec<&Source> = sources
+            .iter()
+            .filter(|m| wants.stores.contains(m.id()) && kept.store_stale(m.id(), now) && (id.is_empty() || !kept.asked_lately(m.id(), now)))
+            .collect();
         let listing = futures_util::future::join_all(stores.iter().map(|m| self.run_verb(m, "update", &[], None)));
         let (listed, mut fresh) = futures_util::future::join(listing, crate::upstream::refresh(net, &kept, &wants, now)).await;
         for (m, listed) in stores.iter().zip(listed) {
+            fresh.mark_asked(m.id(), now);
             match listed {
                 Ok(events) => fresh.set_store(m.id(), events.into_iter().filter_map(|e| if let SourceEvent::Update(u) = e { Some(u) } else { None }), now),
                 Err(e) => tracing::warn!("{}: no updates listed: {e}", m.id()),

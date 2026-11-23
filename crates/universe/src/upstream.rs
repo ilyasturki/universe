@@ -129,6 +129,8 @@ pub struct Upstream {
     switch: BTreeMap<String, Titles>,
     ps3: BTreeMap<String, Sony>,
     stores: BTreeMap<String, Store>,
+    /// When each store was last asked for its list, whether it answered or not.
+    asked: BTreeMap<String, i64>,
     /// The sources on, whose games their store judges even before it answered.
     #[serde(skip)]
     sources: Vec<String>,
@@ -162,6 +164,15 @@ impl Upstream {
         self.stores.get(source).is_none_or(|s| now - s.at >= FRESH_S)
     }
 
+    /// Whether `source` was asked for its list within the last few hours, even one it could not give.
+    pub(crate) fn asked_lately(&self, source: &str, now: i64) -> bool {
+        self.asked.get(source).is_some_and(|at| now - at < FRESH_S)
+    }
+
+    pub(crate) fn mark_asked(&mut self, source: &str, now: i64) {
+        self.asked.insert(source.into(), now);
+    }
+
     /// The `update` rows a store listed, by the store's id of each game. A list with an unanswered row is asked for again at the next check.
     pub(crate) fn set_store(&mut self, source: &str, rows: impl IntoIterator<Item = serde_json::Map<String, Value>>, now: i64) {
         let rows: BTreeMap<_, _> = rows.into_iter().filter_map(|r| Some((r.get("id")?.as_str()?.to_string(), r))).collect();
@@ -180,6 +191,7 @@ impl Upstream {
         self.steam.extend(fresh.steam);
         self.switch.extend(fresh.switch);
         self.ps3.extend(fresh.ps3);
+        self.asked.extend(fresh.asked);
         for (source, mut list) in fresh.stores {
             if let Some(old) = self.stores.get(&source) {
                 for (id, row) in list.rows.iter_mut().filter(|(_, row)| unanswered(row)) {
@@ -819,6 +831,8 @@ mod tests {
         assert_eq!(of(&judged(&core).await, "witcher"), ("unknown", "no-answer", "manual", ""), "a store that fails is no answer");
         core.check_versions_with(&net, "").await.unwrap();
         assert_eq!(lists(), 2, "and it is asked again");
+        core.check_versions_with(&net, "witcher").await.unwrap();
+        assert_eq!(lists(), 2, "but not by a game's page opening right after");
         std::fs::remove_file(flag("down")).unwrap();
         core.check_versions_with(&net, "").await.unwrap();
         let v = judged(&core).await;
@@ -864,6 +878,9 @@ mod tests {
         assert_eq!(of(&v, "witcher"), ("unknown", "no-answer", "manual", ""), "and without one reads no answer, not current");
         assert_eq!(v["witcher"]["store"], "gog");
         assert!(stale(), "a list with a hole in it is asked again");
+        let asked = lists();
+        core.check_versions_with(&net, "witcher").await.unwrap();
+        assert_eq!(lists(), asked, "at the next full check, not by the page of the game it left out");
         assert!(core.source_updates().await.unwrap().iter().all(|u| u["id"] != "20"), "an install with no answer is not pending");
 
         std::fs::remove_file(flag("patchy")).unwrap();
