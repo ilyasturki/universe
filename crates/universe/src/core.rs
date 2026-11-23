@@ -3385,9 +3385,9 @@ scan) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":true
         if crate::testbus::races_processes("a SIGTERM ends a running install") {
             return;
         }
-        // The downloader child is detached from the pipes and killed on TERM, as the gog source does with gogdl.
+        // The downloader child is detached from the pipes and killed on TERM, as the gog source does with gogdl; polled, as bash's wait can spin on a trapped TERM.
         let _dir = fake_source(
-            r#"install) sleep 30 >/dev/null 2>&1 & dl=$!; trap 'kill $dl; exit 143' TERM; echo '{"event":"progress","done":1,"total":10,"message":"10%"}'; wait $dl; exit 1 ;;"#,
+            r#"install) sleep 30 >/dev/null 2>&1 & dl=$!; trap 'kill $dl; exit 143' TERM; echo '{"event":"progress","done":1,"total":10,"message":"10%"}'; while kill -0 $dl 2>/dev/null; do sleep 0.05; done; exit 1 ;;"#,
         );
         let core = open().await;
         assert!(!core.source_cancel("fake", "1"), "nothing running");

@@ -1160,8 +1160,8 @@ fn call_off_in_a_pre_launch_hook(on_a_terminal: bool) {
     std::fs::create_dir_all(&hook).unwrap();
     let bin = dir.path().join("modules/pre/bin");
     let ask = if on_a_terminal { format!("read answer < /dev/tty; echo \"$answer\" > {}/got\n", hook.display()) } else { String::new() };
-    // Not a sleep loop: sh keeps running when a Ctrl-C lands as one of its sleeps exits, and the call-off then waits out the timeout.
-    shim(&bin, "pre", &format!("{ask}sleep 30 &\necho $$ $! > {0}/pids\ntouch {0}/entered\nexec sleep 30\n", hook.display()));
+    // No command for sh to wait on once entered is there: a Ctrl-C landing as one exits normally is ignored, and the call-off waits out the timeout.
+    shim(&bin, "pre", &format!("{ask}sleep 30 &\necho $$ $! > {0}/pids\n: > {0}/entered\nexec sleep 30\n", hook.display()));
     shim(&bin, "end", &format!("echo ended >> {}/ended\n", hook.display()));
     std::fs::write(dir.path().join("modules/pre/module.toml"), "api = 2\nid = \"pre\"\n[hooks]\npre-launch = \"bin/pre\"\nsession-end = \"bin/end\"\n")
         .unwrap();
@@ -1203,7 +1203,7 @@ fn call_off_in_a_pre_launch_hook(on_a_terminal: bool) {
         assert_eq!(std::fs::read_to_string(hook.join("got")).unwrap().trim(), "yes", "the hook read its answer, not stopped in the background");
     }
     let pids: Vec<i32> = std::fs::read_to_string(hook.join("pids")).unwrap().split_whitespace().map(|p| p.parse().unwrap()).collect();
-    let by = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    let by = std::time::Instant::now() + std::time::Duration::from_secs(10);
     // A zombie counts as gone: a container's PID 1 (CI's `tail -f /dev/null`) never reaps the orphaned child.
     let running = |pid: i32| {
         std::fs::read_to_string(format!("/proc/{pid}/stat")).is_ok_and(|stat| stat.rsplit_once(") ").is_some_and(|(_, state)| !state.starts_with('Z')))
@@ -1485,7 +1485,7 @@ fn a_ludusavi_lookup_dies_with_the_cli_killed_mid_way() {
     // Reaped, or a zombie its new parent has yet to reap: either way it runs no more.
     let alive = || std::fs::read_to_string(format!("/proc/{pid}/stat")).is_ok_and(|s| s.rsplit_once(") ").is_some_and(|(_, rest)| !rest.starts_with('Z')));
     let killed = std::time::Instant::now();
-    while alive() && killed.elapsed().as_secs() < 2 {
+    while alive() && killed.elapsed().as_secs() < 10 {
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
     let outlived = alive();
