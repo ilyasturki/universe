@@ -4,6 +4,7 @@ import logging
 import os
 import tempfile
 import threading
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -31,6 +32,8 @@ CoreError = _core_error()
 # Past the session toast, not over it.
 SKIPPED_NOTICE_MS = 4500
 SESSION_POLL_MS = 2000
+# The marker goes before `session end` files the row: a close slower than the state watch's debounce has it still on its way.
+ROW_WAIT_S = 5
 CALL_OFF_RETRY_MS = 50
 
 
@@ -618,8 +621,13 @@ class CoreClient(QObject):
         self.refreshCurrent()
 
         def closed():
-            self._core.reload_game(ident)
-            return next((s for s in self._core.sessions(ident) if s.get("session") == session_id), {})
+            by = time.monotonic() + ROW_WAIT_S
+            while True:
+                self._core.reload_game(ident)
+                line = next((s for s in self._core.sessions(ident) if s.get("session") == session_id), None)
+                if line is not None or self._closed or time.monotonic() > by:
+                    return line or {}
+                time.sleep(0.05)
 
         def landed(line):
             line = line or {}

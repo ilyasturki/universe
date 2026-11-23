@@ -3,6 +3,7 @@ shims, the user's systemd a private bus's, the game tools/sample's."""
 
 import base64
 import contextlib
+import fcntl
 import json
 import os
 import signal
@@ -16,7 +17,7 @@ import pytest
 from looks import DIALOG, LOOKS, MENU, FocusTrace, Look, current_row, held_notices, read, settle
 from PySide6.QtCore import QObject, Qt
 from PySide6.QtTest import QTest
-from uitest import descendant, record, until
+from uitest import descendant, pump, record, until
 
 universe_core = pytest.importorskip("universe_core")
 # Each starts the real core's processes (a store source, a private bus, its systemd): load stretches any of them past the budget.
@@ -264,14 +265,20 @@ def test_a_game_launched_from_home_and_quit_from_its_menu_leaves_a_session_row(j
     look.press(Qt.Key.Key_F1)
     assert {"resume", "stop"} <= set(menu_ids(look.menu())), "the playing game's menu resumes or quits it"
     look.press(Qt.Key.Key_Escape)
-    quit_game(look, client)
+    told = record(client.sessionEnded)
+    # A slow close: `session end` removes the marker, then waits on the history's lock to file the row.
+    with open(journey.state / "sessions.lock", "w") as history:
+        fcntl.flock(history, fcntl.LOCK_EX)
+        quit_game(look, client)
+        pump(200)
     rows = until(lambda: journey.sessions(game))
     assert [(r["session"], r["unit"], r["stopped"], r["crashed"]) for r in rows] == [(session, started[0]["unit"], True, False)], rows
+    assert [(s, i, end) for s, i, _, end in until(lambda: told)] == [(session, game, "stopped")], "the notice waits for the row"
     ended = until(lambda: [u for u in journey.units() if "stop_post" in u])
     assert [u["stop_post"] for u in ended] == [0], ended
     sessions = journey.api.screens.sessions
     sessions.load(game)
-    assert [(r["session"], r["end"], r["live"]) for r in sessions.rows] == [(session, "stopped", False)]
+    until(lambda: [(r["session"], r["end"], r["live"]) for r in sessions.rows] == [(session, "stopped", False)], "the page shows the row")
 
 
 @needs_tree
