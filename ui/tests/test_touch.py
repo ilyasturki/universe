@@ -25,7 +25,8 @@ def tile_centre(home, i):
             yield from items(child)
 
     rail = next(v for v in items(home) if v.metaObject().className().startswith("QQuickListView") and v.property("pitch"))
-    tile = QMetaObject.invokeMethod(rail, "itemAtIndex", Q_RETURN_ARG("QQuickItem*"), Q_ARG(int, i))
+    # The page can load with the rail's first tile alone: the rail lays out the rest on its next polish, with the next frame.
+    tile = until(lambda: QMetaObject.invokeMethod(rail, "itemAtIndex", Q_RETURN_ARG("QQuickItem*"), Q_ARG(int, i)), f"tile {i} is laid out")
     p = tile.mapToScene(QPointF(tile.width() / 2, tile.height() * 0.6))
     return p.x(), p.y()
 

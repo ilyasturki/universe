@@ -1096,7 +1096,7 @@ def test_the_reprise_library_runs_in_homes_order_and_y_hearts_the_game_under_the
 @reprise
 def test_the_reprise_detail_page_has_one_line_of_play_and_the_screenshots_beside_the_description(look, api):
     def facts():
-        page = until(lambda: root.findChild(QObject, "detailPage"))
+        page = until(lambda: loaded(root.findChild(QObject, "detailPage")))
         row = until(lambda: descendant(page, "stats"))
         return [f["key"] for f in read(row, "facts")] if row.isVisible() else []
 
