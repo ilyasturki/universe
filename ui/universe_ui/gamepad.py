@@ -212,13 +212,20 @@ class Mapper:
 POSTED = {}
 
 
-def post_key(key, pressed, autorepeat=False, window=None, source="pad", text="", modifiers=Qt.KeyboardModifier.NoModifier):
+def post_key(key, pressed, autorepeat=False, window=None, source="pad", text="", modifiers=Qt.KeyboardModifier.NoModifier, now=False):
     window = window or QGuiApplication.focusWindow()
     if window is None:
         return False
     kind = QEvent.Type.KeyPress if pressed else QEvent.Type.KeyRelease
-    POSTED.setdefault((int(key), pressed), []).append(source)
-    QCoreApplication.postEvent(window, QKeyEvent(kind, key, modifiers, text, autorepeat))
+    event = QKeyEvent(kind, key, modifiers, text, autorepeat)
+    sources = POSTED.setdefault((int(key), pressed), [])
+    if now:
+        # Read before any posted one still queued: the filter takes the first source.
+        sources.insert(0, source)
+        QCoreApplication.sendEvent(window, event)
+    else:
+        sources.append(source)
+        QCoreApplication.postEvent(window, event)
     return True
 
 

@@ -1135,29 +1135,43 @@ def test_the_reprise_detail_page_has_one_line_of_play_and_the_screenshots_beside
 
 @reprise
 def test_a_key_pressed_while_a_reprise_page_loads_reaches_it_once_loaded(look, api):
+    from universe_ui import gamepad
+
     root = look.root
     game = api.allGames.byId("the-technomancer")
     home = look.home()
     shown = game_id(home)
 
-    def b_as_it_loads(loader):
+    def b_as_it_loads(loader, pad=False):
         def b():
             loader.loaded.disconnect(b)
-            QTest.keyClick(look.window, Qt.Key.Key_Escape)
+            if pad:
+                # Posted, as the pad's keys are: it comes in right after the replay of the keys the page held.
+                gamepad.post_key(Qt.Key.Key_Escape, True, window=look.window)
+                gamepad.post_key(Qt.Key.Key_Escape, False, window=look.window)
+            else:
+                QTest.keyClick(look.window, Qt.Key.Key_Escape)
 
         loader.loaded.connect(b)
 
     invoke(root, "openDetail", game)
-    b_as_it_loads(next(c for c in look.window.activeFocusItem().childItems() if c.inherits("QQuickLoader")))
+    detail = next(c for c in look.window.activeFocusItem().childItems() if c.inherits("QQuickLoader"))
+    b_as_it_loads(detail)
     look.press(Qt.Key.Key_Right)
     until(lambda: root.property("detailOpen") is False, "B pressed as the Game page ends loading closes it")
     invoke(root, "openSub", "pages/SessionsPage.qml", {"game": game})
     b_as_it_loads(look.find("subLoader"))
     look.press(Qt.Key.Key_Right)
     until(lambda: root.property("subOpen") is False, "B pressed as a sub page ends loading closes it")
+    until(lambda: detail.property("active") is False, "the Game page faded out")
+    invoke(root, "openDetail", game)
+    b_as_it_loads(detail, pad=True)
+    look.press(Qt.Key.Key_Right)
+    until(lambda: root.property("detailOpen") is False, "the pad's B as the Game page ends loading closes it")
     pump(100)
     assert game_id(home) == shown, "the Right held for each page reached it before the B that closed it"
 
+    until(lambda: detail.property("active") is False, "the Game page faded out")
     invoke(root, "openDetail", game)
     look.press(Qt.Key.Key_Escape)
     until(lambda: root.property("detailOpen") is False, "B pressed as the Game page loads closes it")

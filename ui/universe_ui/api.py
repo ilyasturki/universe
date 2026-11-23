@@ -206,7 +206,8 @@ class Keys(QObject):
     def replay(self, key, pressed, text, modifiers):
         from .gamepad import post_key
 
-        post_key(Qt.Key(key), pressed, window=self._focus_window(), source="replay", text=text, modifiers=Qt.KeyboardModifier(modifiers))
+        # Delivered at once: a key pressed between the replay and a posted delivery would reach the page ahead of the held ones.
+        post_key(Qt.Key(key), pressed, window=self._focus_window(), source="replay", text=text, modifiers=Qt.KeyboardModifier(modifiers), now=True)
 
     def _focus_window(self):
         from PySide6.QtGui import QGuiApplication
