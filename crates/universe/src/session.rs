@@ -623,7 +623,7 @@ impl Core {
         };
         let starting = hold_starting()?;
         write_marker(&Marker { current: current.clone(), hook_env: base.vars.clone(), starting: true, ..Marker::default() })?;
-        let prepared = self.prepare(&r, &cfg, &base, &session_id, &screen, splash, off).await;
+        let prepared = self.prepare(&r, &cfg, &base, &current, splash, off).await;
         // Out of the list first: a call-off after it is told it came too late, one before it is seen here.
         let off = preparing.leave();
         let prepared = match prepared {
@@ -696,12 +696,11 @@ impl Core {
         r: &Resolved,
         cfg: &crate::config::Config,
         base: &modules::HookEnv,
-        session_id: &str,
-        screen: &str,
+        current: &Current,
         splash: &str,
         off: &std::sync::atomic::AtomicBool,
     ) -> Result<(Plan, Runtime, Option<std::path::PathBuf>)> {
-        let id = r.game.id.as_str();
+        let (id, session_id, screen) = (r.game.id.as_str(), current.session_id.as_str(), current.screen.as_str());
         let env_file = paths::state_home().join(format!("env-{session_id}"));
         std::fs::create_dir_all(paths::state_home())?;
         std::fs::write(&env_file, "")?;

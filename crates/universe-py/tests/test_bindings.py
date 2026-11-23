@@ -80,7 +80,13 @@ def test_a_launch_held_in_its_pre_launch_hook_is_called_off_from_another_thread(
     core = universe_core.Core()
     assert core.cancel_launch() is False, "nothing preparing"
     errors = []
-    launch = threading.Thread(target=lambda: errors.append(pytest.raises(universe_core.UniverseError, core.launch, "quest", "")))
+
+    def launching():
+        with pytest.raises(universe_core.UniverseError) as raised:
+            core.launch("quest", "")
+        errors.append(raised)
+
+    launch = threading.Thread(target=launching)
     launch.start()
     deadline = time.monotonic() + 5
     while not entered.exists():
