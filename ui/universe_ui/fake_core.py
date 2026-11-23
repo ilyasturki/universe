@@ -455,6 +455,7 @@ class FakeCore:
         self._cache = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "universe", "fake-art")
         self._fake_launch = fake_launch
         self._called_off = False
+        self._preparing = 0
         self._lock = threading.Lock()
         self._timers = []
         self._process = None
@@ -1350,6 +1351,13 @@ class FakeCore:
         time.sleep(START_S)
         game = self._game(ident)
         with self._lock:
+            self._preparing += 1
+        try:
+            self.prepare_launch(ident)
+        finally:
+            with self._lock:
+                self._preparing -= 1
+        with self._lock:
             called_off, self._called_off = self._called_off, False
             if called_off:
                 raise UniverseError("Busy", f"the launch of {game['title']} was called off")
@@ -1447,10 +1455,15 @@ class FakeCore:
             with contextlib.suppress(OSError):
                 self._marker().unlink()
 
+    # The pre-launch hooks' stand-in, instant: a test holds it to call the launch off meanwhile.
+    def prepare_launch(self, ident):
+        pass
+
     def cancel_launch(self):
         with self._lock:
-            self._called_off = self._session is None
-            return self._called_off
+            if self._preparing:
+                self._called_off = True
+            return self._preparing > 0
 
     def stop(self, session_id):
         self._stopped = True

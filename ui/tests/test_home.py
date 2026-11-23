@@ -453,7 +453,7 @@ def test_the_dock_opens_over_the_poster_before_the_session_is_made_and_grows_onc
 @pytest.mark.parametrize("made", [True, False], ids=["session", "pending"])
 def test_quit_from_the_dock_over_a_loading_game_stops_it_through_the_launcher(api, fake, monkeypatch, held, made):
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
-    making = held(fake.core, "launch")
+    entering, making = held(fake.core, "launch"), held(fake.core, "prepare_launch")
     held(fake.core, "wait_session_window")
     home = api.home
     home.attachOverlay(Overlay())
@@ -461,11 +461,17 @@ def test_quit_from_the_dock_over_a_loading_game_stops_it_through_the_launcher(ap
     launched, ended, called_off = record(fake.launched), record(fake.sessionEnded), record(fake.launchCalledOff)
     fake.launch("mirrors-edge", "")
     if made:
+        entering.set()
         making.set()
         until(lambda: launched)
     home.openDock()
+    until(entering.entered.is_set, "the launch on its way to the core")
     home.stop()
     assert quitting == [("Mirror's Edge",)] and not home.open and home.flipped and fake.core.frozen is False, "the launcher comes up, nothing frozen"
+    if not made:
+        entering.set()
+        until(making.entered.is_set, "the core preparing, after the quit was asked")
+        until(lambda: fake.core._called_off, "the call-off asked again reaches the core")
     making.set()
     if made:
         until(lambda: ended, "stopped, as soon as the session existed")
@@ -478,7 +484,7 @@ def test_quit_from_the_dock_over_a_loading_game_stops_it_through_the_launcher(ap
 
 def test_quit_from_the_dock_over_a_launch_not_made_takes_its_poster_down(look, api, fake, held, monkeypatch):
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
-    making = held(fake.core, "launch")
+    making = held(fake.core, "prepare_launch")
     called_off = record(fake.launchCalledOff)
     api.home.attachOverlay(Overlay())
     look.home()
@@ -493,7 +499,7 @@ def test_quit_from_the_dock_over_a_launch_not_made_takes_its_poster_down(look, a
 
 @pytest.mark.parametrize("made", [False, True], ids=["pending", "session"])
 def test_b_on_the_poster_calls_off_a_launch_not_made_and_lets_a_made_one_load(look, api, fake, held, made):
-    making = held(fake.core, "launch")
+    making = held(fake.core, "prepare_launch")
     mapped = held(fake.core, "wait_session_window")
     ended, failed, called_off = record(fake.sessionEnded), record(fake.launchFailed), record(fake.launchCalledOff)
     look.home()

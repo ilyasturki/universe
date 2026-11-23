@@ -31,6 +31,7 @@ CoreError = _core_error()
 # Past the session toast, not over it.
 SKIPPED_NOTICE_MS = 4500
 SESSION_POLL_MS = 2000
+CALL_OFF_RETRY_MS = 50
 
 
 log = logging.getLogger("universe.client")
@@ -360,8 +361,14 @@ class CoreClient(QObject):
     # Its pre-launch hooks and tool fetches stop where they are; a launch past them still makes its session.
     def cancelLaunch(self, ident):
         self._called_off.add(ident)
-        if ident in self._launching:
-            self._guarded(False, self._core.cancel_launch)
+        self._call_off(ident)
+
+    # The worker reaches the core's launch a moment after it is asked: until it does, the core has nothing to call off.
+    def _call_off(self, ident):
+        if self._closed or ident not in self._launching or ident not in self._called_off:
+            return
+        if not self._guarded(False, self._core.cancel_launch):
+            QTimer.singleShot(CALL_OFF_RETRY_MS, self, lambda: self._call_off(ident))
 
     def stopNow(self, session_id):
         self._guarded(None, self._core.stop, session_id)
