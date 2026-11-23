@@ -617,9 +617,11 @@ pub(crate) async fn fetch(url: &str, dest: &Path, size: u64, label: &str, progre
     use tokio::io::AsyncWriteExt;
     let failed = |e: reqwest::Error| Error::Unavailable(format!("{label} could not be downloaded: {e}"));
     let cancelled = || Error::Busy(format!("{label}: cancelled"));
+    let off = crate::called_off(cancel);
+    tokio::pin!(off);
     let mut resp = tokio::select! {
         biased;
-        () = crate::called_off(cancel) => return Err(cancelled()),
+        () = &mut off => return Err(cancelled()),
         sent = client()?.get(url).send() => sent.and_then(reqwest::Response::error_for_status).map_err(failed)?,
     };
     let total = resp.content_length().filter(|n| *n > 0).unwrap_or(size);
@@ -630,7 +632,7 @@ pub(crate) async fn fetch(url: &str, dest: &Path, size: u64, label: &str, progre
         loop {
             let chunk = tokio::select! {
                 biased;
-                () = crate::called_off(cancel) => return Err(cancelled()),
+                () = &mut off => return Err(cancelled()),
                 chunk = resp.chunk() => chunk.map_err(failed)?,
             };
             let Some(chunk) = chunk else { break };
