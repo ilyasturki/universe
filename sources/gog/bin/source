@@ -30,6 +30,7 @@ USER_URL = "https://embed.gog.com/userData.json"
 REFRESH_UNREACHABLE = "[AUTH] ERROR: Failed to refresh credentials"
 CODE_UNREACHABLE = "[AUTH] ERROR: Failed to reach GOG"
 UNREACHABLE = "GOG could not be reached."
+UNREACHABLE_EXIT = 3  # docs/api.md: the core reads it as the store out of reach, `Unavailable`
 CATALOG_URL = "https://catalog.gog.com/v1/catalog"
 BUILDS_URL = "https://content-system.gog.com/products/{id}/os/{platform}/builds?generation=2"
 ACHIEVEMENTS_URL = "https://gameplay.gog.com/clients/{client}/users/{user}/achievements"
@@ -419,7 +420,15 @@ def published_builds(game_id, platform):
     except SourceError as exc:
         if unsupported_os(exc.__cause__):
             return []
+        if out_of_reach(exc.__cause__):
+            log(str(exc))
+            raise Offline(UNREACHABLE) from exc
         raise
+
+
+# An HTTP error is GOG answering; any other OSError (no route, no name, a timeout) never reached it.
+def out_of_reach(error):
+    return isinstance(error, OSError) and not isinstance(error, urllib.error.HTTPError)
 
 
 def fetch_build(settings, game_id):
@@ -682,7 +691,7 @@ def cmd_update(settings, args):
         remotes = fetch_builds(settings, [i["id"] for i in installs])
         failures = [r for r in remotes.values() if isinstance(r, SourceError)]
         if failures and len(failures) == len(remotes):
-            raise failures[0]
+            raise next((f for f in failures if not isinstance(f, Offline)), failures[0])
         for install in installs:
             remote = remotes.get(install["id"])
             if isinstance(remote, SourceError):
@@ -1505,6 +1514,9 @@ def main(argv):
     try:
         settings = load_settings()
         VERBS[argv[0]](settings, argv[1:])
+    except Offline as exc:
+        log(str(exc))
+        return UNREACHABLE_EXIT
     except SourceError as exc:
         log(str(exc))
         return 1

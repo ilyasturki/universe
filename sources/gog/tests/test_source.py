@@ -137,7 +137,7 @@ def test_a_rejected_code_signs_nobody_in(web, src, env, run, monkeypatch, code, 
     monkeypatch.setenv("SHIM_MODE", gogdl)
     fake_fetch(web, {src.USER_URL: {"username": "Yasso"}})
     exit_code, events, err = run("login", code)
-    assert exit_code == 1 and events == []
+    assert exit_code == (src.UNREACHABLE_EXIT if gogdl == "offline" else 1) and events == []
     assert err.rstrip().endswith(src.UNREACHABLE) == (gogdl == "offline")
 
 
@@ -223,7 +223,7 @@ def test_library_offline_says_so_rather_than_asking_to_sign_in_again(src, env, r
     monkeypatch.setenv("SHIM_MODE", "offline")
     write_auth(env, {src.GALAXY_CLIENT_ID: expired_session()})
     code, events, err = run("library")
-    assert code == 1 and events == [] and err.rstrip().endswith(src.UNREACHABLE)
+    assert code == src.UNREACHABLE_EXIT and events == [] and err.rstrip().endswith(src.UNREACHABLE)
 
 
 def test_library_lists_the_owned_games_with_the_installs_found_on_disk(web, src, env, run, monkeypatch):
@@ -474,7 +474,9 @@ def test_updates_list_every_install_against_the_published_build(web, src, env, r
 def test_updates_without_an_answer_fail_and_one_unanswered_install_is_named(web, src, env, run, monkeypatch):
     fake_fetch(web, {"https://content-system.gog.com/products/": OSError("boom")})
     code, events, err = run("update")
-    assert code == 1 and events == [] and "boom" in err
+    assert code == src.UNREACHABLE_EXIT and events == [] and "boom" in err and err.rstrip().endswith(src.UNREACHABLE), (
+        "the cause in the log, then GOG out of reach"
+    )
 
     write_info(env["scan"] / "Current", "2", "2", "Current", build="B2")
     write_info(env["scan"] / "Unlisted", "3", "3", "Unlisted", build="B0")
@@ -523,7 +525,7 @@ def test_a_game_with_no_build_for_the_depot_platform_is_an_answer(web, src, env,
         web.answers.clear()
         fake_fetch(web, {products: failure})
         code, events, _ = run("update")
-        assert code == 1 and events == []
+        assert code == (src.UNREACHABLE_EXIT if isinstance(failure, OSError) else 1) and events == [], "an HTTP error is GOG answering"
 
 
 def test_updates_with_nothing_installed_ask_nobody(web, src, env, run):
@@ -693,7 +695,7 @@ def test_achievements_offline_say_so_rather_than_asking_to_sign_in_again(src, en
     write_auth(env, {src.GALAXY_CLIENT_ID: galaxy, **sessions})
     (env["data"] / "clients.json").write_text(json.dumps({MINI_METRO: {"client_id": "5010", "client_secret": "s3cret"}}))
     code, events, err = run("achievements", MINI_METRO)
-    assert code == 1 and events == []
+    assert code == (src.UNREACHABLE_EXIT if offline else 1) and events == []
     assert err.rstrip().endswith(src.UNREACHABLE) == offline and ("run login" in err) == (not offline)
 
 
@@ -982,6 +984,15 @@ def test_a_stopped_download_discarded_goes_to_the_trash_and_leaves_no_paused_row
     row = next(r for r in universe.library("gog", False) if r["id"] == "1434554947")
     assert (row["installed"], row["partial_dir"]) == (False, None), "no phantom Paused row"
     assert "1434554947" not in json.loads((core.data / "gog" / "partials.json").read_text()), "the store's record is cleared"
+
+
+def test_update_everything_offline_says_gog_is_out_of_reach(core, src, tmp_path, monkeypatch):
+    monkeypatch.setenv("SHIM_LOG", str(tmp_path / "gogdl.log"))
+    write_info(tmp_path / "games" / "Mini Metro", MINI_METRO, MINI_METRO, "Mini Metro")
+    universe = core("gog", {"games_dir": str(tmp_path / "games")})
+    with pytest.raises(sys.modules["universe_core"].UniverseError) as failed:
+        universe.update("gog", "")
+    assert failed.value.args == ("Unavailable", src.UNREACHABLE), "the core's proxy refuses every request"
 
 
 def test_an_install_the_disk_cannot_hold_says_the_disk_is_full(core, src, tmp_path, monkeypatch):

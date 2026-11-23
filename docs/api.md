@@ -2309,7 +2309,7 @@ A `games_dir` setting whose manifest default is empty arrives filled with `paths
 One JSON object per line on stdout, human-readable logs on stderr, meaningful exit code.
 **Every verb ends with `{"event":"done"}`**, `login` included. A verb that fails exits non-zero with
 why as its last stderr line, `<id>: ` first or not: that line, without the prefix, is the error a
-player reads (`Io`); the verb and exit code go to the log.
+player reads (`Io`); the verb and exit code go to the log. A verb that failed because the store could not be reached exits 3, and the core reports that line as `Unavailable`.
 
 | Verb | Argument | Events |
 |---|---|---|

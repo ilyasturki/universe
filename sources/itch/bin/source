@@ -29,11 +29,19 @@ PLAYABLE = ("game", "tool")
 PACKAGES = (".deb", ".rpm", ".pkg", ".dmg")
 FLAVORS = {"linux": ("script", "linux"), "windows": ("windows",)}
 WARNED_GAME = re.compile(r"/games/(\d+)\b")  # butler's CheckUpdate warnings carry no cave id, only the URL it failed on
+# Go's net errors as butler 15.32.0 words a request that never reached itch.io.
+NETWORK_FAILURE = re.compile(r"dial tcp|no such host|i/o timeout|network is unreachable|connection refused|TLS handshake timeout")
+UNREACHABLE = "itch.io could not be reached."
+UNREACHABLE_EXIT = 3  # docs/api.md: the core reads it as the store out of reach, `Unavailable`
 
 _child = None
 
 
 class SourceError(Exception):
+    pass
+
+
+class Offline(SourceError):
     pass
 
 
@@ -631,6 +639,9 @@ def direct_updates(butler, caves):
     updates, warnings = result.get("updates") or [], result.get("warnings") or []
     unanswered = unanswered_caves(caves, updates, warnings)
     if len(unanswered) == len(caves):
+        if all(NETWORK_FAILURE.search(w) for w in warnings):
+            log(f"update check: {warnings[0]}")
+            raise Offline(UNREACHABLE)
         raise SourceError(f"update check: {warnings[0]}")
     return [u for u in updates if u.get("direct") and u.get("choices") and u.get("caveId") in caves], unanswered
 
@@ -780,6 +791,9 @@ def main(argv):
     try:
         settings = load_settings()
         VERBS[argv[0]](settings, argv[1:])
+    except Offline as exc:
+        log(str(exc))
+        return UNREACHABLE_EXIT
     except SourceError as exc:
         log(str(exc))
         return 1

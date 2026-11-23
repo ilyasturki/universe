@@ -215,6 +215,9 @@ pub enum SourceEvent {
     Unknown,
 }
 
+/// A source's exit code when the store could not be reached: the failure is `Unavailable`.
+pub const UNREACHABLE_EXIT: i32 = 3;
+
 /// `spawned` gets the process id as soon as there is one, so a `cancel` can SIGTERM it; `env` is a game's hook environment, for a verb about one game.
 pub async fn run<F>(
     source: &Source,
@@ -270,7 +273,8 @@ where
         tracing::warn!("{} {verb} failed ({code}): {last_err}", source.id());
         // A source ends on why it failed, as `<id>: why`: that line is what the player reads.
         let said = last_err.strip_prefix(&format!("{}: ", source.id())).unwrap_or(&last_err).trim();
-        return Err(crate::Error::Io(if said.is_empty() { format!("{} {verb} failed ({code})", source.id()) } else { said.to_string() }));
+        let said = if said.is_empty() { format!("{} {verb} failed ({code})", source.id()) } else { said.to_string() };
+        return Err(if code == UNREACHABLE_EXIT { crate::Error::Unavailable(said) } else { crate::Error::Io(said) });
     }
     Ok(())
 }

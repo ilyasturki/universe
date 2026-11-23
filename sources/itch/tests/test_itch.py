@@ -202,13 +202,15 @@ def two_installs_one_behind(env, run):
 
 
 @pytest.mark.parametrize("warnings", [(unreachable(11), unreachable(14)), ("a cave it cannot name", "another")], ids=["named", "unnamed"])
-def test_an_update_check_butler_warns_about_for_every_install_fails(env, run, warnings):
+def test_an_update_check_butler_warns_about_for_every_install_fails(src, env, run, warnings):
     two_installs_one_behind(env, run)
     patch_state(env, check_warnings=dict(zip(("cave-11", "cave-14"), warnings, strict=True)))
     code, events, err = run("update")
-    assert code == 1 and events == [] and any(w in err for w in warnings)
+    named = warnings[0].startswith("Get ")
+    assert code == (src.UNREACHABLE_EXIT if named else 1) and events == [] and any(w in err for w in warnings), "a network failure is itch.io out of reach"
+    assert err.rstrip().endswith(src.UNREACHABLE) == named
     code, events, err = run("update", "14")
-    assert code == 1 and events == [] and "already current" not in err
+    assert code == (src.UNREACHABLE_EXIT if named else 1) and events == [] and "already current" not in err
     assert not [c for c in calls(env) if c["method"] == "Install.Queue" and c["params"].get("reason") == "update"]
 
 
