@@ -1024,7 +1024,8 @@ A stopped download is kept in `partials.json` with its folder while that folder 
 `.gogdl-resume`; `discard` drops the entry.
 `update` asks GOG's content system for the builds of a Windows install, and gogdl (`info --platform
 linux`) for the installer of a Linux one (a `gameinfo` beside `game/goggame-<id>.info`), which has a
-version name and no build. The version `install` and `update` installed is kept in
+version name and no build. Each install is checked and updated by its own layout, whatever `platform`
+says; `platform` picks what `install` downloads. The version `install` and `update` installed is kept in
 `linux-versions.json`; a Linux install without one, gogdl failing or listing `Unknown` gives an
 `unanswered` row. An update check that reached GOG for no install fails with `GOG could not be
 reached.`, exit 3; a download gogdl stops for a full disk fails with `Not enough free space on the disk.`

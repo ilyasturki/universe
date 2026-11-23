@@ -499,14 +499,21 @@ def test_updates_without_an_answer_fail_and_one_unanswered_install_is_named(web,
     assert "Mini Metro" in err and "boom" in err
 
 
-def test_a_game_with_no_build_for_the_depot_platform_is_an_answer(web, src, env, run, settings):
+def test_a_windows_install_is_judged_by_its_windows_builds_whatever_the_depot_platform(web, src, env, run, settings):
     settings(platform="linux")
     write_info(env["scan"] / "Current", "2", "2", "Current", build="B2")
     products = "https://content-system.gog.com/products/"
-    fake_fetch(web, {f"{products}2/": BUILDS, products: UNSUPPORTED_OS})
+    seen = fake_fetch(web, {f"{products}2/": BUILDS, products: UNSUPPORTED_OS})
     code, events, err = run("update")
     assert code == 0 and [(e["event"], e.get("id"), e.get("unanswered")) for e in events] == [("update", "2", None), ("done", None, None)]
-    assert "no build published for linux" in err
+    assert "no Windows build published" in err
+    assert sorted(url for url, _ in seen) == [f"{products}{i}/os/windows/builds?generation=2" for i in ("1434554947", "2")]
+
+    web.answers.clear()
+    fake_fetch(web, {products: BUILDS})
+    code, _, err = run("update", MINI_METRO)
+    assert code == 0, err
+    assert [c["args"][c["args"].index("--platform") + 1] for c in calls(env) if "update" in c["args"]] == ["windows"]
 
     web.answers.clear()
     fake_fetch(web, {products: UNSUPPORTED_OS})

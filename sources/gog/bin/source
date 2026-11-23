@@ -440,8 +440,9 @@ def out_of_reach(error):
     return isinstance(error, OSError) and not isinstance(error, urllib.error.HTTPError)
 
 
-def fetch_build(settings, game_id):
-    builds = published_builds(game_id, settings["platform"])
+# An install without gameinfo is a Windows build, whatever Depot platform picks for new installs.
+def fetch_build(game_id):
+    builds = published_builds(game_id, "windows")
     items = [b for b in builds if b.get("branch") is None]
     if not items:
         return None
@@ -453,7 +454,7 @@ def fetch_build(settings, game_id):
 def fetch_builds(settings, game_ids):
     def one(game_id):
         try:
-            return game_id, fetch_build(settings, game_id)
+            return game_id, fetch_build(game_id)
         except SourceError as exc:
             return game_id, exc
 
@@ -765,7 +766,7 @@ def cmd_update(settings, args):
                 linux_row(install, remote, recorded.get(install["id"]), index)
                 continue
             if remote is None:
-                log(f"{install['title']}: no build published for {settings['platform']}, skipped")
+                log(f"{install['title']}: no Windows build published, skipped")
                 continue
             emit(
                 "update",
@@ -790,15 +791,15 @@ def cmd_update(settings, args):
     if root := linux_root(install):
         update_linux(settings, install, root, index)
         return
-    remote = fetch_build(settings, game_id)
+    remote = fetch_build(game_id)
     if remote is None:
-        raise SourceError(f"no build published for {game_id} on {settings['platform']}")
+        raise SourceError(f"no Windows build published for {game_id}")
     if install["build"] == remote["build"]:
         log(f"{install['title']} is already current ({remote['version']})")
         emit("done")
         return
     log(f"{install['title']}: {install['build'] or 'unknown'} -> {remote['build']} ({remote['version']})")
-    gogdl_stream(settings, "update", game_id, *platform_args(settings), "--path", install["dir"], timeout=settings["install_timeout_s"])
+    gogdl_stream(settings, "update", game_id, *platform_args(settings, "windows"), "--path", install["dir"], timeout=settings["install_timeout_s"])
     after = find_install(settings, game_id, [install["dir"]])
     if after is None or after["build"] != remote["build"]:
         raise SourceError(f"gogdl finished but {install['title']} is at build {after['build'] if after else 'unknown'}, expected {remote['build']}")
