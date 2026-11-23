@@ -1139,7 +1139,8 @@ fn call_off_in_a_pre_launch_hook(on_a_terminal: bool) {
     std::fs::create_dir_all(&hook).unwrap();
     let bin = dir.path().join("modules/pre/bin");
     let ask = if on_a_terminal { format!("read answer < /dev/tty; echo \"$answer\" > {}/got\n", hook.display()) } else { String::new() };
-    shim(&bin, "pre", &format!("{ask}sleep 30 &\necho $$ $! > {0}/pids\n{1}\n", hook.display(), gate(&hook)));
+    // Not a sleep loop: sh keeps running when a Ctrl-C lands as one of its sleeps exits, and the call-off then waits out the timeout.
+    shim(&bin, "pre", &format!("{ask}sleep 30 &\necho $$ $! > {0}/pids\ntouch {0}/entered\nexec sleep 30\n", hook.display()));
     shim(&bin, "end", &format!("echo ended >> {}/ended\n", hook.display()));
     std::fs::write(dir.path().join("modules/pre/module.toml"), "api = 2\nid = \"pre\"\n[hooks]\npre-launch = \"bin/pre\"\nsession-end = \"bin/end\"\n")
         .unwrap();
